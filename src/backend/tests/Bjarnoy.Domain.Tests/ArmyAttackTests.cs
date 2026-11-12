@@ -33,11 +33,10 @@ public class ArmyAttackTests
             Name = "Bjornstad",
             Centre = home,
             Buildings = [new PlacedBuilding(home, BuildingType.Longhouse, longhouseLevel), .. extraBuildings ?? []],
-            Garrison = garrison ?? [new UnitStack(UnitType.Spearman, 1000), new UnitStack(UnitType.Axeman, 1000)],
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: food, Iron: 1_000_000),
                 production, capacity, T0),
-        };
+        }.WithGarrison(garrison ?? [new UnitStack(UnitType.Spearman, 1000), new UnitStack(UnitType.Axeman, 1000)]);
     }
 
     private static DispatchDecision DispatchAttack(
@@ -45,7 +44,7 @@ public class ArmyAttackTests
         Guid targetSettlementId,
         double provisions,
         IReadOnlyList<UnitStack>? requested = null,
-        HexCoord? targetBuildingCoord = null) => Army.PlanDispatch(
+        HexCoord? targetBuildingCoord = null) => TestArmy.PlanDispatch(
             settlement,
             requested ?? [new UnitStack(UnitType.Axeman, 20)],
             provisions,
@@ -63,7 +62,7 @@ public class ArmyAttackTests
     {
         var settlement = Found();
 
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Axeman, 5)], 40, [], TargetHex, T0,
             Guid.CreateVersion7(), AllGrass(), ArmyMission.Attack, targetSettlementId: null);
 
@@ -141,6 +140,70 @@ public class ArmyAttackTests
     }
 
     [Fact]
+    public void A_won_attack_refills_the_provisions_from_the_targets_food_on_top_of_the_loot()
+    {
+        var settlement = Found();
+        var decision = DispatchAttack(settlement, Guid.CreateVersion7(), provisions: 100);
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+        var defender = Found(centre: TargetHex, garrison: [], food: 5000);
+        var stockBefore = defender.Resources.At(movement.ArrivesAt);
+
+        var arrival = Army.SettleArrival(army, defender, defenderSpeedFactor: 1.0, movement.ArrivesAt, seed: 7);
+
+        // 20 axemen: food capacity 800, carry 600. They burned some of the 100 on the way; the room is refilled in full.
+        var provisionsAtBattle = army.ProvisionsAt(movement.ArrivesAt);
+        var refill = 800 - provisionsAtBattle;
+        Assert.Equal(800, arrival.Army!.Provisions, 6);
+        Assert.Equal(refill, arrival.Attack!.Refill, 6);
+        var loot = arrival.Army.Loot;
+        Assert.Equal(600, loot.Wood + loot.Stone + loot.Food + loot.Iron, 6);
+        // The defender lost the loot and the refill, both.
+        var stockAfter = arrival.DefenderSettlement.Resources.At(movement.ArrivesAt);
+        Assert.Equal(stockBefore.Food - loot.Food - refill, stockAfter.Food, 3);
+    }
+
+    [Fact]
+    public void The_defenders_stock_goes_down_by_exactly_what_the_attacker_gets_whatever_the_rounding()
+    {
+        // (stock - refill) + refill can round above the stock; the spend then used to fail, leaving the defender's stock
+        // untouched while the attacker still got the loot and the refill. Sweep stocks and provisions to cover such cases.
+        for (var i = 0; i < 200; i++)
+        {
+            var food = 468.2 + (i * 0.137);
+            var settlement = Found();
+            var decision = DispatchAttack(settlement, Guid.CreateVersion7(), provisions: 100 + (i * 1.3));
+            var army = decision.Army!;
+            var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+            var defender = Found(centre: TargetHex, garrison: [], food: food);
+            var stockBefore = defender.Resources.At(movement.ArrivesAt);
+
+            var arrival = Army.SettleArrival(army, defender, defenderSpeedFactor: 1.0, movement.ArrivesAt, seed: 7);
+
+            var stockAfter = arrival.DefenderSettlement.Resources.At(movement.ArrivesAt);
+            var gotFood = arrival.Army!.Loot.Food + arrival.Attack!.Refill;
+            Assert.True(gotFood > 0);
+            Assert.Equal(stockBefore.Food - gotFood, stockAfter.Food, 6);
+            Assert.True(stockAfter.Food >= 0);
+        }
+    }
+
+    [Fact]
+    public void A_lost_attack_refills_nothing_and_takes_no_food()
+    {
+        var settlement = Found();
+        var decision = DispatchAttack(
+            settlement, Guid.CreateVersion7(), provisions: 5, requested: [new UnitStack(UnitType.Spearman, 1)]);
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var arrival = Army.SettleArrival(army, Found(centre: TargetHex), defenderSpeedFactor: 1.0, movement.ArrivesAt, seed: 1);
+
+        Assert.Equal(0, arrival.Attack!.Refill);
+        Assert.Equal(BattleWinner.Defender, arrival.Battle!.Winner);
+    }
+
+    [Fact]
     public void A_strong_garrison_wipes_out_the_attacker_with_no_return_trip()
     {
         var settlement = Found();
@@ -207,7 +270,8 @@ public class ArmyAttackTests
 
         var stockAfter = arrival.DefenderSettlement.Resources.At(movement.ArrivesAt);
         Assert.Equal(lootAvailableBefore.Wood - lootTaken.Wood, stockAfter.Wood, 4);
-        Assert.Equal(lootAvailableBefore.Food - lootTaken.Food, stockAfter.Food, 4);
+        // The food that refilled the army's provisions left the stock too.
+        Assert.Equal(lootAvailableBefore.Food - lootTaken.Food - arrival.Attack!.Refill, stockAfter.Food, 4);
     }
 
     [Fact]
@@ -405,7 +469,7 @@ public class ArmyAttackTests
         var settlement = Found(garrison: [new UnitStack(UnitType.Karve, 5)]);
         Terrain TerrainAt(HexCoord c) => c == TargetHex ? Terrain.Grass : Terrain.Sea;
 
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Karve, 5)], 100, [], TargetHex, T0,
             Guid.CreateVersion7(), TerrainAt, ArmyMission.Attack, Guid.CreateVersion7(),
             targetBuildingCoord: TargetHex, targetClaimDiscs: [(TargetHex, 0)]);
@@ -420,7 +484,7 @@ public class ArmyAttackTests
         var landBlob = TargetHex.Neighbours().Append(TargetHex).ToHashSet();
         Terrain TerrainAt(HexCoord c) => landBlob.Contains(c) ? Terrain.Grass : Terrain.Sea;
 
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Karve, 5)], 100, [], TargetHex, T0,
             Guid.CreateVersion7(), TerrainAt, ArmyMission.Attack, Guid.CreateVersion7(),
             targetBuildingCoord: TargetHex, targetClaimDiscs: [(TargetHex, 0)]);
@@ -446,7 +510,7 @@ public class ArmyAttackTests
     {
         var settlement = Found();
 
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Axeman, 5)], 40, [], TargetHex, T0,
             Guid.CreateVersion7(), AllGrass(), ArmyMission.Move, targetSettlementId: null,
             targetBuildingCoord: new HexCoord(1, 1));
@@ -626,7 +690,7 @@ public class ArmyAttackTests
         Guid targetSettlementId,
         double provisions,
         IReadOnlyList<UnitStack>? requested = null,
-        HexCoord? targetBuildingCoord = null) => Army.PlanDispatch(
+        HexCoord? targetBuildingCoord = null) => TestArmy.PlanDispatch(
             settlement,
             requested ?? [new UnitStack(UnitType.Axeman, 20)],
             provisions,
@@ -644,7 +708,7 @@ public class ArmyAttackTests
     {
         var settlement = Found();
 
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Axeman, 5)], 40, [], TargetHex, T0,
             Guid.CreateVersion7(), AllGrass(), ArmyMission.Raid, targetSettlementId: null);
 
@@ -815,10 +879,9 @@ public class ArmyAttackTests
             Name = "Target",
             Centre = TargetHex,
             Buildings = [new PlacedBuilding(TargetHex, BuildingType.Longhouse, 1)],
-            Garrison = [],
             Resources = ResourcePool.Create(
                 defenderStock, production, ResourceAmounts.Uniform(10_000), T0),
-        };
+        }.WithGarrison([]);
 
         var neighbours = TargetHex.Neighbours();
 

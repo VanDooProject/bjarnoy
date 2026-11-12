@@ -675,6 +675,36 @@ public class HexPathfinderTests
     }
 
     [Fact]
+    public void A_fleet_beaching_on_sand_pays_twice_a_sea_hex_for_that_endpoint_while_other_land_stays_at_one()
+    {
+        var path = Line(4);
+        Terrain Sand(HexCoord c) => c.Q == 3 ? Terrain.Sand : Terrain.Sea;
+        Terrain Grass(HexCoord c) => c.Q == 3 ? Terrain.Grass : Terrain.Sea;
+
+        var sandHours = HexPathfinder.CumulativeHours(path, Sand, hexesPerHour: 1.0, isLandUnit: false);
+        var grassHours = HexPathfinder.CumulativeHours(path, Grass, hexesPerHour: 1.0, isLandUnit: false);
+
+        // the last step is half a sea hex plus half the beach
+        Assert.Equal([0.0, 1.0, 2.0, 3.0], grassHours);
+        Assert.Equal([0.0, 1.0, 2.0, 3.5], sandHours);
+        Assert.Equal([0.0, 0.5, 1.5, 2.5], HexPathfinder.EdgeHours(path, Sand, 1.0, isLandUnit: false));
+        Assert.Equal(HexPathfinder.FleetSandCost, 2.0);
+        Assert.Equal(path, HexPathfinder.FindPath(path[0], path[^1], Sand, isLandUnit: false));
+    }
+
+    [Fact]
+    public void A_fleet_pushing_off_a_sand_harbour_pays_the_sand_price_for_that_endpoint_too()
+    {
+        Terrain Harbour(HexCoord c) => c.Q == 0 ? Terrain.Sand : Terrain.Sea;
+        var path = Line(3);
+
+        var hours = HexPathfinder.CumulativeHours(path, Harbour, hexesPerHour: 1.0, isLandUnit: false);
+
+        Assert.Equal([0.0, 1.5, 2.5], hours);
+        Assert.Equal([0.0, 1.0, 2.0], HexPathfinder.EdgeHours(path, Harbour, 1.0, isLandUnit: false));
+    }
+
+    [Fact]
     public void Open_sea_route_follows_the_straight_line_between_the_endpoints()
     {
         var from = new HexCoord(0, 0);

@@ -111,7 +111,7 @@ export async function clickHudMenuEntry(page: Page, label: string): Promise<void
   const account = page.getByTestId('account-menu-trigger');
   const trigger = (await account.isVisible()) ? account : page.getByTestId('returning-player-trigger');
   await trigger.click();
-  await page.locator('.hud-nav [role="menuitem"]', { hasText: label }).click();
+  await page.locator('[role="menu"] [role="menuitem"]', { hasText: label }).click();
 }
 
 /**
@@ -646,5 +646,86 @@ export async function bubbleNearestPointerTip(
     if (!best) return null;
     const hit = document.elementFromPoint(tip.x, tip.y)?.closest('.ring-bubble, .ring-hub');
     return { ...best, under: hit ? name(hit) : null };
+  });
+}
+
+/**
+ * Puts five standing fleets on five different hexes of the open sea, up to ~300 hexes from the settlement (demo mode has no army simulation, so they go straight
+ * into the store) and returns an empty, inland grass hex of the realm: no fleet can ever reach it, so every route search for it fails.
+ * `screen` is that hex's centre on the settlement canvas. The fleets' home (where a leg must be able to return to) is the settlement, an
+ * inland hex no fleet can reach, unless `homeAt` names another (a coastal hex of the realm).
+ */
+export async function putFleetsFarAtSea(
+  page: Page,
+  homeAt?: { q: number; r: number },
+): Promise<{ hex: { q: number; r: number }; screen: { x: number; y: number } }> {
+  return page.evaluate((homeOverride) => {
+    const win = window as unknown as {
+      __demoWorld: () => { model: any; selectedSettlementId: string; armies: unknown[] };
+      __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
+    };
+    const world = win.__demoWorld();
+    const home = world.model.getSettlement(world.selectedSettlementId);
+    const sides = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]] as const;
+    const isSea = (q: number, r: number) => world.model.getTile(q, r).terrain === 'sea';
+    // One far open-sea hex per fleet, all different: every fleet is its own route search (its own cache key).
+    const seas: Array<{ q: number; r: number }> = [];
+    for (let d = 300; d > 50 && seas.length < 5; d -= 5) {
+      for (const [dq, dr] of sides) {
+        const at = { q: home.q + dq * d, r: home.r + dr * d };
+        if (seas.length < 5 && isSea(at.q, at.r) && sides.every(([a, b]) => isSea(at.q + a, at.r + b))) seas.push(at);
+      }
+    }
+    if (seas.length < 5) throw new Error('no five open-sea hexes far from home');
+    const arrived = new Date(Date.now() - 60_000).toISOString();
+    world.armies = seas.map((sea, i) => ({
+      id: `fleet-${i}`,
+      settlementId: world.selectedSettlementId,
+      mission: 'move',
+      targetSettlementId: null,
+      atHome: false,
+      supporting: false,
+      position: sea,
+      provisions: 1_000_000,
+      totalSpeed: 10,
+      totalUpkeepPerHour: 1,
+      visionRadius: 4,
+      stacks: [{ unit: 'longship', count: 1 }],
+      movement: { path: [homeOverride ?? { q: home.q, r: home.r }, sea], isReturning: false, departedAt: arrived, arrivesAt: arrived },
+    }));
+    for (let dq = -3; dq <= 3; dq++) {
+      for (let dr = -3; dr <= 3; dr++) {
+        const at = { q: home.q + dq, r: home.r + dr };
+        const tile = world.model.getTile(at.q, at.r);
+        if (tile.ownerId !== world.selectedSettlementId || tile.buildingType || tile.terrain !== 'grass') continue;
+        if (sides.some(([a, b]) => isSea(at.q + a, at.r + b))) continue;
+        return { hex: at, screen: win.__settlementRenderer().hexCenterScreen(at) };
+      }
+    }
+    throw new Error('no empty inland grass hex in the realm');
+  }, homeAt);
+}
+
+/** Starts recording main-thread long tasks (durations in ms) from now on; read the worst one with `longestTask`. */
+export async function observeLongTasks(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const win = window as unknown as { __longTasks: number[] };
+    win.__longTasks = [];
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) win.__longTasks.push(entry.duration);
+    }).observe({ type: 'longtask' });
+  });
+}
+
+/** The longest main-thread task (ms) since `observeLongTasks`, 0 when none was long. */
+export function longestTask(page: Page): Promise<number> {
+  return page.evaluate(() => Math.max(0, ...(window as unknown as { __longTasks: number[] }).__longTasks));
+}
+
+/** Triggers an armies refresh, as the live poll does: every army is replaced by a copy. */
+export async function refreshArmies(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const world = (window as unknown as { __demoWorld: () => { armies: object[] } }).__demoWorld();
+    world.armies = world.armies.map((a) => ({ ...a }));
   });
 }

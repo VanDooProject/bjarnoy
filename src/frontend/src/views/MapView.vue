@@ -5,7 +5,10 @@ import type { MessageSchema } from '../i18n/schema';
 import { buildingName, terrainName } from '../i18n/catalogueNames';
 import { useRouter } from 'vue-router';
 import { useDisplayedRoute } from '../composables/useDisplayedRoute';
+import { useMapFocus } from '../composables/useMapFocus';
+import { isModalRouteName } from '../lib/modalRoute';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
+import BuildingHudLayer from '../components/hud/BuildingHudLayer.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
 import { useIntroTilesSignal } from '../composables/useIntroTilesSignal';
 import { useLoadFlow } from '../composables/useLoadFlow';
@@ -13,10 +16,9 @@ import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
-import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
-import ExpansionPanel from '../components/hud/ExpansionPanel.vue';
+import HudPanelColumn from '../components/hud/HudPanelColumn.vue';
+import HudPanelDock from '../components/hud/HudPanelDock.vue';
 import QuestTray from '../components/onboarding/QuestTray.vue';
-import TrainingQueuePanel from '../components/hud/TrainingQueuePanel.vue';
 import QueueDrawer from '../components/hud/QueueDrawer.vue';
 import ArmyPanel from '../components/hud/ArmyPanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
@@ -25,6 +27,15 @@ import TrainingModal from '../components/hud/TrainingModal.vue';
 import BuildRefusalChip from '../components/hud/BuildRefusalChip.vue';
 import { announceConfirmedBuild, holdBuildRow, releaseBuildRow } from '../composables/buildFeedback';
 import RingMenuHost from '../components/hud/RingMenuHost.vue';
+import {
+  BEACH_CAMP_BUILD_SECONDS,
+  BEACH_CAMP_COST,
+  campLock,
+  foundingLock,
+  isCampSite,
+  isShorelineHex,
+  type FoundingLock,
+} from '../lib/founding';
 import RingMenu, { type RingAction, type RingCategory } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
@@ -32,13 +43,14 @@ import FpsMeter from '../components/hud/FpsMeter.vue';
 import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
 import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
 import ZoomDebugPanel from '../components/hud/ZoomDebugPanel.vue';
-import { useWorldStore } from '../stores/world';
+import { useWorldStore, type SendPickerTarget } from '../stores/world';
 import { WORLD_HASH, isWorldHash } from '../lib/mapModeRoute';
 import { parseCameraHash, serializeCameraHash } from '../lib/mapCameraHash';
 import { useAuthStore } from '../stores/auth';
+import { realmToSwitchTo } from '../lib/realmTap';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
-import { armyOverlayMovement, foreignArmyMarker } from '../lib/map/armyOverlay';
+import { armyOverlayMovement, campArmyMarkers, campFleetLiveCoord, foreignArmyMarker } from '../lib/map/armyOverlay';
 import { useGuildStore } from '../stores/guild';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
@@ -51,18 +63,20 @@ import { hudBarHeightPx, hudRailWidthPx } from '../composables/hudBarHeight';
 import { isHudRail } from '../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
 import { hexTakesNoOrder, nextUpgradeLevel } from '../lib/hud/pendingBuild';
+import { upgradeVerdict } from '../lib/hud/upgradeRules';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
+import { useHasActiveDraft } from '../composables/useHudPanelContent';
+import { useEscapeCancelsPlanning } from '../composables/useEscapeCancelsPlanning';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
-import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { buildingArt } from '../lib/map/buildingArt';
 import { buildingStatsAt, buildingUpgradeCost, scaleOutput, upgradeRateGain } from '../lib/map/buildingEconomy';
 import { razeBlock, razeRefund, razeSeconds } from '../lib/map/raze';
-import { formatBuildTime, formatMissingResources, longhouseLock } from '../lib/map/ringCatalogue';
+import { formatBuildTime, formatMissingResources, longhouseLock, scaledBuildSeconds } from '../lib/map/ringCatalogue';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { ringShapes } from '../lib/map/ringLayout';
-import { buildingEntryId, primaryActionFirst } from '../lib/map/ringActions';
+import { buildingEntryId, offersUpgradeAndRaze, primaryActionFirst } from '../lib/map/ringActions';
 import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
 import { useRingMaxScale } from '../composables/useRingMaxScale';
 import type { Tile } from '../lib/map/types';
@@ -78,9 +92,11 @@ import {
 import { reachableRange } from '../lib/map/hexPath';
 import { gamePathContext } from '../lib/map/movementContext';
 import { routeProgressAt } from '../lib/units/armyProgress';
-import { anySendSourceCanGo } from '../lib/units/sendSources';
+import { isGarrisonSpotTile } from '../lib/units/garrisonSpots';
+import { isHomeSourceId } from '../lib/units/sendSources';
 import { useSendBlockText, useSendPickerRows, useSendSources } from '../composables/useSendSources';
 import { motionEnabled } from '../lib/motion';
+import { useHiddenUnderPhoneLayer, vPhoneHidden } from '../composables/usePhoneLayer';
 import MobileDispatchSheet from '../components/hud/MobileDispatchSheet.vue';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -148,6 +164,8 @@ const debugStackRef = ref<HTMLElement | null>(null);
 const debugStackDrag = useDraggablePosition('debugStack', debugStackRef);
 const debugStackStyle = debugStackDrag.style;
 const isMobile = useIsMobile();
+// HUD overlays hide while a layer (modal, drawer, ring, ...) is open on a phone.
+const hudHidden = useHiddenUnderPhoneLayer();
 const queueDrawerOpen = ref(false);
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
 
@@ -197,6 +215,11 @@ function onFocusHome() {
   else renderer.focusSettlementCamera();
 }
 
+/** Centres the camera on another of the player's realms (its longhouse) without switching to it. */
+function onFocusRealm(at: { q: number; r: number }) {
+  canvasRef.value?.renderer?.panTo(at);
+}
+
 let flashTimeout: ReturnType<typeof setTimeout> | null = null;
 function onQueueSelect(coord: { q: number; r: number }) {
   const renderer = canvasRef.value?.renderer;
@@ -223,9 +246,20 @@ function onArmySelect(armyId: string) {
   onQueueSelect(liveArmyCoord(army));
 }
 
+/** Whether an army has a ship (its land units are passengers): the marker is a ship, not a flag. */
+function isFleetArmy(a: (typeof world.armies)[number]): boolean {
+  return (
+    classifyUnitSelection(Object.fromEntries(a.stacks.map((s) => [s.unit, s.count])), unitCatalogue.byType) === 'fleet'
+  );
+}
+
 /** The hex an army's marker is on right now: where it is along its leg (the half it has reached), not the last hex the poll reported. */
 function liveArmyCoord(army: (typeof world.armies)[number]): AxialCoord {
   let coord: AxialCoord = army.position;
+  // A camp fleet is drawn one hex short of the camp: the marker's own leg decides (campFleetLiveCoord).
+  if (army.mission === 'setupcamp' && army.movement && !army.movement.isReturning && isFleetArmy(army)) {
+    return campFleetLiveCoord({ position: army.position, movement: army.movement }, Date.now());
+  }
   if (army.movement) {
     const {
       path, cumulativeHours, edgeHours, departedAt, arrivesAt, isReturning,
@@ -351,9 +385,9 @@ watch(mode, (m) => {
   zoomDrivenTransition = false;
 });
 
-// A navigation that carries a camera anchor (e.g. a report's "show on map" link: `/settlement#world&q=..&r=..&z=..`)
-// moves the camera there. The anchor is also read once at setup (`initialCameraView`) for a reload or a fresh mount;
-// this covers the map already being mounted behind a modal. `flush: 'post'` runs it after the `mode` watcher above has
+// A navigation that carries a camera anchor (a followed link or back/forward to `/settlement#q=..&r=..&z=..`, world mode
+// behind `#world&`) moves the camera there. The anchor is also read once at setup (`initialCameraView`) for a reload or a
+// fresh mount; this covers the map already being mounted. `flush: 'post'` runs it after the `mode` watcher above has
 // switched the renderer's mode.
 watch(
   () => route.value.hash,
@@ -362,6 +396,21 @@ watch(
     if (view) canvasRef.value?.renderer?.restoreCameraView(view.coord, view.zoom);
   },
   { flush: 'post' },
+);
+
+// "Show on map" requests (a report's location link, composables/useMapFocus.ts): centre and flash the hex, keeping the mode and
+// zoom the map is in. Applied only once the modal is closed and after the hash watcher above (`flush: 'post'`, defined later):
+// closing a modal pops history back to the entry whose URL still holds the camera from before it opened, and that restore must
+// not undo this pan. Also fulfilled when the renderer only appears after the request was raised.
+const mapFocus = useMapFocus();
+watch(
+  [mapFocus.pending, () => canvasRef.value?.renderer, () => isModalRouteName(router.currentRoute.value.name)],
+  ([request, renderer, modalOpen]) => {
+    if (!request || !renderer || modalOpen) return;
+    onQueueSelect(request.coord);
+    mapFocus.clear();
+  },
+  { immediate: true, flush: 'post' },
 );
 
 // Fog v2 (map-fog-v2.md §3): pushes a freshly fetched mask bitmap into the
@@ -402,7 +451,13 @@ const sendPicker = useSendPickerRows();
 const armyOverlayData = computed<ArmyOverlayData>(() => {
   const picker = world.sendPicker;
   const pickRows = picker ? new Map(sendPicker.rows.value.map((r) => [r.id, r])) : null;
-  const armies: ArmyOverlayMarker[] = world.armies.map((a) => ({
+  // A fleet sailing to set up a beach camp is drawn one hex short of the camp, and its troops appear on the camp hex when it arrives
+  // (campArmyMarkers): while one is still under way the clock ticks so that moment is not missed.
+  const now = Date.now();
+  if (world.armies.some((a) => a.mission === 'setupcamp' && a.movement && !a.movement.isReturning && Date.parse(a.movement.arrivesAt) > now)) {
+    void world.hud.tick;
+  }
+  const armies: ArmyOverlayMarker[] = world.armies.flatMap((a) => campArmyMarkers({
     id: a.id,
     position: a.position,
     selected: a.id === world.selectedArmyId,
@@ -412,16 +467,12 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
     // docs/design/ship-movement.md §4: ship marker for a fleet (any ship in
     // the army, its land units are passengers), flag for a land army — the
     // same classification dispatch relies on.
-    isFleet:
-      classifyUnitSelection(
-        Object.fromEntries(a.stacks.map((s) => [s.unit, s.count])),
-        unitCatalogue.byType,
-      ) === 'fleet',
+    isFleet: isFleetArmy(a),
     // The backend's own figure: best-sighted unit type plus the home settlement's Ravens.
     visionRadius: a.visionRadius,
     // An `atHome`/`supporting` army has no movement at all and keeps sitting on its authoritative hex.
     movement: a.movement ? armyOverlayMovement(a.movement) : undefined,
-  }));
+  }, a, now));
   // docs/design/map-fog-v2.md §1g: other players' troops marching inside our sight, in their owner's colour (guild/treaty/rival like
   // the realm borders). Never selected, never returning-grey, and the renderer gives them no vision of their own.
   for (const a of world.foreignArmies) {
@@ -509,9 +560,11 @@ watch(
 const rangeOverlayHexes = computed<AxialCoord[] | null>(() => {
   const draft = world.dispatchDraft;
   if (!draft || draft.mission !== 'move') return null;
-  if (!world.selectedSettlementId) return null;
+  // The realm the units leave from: the open one, or another realm of the player's when the picker sent its garrison.
+  const source = world.dispatchSource;
+  if (!source) return null;
 
-  const home = world.model.getSettlement(world.selectedSettlementId);
+  const home = world.model.getSettlement(source.realmId);
   if (!home) return null;
 
   const speed = totalSpeed(draft.unitCounts, unitCatalogue.byType);
@@ -532,7 +585,7 @@ const rangeOverlayHexes = computed<AxialCoord[] | null>(() => {
   const origin =
     classifyUnitSelection(draft.unitCounts, unitCatalogue.byType) === 'fleet'
       ? { q: home.q, r: home.r }
-      : trainingSite({ q: home.q, r: home.r }, world.hud.buildings, draft.unitCounts, unitCatalogue.byType);
+      : trainingSite({ q: home.q, r: home.r }, source.buildings, draft.unitCounts, unitCatalogue.byType);
   const range = reachableRange(origin, origin, hoursOfFood, ctx);
   return [...range.keys()].map(parseKey);
 });
@@ -551,6 +604,8 @@ const PICKER_FRAME_MS = 300;
 const pickerFrameKey = computed(() => {
   const picker = world.sendPicker;
   if (!picker) return null;
+  // Frame once, when every army's route is known: no moving camera as the rows resolve one by one.
+  if (sendPicker.rows.value.some((r) => r.kind === 'field' && r.block === 'pending')) return null;
   const ids = sendPicker.rows.value.filter((r) => r.kind === 'field' && r.ok).map((r) => r.id);
   return `${picker.coord.q},${picker.coord.r}|${ids.sort().join(',')}`;
 });
@@ -569,7 +624,7 @@ watch(
   { immediate: true },
 );
 
-// A tap on an army's marker while the picker is open: a army that can go is selected, the same as tapping its row; one that cannot
+// A tap on an army's marker (while the picker is open: a army that can go is selected, the same as tapping its row; one that cannot
 // shows its reason in a small hint above it.
 const armyHint = ref<{ x: number; y: number; text: string } | null>(null);
 let armyHintTimer: ReturnType<typeof setTimeout> | null = null;
@@ -577,12 +632,19 @@ const sendBlockText = useSendBlockText();
 function onArmyTap(armyId: string, screen: { x: number; y: number }) {
   if (armyHintTimer) clearTimeout(armyHintTimer);
   armyHint.value = null;
+  // No picker open: the marker selects its army, shown highlighted in the armies panel. The tap still reaches the tile (onHexClick), so
+  // while a route is being composed it adds the waypoint and selects nothing.
+  if (!world.sendPicker) {
+    if (!world.dispatchDraft && !world.fieldOrderDraft) world.selectArmy(armyId);
+    return;
+  }
   const row = sendPicker.rows.value.find((r) => r.id === armyId);
-  if (!row || !world.sendPicker) return;
+  if (!row) return;
   if (row.ok) {
     world.selectSendSource(armyId);
     return;
   }
+  if (row.block === 'pending') return;
   const text = sendBlockText(row, sendPicker.target.value);
   if (!text) return;
   armyHint.value = { x: Math.min(Math.max(screen.x, 110), Math.max(110, stage.value.w - 110)), y: Math.max(48, screen.y - 34), text };
@@ -594,14 +656,26 @@ watch(
     if (!picker) armyHint.value = null;
   },
 );
+// The selected army was kept while its route was being searched (or the target moved): once its row settles on "cannot go", drop it.
+watch(
+  () => {
+    const id = world.sendPicker?.selectedId;
+    if (!id || isHomeSourceId(id)) return null;
+    const row = sendPicker.rows.value.find((r) => r.id === id);
+    return row ? (row.ok ? 'ok' : (row.block ?? null)) : null;
+  },
+  (state, previous) => {
+    if (previous === 'pending' && state && state !== 'ok' && state !== 'pending') world.selectSendSource(null);
+  },
+);
 onUnmounted(() => armyHintTimer && clearTimeout(armyHintTimer));
 
 // Construction progress dials over buildings still being built; the renderer
 // animates the progress itself every tick from these absolute timestamps.
 watch(
-  [() => canvasRef.value?.renderer, () => world.hud.queue, () => world.hud.queueFetchedAt],
+  [() => canvasRef.value?.renderer, () => world.constructionDials],
   ([renderer]) => {
-    renderer?.setConstructionDials(constructionDialsFromQueue(world.hud.queue, world.hud.queueFetchedAt));
+    renderer?.setConstructionDials(world.constructionDials);
   },
   { immediate: true },
 );
@@ -644,6 +718,8 @@ watch(
 );
 
 const hoverInfo = ref<HoverInfo | null>(null);
+/** The mouse is on a building HUD marker: the tile tooltip stays away (the marker says it better). */
+const hudHovering = ref(false);
 function onHover(info: HoverInfo | null) {
   // The renderer's pointer tracking is a window-level listener (see
   // HexMapRenderer's onPointerMove), so it keeps resolving a hex under the
@@ -709,22 +785,19 @@ onMounted(() => {
 });
 onUnmounted(() => stageObserver?.disconnect());
 
-// Every number below is traceable to a panel's own scoped style, so the ring
-// treats a panel as an edge rather than opening underneath it:
-//   BuildQueuePanel .status-card  left:16  top:76    width:240  -> left 268
-//   ExpansionPanel  .status-card  left:16  top:340   width:240  (same column)
-//   TrainingQueuePanel            right:16 top:76    width:240
-//   ArmyPanel       .status-card  right:16 bottom:16 width:260
-//   TopBar .hud-bar height 64, plus a 12px gap                  -> top 76
-// The right edge is set by the widest panel actually in the ring's way: ArmyPanel
-// (260 wide, runs down to the bottom bound) beats TrainingQueuePanel (240, top only)
-// -> right = stage width - (16 + 260 + 16), floored at 420.
-// These are worst-case constants: every panel is treated as present. On
-// mobile, BuildQueuePanel/TrainingQueuePanel are replaced by QueueDrawer's
-// collapsed handle (.queue-drawer-handle, a 48px-wide tab) pinned to the left
-// edge, and the HUD bar can be docked at the bottom instead of the top (see
-// ArmyPanel.vue's `--hud-inset-bottom`) — `hudInsetTopPx`/`hudInsetBottomPx`
-// above mirror the bar's real height into whichever edge it occupies now.
+// The desktop panels are dockable (HudPanelDock): each can sit in any column on either side, so the ring treats the worst
+// case as always present. Every number below is traceable to the dock's column geometry (lib/hud/hudPanelDock.ts) and
+// the panels' widths:
+//   columns         full height: top:76 (TopBar .hud-bar height 64, plus a 12px gap), bottom:16, left/right 16
+//   icon rail       left 16, or right of the left panel columns when they reach down to it (HudPanelColumn)
+//   panel widths    Construction 240, Garrison 240, Armies 260, Quests 280
+// The left edge stays at the default Construction column (left 16 + 240 + 12 -> 268). The right edge is set by the widest
+// panel that can sit in the ring's way: Armies (260 wide, runs down to the bottom bound) beats Garrison (240) ->
+// right = stage width - (16 + 260 + 16), floored at 420. These are constants, not the live layout: every panel is treated
+// as present in its default column. On mobile the panels are replaced by QueueDrawer's collapsed handle
+// (.queue-drawer-handle, a 48px-wide tab) pinned to the left edge, and the HUD bar can be docked at the bottom instead
+// of the top (`--hud-inset-bottom`) — `hudInsetTopPx`/`hudInsetBottomPx` above mirror the bar's real height into
+// whichever edge it occupies now.
 // Phone layout: the ring's detail card docks to a screen edge instead of
 // floating beside the ring — a bottom strip in portrait, a side panel away
 // from the tapped hex in landscape (lib/map/ringDock.ts).
@@ -782,7 +855,8 @@ watch(canvasInteractionLocked, (locked) => {
 // over the bottom of the screen while one is, so QueueDrawer (which would
 // otherwise clash with it) hides, and the HUD pull-down drawer closes the
 // same way opening QueueDrawer already does above.
-const hasActiveDraft = computed(() => !!(world.dispatchDraft || world.fieldOrderDraft || world.sendPicker));
+const hasActiveDraft = useHasActiveDraft();
+useEscapeCancelsPlanning();
 watch(hasActiveDraft, (active) => {
   if (active) {
     queueDrawerOpen.value = false;
@@ -847,27 +921,44 @@ const isMineTile = computed(
 );
 
 // Issue: mobile army dispatch. Every tile's ring gets a "send army" bubble —
-// what it's called and what it starts depends on who (if anyone) owns the
-// tile: another player's settlement reads "Attack" and targets it directly;
-// the player's own *other* settlement (multi-settlement accounts) reads
-// "Support"; anything else (own current settlement, unclaimed ground, open
-// water) is a plain Move with `route = [coord]`. Enabled on every viewport —
-// on desktop, starting a draft this way just pre-fills ArmyPanel's existing
-// dispatch form, same as picking a mission tab and a target there by hand.
-function sendMissionAt(tile: Tile): 'move' | 'attack' | 'support' {
-  const ownerSettlementId = tile.ownerId;
-  if (!ownerSettlementId) return 'move';
-  if (world.model.getSettlement(ownerSettlementId)?.ownerId !== player.id) return 'attack';
-  return world.isRealmSettlement(ownerSettlementId) ? 'move' : 'support';
+// what it's called depends on who (if anyone) owns the tile: another player's
+// settlement reads "Attack" and targets it directly; anything else (any hex of
+// the player's own realms, unclaimed ground, open water) reads "Send army here"
+// and opens the picker with the hex as a plain Move target. On a hex of one of
+// the player's own realms the picker sends that realm's troops there as a Move
+// and the troops of the player's other realms as a Support to that realm
+// (`targetRealmId`/`targetBuildingCoord`, see lib/units/sendSources.ts
+// `missionFor`). Always enabled, so opening a ring runs no route search: the
+// send picker it opens lists which armies can go and why the others cannot.
+// Enabled on every viewport — on desktop, starting a draft this way just
+// pre-fills ArmyPanel's existing dispatch form, same as picking a mission tab
+// and a target there by hand.
+function sendMissionAt(tile: Tile): 'move' | 'attack' {
+  if (!tile.ownerId) return 'move';
+  return ownRealmAt(tile) ? 'move' : 'attack';
+}
+/** The player's realm that owns `tile` (the open realm for its own or a linked member's hex), else null. */
+function ownRealmAt(tile: Tile): string | null {
+  if (!tile.ownerId) return null;
+  if (world.isRealmSettlement(tile.ownerId)) return world.selectedSettlementId;
+  if (world.model.getSettlement(tile.ownerId)?.ownerId !== player.id) return null;
+  return world.ownRealmOf(tile.ownerId) ?? tile.ownerId;
+}
+/**
+ * What the picker aims at on `tile`: an attack names the owning settlement; a hex of the player's own realm names that realm and
+ * the garrison spot a support from another realm joins (the tapped hex when it is a spot, else the realm's centre).
+ */
+function sendPickerTargetAt(tile: Tile, coord: AxialCoord): SendPickerTarget {
+  if (sendMissionAt(tile) === 'attack') return { mission: 'attack', targetSettlementId: tile.ownerId ?? undefined };
+  const realmId = ownRealmAt(tile);
+  const realm = realmId ? world.model.getSettlement(realmId) : undefined;
+  if (!realmId || !realm) return {};
+  const spot = isGarrisonSpotTile(tile, world.model.getSettlement(tile.ownerId ?? realmId)) ? coord : { q: realm.q, r: realm.r };
+  return { targetRealmId: realmId, targetBuildingCoord: spot };
 }
 function sendArmyAction(tile: Tile): RingAction {
-  const mission = sendMissionAt(tile);
-  const id = mission === 'move' ? 'send-army' : mission;
-  const label = t(
-    mission === 'attack' ? 'hud.ringMenu.actions.attack' : mission === 'support' ? 'hud.ringMenu.actions.support' : 'hud.ringMenu.actions.sendArmyHere',
-  );
-  const canGo = anySendSourceCanGo(sendSources.evaluate(sendSources.targetAt(mission, { q: tile.q, r: tile.r })));
-  return { id, label, disabled: !canGo, hint: canGo ? undefined : t('hud.ringMenu.actions.noArmyCanGo') };
+  const attack = sendMissionAt(tile) === 'attack';
+  return { id: attack ? 'attack' : 'send-army', label: t(attack ? 'hud.ringMenu.actions.attack' : 'hud.ringMenu.actions.sendArmyHere') };
 }
 
 /** Whether the ring offers Hunt on this tile (huntActions): a wildlife camp still on the map, live mode only. */
@@ -883,37 +974,39 @@ function isHuntableCamp(tile: Tile): boolean {
 function retargetSendPicker(coord: AxialCoord, tile: Tile) {
   const picker = world.sendPicker;
   if (!picker) return;
-  const mission = picker.mission === 'hunt' && isHuntableCamp(tile) ? 'hunt' : sendMissionAt(tile);
+  const hunting = picker.mission === 'hunt' && isHuntableCamp(tile);
+  const options: SendPickerTarget = hunting ? { mission: 'hunt' } : sendPickerTargetAt(tile, coord);
+  const mission = options.mission ?? 'move';
   const selected = picker.selectedId;
-  const canGo = !!selected && !!sendSources.evaluate(sendSources.targetAt(mission, coord)).find((r) => r.id === selected)?.ok;
-  world.retargetSendPicker(
-    coord,
-    mission === 'move' ? {} : mission === 'hunt' ? { mission } : { mission, targetSettlementId: tile.ownerId ?? undefined },
-    canGo,
-  );
+  // A route still being searched keeps the army too: the watch on the selected row drops it once the search says it cannot go.
+  const selectedRow = selected
+    ? sendSources
+        .evaluate(
+          sendSources.targetAt(mission, coord, {
+            targetSettlementId: options.targetSettlementId,
+            ownRealmId: options.targetRealmId,
+            supportSpot: options.targetBuildingCoord,
+          }),
+        )
+        .find((r) => r.id === selected)
+    : undefined;
+  const canGo = !!selectedRow && (selectedRow.ok || selectedRow.block === 'pending');
+  world.retargetSendPicker(coord, options, canGo);
 }
 
 // Hunt a wildlife camp: offered on a camp tile that is still on the map, live mode only
 // (the demo has no army simulation, so no camp fights). A land camp needs land units, a camp at sea (the whale road)
-// ships — the other class cannot hunt it. Enabled when the home garrison or an army in the field can go.
+// ships — the other class cannot hunt it. Like the send bubble it is never greyed out: which armies can go is the
+// picker's question (its rows run the route search), opening the ring runs none.
 function huntActions(tile: Tile): RingAction[] {
   if (!isHuntableCamp(tile)) return [];
-  const canGo = anySendSourceCanGo(sendSources.evaluate(sendSources.targetAt('hunt', { q: tile.q, r: tile.r })));
-  return [
-    {
-      id: 'hunt',
-      label: t('hud.ringMenu.actions.hunt'),
-      color: 'var(--rival)',
-      disabled: !canGo,
-      hint: canGo ? undefined : t('hud.ringMenu.actions.noArmyCanGo'),
-    },
-  ];
+  return [{ id: 'hunt', label: t('hud.ringMenu.actions.hunt'), color: 'var(--rival)' }];
 }
 
 // Siege another player's palisade or gate (endgame "Breaching walls"): offered on a standing wall hex of a settlement that is
 // neither the player's own nor a friend's (same guild, or a guild at peace), live mode only. It opens an Attack on the wall owner's
 // settlement with the wall hex as the preferred target building. Walls fall to battering rams only, so one must be at home; without
-// one the bubble stays but is disabled with a hint, like the other army actions.
+// one the bubble stays but is disabled with a hint (a garrison check, no route search).
 function siegeActions(tile: Tile): RingAction[] {
   if (
     DEMO_MODE
@@ -940,19 +1033,27 @@ function siegeActions(tile: Tile): RingAction[] {
 function upgradeActionFor(tile: Tile): RingAction {
   const type = tile.buildingType!;
   const label = t('hud.ringMenu.actions.upgrade');
-  // Queued behind a running upgrade, this one starts from the level that one reaches.
-  const nextLevel = nextUpgradeLevel(tile.buildingLevel ?? 1, world.hud.queue, tile);
-  const level = nextLevel - 1;
-  const definitions = buildingCatalogue.byType[type];
-  const upgradeDefinition = definitions?.find((d) => d.level === nextLevel);
-  // A catalogue that lists the building but has no further level: nothing left to upgrade to.
-  if (definitions?.length && !upgradeDefinition) {
+  // The same verdict the building HUD reads. Queued behind a running upgrade, this one starts from the level that one reaches.
+  const verdict = upgradeVerdict({
+    type,
+    builtLevel: tile.buildingLevel ?? 1,
+    queue: world.hud.queue,
+    at: tile,
+    definitions: buildingCatalogue.byType[type],
+    longhouseLevel: world.hud.level,
+    builtLevels: builtLevels(),
+    storageCap: world.hud.storageCap,
+  });
+  const { nextLevel, level, definition: upgradeDefinition, cost, blockers } = verdict;
+  // Nothing left to upgrade to: at the last level, or the last one is already ordered.
+  if (verdict.maxed || !cost) {
     return { id: 'upgrade', label, color: 'var(--gold)', disabled: true, hint: t('hud.ringMenu.actions.maxLevel') };
   }
-  const cost = upgradeDefinition?.cost ?? buildingUpgradeCost(type, nextLevel);
   const locks = [
-    longhouseLock(upgradeDefinition?.requiredLonghouseLevel, world.hud.level),
-    ...prerequisiteLocks(upgradeDefinition?.prerequisites, builtLevels()),
+    longhouseLock(blockers.longhouse, world.hud.level),
+    ...prerequisiteLocks(blockers.prerequisites, builtLevels()),
+    // The stores cannot hold the next level's price: waiting would never get there.
+    verdict.storageShort ? t('hud.ringMenu.actions.storageTooSmall') : undefined,
   ].filter((lock): lock is string => !!lock);
   const hexBusy = world.hud.queue.some((o) => o.q === tile.q && o.r === tile.r);
   const availability = availabilityFor(cost, upgradeDefinition, locks.length > 0, hexBusy);
@@ -1043,33 +1144,82 @@ function razeActionFor(tile: Tile): RingAction {
 }
 
 const rootActions = computed<RingAction[]>(() => primaryActionFirst(rootActionList()));
+// Settlers standing in the selected settlement's garrison (a founding convoy takes exactly SETTLERS_PER_FOUNDING of them).
+function settlersAtHome(): number {
+  return world.hud.garrison.find((g) => g.unit === 'settler')?.count ?? 0;
+}
+// Set up a beach camp: offered on a sand shore hex with nothing on it (an enemy realm's included), live mode only. Locked with
+// the missing requirement (camp builders at home, the camp's cost), like a founding; the card shows the cost and the build time.
+function campActions(tile: Tile): RingAction[] {
+  if (DEMO_MODE || !isCampSite(tile, world.model.terrainOf, (c) => world.model.giantAnchorAt(c))) return [];
+  const buildersAtHome = world.hud.garrison.find((g) => g.unit === 'campbuilder')?.count ?? 0;
+  const lock = campLock(buildersAtHome, world.hud.available);
+  const missing = formatMissingResources(BEACH_CAMP_COST, world.hud.available);
+  const hint = !lock
+    ? undefined
+    : lock.reason === 'builders'
+      ? t('hud.ringMenu.actions.campNeedsBuilders', { have: lock.have, need: lock.need })
+      : t('hud.ringMenu.actions.notEnough', { resources: missing });
+  return [
+    {
+      id: 'setup-camp',
+      label: t('hud.ringMenu.actions.setUpCamp'),
+      disabled: lock !== null,
+      state: lock ? 'waiting' : undefined,
+      hint,
+      card: {
+        title: t('hud.ringMenu.card.campTitle'),
+        sub: t('hud.ringMenu.card.campSub'),
+        cost: BEACH_CAMP_COST,
+        time: formatBuildTime(scaledBuildSeconds(BEACH_CAMP_BUILD_SECONDS, 1, world.worldSpeedFactor)),
+        okBadge: t('hud.ringMenu.card.campBadge'),
+        locks: hint ? [hint] : [],
+        art: buildingArt('beachcamp', 1),
+      },
+    },
+  ];
+}
+function foundingLockHint(lock: FoundingLock): string {
+  switch (lock.reason) {
+    case 'settlers':
+      return t('hud.ringMenu.actions.foundNeedsSettlers', { have: lock.have, need: lock.need });
+    case 'renown':
+      return t('hud.ringMenu.actions.foundNeedsRenown', { total: Math.floor(lock.total), required: Math.round(lock.required) });
+    case 'renownUnknown':
+      return t('hud.ringMenu.actions.foundRenownUnknown');
+  }
+}
 function rootActionList(): RingAction[] {
   const tile = selectedTile.value;
   if (!tile) return [];
   // World zoom only offers the army action: BuildingModal/TrainingModal and
   // the build fan only exist in the settlement template, so Build/Upgrade
   // bubbles here would open nothing.
-  if (mode.value === 'world') return [...huntActions(tile), ...siegeActions(tile), sendArmyAction(tile)];
+  if (mode.value === 'world') return [...huntActions(tile), ...siegeActions(tile), ...campActions(tile), sendArmyAction(tile)];
 
   if (isEnemyTile.value) {
     // Replaces the old permanently-disabled "Attack / Raid" bubble — combat
     // is implemented now, via the same dispatch draft/sheet every other
     // "send army" entry point uses.
-    return [...siegeActions(tile), sendArmyAction(tile)];
+    return [...siegeActions(tile), ...campActions(tile), sendArmyAction(tile)];
   }
   if (isUnclaimedTile.value) {
-    const onCoast = tile.terrain === 'sand';
+    const onCoast = isShorelineHex(tile, world.model.terrainOf);
+    const lock = foundingLock(settlersAtHome(), world.hud.renown);
     return [
       {
         id: onCoast ? 'land-here' : 'send-settlers',
         label: onCoast ? t('hud.ringMenu.actions.landHere') : t('hud.ringMenu.actions.sendSettlers'),
-        disabled: true,
-        hint: t('hud.ringMenu.actions.noSettlersYet'),
+        disabled: lock !== null,
+        hint: lock ? foundingLockHint(lock) : undefined,
       },
       ...huntActions(tile),
+      ...campActions(tile),
       sendArmyAction(tile),
     ];
   }
+  // A beach camp has nothing to upgrade, raze, train or build: its one hex offers only the army action.
+  if (isMineTile.value && tile.buildingType && !offersUpgradeAndRaze(tile.buildingType)) return [sendArmyAction(tile)];
   if (isMineTile.value && tile.buildingType) {
     // The previous ring floated "Lv n / upgrade" as a gold badge above the
     // orbit, joined to it by a guide line. 2a has no badge — every action is
@@ -1103,10 +1253,11 @@ function rootActionList(): RingAction[] {
     return [
       ...(buildAction.value ? [buildAction.value] : []),
       ...huntActions(tile),
+      ...campActions(tile),
       sendArmyAction(tile),
     ];
   }
-  return [...huntActions(tile), sendArmyAction(tile)];
+  return [...huntActions(tile), ...campActions(tile), sendArmyAction(tile)];
 }
 
 
@@ -1134,7 +1285,7 @@ const ringCoordLabel = computed(() => {
 
 const ringOpen = computed(() => !!(selectedTile.value && ringScreen.value));
 
-function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
+async function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
   // docs/design/ship-movement.md §5: fleet waypoints/orders must work at
   // world zoom too, not just settlement zoom — ships range over open water
   // the settlement view never shows. So a dispatch/field-order draft in
@@ -1168,10 +1319,23 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   // uses instead, so a fleet's target (open water the settlement view never
   // shows) can be picked by tapping it, not just by search in ArmyPanel.
   hoverInfo.value = null;
+  // Settlement view: a tap on a hex of another of the player's realms switches to it first, so the ring below offers the home
+  // actions of the realm that is now run. The camera stays where it is. World zoom never switches.
+  let switchError: string | null = null;
+  let ringTile = tile;
+  const otherRealm = realmToSwitchTo(mode.value, tile.ownerId, world.selectedSettlementId, world.ownRealmOf);
+  if (otherRealm) {
+    try {
+      await world.switchToSettlement(otherRealm);
+      ringTile = world.model.getTile(coord.q, coord.r) ?? tile;
+    } catch (e) {
+      switchError = apiErrorMessage(e, t('hud.ringMenu.errors.couldNotSwitchRealm'));
+    }
+  }
   selectedCoord.value = coord;
-  selectedTile.value = tile;
+  selectedTile.value = ringTile;
   ringScreen.value = roomForRing(screen);
-  actionError.value = null;
+  actionError.value = switchError;
 }
 
 /** Pans the map so the tapped tile's ring opens as a circle (lib/map/ringPlacement.ts); returns where it opens. */
@@ -1252,7 +1416,18 @@ async function onRingSelect(id: string) {
       await raze();
       return;
     case 'send-army':
-      if (selectedCoord.value) world.openSendPicker(selectedCoord.value);
+      if (selectedCoord.value && tile) world.openSendPicker(selectedCoord.value, sendPickerTargetAt(tile, selectedCoord.value));
+      closeRing();
+      return;
+    case 'send-settlers':
+    case 'land-here':
+      // Same dispatch draft the Hunt / Siege bubbles use: the hex is the destination, five settlers go.
+      if (selectedCoord.value) world.startDispatchAt(selectedCoord.value, { mission: 'found' });
+      closeRing();
+      return;
+    case 'setup-camp':
+      // Same dispatch draft as a founding: the hex is the camp's site, two camp builders go.
+      if (selectedCoord.value) world.startDispatchAt(selectedCoord.value, { mission: 'setupcamp' });
       closeRing();
       return;
     case 'hunt':
@@ -1268,10 +1443,7 @@ async function onRingSelect(id: string) {
       closeRing();
       return;
     case 'attack':
-    case 'support':
-      if (selectedCoord.value && tile?.ownerId) {
-        world.openSendPicker(selectedCoord.value, { mission: id, targetSettlementId: tile.ownerId });
-      }
+      if (selectedCoord.value && tile?.ownerId) world.openSendPicker(selectedCoord.value, { mission: 'attack', targetSettlementId: tile.ownerId });
       closeRing();
       return;
     default:
@@ -1458,8 +1630,8 @@ async function upgrade() {
          the camera starts — this scrim (matching Viking Realm.dc.html's own
          top-bar gradient) keeps the logo/resources/nav readable regardless
          of what's under them. -->
-    <div class="hud-scrim" :class="{ 'hud-scrim--bottom': hudBarAtBottom }" />
-    <TopBar :hide-title="mode === 'settlement'" @focus-home="onFocusHome">
+    <div v-phone-hidden="hudHidden" class="hud-scrim" :class="{ 'hud-scrim--bottom': hudBarAtBottom }" />
+    <TopBar @focus-home="onFocusHome" @focus-realm="onFocusRealm">
       <ResourceBar :ring-open="ringOpen" />
       <HudNav has-resource-bar />
       <template #drawer="{ close }">
@@ -1467,17 +1639,18 @@ async function upgrade() {
       </template>
     </TopBar>
     <template v-if="mode === 'settlement'">
+      <!-- Over the map, under every panel: one marker per own building (dial + docked box) and the switch that hides them. -->
+      <BuildingHudLayer :renderer="canvasRef?.renderer" @update:hovering="hudHovering = $event" />
       <template v-if="isMobile">
         <QueueDrawer v-if="!hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
       </template>
       <template v-else>
-        <BuildQueuePanel @select="onQueueSelect" />
-        <TrainingQueuePanel />
+        <!-- Desktop: the four panels dock to the map's corners; their icons sit in the column at the bottom left. -->
+        <HudPanelColumn v-phone-hidden="hudHidden" />
+        <HudPanelDock v-phone-hidden="hudHidden" @select="onQueueSelect" @focus-army="onArmySelect" />
       </template>
-      <ExpansionPanel />
-      <QuestTray v-if="!hasActiveDraft" />
-      <ArmyPanel v-if="!isMobile" @focus-army="onArmySelect" />
-      <HexTooltip v-if="hoverInfo" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
+      <QuestTray v-if="isMobile && !hasActiveDraft" />
+      <HexTooltip v-if="hoverInfo && !hudHovering" v-phone-hidden="hudHidden" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
       <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu
           v-if="selectedTile && ringScreen"
@@ -1524,7 +1697,7 @@ async function upgrade() {
            queue drawer (mobile fleets need to be tracked here too) are
            mode-agnostic. -->
       <QueueDrawer v-if="isMobile && !hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
-      <ArmyPanel v-if="!isMobile" @focus-army="onArmySelect" />
+      <ArmyPanel v-if="!isMobile" v-phone-hidden="hudHidden" @focus-army="onArmySelect" />
       <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu
           v-if="selectedTile && ringScreen"
@@ -1549,12 +1722,14 @@ async function upgrade() {
     </template>
     <BuildRefusalChip
       v-if="buildRefusal"
+      v-phone-hidden="hudHidden"
       :renderer="canvasRef?.renderer"
       :coord="buildRefusal.coord"
       :message="buildRefusal.message"
     />
     <div
       v-if="armyHint"
+      v-phone-hidden="hudHidden"
       class="army-hint"
       role="status"
       :style="{ left: armyHint.x + 'px', top: armyHint.y + 'px' }"

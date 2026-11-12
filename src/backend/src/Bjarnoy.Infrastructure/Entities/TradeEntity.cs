@@ -136,6 +136,15 @@ public class TradeReportEntity
 
     public Guid AcceptorSettlementId { get; set; }
 
+    /// <summary>The world the trade happened in; scopes the per-player inbox.</summary>
+    public Guid WorldId { get; set; }
+
+    /// <summary>The poster's player (<c>SettlementEntity.OwnerId</c>). A report belongs to the players, not to a settlement.</summary>
+    public string PosterOwnerId { get; set; } = string.Empty;
+
+    /// <summary>The acceptor's player; see <see cref="PosterOwnerId"/>.</summary>
+    public string AcceptorOwnerId { get; set; } = string.Empty;
+
     public TradeResource OfferedResource { get; set; }
 
     public double OfferedAmount { get; set; }

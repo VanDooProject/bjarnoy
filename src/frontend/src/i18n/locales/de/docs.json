@@ -58,6 +58,11 @@
         "wildlifeCamps": "Starke Lager können Siedler unterwegs überfallen.",
         "realm": "Eine neue Siedlung hält Abstand zu deinem Gebiet, Wachtürme eingerechnet."
       },
+      "beachCamp": {
+        "founding": "Lagerbauer bildest du in derselben Wagnerei aus wie Siedler.",
+        "ships": "Das Lager entsteht vom Meer aus, und die Schiffe warten draußen auf dem Wasser.",
+        "realm": "Ein Lager beansprucht ein Feld und schließt sich deinem Gebiet an, wenn es es berührt."
+      },
       "realm": {
         "founding": "Wo eine neue Siedlung landen darf, wird von jeder Gebietsgrenze aus gemessen, Wachtürme eingerechnet.",
         "walls": "Auch Mauern stehen innerhalb deines Gebiets und brauchen einen Wachturm der Stufe 5.",
@@ -154,6 +159,10 @@
         "title": "Siedlungen gründen",
         "description": "Siedler aus der Wagnerei und wo eine neue Siedlung landen kann."
       },
+      "beachCamp": {
+        "title": "Strandlager",
+        "description": "Lagerbauer, ein Lager am Sandstrand und was es fasst."
+      },
       "realm": {
         "title": "Das Gebiet erweitern",
         "description": "Wie weit dein Anspruch reicht, wie Wachtürme die Grenze hinausschieben und wie viele du bauen darfst."
@@ -246,11 +255,11 @@
       "water": "Wasser"
     },
     "lore": {
-      "longhouse": "Das Herz der Siedlung. Seine Stufe bestimmt Claim-Radius, Bauplätze und welche Gebäude freigeschaltet sind. Außerdem liefert es von jedem Rohstoff ein wenig und erweitert das Lager. Jede Siedlung beginnt mit einem Langhaus auf Gras.",
+      "longhouse": "Das Herz der Siedlung. Seine Stufe bestimmt Claim-Radius, Bauplätze und welche Gebäude freigeschaltet sind. Außerdem liefert es ein wenig Holz und Nahrung und erweitert das Lager. Jede Siedlung beginnt mit einem Langhaus auf Gras oder, wenn sie vom Meer aus gegründet wurde, auf dem Sandstrand.",
       "lumberjack": "Schlägt Holz auf bewaldetem Boden – das Holz hinter jeder Wand und jedem Dach.",
       "quarry": "Bricht Stein aus einem Bergkamm – die Knochen jeder Festung.",
       "odinstatue": "Odins Statue steht auf Gras und wird ab Langhaus 25 hinter einer Druidenhütte der Stufe 10 freigeschaltet. Weisheit: Jeder Bau in dieser Siedlung dauert pro Stufe 2 % kürzer (auf Stufe 5 sind es 10 %). Raben: Das Gebiet, die Türme und die Armeen der Siedlung sehen pro Stufe 2 Ringe weiter (auf Stufe 5 sind es 10). Sie zählt als der eine Schrein der Siedlung.",
-      "palisade": "Ein Feld der Siedlungsmauer auf Gras, Wald oder Sand im eigenen Gebiet. Es wird ab Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet (Palisade und Tor teilen sich eine Karte im Techbaum). Mauern verzweigen sich nie: Kein Feld darf drei Mauernachbarn haben. Ob ein Feld als Gerade, Kurve oder Ende gezeichnet wird, hängt von den benachbarten Mauerfeldern ab. Jedes Mauerfeld hält jede Landarmee auf, auch die des Besitzers. Ein einzelnes Mauerende (mit einem Mauernachbarn) ist nur halb offen: Jede Armee überquert es, nur langsamer, es sei denn, es grenzt an einen Berg oder einen breiten Fluss. An der Küste endet die Mauer auf einem Flachwasserfeld, dem Seeende, und das Meer bleibt Meer. Gewinnt ein Angreifer eine Belagerung, die ein Mauerfeld zum Ziel hat, nimmt sie ihm eine Stufe, egal wie viele Rammböcke übrig sind (an Land beschädigen nur Rammböcke eine Mauer; eine Flotte, die gegen das Seeende geschickt wird, ebenfalls). Feuer wird das später auch tun.",
+      "palisade": "Ein Feld der Siedlungsmauer auf Gras, Wald oder Sand im eigenen Gebiet. Es wird ab Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet (Palisade und Tor teilen sich eine Karte im Techbaum). Mauern verzweigen sich nie: Kein Feld darf drei Mauernachbarn haben. Ob ein Feld als Gerade, Kurve oder Ende gezeichnet wird, hängt von den benachbarten Mauerfeldern ab. Jedes Mauerfeld hält jede Landarmee auf, auch die des Besitzers. Ein einzelnes Mauerende (mit einem Mauernachbarn) ist nur halb offen: Jede Armee überquert es, nur langsamer, es sei denn, es grenzt an einen Berg oder einen breiten Fluss. An der Küste endet die Mauer auf einem Flachwasserfeld, dem Seeende, und das Meer bleibt Meer. Gewinnt ein Angreifer eine Belagerung, die ein Mauerfeld zum Ziel hat, nimmt sie ihm eine Stufe, egal wie viele Rammböcke übrig sind (an Land beschädigen nur Rammböcke eine Mauer, das Seeende nur ein Brandschiff). Feuer wird das später auch tun.",
       "palisadegate": "Ein Mauerfeld mit Tor. Es lässt sich nur dort setzen, wo die Mauer gerade zwischen zwei gegenüberliegenden Mauerfeldern verläuft. Die Armeen des Besitzers und seiner Freunde (dieselbe Gilde oder eine Gilde, die mit ihr im Frieden ist) passieren es so schnell wie den Boden darunter. Jede andere Armee wird wie an jedem Mauerfeld aufgehalten. Freischaltung, Voraussetzung, Stufen und Kosten sind dieselben wie bei der Palisade, beide teilen sich eine Karte im Techbaum.",
       "reindeerherder": "Eine Hirtenhütte mit Rentiergehege auf offenem Grasland. Es ist das erste Nahrungsgebäude der Siedlung und von Anfang an verfügbar.",
       "farm": "Baut auf offenem Grasland Nahrung an und hält den Tisch des Langhauses gefüllt. Der Bauernhof lässt sich auf jeder Insel bauen, unabhängig vom Boden, und wird ab Langhaus 4 hinter einem Rentierhirten der Stufe 3 freigeschaltet (Bauernhof und Kürbisfarm teilen sich eine Karte im Techbaum).",
@@ -264,7 +273,7 @@
       "shrineofnjord": "Für Njörd auf Küstenwasser errichtet, hinter einer Werft der Stufe 10. Die Gunst des Meeresgottes stärkt den Angriff deiner Schiffe (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
       "archeryrange": "Bildet auf Gras die Bogenschützen der Landarmee aus.",
       "dockyard": "Bildet auf flachem (Küsten-)Wasser Schiffe aus.",
-      "greatstorehouse": "Eine Lagerstufe für das Endspiel auf Gras. Sie setzt voraus, dass sowohl das Langhaus als auch das Lagerhaus dieser Siedlung auf Stufe 15 stehen.",
+      "greatstorehouse": "Eine Lagerstufe für das Endspiel auf Gras. Du brauchst dafür ein Langhaus auf Stufe 15 und ein Lagerhaus auf Stufe 25. Jedes weitere verlangt ein zusätzliches Lagerhaus auf Stufe 25.",
       "barracks": "Bildet auf Gras an der Grenze die Kernlinie der Landarmee aus – Thralls, Speerkämpfer, Axtkämpfer und Berserker. Die Bogenschützen bildet der Schießplatz aus, die Belagerungswaffen die Belagerungswerkstatt. Keine Einheit lässt sich an zwei Gebäuden ausbilden.",
       "sawmill": "Verarbeitet Holz direkt auf einem geraden, sanft gebogenen oder eng gebogenen Flussfeld – ein Wasserrad, das sich mit der Strömung dreht, wie bei der Getreidemühle. Sie liefert kein eigenes Holz, sondern steigert jeden Holzfäller im Umkreis ihrer Stufe. Mit steigender Stufe wachsen Reichweite und Bonus.",
       "meadery": "Züchtet Bienen auf Gras hinter einem Bauernhof der Stufe 5 – Bienenkörbe, eine Honigpresse und ein Metkeller. Sie hat noch keine eigene Wirkung, der Met ist für einen künftigen Moralbonus gedacht.",
@@ -361,6 +370,11 @@
         "title": "Küstenwasser",
         "lore": "Darunter ist es schlichtes Meer, dasselbe Gelände wie das offene Wasser dahinter – aber nah genug am Ufer für einen Steg.",
         "generation": "Ein Meeresfeld mit mindestens einem Nachbarn an Land: der Ring, der jede Insel umschließt."
+      },
+      "inlandLake": {
+        "title": "Binnensee",
+        "lore": "Ein Binnensee ist Wasser, das eine Insel ganz umschließt. Er sieht aus wie das Meer, aber kein Schiff kommt hin. Am Ufer kannst du eine Fischerhütte darauf bauen – Werft und Flotten können ihn nicht nutzen.",
+        "generation": "Wasser, das eine Insel umschließt und das nicht mit dem offenen Meer verbunden ist, wenn das Moor daraus keinen Moorsee gemacht hat."
       },
       "sand": {
         "title": "Sand",
@@ -567,7 +581,7 @@
       "respawn": "Ein geräumtes Lager füllt sich nur wieder auf, solange sein Feld außerhalb jedes Reichs liegt. Ein leeres Lager innerhalb eines Reichs bleibt leer. Steht das Gebäude darauf nicht mehr und liegt das Feld außerhalb jedes Reichs, kehrt das Lager zurück.",
       "neverBuilt": "Auf dem Adlerhorst auf seiner Brandungssäule und auf Fenrirs Brut in den Ödlanden wird nie gebaut. Das leere Nest bleibt auf der Karte, und Fenrirs Brut kehrt immer wieder zurück.",
       "atSea": "Der Walweg liegt auf offener See, weit vor der Küste. Er beansprucht kein Land und brennt keine Türme nieder. Segelt eine Flotte auf sein Feld, solange er nicht ruhig ist, gerät sie dort in einen Hinterhalt. Jagen kannst du ihn nur mit Schiffen. Er liefert nur Nahrung, so viel deine überlebenden Schiffe tragen können, und kehrt nach jeder Räumung zurück.",
-      "hunting": "Jagd: Schick Landeinheiten (zum Walweg Schiffe) mit dem Jagdbefehl auf das Feld eines Lagers. Der Angriff deiner Armee wird gegen die Verteidigung der Tiere ausgekämpft, bei Gleichstand gewinnt das Lager. Der Verlierer verliert alles, der Gewinner einen Teil seiner Streitmacht. Ein Sieg räumt das Lager und zahlt seine Beute aus.",
+      "hunting": "Jagd: Schick Landeinheiten (zum Walweg Schiffe) mit dem Jagdbefehl auf das Feld eines Lagers. Eine Robbenbank oder einen Walross-Liegeplatz am Strand jagt eine Flotte nur mit Landtruppen an Bord, denn die kämpfen dort. Der Angriff deiner Armee wird gegen die Verteidigung der Tiere ausgekämpft, bei Gleichstand gewinnt das Lager. Der Verlierer verliert alles, der Gewinner einen Teil seiner Streitmacht. Ein Sieg räumt das Lager und zahlt seine Beute aus.",
       "regrowth": "Nachwuchs: Ein angeschlagenes Lager bekommt seine Tiere gleichmäßig über 4 Stunden (schwache Lager) oder 8 Stunden (starke Lager) zurück.",
       "calm": "Ruhe: Nach jedem Kampf ist ein Lager 24 Stunden lang ruhig. Es wächst weiter nach, greift aber nicht an.",
       "leveling": "Aufstieg: Jede 10. Räumung eines Lagers, egal durch welchen Spieler, hebt seine Stufe um 1, höchstens bis 100. Die Stufe sinkt nie wieder. Die Reichweite bleibt, wie sie ausgewürfelt wurde: Ein abgefarmtes Lager wird also stärker, beansprucht aber nicht mehr Land.",
@@ -781,7 +795,7 @@
       "boats": "Boote erscheinen auf einem See nur dort, wo eine Seefischerhütte oder eine Raseneisenerz-Grube am Ufer steht, und auch dann nicht bei jedem Gebäude: Jedes hat eine Chance von 50 %. Ein kleiner See trägt höchstens ein Boot, ein großer eines je zwölf Wasserfelder. Boote und Reusen halten drei Felder Abstand zueinander.",
       "landing": "Von jedem Landeplatz, der einem neuen Spieler angeboten wird, ist Moor in Reichweite, denn Ziegelei und Raseneisenerz-Grube brauchen es beide.",
       "river": "Durch den See fließt immer ein Fluss: Er kommt durch eine Bachmündung herein und verlässt den See durch eine andere. Manchmal mündet ein zweiter Fluss in den See, oder eine Bachquelle im Moor lässt einen eigenen Fluss entstehen.",
-      "inland": "Moor berührt nie das Meer oder den Strand. Wo eine Insel eine Meeresbucht umschließt, wird diese Bucht zu einem Moorsee mit einem Moorring, und die Flüsse in der Nähe münden in ihn."
+      "inland": "Moor grenzt nie ans Meer oder an den Strand."
     },
     "margins": {
       "heading": "Moorränder (nicht verwendet)",
@@ -820,7 +834,7 @@
   },
   "walls": {
     "title": "Mauern",
-    "intro": "Die Palisade ist die Mauer aus Erde und Holz der Wikingerzeit und vor allem eine Bewegungssperre: Sie hält Landarmeen auf, Boote aber nicht. Sie wird mit Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet und hat 3 Stufen. Jedes Mauerfeld kostet auf Stufe 1 etwa 40 Holz und 10 Stein.",
+    "intro": "Die Palisade ist die Mauer aus Erde und Holz der Wikingerzeit und vor allem eine Bewegungssperre: Sie hält Landarmeen auf, Boote aber nicht. Sie wird mit Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet und hat 3 Stufen. Jedes Mauerfeld kostet auf Stufe 1 etwa 540 Holz, 150 Stein und 40 Nahrung.",
     "stage": "Stufe",
     "camera": "Blickrichtung",
     "stages": {
@@ -924,10 +938,10 @@
     },
     "sieges": {
       "heading": "Belagerung",
-      "body": "Eine Mauer lässt sich durchbrechen, und zwar Stufe um Stufe. Das schaffen Rammböcke und Flotten, aber nur bei einem Angriff auf die Siedlung, zu der die Mauer gehört. Katapulte können keine Mauer beschädigen; sie brennen Türme und alle anderen Gebäude nieder.",
+      "body": "Eine Mauer lässt sich durchbrechen, und zwar Stufe um Stufe. Das schaffen Rammböcke und am Seeende Brandschiffe, aber nur bei einem Angriff auf die Siedlung, zu der die Mauer gehört. Katapulte können keine Mauer beschädigen; sie brennen Türme und alle anderen Gebäude nieder.",
       "rules": {
-        "who": "Schick einen Angriff (oder einen Raubzug) mit Rammböcken gegen die Siedlung und wähl beim Losschicken das Mauerfeld als Ziel. Bei der Mauer eines Rivalen erledigt das die Aktion „Belagern“ im Ringmenü für dich (sie braucht einen Rammbock zu Hause). Gewinnt deine Armee die Schlacht, schlagen die überlebenden Rammböcke auf dieses Feld. Ein einziger überlebender Rammbock genügt. Verliert deine Armee die Schlacht, schlägt nichts zu. Rammböcke werden in der Belagerungswerkstatt ausgebildet.",
-        "ships": "Gewinnt eine Flotte ihren Kampf, beschädigt sie das Gebäude, gegen das du sie geschickt hast, auf dieselbe Weise, auch das Seeende einer Mauer. Einem Mauerfeld nimmt sie dann ebenfalls genau eine Stufe.",
+        "who": "Schick einen Angriff mit Rammböcken gegen die Siedlung und wähl beim Losschicken das Mauerfeld als Ziel. Bei der Mauer eines Rivalen erledigt das die Aktion „Belagern“ im Ringmenü für dich (sie braucht einen Rammbock zu Hause). Gewinnt deine Armee die Schlacht, schlagen die überlebenden Rammböcke auf dieses Feld. Ein einziger überlebender Rammbock genügt. Verliert deine Armee die Schlacht, schlägt nichts zu. Rammböcke werden in der Belagerungswerkstatt ausgebildet. Auf einem Raubzug zerstören deine Rammböcke und Katapulte nichts.",
+        "ships": "Schiffe beschädigen keine Gebäude an Land. Schickst du ein Brandschiff gegen das Seeende einer Mauer und gewinnen deine Schiffe dort den Kampf, verbrennt es und nimmt der Mauer eine Stufe.",
         "target": "Wählst du kein Ziel oder steht das gewählte Gebäude bei der Ankunft nicht mehr, trifft die Belagerung ein zufälliges Gebäude der Siedlung, das deine überlebenden Belagerungswaffen beschädigen können. Eine Mauer, die nur Katapulten genannt wird, nimmt keinen Schaden.",
         "level": "Eine gewonnene Belagerung nimmt einem Mauerfeld genau eine Stufe, egal wie viele Rammböcke überleben. Das gilt auch für das Tor. Die meisten Gebäude verlieren gegen eine starke Armee mehrere Stufen auf einmal, eine Mauer bricht dagegen Stufe für Stufe. Palisade und Tor haben {levels} Stufen, ein fertig ausgebautes Mauerfeld braucht also {levels} gewonnene Belagerungen. Eine beschädigte Mauer hält Armeen weiter auf, bis ihre letzte Stufe fällt.",
         "gone": "Auf Stufe 0 ist das Mauerfeld weg: Das Feld ist wieder freier Boden, und Armeen ziehen hindurch. Ein Bauauftrag, der noch für dieses Feld wartet, entfällt.",
@@ -947,7 +961,7 @@
     },
     "producers": {
       "heading": "Produzenten",
-      "growth": "Die Leistung eines Produzenten wächst mit jeder Stufe um 20 %: Jede Stufe liefert das 1,2-Fache der vorigen.",
+      "growth": "Die Leistung eines Produzenten wächst mit jeder Stufe, und jede Stufe bringt 20 % mehr dazu als die vorige.",
       "columns": {
         "building": "Gebäude",
         "makes": "Liefert",
@@ -963,7 +977,7 @@
         "claybrickworks": "Nur auf reinem Moorboden",
         "bogoreworks": "Nur auf reinem Moorboden, nicht an Ufer, Bach oder See"
       },
-      "longhouse": "Das Langhaus ist die Ausnahme: Es liefert mit jeder Stufe dieselbe feste Menge dazu ({amounts} pro Stunde: Holz / Stein / Nahrung / Eisen), statt um 20 % zu wachsen.",
+      "longhouse": "Das Langhaus ist die Ausnahme: Es liefert mit jeder Stufe dieselbe feste Menge dazu ({amounts} pro Stunde: Holz / Nahrung), statt jedes Mal 20 % mehr zu bringen.",
       "soil": "Jede Insel hat Weizen- oder Kürbisboden, etwa die Hälfte von jedem. Eine {pumpkin} passt nur auf Kürbisboden und bringt auf Stufe 1 {pumpkinRate} Nahrung, wo ein {farm} {farmRate} bringt. Ein {farm} kannst du auf jeder Insel bauen."
     },
     "boost": {
@@ -993,16 +1007,8 @@
       "body": "Jeder Rohstoff wächst nur bis zu deiner Lagergrenze, was darüber liegt, geht verloren. Ohne Lagergebäude liegt die Grenze bei {base} pro Rohstoff. Diese Gebäude heben sie an.",
       "capacity": "Fasst zusätzlich, pro Rohstoff",
       "cell": "Stufe {level}: {capacity}",
-      "levelCap": "Ein {storehouse} oder ein {great} darf nicht höher ausgebaut sein als dein {longhouse}.",
-      "moreHeading": "Weitere Lagerhäuser",
-      "moreBody": "Du kannst mehr als ein Lagerhaus bauen, aber jedes weitere verlangt mehr von den vorhandenen.",
-      "step": {
-        "which": "Lagerhaus",
-        "needs": "Voraussetzung",
-        "nth": "Nr. {n}",
-        "later": "Nr. {n} und jedes weitere",
-        "needsCell": "{count} Lagerhaus auf Stufe {level} | {count} Lagerhäuser auf Stufe {level}"
-      },
+      "levelCap": "Ein {great} darf nicht höher ausgebaut sein als dein {longhouse}.",
+      "greatCount": "Lagerhäuser kannst du in beliebiger Zahl bauen, und ihre Stufe hängt nicht vom Langhaus ab. Für ein {great} brauchst du ein {storehouse} auf Stufe 25, für jedes weitere eines mehr: Das zweite verlangt zwei auf Stufe 25, das dritte drei und so weiter.",
       "overCap": "Kosten über deiner Lagergrenze kannst du nie bezahlen, egal wie lange du wartest. Baue also Lager aus, bevor du etwas aufwertest, das mehr kostet, als du fassen kannst."
     },
     "upkeep": {
@@ -1051,6 +1057,7 @@
     "toc": {
       "first": "Erste Siedlung",
       "more": "Weitere Siedlungen",
+      "sea": "Über das Meer",
       "renown": "Ruhm und Preis",
       "where": "Wo",
       "new": "Eine neue Siedlung"
@@ -1069,24 +1076,36 @@
         "upkeep": "Unterhalt pro Stunde",
         "time": "Ausbildungszeit",
         "longhouse": "Langhaus-Stufe",
+        "cost": "Kosten pro Siedler",
         "minutes": "{n} Min."
       },
+      "order": "Die Kosten sind {resources}.",
+      "send": "Zum Losschicken tippst du auf ein freies Feld und wählst „Siedler entsenden“, an der Küste „Hier landen“.",
+      "escorts": "Du kannst den Siedlern Begleitschutz mitgeben. Er bleibt als Besatzung in der neuen Siedlung.",
       "provisions": "Jeder Siedler trägt {food} Nahrung, alle fünf zusammen {total}. Nimm genug für Hin- und Rückweg mit.",
       "ambush": "Unterwegs können starke Wildtierlager deine Siedler überfallen (siehe {camps}). Wie schnell sie über das jeweilige Gelände kommen, steht auf der Seite {movement}.",
       "campsLink": "Wildtierlager",
       "movementLink": "Bewegung an Land"
     },
+    "sea": {
+      "heading": "Gründen über das Meer",
+      "body": "Gib den fünf Siedlern Schiffe aus deiner Heimatbesatzung mit, dann segelt der Zug los. Er startet an deiner {dockyard} und landet auf dem Feld, das du gewählt hast: einem Sandfeld direkt am Meer. Tipp dazu auf der Karte ein freies Feld an der Küste an und wähle „Hier landen“.",
+      "slots": "Jeder Siedler belegt an Bord einen Platz. Eine Karve nimmt also alle fünf auf und hat noch Platz für Begleitschutz. Brauchen die Truppen mehr Plätze, als die Schiffe haben, kann der Zug nicht aufbrechen. Wie viele Plätze jede Einheit braucht, steht auf der Seite {ships}.",
+      "speed": "Auf See ist der Zug so schnell wie sein langsamstes Schiff. Die Siedler bremsen ihn nicht.",
+      "camps": "Lager an Land überfallen einen Zug auf See nie. Der Walweg schon (siehe {camps}).",
+      "camp": "Willst du nur einen Brückenkopf am Ufer und kein neues Gebiet, errichte stattdessen ein {camp}.",
+      "ships": "Auch die Schiffe bleiben mit dem Begleitschutz in der neuen Siedlung.",
+      "shipsLink": "Schiffe und Wasser",
+      "campLink": "Strandlager"
+    },
     "renown": {
       "heading": "Ruhm und Preis",
-      "body": "Jede Siedlung nach der ersten kostet Ruhm und Siedler. Ruhm sammelst du mit den Gebäuden aller deiner Siedlungen zusammen: 1 pro Gebäudestufe und Stunde, und er verfällt nie. Mit jeder Siedlung, die du besitzt, verdoppelt sich der Ruhm, der für die nächste verlangt wird, und ebenso der Preis ihrer Siedler.",
+      "body": "Jede Siedlung nach der ersten kostet Ruhm und Siedler. Ruhm sammelst du mit den Gebäuden aller deiner Siedlungen zusammen: 1 pro Gebäudestufe und Stunde, auf schnelleren Welten entsprechend schneller, und er verfällt nie. Mit jeder Siedlung, die du besitzt, verdoppelt sich der Ruhm, der für die nächste verlangt wird. Siedler kosten immer gleich viel.",
       "columns": {
         "next": "Du gründest",
-        "renown": "Nötiger Ruhm",
-        "perSettler": "Kosten pro Siedler",
-        "total": "Kosten für {count} Siedler"
+        "renown": "Nötiger Ruhm"
       },
       "nth": "Siedlung Nr. {n}",
-      "order": "Die Kosten sind {resources}.",
       "when": "Der Ruhm wird geprüft, wenn die Siedler aufbrechen.",
       "feasts": "Ein Fest auf dem {square} bringt zusätzlich Ruhm. Es dauert {hours} Stunden, kostet gleich viel Holz, Stein und Nahrung und wird mit der Stufe des Platzes größer.",
       "feast": {
@@ -1098,6 +1117,7 @@
     "where": {
       "heading": "Wo eine Siedlung landen kann",
       "land": "Auf jedem Landfeld, das deine Siedler erreichen können, nur nicht auf einem Riesen.",
+      "sea": "Über das Meer auf einem Landfeld direkt am Meer.",
       "spacing": "Mindestens {hexes} Felder jenseits der Gebietsgrenze jeder Siedlung der Welt, egal ob deiner eigenen oder der anderer Spieler.",
       "twice": "Das wird beim Aufbruch geprüft und noch einmal bei der Ankunft.",
       "taken": "Hat inzwischen jemand anderes den Platz besetzt, warten die Siedler dort. Du kannst sie weiterschicken oder zurückrufen, und sie kehren von allein heim, wenn ihnen die Nahrung ausgeht."
@@ -1108,7 +1128,49 @@
       "garrison": "Alle Einheiten, die mit den Siedlern gezogen sind, bleiben als Besatzung dort, nur die Siedler selbst nicht."
     },
     "adminNote": {
-      "sea": "Eine Gründung über das Meer gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
+      "sea": "Ein Zug mit mindestens einem Schiff ist eine Flotte (Army.IsFleet): Er startet an der Werft (Army.FleetAnchor), nutzt für Rückruf und Rückzug die Seerouten und fährt mit dem Tempo seines langsamsten Schiffs (ShipCargo.Pace). Das Landefeld ist ein Landfeld mit einem Meer-Nachbarn (Shoreline.IsShoreline), das die Route mit dem letzten Schritt erreicht."
+    }
+  },
+  "beachCamp": {
+    "title": "Strandlager",
+    "intro": "Ein kleiner Stützpunkt an einem Sandstrand, den du vom Meer aus errichtest.",
+    "toc": {
+      "what": "Wofür",
+      "setup": "Aufbauen",
+      "holds": "Was es fasst",
+      "claim": "Gebiet",
+      "risks": "Gefahren"
+    },
+    "what": {
+      "heading": "Ein Stützpunkt für Landungen vom Meer",
+      "body": "Im Strandlager fasst ein Angriff vom Meer Fuß. Schiffe bringen die Truppen an einen Sandstrand, dort entsteht das Lager, und von ihm aus kämpfen die Truppen. Das Lager ist eine eigene Siedlung, aber nur ein Feld groß."
+    },
+    "setup": {
+      "heading": "Ein Lager errichten",
+      "body": "Du brauchst genau {count} {builders} aus der {workshop} und {cost}. Die Kosten zahlst du, sobald die Armee aufbricht. Schiffe und Truppen kannst du dazunehmen. {minutes} Minuten nach der Ankunft der Armee steht das Lager. Tipp auf der Karte ein freies Sandfeld am Ufer an und wähle „Strandlager errichten“.",
+      "rules": {
+        "site": "Du kannst es nur auf einem Sandfeld am Ufer errichten, auf dem noch nichts steht.",
+        "inside": "Es darf auch im Gebiet eines anderen Spielers stehen, selbst im Gebiet eines Feindes.",
+        "waiting": "Solange das Lager entsteht, warten die Truppen auf seinem Feld und die Schiffe ein Feld weit draußen auf dem Wasser.",
+        "garrison": "Die Lagerbauer werden dabei verbraucht. Alles andere, was du mitgeschickt hast, bleibt als Besatzung im Lager.",
+        "home": "Rufst du die Armee zurück oder besetzt jemand die Stelle, während das Lager entsteht, kommen Lagerbauer und Rohstoffe wieder heim."
+      }
+    },
+    "holds": {
+      "heading": "Was ein Lager fasst",
+      "body": "Ein Lager fasst bis zu {cap} von jedem Rohstoff: Holz, Stein, Nahrung und Eisen. Es hat eine eigene Besatzung.",
+      "nothing": "Es produziert nichts, und du kannst darin nichts bauen."
+    },
+    "claim": {
+      "heading": "Gebiet",
+      "body": "Ein Lager beansprucht nur sein eigenes Feld. Berührt dieses Feld eines deiner Gebiete, schließt sich das Lager ihm an: Beide teilen sich einen Vorrat, und das Lager erscheint unter dem Namen des Gebiets (siehe {realm}).",
+      "realmLink": "Das Gebiet erweitern",
+      "limit": "Ein Lager zählt nicht zu deiner Obergrenze an Siedlungen."
+    },
+    "risks": {
+      "heading": "Gefahren",
+      "attacked": "Ein Lager kann von Land und vom Meer aus angegriffen werden. Verteidigen keine Truppen es, kannst du es plündern.",
+      "empty": "Sind keine Truppen darin, lässt es sich auch ohne Belagerungsgerät zerstören."
     }
   },
   "realm": {
@@ -1163,6 +1225,10 @@
     "linked": {
       "heading": "Verbundene Gebiete",
       "body": "Berühren sich die Gebiete zweier deiner Siedlungen auf einer Insel, verbinden sie sich zu einem Gebiet. Es trägt den Namen deiner ältesten Siedlung darin und hat einen gemeinsamen Vorrat: Alles, was du produzierst, fließt hinein, und alles, was du dort baust, ausbildest oder handelst, bezahlst du daraus. Seine Lagerkapazität ist die aller Siedlungen zusammen, ebenso seine Bauplätze, die sich alle Bauaufträge teilen. Du verwaltest das Gebiet von deiner ältesten Siedlung aus und kannst von dort auf jedem seiner Felder bauen. Deine übrigen Siedlungen darin tauchen in keiner Liste mehr auf, und Rivalen sehen auf jedem Langhaus den Namen der ältesten. Ein Überfall auf eines seiner Langhäuser kann den ganzen Vorrat plündern. Reißt die Verbindung ab, behält jede Siedlung ihren Anteil am Vorrat – im Verhältnis zu ihrer Lagerkapazität."
+    },
+    "switching": {
+      "heading": "Zwischen deinen Reichen wechseln",
+      "body": "Besitzt du mehrere Reiche, erscheint in der oberen Leiste ein Pfeil neben dem Namen deines Reichs. Er listet deine Reiche auf, und ein Tipp darauf wechselt dorthin. Du kannst auch auf der Karte ein anderes deiner Reiche antippen: Du wechselst dorthin und kannst gleich bauen. Schickst du Truppen los, kannst du die Garnison oder die Armeen jedes deiner Reiche wählen."
     }
   },
   "landMovement": {
@@ -1222,7 +1288,7 @@
     "pace": {
       "heading": "Wie schnell Armeen ziehen",
       "body": "Das Tempo wird in Feldern pro Stunde auf Gras angegeben. Eine Armee zieht so schnell wie ihre langsamste Einheit. Eine Flotte fährt so schnell wie ihr langsamstes Schiff; Truppen an Bord bremsen sie nicht.",
-      "start": "Deine Truppen ziehen aus dem Gebäude los, in dem sie ausgebildet wurden, und kehren dorthin zurück. Eine Armee aus mehreren Einheitentypen bricht vom Gebäude ihrer langsamsten Einheit auf.",
+      "start": "Deine Truppen stehen an Garnisonsorten: im Langhaus, in Wachtürmen und in Werften. Eine Armee kannst du aus mehreren Orten zusammenstellen. Jede Gruppe bricht sofort von ihrem Ort auf. Sie treffen sich auf dem ersten Feld, das ihre Wege gemeinsam haben. Teilen sie keines, treffen sie sich auf dem Feld direkt vor dem Ziel. Wer zuerst ankommt, wartet dort und isst. Danach zieht die Armee gemeinsam weiter, im Tempo ihrer langsamsten Einheit. Die Heimat der Armee ist der Ort, der dem Treffpunkt am nächsten liegt. Wird eine Gruppe vor dem Treffen zurückgerufen, bekommt sie einen anderen Befehl, wird sie abgespalten oder verliert sie einen Kampf, bleibt sie zurück, und die anderen ziehen weiter. Willst du die ganze Armee abbrechen, ruf jede Gruppe zurück. Passagiere einer Flotte, die an einem Ort ohne Schiffe stehen, laufen zu einer der Werften der Flotte und gehen dort an Bord.",
       "example": "Zum Beispiel braucht ein {unit} für ein Grasfeld {minutes}.",
       "columns": {
         "unit": "Einheit",
@@ -1236,6 +1302,7 @@
       "upkeep": "Eine Armee isst ab dem Aufbruch jede Stunde den Unterhalt ihrer Einheiten an Nahrung.",
       "carry": "Mehr Nahrung, als ihre Einheiten tragen, kann sie nicht mitnehmen. Den Proviant für den ganzen Weg lädst du also vor dem Aufbruch.",
       "turnBack": "Wird die Nahrung knapp, kehrt eine marschierende Armee um.",
+      "noWayHome": "Kommt eine Armee nicht mehr nach Hause, etwa weil eine Palisade den Weg versperrt, bleibt sie, wo sie ist. Geht ihr die Nahrung aus, verhungert die ganze Armee, und du bekommst einen Bericht.",
       "columns": {
         "upkeep": "Isst pro Stunde",
         "carries": "Trägt (Nahrung)"
@@ -1246,11 +1313,14 @@
       "camps": "Kommt eine Armee in die Reichweite eines starken Wildtierlagers, wird sie überfallen, außer das Lager ist ruhig. Ein starkes Lager bewacht {min} bis {max} Felder um sich (2 plus seine Stufe). Mehr dazu unter {link}.",
       "campsLink": "Wildtierlager",
       "enemies": "Feindliche Armeen, die sich auf der Straße treffen, kämpfen eine Feldschlacht. Armeen desselben Besitzers oder derselben Gilde kämpfen nie gegeneinander.",
+      "fleeing": "Nur eine Armee, die nach einer verlorenen Feldschlacht flieht, ist vor Feldschlachten und Überfällen aus Wildtierlagern sicher, höchstens 6 Stunden lang. Du kannst ihr Befehle geben wie jeder anderen Armee, doch mit dem ersten Befehl endet dieser Schutz.",
+      "newWalls": "Versperrt eine neue Palisade einer Armee den Weg, sucht sie sich einen anderen – auf dem Hinweg wie auf dem Heimweg. Findet sie keinen, bleibt sie auf dem letzten Feld vor der Palisade stehen, und du bekommst einen Bericht. Steckt sie auf dem Hinweg fest, gibt sie ihr Ziel auf und wartet dort.",
       "orders": "Jeder Befehl hat ein Ziel gratis. Wegpunkte unterwegs sind eine Premium-Funktion."
     },
     "sendOut": {
       "heading": "Eine Armee losschicken, die schon unterwegs ist",
-      "orders": "Tippe auf einem Feld auf „Armee hierher entsenden“, „Angreifen“, „Unterstützen“ oder „Jagen“ und wähle die Armee, die losziehen soll: deine Garnison oder eine Armee, die schon draußen ist. Eine stehende Armee kann ziehen, angreifen, unterstützen oder jagen. Eine marschierende Armee leitest du mit Premium um. Willst du lieber woandershin, tippst du währenddessen einfach auf ein anderes Feld.",
+      "spots": "Deine Truppen stehen in deinem Langhaus, in deinen Wachtürmen und in deinen Werften. Schiffe liegen in den Werften, im Langhaus nur dann, wenn es am Meer auf Sand steht. Neue Einheiten ziehen an den nächstgelegenen Ort, der sie aufnehmen kann, und eine Armee kehrt dorthin zurück, wo sie losgezogen ist. Hast du sie aus mehreren Orten zusammengestellt, kehrt sie an den Ort zurück, der dem Treffpunkt ihrer Gruppen am nächsten liegt. Willst du Truppen in ein anderes deiner Reiche schicken, tippst du auf eines seiner Felder: Sie verstärken dort als Unterstützung die Besatzung, auf dem Feld, das du angetippt hast, oder im Langhaus.",
+      "orders": "Tippe auf einem Feld auf „Armee hierher entsenden“, „Angreifen“ oder „Jagen“ und wähle die Armee, die losziehen soll: die Garnison eines deiner Reiche oder eine Armee von dir, die schon draußen ist. Jede Zeile nennt das Reich und was seine Truppen dort tun würden: Auf einem Feld deines eigenen Reichs ziehen sie hin, Truppen deiner anderen Reiche unterstützen es. Eine stehende Armee kann ziehen, angreifen, unterstützen oder jagen. Eine marschierende Armee leitest du mit Premium um. Willst du lieber woandershin, tippst du währenddessen einfach auf ein anderes Feld. Greifst du eine Siedlung an, greifst du ein Gebäude in ihrem Reich an. Hat das Gebäude eine Besatzung, verteidigt sie es. Unterstützt du eine Siedlung, verstärkst du eine ihrer Besatzungen.",
       "split": "Von einer stehenden Armee kannst du nur einen Teil losschicken. Der Rest bleibt, wo er steht. Eine marschierende Armee zieht immer komplett los.",
       "reach": "Eine Armee zieht nur los, wenn sie das Ziel erreicht und danach noch genug Proviant für den Rückweg hat. Alle anderen siehst du ausgegraut in der Liste, zusammen mit dem Grund.",
       "support": "Eine Armee, die eine andere Siedlung unterstützt, musst du erst zurückrufen."
@@ -1314,34 +1384,36 @@
     "sailing": {
       "heading": "Auf See",
       "sea": "Schiffe fahren nur auf dem Meer. Küstenwasser und offene See kosten gleich viel, Moorseen sind für sie gesperrt.",
-      "targets": "Eine Flotte kann Siedlungen angreifen, plündern oder unterstützen, die Küste beanspruchen.",
+      "targets": "Eine Flotte kann Siedlungen angreifen, plündern oder unterstützen, die Küste beanspruchen. Greifst du eine Siedlung an, greifst du ein Gebäude in ihrem Reich an. Unterstützt du sie, verstärkst du eine ihrer Besatzungen.",
+      "camp": "Eine Flotte kann auch Lagerbauer an einen Sandstrand bringen, die dort ein {camp} errichten: einen Stützpunkt für Landungen vom Meer.",
       "walls": "{walls} halten Flotten nicht auf.",
       "wallsLink": "Mauern",
       "camps": "Lager an Land überfallen nie eine Flotte. Der Walweg liegt auf offener See und überfällt jede Flotte, die auf sein Feld segelt (siehe {camps}).",
-      "campsLink": "Wildtierlager"
+      "campsLink": "Wildtierlager",
+      "campLink": "Strandlager"
     },
     "troops": {
       "heading": "Truppen an Bord",
       "slots": "Schiffe tragen Landtruppen in Plätzen. Jedes Schiff bietet eine bestimmte Zahl an Plätzen (siehe Tabelle oben), und jede Einheit belegt einige davon (Tabelle unten).",
       "anyTrip": "Eine Flotte kann auf jeder Fahrt Truppen mitnehmen: beim Angriff, Plündern, Unterstützen, Gründen und Jagen. Brauchen die Truppen mehr Plätze, als die Schiffe haben, läuft die Flotte nicht aus.",
       "speed": "Eine Flotte fährt so schnell wie ihr langsamstes Schiff. Die Truppen an Bord bremsen sie nicht, und sie essen vom Proviant der Flotte.",
-      "fight": "Truppen an Bord kämpfen nicht – weder bei einem Flottenangriff noch bei einem Überfall auf See.",
-      "drown": "Gehen Schiffe verloren, ertrinken die Truppen, für die auf den übrigen Schiffen kein Platz mehr ist. Die größten Einheiten trifft es zuerst.",
+      "fight": "Im Schiffskampf kämpfen die Truppen an Bord nicht mit. Im Landkampf danach kämpfen sie von Bord aus, Belagerungswaffen eingeschlossen. Bei einem Überfall auf See kämpfen nur die Schiffe. Von Bord gehen die Truppen nur an einem Strandlager oder an deiner eigenen Werft.",
+      "drown": "Gehen Schiffe verloren, ertrinken die Truppen, für die auf den übrigen Schiffen kein Platz mehr ist. Die größten Einheiten trifft es zuerst. Nach einem Schiffskampf passiert das noch vor dem Landkampf.",
       "unit": "Einheit",
       "unitSlots": "Plätze"
     },
     "battles": {
       "heading": "Kämpfe",
       "same": "Flotten kämpfen nach denselben Regeln wie Armeen an Land: Angriff gegen Verteidigung, bei Gleichstand gewinnt der Verteidiger.",
-      "shipsOnly": "Es kämpfen nur Schiffe, und zwar nur die, die an der angegriffenen Stelle liegen. Landtruppen halten sich auf beiden Seiten heraus: die Truppen auf deinen Schiffen genauso wie die Besatzung an Land in der angegriffenen Siedlung. Deine Schiffe im Hafen verteidigen deine Werft (oder dein Langhaus, wenn es am Ufer steht), verbündete Flotten verteidigen dein Langhaus. Greift eine Flotte irgendein anderes Gebäude an deiner Küste an, trifft sie auf keine Schiffe: Es gibt keinen Kampf, die Flotte siegt und geht direkt auf das Gebäude los.",
-      "shore": "Du schickst eine Flotte gegen ein einzelnes Gebäude am Ufer des Gegners: ein Gebäude auf einem Küstenfeld oder im Küstenwasser, innerhalb des Gebiets der Siedlung. Die Flotte segelt bis zu diesem Gebäude, und dort wird gekämpft. Das Langhaus der Siedlung darf auch im Landesinneren stehen.",
-      "damage": "Gewinnt die Flotte, beschädigt sie dieses Gebäude. Je mehr deiner Schiffe den Kampf überstehen, desto mehr Stufen verliert es. Sonst wird nichts von der Siedlung getroffen. Steht das Gebäude bei der Ankunft nicht mehr, wird nichts beschädigt.",
+      "shipsOnly": "Ein Angriff besteht aus zwei Kämpfen: zuerst Schiffe gegen Schiffe, dann Landtruppen gegen Landtruppen. Schiffe und Landtruppen kämpfen nie gegeneinander. Deine Schiffe im Hafen verteidigen deine Werft (oder dein Langhaus, wenn es am Ufer auf Sand steht), verbündete Flotten kämpfen mit ihnen. Hat das Ziel keine Schiffe, entfällt der Schiffskampf und gilt als gewonnen. Verlierst du ihn, gibt es keinen Landkampf.",
+      "shore": "Schiffe beschädigen keine Gebäude an Land. Nur das Brandschiff beschädigt Gebäude, und nur solche im Wasser: eine Werft, eine Fischerhütte, den Schrein des Njörd und das Seeende einer Mauer. Dabei verbrennt es: 10 Brandschiffe nehmen eine Stufe, und mehr Stufen, als ein gewonnener Angriff erlaubt, verliert ein Gebäude nie.",
+      "damage": "Beute gibt es nur nach einem gewonnenen Landkampf: Ein Angriff auf ein Gebäude im Wasser (Werft, Fischerhütte, Schrein des Njörd, das Seeende einer Mauer) ist nur ein Schiffskampf und bringt keine Beute, denn deine Truppen an Bord kommen nicht heran. Gebäude an Land beschädigen nur die Belagerungswaffen an Bord (Katapulte, Rammböcke), und zwar im Landkampf eines Angriffs. Bei einem Raubzug zerstören die Belagerungswaffen nichts.",
       "tower": "Ein {tower} der verteidigenden Siedlung gibt pro Stufe {percent} % Verteidigung dazu.",
       "njord": "Der {shrine} steigert den Angriff deiner Schiffe auf Stufe 1 um {low} %, bis Stufe 5 um {high} %. Mehr unter {shrines}.",
       "shrinesLink": "Schreine"
     },
     "adminNote": {
-      "sea": "Eine Gründung über das Meer folgt der Platzregel oben: Die {settlers} Siedler einer Gründungsgruppe belegen {settlers} Plätze (ShipCargo). Eine Oberfläche dafür gibt es noch nicht (Issue #447)."
+      "sea": "Eine Gründung über das Meer folgt der Platzregel oben: Die {settlers} Siedler einer Gründungsgruppe belegen {settlers} Plätze (ShipCargo)."
     }
   },
   "shrines": {

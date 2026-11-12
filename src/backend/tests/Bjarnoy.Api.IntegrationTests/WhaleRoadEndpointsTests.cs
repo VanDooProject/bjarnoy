@@ -9,6 +9,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -80,8 +81,7 @@ public sealed class WhaleRoadEndpointsTests : IAsyncLifetime
     private async Task<Setup> FoundOnTheCoastAsync(HttpClient client)
     {
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -120,9 +120,9 @@ public sealed class WhaleRoadEndpointsTests : IAsyncLifetime
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Longship, Count = 10 });
-            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Karve, Count = 10 });
-            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Axeman, Count = 20 });
+            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Longship, Count = 10 });
+            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Karve, Count = 10 });
+            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Axeman, Count = 20 });
             await db.SaveChangesAsync(Ct);
         }
 
@@ -148,16 +148,21 @@ public sealed class WhaleRoadEndpointsTests : IAsyncLifetime
         await db.SaveChangesAsync(Ct);
     }
 
-    private Task<HttpResponseMessage> DispatchAsync(
+    private async Task<HttpResponseMessage> DispatchAsync(
         HttpClient client, Guid settlementId, string unit, int count, HexCoord to, double provisions, string? mission = null) =>
-        client.PostJsonAsync(
+        await client.PostJsonAsync(
             $"/api/v1/settlements/{settlementId}/armies",
-            new DispatchArmyRequest([new UnitCountRequest(unit, count)], null, new HexPointRequest(to.Q, to.R), provisions, mission),
+            new DispatchArmyRequest([new(await client.SpotOfAsync(settlementId, Ct), [new UnitCountRequest(unit, count)])], null, new HexPointRequest(to.Q, to.R), provisions, mission),
             Ct);
 
-    private Task<List<CampReportResponse>?> CampReportsAsync(HttpClient client, Guid settlementId) =>
-        client.GetFromJsonAsync<List<CampReportResponse>>(
-            $"/api/v1/settlements/{settlementId}/camp-reports", SqliteApiFixture.StrictJson, Ct);
+    /// <summary>The camp reports of the player owning <paramref name="settlementId"/>, from the player's inbox of its world.</summary>
+    private async Task<List<CampReportResponse>?> CampReportsAsync(HttpClient client, Guid settlementId)
+    {
+        var settlement = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlementId}", SqliteApiFixture.StrictJson, Ct);
+        return await client.GetFromJsonAsync<List<CampReportResponse>>(
+            $"/api/v1/worlds/{settlement!.WorldId}/camp-reports", SqliteApiFixture.StrictJson, Ct);
+    }
 
     private async Task<CampStateResponse> CampAtAsync(HttpClient client, Guid worldId, HexCoord hex) =>
         (await client.GetFromJsonAsync<List<CampStateResponse>>(
@@ -202,8 +207,11 @@ public sealed class WhaleRoadEndpointsTests : IAsyncLifetime
         var survivors = 5 - report.Units.Single().Lost;
         Assert.True(report.Loot.Food <= survivors * UnitCatalogue.Get(UnitType.Longship).CarryCapacity);
 
-        // What the ships could not carry stays on the whale road.
-        Assert.Equal(1800, report.Loot.Food + after.Leftover.Food);
+        // The food of the pool first refilled the provisions of the ships that survived (320 food each; the fleet set out with at most
+        // 200), then the ships took what they could carry; the rest stays on the whale road.
+        var refill = 1800 - (report.Loot.Food + after.Leftover.Food);
+        var foodCapacity = survivors * UnitCatalogue.Get(UnitType.Longship).FoodCarryCapacity;
+        Assert.InRange(refill, Math.Min(1800, foodCapacity - 200), Math.Min(1800, foodCapacity));
     }
 
     [Fact]

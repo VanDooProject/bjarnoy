@@ -32,6 +32,7 @@
     "palisadegate": "Palisade Gate",
     "bridge": "Bridge",
     "siegeworkshop": "Siege workshop",
+    "beachcamp": "Beach camp",
     "reindeerherder": "Reindeer Herder"
   },
   "units": {
@@ -45,7 +46,9 @@
     "ram": "Battering ram",
     "karve": "Karve",
     "longship": "Longship",
-    "settler": "Settler"
+    "fireship": "Fire Ship",
+    "settler": "Settler",
+    "campbuilder": "Camp builder"
   },
   "giants": {
     "giantmountain": "Giant mountain",
@@ -76,7 +79,8 @@
     "forest": "Forest",
     "mountain": "Mountain",
     "bog": "Bogland",
-    "lake": "Bog lake"
+    "lake": "Bog lake",
+    "inlandlake": "Inland lake"
   },
   "wastedTerrain": {
     "wasteland": "Wasteland",
@@ -96,6 +100,7 @@
     "support": "Support",
     "raid": "Raid",
     "found": "Found settlement",
+    "setupcamp": "Set up camp",
     "hunt": "Hunt"
   },
   "runes": {

@@ -791,6 +791,37 @@ describe('textureKeyFor wasted-island mapping', () => {
   });
 });
 
+describe('textureKeyFor inland lakes', () => {
+  it('draws an inland lake with the sea art, wasted or not', () => {
+    expect(textureKeyFor({ q: 0, r: 0, terrain: 'inlandlake' })).toBe('sea');
+    expect(textureKeyFor({ q: 0, r: 0, terrain: 'inlandlake', isCoastalWater: true })).toBe('sea');
+    expect(textureKeyFor({ q: 0, r: 0, terrain: 'inlandlake', wasted: true })).toBe('taintedwater');
+  });
+
+  it('keeps a Fishing Hut on an inland lake on the coastal fishing hut art', () => {
+    expect(textureKeyFor({ q: 0, r: 0, terrain: 'inlandlake', isCoastalWater: true, buildingType: 'fishinghut' })).toBe('fishinghut');
+  });
+
+  it('draws the coastal-water base art for an inland-lake hex beside land, like the sea there', () => {
+    const base = (name: string) => Object.fromEntries(TILE_ORIENTATIONS.map((o) => [o, [name]]));
+    const textures = {
+      base: {},
+      baseIndexed: {},
+      top: {},
+      animTop: {},
+      coastalBase: base('coastal-base'),
+      coastalTop: base('coastal-top'),
+      wastedCoastalBase: base('wasted-coastal-base'),
+      wastedCoastalTop: base('wasted-coastal-top'),
+    } as unknown as TileTextures;
+    const lake: Tile = { q: 0, r: 0, terrain: 'inlandlake', isCoastalWater: true, variant: 0, orientation: 'E' };
+    const sea: Tile = { ...lake, terrain: 'sea' };
+
+    expect(baseTextureFor(textures, lake)).toBe(baseTextureFor(textures, sea));
+    expect(baseTextureFor(textures, lake)).toBe('coastal-base');
+  });
+});
+
 describe('living mountain shapes', () => {
   const FAMILIES = ['mountaintile', 'mountaintile_table', 'mountaintile_saddleback', 'mountaintile_corrie'];
   const mountain = (variant: number, extra: Partial<Tile> = {}): Tile => ({ q: 0, r: 0, terrain: 'mountain', orientation: 'E', variant, ...extra });
@@ -1885,6 +1916,14 @@ describe('bog buildings and lake decorations', () => {
     expect(textureKeyFor(tower({ terrain: 'bog', bog: bog('bog', [], null) }))).toBe('towerbog');
   });
 
+  it('draws a Longhouse on sand with its own beach art and keeps the grass one on grass', () => {
+    expect(KEY_FAMILY.longhousesand).toBe('greathall_sand');
+    const hall = (terrain: 'sand' | 'grass'): Tile => ({ q: 0, r: 0, terrain, buildingType: 'longhouse', buildingLevel: 1 });
+
+    expect(textureKeyFor(hall('sand'))).toBe('longhousesand');
+    expect(textureKeyFor(hall('grass'))).toBe('longhouse');
+  });
+
   it('draws a Fishing Hut on a half shore with the lake art, and one on the coast with the coastal art', () => {
     const half: Tile = { q: 0, r: 0, terrain: 'bog', orientation: 'NW', buildingType: 'fishinghut', buildingLevel: 2, bog: bog('half', [], null, ['SE', 'E', 'NE']) };
     expect(textureKeyFor(half)).toBe('fisherhutlake');
@@ -2107,6 +2146,15 @@ describe('palisade art', () => {
     // The ground is the terrain's own base at the tile's rotation (not the wall's camera file), the top is the wall's.
     expect(baseTextureFor(textures, tile, art)).toBe(`${ground}-NE`);
     expect(topTextureFor(textures, tile, art)).toBe('wall-1');
+  });
+
+  it('a Longhouse on sand takes its base from its own art, not the plain sand ground', () => {
+    const textures = emptyTextures();
+    textures.base.sand = Object.fromEntries(ORIENTATIONS.map((o) => [o, `sand-base-${o}`])) as never;
+    textures.baseIndexed.longhousesand = orientationMap(['beach-base-0', 'beach-base-1'] as unknown as never);
+    const tile: Tile = { q: 0, r: 0, terrain: 'sand', orientation: 'NE', buildingType: 'longhouse', buildingLevel: 1 };
+
+    expect(baseTextureFor(textures, tile)).toBe('beach-base-1');
   });
 
   it('keeps the sea end on its own coastal base', () => {

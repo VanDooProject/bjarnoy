@@ -1,7 +1,7 @@
 // The sources (home garrison and field armies) that can be sent at a target, evaluated against the live world: the pathfinder the
-// range tint uses (`gamePathContext`) plus the shared rules in lib/units/sendSources.ts. Used by the ring menu (is the bubble
-// enabled?), by the source picker (the rows) and by MapView (which markers are tappable) so all read one answer.
-import { computed } from 'vue';
+// range tint uses (`gamePathContext`) plus the shared rules in lib/units/sendSources.ts. Used by the source picker (the rows) and by
+// MapView (which markers are tappable) so both read one answer. Not by the ring menu: opening a ring runs no route search.
+import { computed, effectScope, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import { useWorldStore } from '../stores/world';
@@ -9,22 +9,39 @@ import { useAuthStore } from '../stores/auth';
 import { useGuildStore } from '../stores/guild';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import type { AxialCoord } from '../lib/hex/coords';
-import { findPath, findSeaPath, pathCost } from '../lib/map/hexPath';
+import { findPathSteps, findSeaPathSteps, pathCost, seaPathCost } from '../lib/map/hexPath';
+import { clearRouteCache, routeCacheVersion, routeKey, routeOrQueue, type RouteJob } from '../lib/map/routeQueue';
 import { gamePathContext } from '../lib/map/movementContext';
-import { isWaterCampFamily } from '../lib/map/campPlacement';
+import { isSandCampFamily, isWaterCampFamily } from '../lib/map/campPlacement';
 import { fieldOrderFeasibility, type FeasibilityArmy, type FeasibilityEnv, type SendMission } from '../lib/units/fieldOrderFeasibility';
 import { evaluateSendSources, type SendSource, type SendTarget } from '../lib/units/sendSources';
 
+// Cached routes live while a send picker is open: the terrain, the walls and the armies move on, so each opening searches afresh.
+// One watcher per store, whoever asks first installs it.
+const cacheClearers = new WeakSet<object>();
+function clearRoutesWithPicker(world: ReturnType<typeof useWorldStore>) {
+  if (cacheClearers.has(world)) return;
+  cacheClearers.add(world);
+  effectScope(true).run(() => {
+    watch(
+      () => (world.sendPicker ? `${world.sendPicker.coord.q},${world.sendPicker.coord.r}|${world.sendPicker.mission}` : null),
+      () => clearRouteCache(),
+      { flush: 'sync' },
+    );
+  });
+}
+
 export function useSendSources() {
   const world = useWorldStore();
+  clearRoutesWithPicker(world);
   const auth = useAuthStore();
   const guild = useGuildStore();
   const catalogue = useUnitCatalogueStore();
 
-  /** The target a ring action or the open picker aims at; a hunt at a camp on the sea is sent ships, not land units. */
-  function targetAt(mission: SendMission, coord: AxialCoord): SendTarget {
+  /** The target a ring action or the open picker aims at; a hunt at a camp on the sea is sent ships, not land units. `own` marks a hex of the player's own realm. */
+  function targetAt(mission: SendMission, coord: AxialCoord, own?: Pick<SendTarget, 'targetSettlementId' | 'ownRealmId' | 'supportSpot'>): SendTarget {
     const camp = mission === 'hunt' ? world.model.campAt(coord) : undefined;
-    return { mission, coord, campAtSea: !!camp && isWaterCampFamily(camp.family) };
+    return { mission, coord, campAtSea: !!camp && isWaterCampFamily(camp.family), campOnSand: !!camp && isSandCampFamily(camp.family), ...own };
   }
 
   function env(): FeasibilityEnv {
@@ -37,24 +54,30 @@ export function useSendSources() {
       home?.ownerId,
       guild.friendlyUserIds,
     );
+    function* routeJob(from: AxialCoord, to: AxialCoord, fleet: boolean): RouteJob {
+      const terrainAt = (c: AxialCoord) => world.model.getTile(c.q, c.r).terrain;
+      const path = yield* (fleet ? findSeaPathSteps(from, to, terrainAt) : findPathSteps(from, to, ctx));
+      if (!path) return null;
+      const cost = fleet ? seaPathCost(path, terrainAt) : pathCost(path, ctx);
+      return Number.isFinite(cost) ? { path, cost } : null;
+    }
     return {
       byType: catalogue.byType,
       worldSpeedFactor: world.worldSpeedFactor,
       now: Date.now(),
       route: (from, to, fleet) => {
-        const path = fleet ? findSeaPath(from, to, (c) => world.model.getTile(c.q, c.r).terrain) : findPath(from, to, ctx);
-        if (!path) return null;
-        const cost = fleet ? path.length - 1 : pathCost(path, ctx);
-        return Number.isFinite(cost) ? { path, cost } : null;
+        // Searched in the background, a slice at a time (lib/map/routeQueue.ts): 'pending' until the answer is cached.
+        const found = routeOrQueue(routeKey(from, to, fleet), () => routeJob(from, to, fleet));
+        return found === undefined ? 'pending' : found;
       },
     };
   }
 
   function evaluate(target: SendTarget) {
+    void routeCacheVersion.value; // re-run when a background route search finishes
     return evaluateSendSources({
       target,
-      garrison: world.hud.garrison,
-      armies: world.armies,
+      realms: world.sendRealms,
       isPremium: auth.isPremium,
       byType: catalogue.byType,
       env: env(),
@@ -63,6 +86,7 @@ export function useSendSources() {
 
   /** The verdict for sending only `units` of a field army (the picker's steppers), re-run on every change. */
   function verdictFor(army: FeasibilityArmy, target: SendTarget, units?: Record<string, number>) {
+    void routeCacheVersion.value;
     return fieldOrderFeasibility(army, target.coord, target.mission, env(), units);
   }
 
@@ -73,7 +97,16 @@ export function useSendSources() {
 export function useSendPickerRows() {
   const world = useWorldStore();
   const sources = useSendSources();
-  const target = computed(() => (world.sendPicker ? sources.targetAt(world.sendPicker.mission, world.sendPicker.coord) : null));
+  const target = computed(() => {
+    const picker = world.sendPicker;
+    return picker
+      ? sources.targetAt(picker.mission, picker.coord, {
+          targetSettlementId: picker.targetSettlementId,
+          ownRealmId: picker.targetRealmId,
+          supportSpot: picker.targetBuildingCoord,
+        })
+      : null;
+  });
   const rows = computed(() => (target.value ? sources.evaluate(target.value) : []));
   return { target, rows, verdictFor: sources.verdictFor };
 }
@@ -102,6 +135,8 @@ export function useSendBlockText() {
         return t('hud.sendPicker.reasons.unreachable');
       case 'noFood':
         return t('hud.sendPicker.reasons.noFood');
+      case 'pending':
+        return t('hud.sendPicker.reasons.checking');
       default:
         return '';
     }

@@ -127,10 +127,14 @@
   --rival: #e2705f;
   --shell: #0b1116;
   --panel-bg: rgba(10, 20, 27, 0.92);
+  /* Dims the map behind a layer (HUD drawer, building and training windows): the map stays readable behind it. */
+  --layer-backdrop: rgba(0, 0, 0, 0.6);
   --panel-border: rgba(255, 255, 255, 0.12);
   --text: #e8f0f5;
   --muted: #8fa3af;
   --muted-2: #7d909c;
+  /* A rank that moved up (leaderboard change column); a rank that moved down is --rival. */
+  --rank-up: #4caf6a;
 
   /* Resource palette: lightness steps evenly (brick darkest, iron lightest) so
      the resources stay apart in grey and for colour-blind players; each also
@@ -147,6 +151,16 @@
   /* The water build category (fishing hut, dockyard) — a blue distinct from
      the resource palette above, since it isn't one of the four resources. */
   --water: #5aa8c9;
+
+  /* Build categories: one tint each, shared by the build ring (category and
+     building bubbles) and the docs tech tree. Lifted so a rim reads on the
+     dark bubble; no two categories share a hue, none is error-red. */
+  --cat-resource: #a8d870;
+  --cat-military: #d3dce2;
+  --cat-defense: #8fb8d8;
+  --cat-logistics: #e88fb4;
+  --cat-religion: #c7aaf0;
+  --cat-water: var(--water);
 
   --sans: 'Outfit', system-ui, 'Segoe UI', Roboto, sans-serif;
   color-scheme: dark;
@@ -260,14 +274,50 @@ html[data-hud-motion='reduced'] .floating-art-shadow {
 
 /* The canvas of an inline docs map (composables/useDocsMapRenderer.ts): the reader can drag and zoom it, so it shows the grab
    hand, and `touch-action: pan-y` leaves a one-finger vertical drag to the article's scroll while a pinch still reaches the
-   renderer. (SettlementCanvas.vue's real map uses `touch-action: none` instead: it never scrolls.) */
+   renderer. (SettlementCanvas.vue's real map uses `touch-action: none` instead: it never scrolls.)
+   Pixi writes the canvas's pixel size as an inline style on every resize, and it only learns of a new host size through a
+   ResizeObserver a moment later. The size is `!important` so the canvas box follows its host at once (a viewport shrunk to phone
+   width otherwise leaves it wider than the page until the observer fires). */
 .docs-map-canvas {
   display: block;
-  width: 100%;
-  height: 100%;
+  width: 100% !important;
+  height: 100% !important;
   touch-action: pan-y;
   cursor: grab;
 }
 .docs-map-canvas:active {
   cursor: grabbing;
+}
+
+/* The HUD's status cards (build queue, training queue, armies, expansion; issue #16): sharp corners and a header row with an
+   uppercase label and a count. One shared rule because Vue scoped styles don't leak: a panel that only carried the class got
+   no box at all. Each panel's own scoped style sets where it sits (left/right/top/bottom) and, if it differs, its width. */
+.status-card {
+  position: absolute;
+  z-index: 10;
+  width: 240px;
+  padding: 14px 15px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 0;
+}
+.status-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.status-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.status-card-count {
+  font-size: 12px;
+  color: var(--muted);
 }

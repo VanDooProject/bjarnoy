@@ -51,6 +51,21 @@ public class TrainingAndGarrisonTests
     }
 
     [Fact]
+    public void Training_settlers_costs_exactly_the_catalogue_price_per_unit()
+    {
+        // The settler price is flat: it does not scale with the settlements a player holds.
+        var settlement = Found(
+            longhouseLevel: 10, stock: 10_000,
+            extraBuildings: new PlacedBuilding(new HexCoord(8, 8), BuildingType.CartWorkshop, 1));
+        var order = Plan(settlement, UnitType.Settler, 5, T0);
+
+        var queued = settlement.EnqueueTraining([order], T0);
+
+        var expected = UnitCatalogue.Get(UnitType.Settler).TrainingCost * 5;
+        Assert.Equal(settlement.Resources.At(T0) - expected, queued.Resources.At(T0));
+    }
+
+    [Fact]
     public void A_unit_below_its_longhouse_requirement_is_refused()
     {
         var settlement = Found(longhouseLevel: 1);
@@ -227,13 +242,12 @@ public class TrainingAndGarrisonTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = [new UnitStack(UnitType.Berserker, 50)],
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: 20, Iron: 1_000_000),
                 production with { Food = production.Food - (50 * UnitCatalogue.Get(UnitType.Berserker).UpkeepPerHour) },
                 capacity,
                 T0),
-        };
+        }.WithGarrison([new UnitStack(UnitType.Berserker, 50)]);
 
         var result = settlement.SettleTo(T0.AddDays(30));
 
@@ -317,13 +331,12 @@ public class TrainingAndGarrisonTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = [],
-            Garrison = garrison,
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 0, Stone: 0, Food: 0.5, Iron: 0),
                 new ResourceAmounts(Wood: 0, Stone: 0, Food: netFoodRate, Iron: 0),
                 ResourceAmounts.Uniform(1000),
                 T0),
-        };
+        }.WithGarrison(garrison);
 
         var result = settlement.SettleTo(T0.AddHours(1));
 
@@ -372,13 +385,12 @@ public class TrainingAndGarrisonTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = homeGarrison,
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: 10, Iron: 1_000_000),
                 production with { Food = production.Food - homeUpkeep - guestUpkeep },
                 ResourceAmounts.Uniform(1_000_000),
                 T0),
-        };
+        }.WithGarrison(homeGarrison);
 
         var result = settlement.SettleTo(T0.AddHours(1), guestStacks: guestStacks);
 
@@ -409,13 +421,12 @@ public class TrainingAndGarrisonTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = homeGarrison,
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: 10, Iron: 1_000_000),
                 production with { Food = netFoodRate },
                 ResourceAmounts.Uniform(1_000_000),
                 T0),
-        };
+        }.WithGarrison(homeGarrison);
 
         var result = settlement.SettleTo(T0.AddHours(1), guestStacks: guestStacks);
 
@@ -444,12 +455,11 @@ public class TrainingAndGarrisonTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = garrison,
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: foodStock, Iron: 1_000_000),
                 production with { Food = netFoodRate },
                 capacity,
                 T0),
-        };
+        }.WithGarrison(garrison);
     }
 }

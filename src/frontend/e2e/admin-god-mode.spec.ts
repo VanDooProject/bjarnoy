@@ -47,6 +47,7 @@ function settlement(overrides: SettlementOverrides = {}) {
     buildings: overrides.buildings ?? [{ q: 0, r: 0, type: 'longhouse', level: 1 }],
     queue: overrides.queue ?? [],
     garrison: overrides.garrison ?? [],
+    garrisonSpots: [{ kind: 'longhouse', q: 0, r: 0, stacks: overrides.garrison ?? [], guests: [], holdsLand: true, holdsShips: false }],
     trainingQueue: [],
     world: { state: 'running', running: true, acceptsCommands: true, gameTime: '2026-01-01T00:00:00Z' },
   };
@@ -82,6 +83,7 @@ function armyEntry(overrides: { stacks?: { unit: string; count: number }[]; posi
     worldId: 'world-1',
     settlementName: 'Bjornstad',
     ownerName: 'Ragnar',
+    loot: { wood: 0, stone: 0, food: 0, iron: 0 },
     army: {
       id: ARMY_ID,
       settlementId: SETTLEMENT_ID,
@@ -303,7 +305,7 @@ test.describe('admin god mode', { tag: '@g2' }, () => {
     await mockSettlementsApi(page);
     await admin.openManagePanel();
 
-    await admin.garrisonForm.locator('select').selectOption('spearman');
+    await admin.garrisonForm.getByLabel('Unit').selectOption('spearman');
     await admin.garrisonForm.locator('input[type="number"]').fill('25');
     await admin.garrisonForm.getByRole('button', { name: 'Create' }).click();
 

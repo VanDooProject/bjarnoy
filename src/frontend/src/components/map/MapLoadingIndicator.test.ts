@@ -5,8 +5,11 @@ import MapLoadingIndicator from './MapLoadingIndicator.vue';
 import type { MapLoadState } from '../../lib/map/HexMapRenderer';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
+import { animationPreference } from '../../lib/perf/animationPreference';
 
+/** The device's reduce-motion flag; the HUD motion setting stays on Auto, so it decides (lib/motion.ts). */
 function stubReducedMotion(matches: boolean) {
+  vi.spyOn(animationPreference, 'reducedMotion', 'get').mockReturnValue(matches);
   vi.stubGlobal(
     'matchMedia',
     vi.fn().mockReturnValue({
@@ -27,6 +30,7 @@ function mountIndicator(state: MapLoadState) {
 describe('MapLoadingIndicator', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 

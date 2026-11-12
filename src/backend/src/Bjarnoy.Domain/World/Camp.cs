@@ -100,6 +100,9 @@ public static class CampFamilies
 
     /// <summary>True for a water camp (a family on <see cref="CampGround.Sea"/>). An unknown family is not.</summary>
     public static bool IsWater(string family) => Find(family)?.Ground == CampGround.Sea;
+
+    /// <summary>True for a sand camp (a haul-out, a family on <see cref="CampGround.Sand"/>). An unknown family is not.</summary>
+    public static bool IsSand(string family) => Find(family)?.Ground == CampGround.Sand;
 }
 
 /// <summary>
@@ -119,6 +122,9 @@ public readonly record struct Camp(HexCoord Coord, string Family, int Level, Til
 
     /// <summary>True for a water camp (it stands on open sea and is met by fleets).</summary>
     public bool IsWater => CampFamilies.IsWater(Family);
+
+    /// <summary>True for a sand camp (a seal or walrus haul-out): a fleet's land troops fight it from the ships.</summary>
+    public bool IsSand => CampFamilies.IsSand(Family);
 
     /// <summary>
     /// How many hexes around the camp it guards — see <see cref="CampGenerator.GuardRange(int, CampStrength)"/>.

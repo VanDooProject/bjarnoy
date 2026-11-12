@@ -209,4 +209,23 @@ public class WorldServiceTests : IDisposable
             Assert.All(tiles, t => Assert.Contains(FogChunkLayout.ChunkOf(t), island.FogChunks));
         }
     }
+
+    [Fact]
+    public async Task A_generated_islands_inland_lakes_are_stored_and_read_back_unchanged()
+    {
+        var service = CreateService();
+        // Compact world found by probing seeds: seed 1 at radius 600 encloses water the bog does not fill.
+        var options = WorldGenerationOptions.Compact(1, 600);
+        var generated = new WorldGenerator(options).Generate(Ct);
+        Assert.Contains(generated.Islands, i => i.InlandLakeTiles.Count > 0);
+
+        var world = await service.CreateWorldAsync("inland-lake-world", options, maxPlayers: 10, autoSeed: false, Ct);
+
+        var stored = await _dbContext.Islands.AsNoTracking().Where(i => i.WorldId == world.Id).ToListAsync(Ct);
+        foreach (var island in generated.Islands)
+        {
+            var row = stored.Single(s => s.Index == island.Index);
+            Assert.Equal(island.InlandLakeTiles.Select(t => (t.Q, t.R)), row.InlandLakeTiles.Select(t => (t.Q, t.R)));
+        }
+    }
 }

@@ -22,6 +22,9 @@ function save(settlementId: string | null, keys: Set<string>) {
   }
 }
 
+/** Bumped on every save, so every instance (the quest card and the panel column's icon dot) picks up what another marked. */
+const savedVersion = ref(0);
+
 /**
  * Which quest notices (`${id}:open`, `${id}:ready`) the player has already seen
  * in the opened quest card, kept per settlement in localStorage.
@@ -30,6 +33,11 @@ export function useQuestSeen(settlementId: Ref<string | null>) {
   const seen = ref<Set<string>>(load(settlementId.value));
   watch(settlementId, (id) => {
     seen.value = load(id);
+  });
+
+  watch(savedVersion, () => {
+    const stored = load(settlementId.value);
+    if (stored.size) seen.value = new Set([...seen.value, ...stored]);
   });
 
   /** Whether any of `keys` has not been seen yet. */
@@ -44,6 +52,7 @@ export function useQuestSeen(settlementId: Ref<string | null>) {
     for (const k of keys) next.add(k);
     seen.value = next;
     save(settlementId.value, next);
+    savedVersion.value += 1;
   }
 
   return { hasUnseen, markSeen };

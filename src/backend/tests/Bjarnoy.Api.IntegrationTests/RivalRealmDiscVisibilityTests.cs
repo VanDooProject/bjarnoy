@@ -7,12 +7,13 @@ using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
 /// <summary>
 /// <c>docs/design/map-fog-v2.md</c> §1h: a rival is delivered as soon as any of it is visible through the fog. The visible area is the
-/// caller's explored ground plus where the fog is not yet fully opaque (11.2 hexes past a settlement's or tower's explored ring); a
+/// caller's explored ground plus where the fog is not yet fully opaque (11.2 hexes past a settlement's or tower's explored ring, 5.55 past stored explored ground and a marching army's vision); a
 /// building is sent when its own hex is in it, a tower or the Longhouse when any hex of its claim disc is. The caller here is a level 1
 /// Longhouse at (own.Q, own.R): explored radius 5, so on the q axis the visible area ends at +16 (5 + 11.2 = 16.2) and +17 is out of it.
 /// </summary>
@@ -40,8 +41,7 @@ public sealed class RivalRealmDiscVisibilityTests : IAsyncLifetime
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 80, cancellationToken: Ct);
         var owner = Unique("owner");
         client.DefaultRequestHeaders.Add("X-Owner-Id", owner);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
         var response = await client.PostJsonAsync(
@@ -89,24 +89,26 @@ public sealed class RivalRealmDiscVisibilityTests : IAsyncLifetime
 
     private static HexCoord At(SettlementResponse own, int dq, int dr = 0) => new(own.Q + dq, own.R + dr);
 
+    private static HexCoord At(HexCoord from, int dq, int dr = 0) => new(from.Q + dq, from.R + dr);
+
     [Fact]
     public async Task A_rival_seen_only_through_one_wall_hex_delivers_its_longhouse_and_tower_and_is_listed_with_a_label_inside_its_claim()
     {
         var (worldId, own, _, client) = await SetUpAsync();
         using var _ = client;
-        // Nothing of the rival's centre or tower hex is in the visible area (+19 and +22 are past +16). Its Longhouse claim (radius 3 at
-        // level 2) and the tower's (level 6) reach +16, and one palisade stands on a visible hex.
+        // Nothing of the rival's centre or tower hex is in the visible area (+19 and +21 are past +16). Its Longhouse claim (radius 3 at
+        // level 2) and the tower's (level 5, the Tower's top level) reach +16, and one palisade stands on a visible hex.
         var longhouse = At(own, 19);
-        var tower = At(own, 22);
+        var tower = At(own, 21);
         var wall = At(own, 15, 1);
         var rivalId = await PlantAsync(
             worldId, own.IslandId, longhouse, 2,
-            (tower, BuildingType.Tower, 6), (wall, BuildingType.Palisade, 1), (At(own, 20), BuildingType.Farm, 1));
+            (tower, BuildingType.Tower, 5), (wall, BuildingType.Palisade, 1), (At(own, 20), BuildingType.Farm, 1));
 
         var buildings = await BuildingsAsync(client, worldId);
 
         Assert.Equivalent(
-            new[] { (longhouse, "longhouse", 2), (tower, "tower", 6), (wall, "palisade", 1) },
+            new[] { (longhouse, "longhouse", 2), (tower, "tower", 5), (wall, "palisade", 1) },
             buildings!.Select(b => (new HexCoord(b.Q, b.R), b.Type, b.Level)).ToArray());
         Assert.All(buildings!, b => Assert.Equal(rivalId, b.SettlementId));
 
@@ -127,7 +129,7 @@ public sealed class RivalRealmDiscVisibilityTests : IAsyncLifetime
         var (worldId, own, _, client) = await SetUpAsync();
         using var _ = client;
         var rivalId = await PlantAsync(
-            worldId, own.IslandId, At(own, 19), 2, (At(own, 22), BuildingType.Tower, 6), (At(own, 20), BuildingType.Farm, 1));
+            worldId, own.IslandId, At(own, 19), 2, (At(own, 21), BuildingType.Tower, 5), (At(own, 20), BuildingType.Farm, 1));
 
         var view = await client.GetFromJsonAsync<SettlementViewResponse>(
             $"/api/v1/settlements/{rivalId}/view", SqliteApiFixture.StrictJson, Ct);
@@ -178,23 +180,79 @@ public sealed class RivalRealmDiscVisibilityTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Stored_explored_ground_gets_no_widening_but_a_claim_reaching_it_still_delivers_the_tower()
+    public async Task Stored_explored_ground_without_a_current_source_shows_buildings_where_its_fog_fringe_is_not_opaque_and_not_beyond()
     {
         var (worldId, own, owner, client) = await SetUpAsync();
         using var _ = client;
-        // Ground explored earlier, far from every current source: it is visible, but nothing around it is.
+        // Ground explored earlier, far from every current source: the mist fades out from it like from a marching army's vision,
+        // 5.55 hexes straight-line (the farm 3 away shows, the one 7 away does not). A tower whose claim reaches it is delivered too.
         var old = At(own, 40);
         await _factory.SeedExploredHexesAsync(worldId, owner, [old], Ct);
         await PlantAsync(
-            worldId, own.IslandId, At(own, 60), 1,
-            (old, BuildingType.Farm, 1), (At(own, 41), BuildingType.Farm, 1), (At(own, 43), BuildingType.Tower, 3));
+            worldId, own.IslandId, At(own, 70), 1,
+            (old, BuildingType.Farm, 1), (At(old, 3), BuildingType.Farm, 1), (At(old, 5), BuildingType.Farm, 1),
+            (At(old, 7), BuildingType.Farm, 1), (At(old, 0, 7), BuildingType.Farm, 1), (At(old, 8), BuildingType.Tower, 3));
 
         var buildings = await BuildingsAsync(client, worldId);
 
         Assert.Equivalent(
-            new[] { (old, "farm"), (At(own, 43), "tower") },
+            new[] { (old, "farm"), (At(old, 3), "farm"), (At(old, 5), "farm"), (At(old, 8), "tower") },
             buildings!.Select(b => (new HexCoord(b.Q, b.R), b.Type)).ToArray());
     }
+
+    [Fact]
+    public async Task The_fringe_around_stored_ground_is_straight_line_not_hex_steps()
+    {
+        var (worldId, own, owner, client) = await SetUpAsync();
+        using var _ = client;
+        // (-3, 6) is 6 steps but 5.2 straight-line away (shown); (3, 4) is 7 steps and 6.1 away (hidden); (6, -1) is 6 steps and 5.6 away (hidden).
+        var old = At(own, 40);
+        await _factory.SeedExploredHexesAsync(worldId, owner, [old], Ct);
+        await PlantAsync(
+            worldId, own.IslandId, At(own, 70), 1,
+            (At(old, -3, 6), BuildingType.Farm, 1), (At(old, 3, 4), BuildingType.Farm, 1), (At(old, 6, -1), BuildingType.Farm, 1));
+
+        var buildings = await BuildingsAsync(client, worldId);
+
+        Assert.Equivalent(
+            new[] { At(old, -3, 6) },
+            buildings!.Select(b => new HexCoord(b.Q, b.R)).ToArray());
+    }
+
+    [Theory]
+    [InlineData(1, 0)]
+    [InlineData(0, 1)]
+    public async Task The_fringe_around_stored_ground_reaches_across_a_chunk_seam(int dq, int dr)
+    {
+        var (worldId, own, owner, client) = await SetUpAsync();
+        using var _ = client;
+        // An explored hex on the last texel column (dq = 1) or the last two texel rows (dr = 1, a hex step moves 2 rows) of its chunk,
+        // so the rival's farm 3 hexes on lies in the next chunk, which holds no stored row at all.
+        var edge = At(own, 40);
+        while (true)
+        {
+            var texel = FogMaskLayout.ToTexel(edge);
+            var onEdge = dq == 1 ? Mod(texel.U, FogChunkLayout.ChunkSize) == FogChunkLayout.ChunkSize - 1
+                : Mod(texel.V, FogChunkLayout.ChunkSize) >= FogChunkLayout.ChunkSize - 2;
+            if (onEdge)
+            {
+                break;
+            }
+
+            edge = dq == 1 ? new HexCoord(edge.Q + 1, edge.R) : new HexCoord(edge.Q, edge.R + 1);
+        }
+
+        var farm = new HexCoord(edge.Q + (3 * dq), edge.R + (3 * dr));
+        Assert.NotEqual(FogChunkLayout.ChunkOf(edge), FogChunkLayout.ChunkOf(farm));
+        await _factory.SeedExploredHexesAsync(worldId, owner, [edge], Ct);
+        await PlantAsync(worldId, own.IslandId, new HexCoord(edge.Q + 30, edge.R), 1, (farm, BuildingType.Farm, 1));
+
+        var buildings = await BuildingsAsync(client, worldId);
+
+        Assert.Equal(farm, new HexCoord(Assert.Single(buildings!).Q, buildings![0].R));
+    }
+
+    private static int Mod(int value, int modulus) => ((value % modulus) + modulus) % modulus;
 
     [Fact]
     public async Task A_rival_with_nothing_in_sight_reveals_nothing_not_even_a_type_or_level()

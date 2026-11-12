@@ -10,6 +10,11 @@ import type {
 
 const DEFAULT_PAGE_SIZE = 25;
 
+/** Weekly boards are the ones with closed windows to step through; the rest are live all-time boards. */
+export function isWeeklyCategory(category: LeaderboardCategory | null): boolean {
+  return category?.startsWith('weekly') ?? false;
+}
+
 export const useLeaderboardStore = defineStore('leaderboard', {
   state: () => ({
     worldId: null as string | null,
@@ -28,10 +33,14 @@ export const useLeaderboardStore = defineStore('leaderboard', {
     nextAfterRank: null as number | null,
     boardLoading: false,
     boardError: null as string | null,
+    /** Whether the shown page is a closed (final) weekly window. */
+    isFinal: false,
+    /** Start of the window the "current" board of a weekly category resolves to; `null` until it has loaded. */
+    currentPeriodStart: null as string | null,
 
-    // Set once "jump to my rank" resolves, so the table can highlight the
-    // caller's own row; cleared on any fresh board load.
-    myRank: null as number | null,
+    /** Ids a board entry can carry when it is the player's own: their settlements and the realms those belong to. */
+    ownSubjectIds: [] as string[],
+
     myRankLoading: false,
     myRankError: null as string | null,
   }),
@@ -42,6 +51,16 @@ export const useLeaderboardStore = defineStore('leaderboard', {
         (grouped[board.scope] ??= []).push(board);
       }
       return grouped as Record<LeaderboardScope, LeaderboardBoardInfoResponse[]>;
+    },
+    /**
+     * The weeks a weekly board can be stepped through, oldest first, ending in "current" (`null`). The newest closed
+     * window is what "current" shows, so it is not listed twice.
+     */
+    weekSteps(state): (string | null)[] {
+      const windows = state.weeklyWindows
+        .map((w) => w.periodStart)
+        .filter((start) => start !== state.currentPeriodStart);
+      return [...windows, null];
     },
   },
   actions: {
@@ -59,15 +78,29 @@ export const useLeaderboardStore = defineStore('leaderboard', {
         this.directoryLoading = false;
       }
     },
+    /**
+     * Reads the ids that mark an entry as the player's own on the settlement board (those are realm ids, one of the
+     * owner's settlement ids each). Best effort: without them no row is highlighted, the board itself still works.
+     */
+    async loadOwnSubjects(worldId: string) {
+      try {
+        const mine = await api.listMySettlements(worldId);
+        this.ownSubjectIds = [...new Set(mine.flatMap((s) => [s.id, s.realmId]))];
+      } catch (err) {
+        console.warn('own settlements for the leaderboard failed', err);
+        this.ownSubjectIds = [];
+      }
+    },
     /** Selects a board and loads its first page, replacing whatever was shown before. */
     async selectBoard(scope: LeaderboardScope, category: LeaderboardCategory) {
       this.scope = scope;
       this.category = category;
       this.board = this.boards.find((b) => b.scope === scope && b.category === category) ?? null;
       this.selectedPeriodStart = null;
+      this.currentPeriodStart = null;
+      this.isFinal = false;
       this.entries = [];
       this.nextAfterRank = null;
-      this.myRank = null;
       this.myRankError = null;
       if (!this.board?.available) return;
       await this.loadPage();
@@ -77,7 +110,6 @@ export const useLeaderboardStore = defineStore('leaderboard', {
       this.selectedPeriodStart = periodStart;
       this.entries = [];
       this.nextAfterRank = null;
-      this.myRank = null;
       this.myRankError = null;
       if (!this.board?.available) return;
       await this.loadPage();
@@ -95,6 +127,8 @@ export const useLeaderboardStore = defineStore('leaderboard', {
         });
         this.entries = [...this.entries, ...page.items];
         this.nextAfterRank = page.nextAfterRank;
+        this.isFinal = page.isFinal;
+        if (this.selectedPeriodStart === null) this.currentPeriodStart = page.periodStart;
       } catch (err) {
         this.boardError = err instanceof ApiError ? err.message : 'Could not load this board.';
       } finally {
@@ -115,7 +149,6 @@ export const useLeaderboardStore = defineStore('leaderboard', {
       try {
         const result = await api.getMyLeaderboardRank(this.worldId, this.scope, this.category, { subjectId });
         this.entries = result.items;
-        this.myRank = result.myRank;
         const last = result.items.at(-1);
         this.nextAfterRank = last ? last.rank : null;
       } catch (err) {

@@ -19,6 +19,10 @@
     "eyebrow": "Dein Reich wartet",
     "title": "Willkommen zurück, {name}",
     "body": "Melde dich wieder an, um dein Reich dort fortzusetzen, wo du aufgehört hast.",
-    "newRealm": "Stattdessen ein neues Reich beginnen"
+    "newRealm": "Stattdessen ein neues Reich beginnen",
+    "noRealmTitle": "Du hast kein Reich in {world}",
+    "noRealmBody": "Du bist angemeldet. Gründe hier ein Reich oder such dir eine andere Welt aus.",
+    "startHere": "Hier ein Reich gründen",
+    "pickWorld": "Andere Welt wählen"
   }
 }

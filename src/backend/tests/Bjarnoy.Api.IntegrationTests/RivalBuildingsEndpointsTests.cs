@@ -7,12 +7,13 @@ using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
 /// <summary>
-/// <c>GET /worlds/{id}/rival-buildings</c>: every standing building of another player's settlement that stands on a hex the caller has
-/// explored, whatever its type. A hex the caller has not explored is never listed, and the caller's own buildings are left out.
+/// <c>GET /worlds/{id}/rival-buildings</c>: every building of another player's settlement, standing or under construction (level 0), that
+/// stands on a hex the caller has explored, whatever its type. A hex the caller has not explored is never listed, and the caller's own buildings are left out.
 /// </summary>
 public sealed class RivalBuildingsEndpointsTests : IAsyncLifetime
 {
@@ -36,8 +37,7 @@ public sealed class RivalBuildingsEndpointsTests : IAsyncLifetime
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 80, cancellationToken: Ct);
         var owner = Unique("owner");
         client.DefaultRequestHeaders.Add("X-Owner-Id", owner);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
         var response = await client.PostJsonAsync(
@@ -99,30 +99,45 @@ public sealed class RivalBuildingsEndpointsTests : IAsyncLifetime
         var rivalId = await PlantAsync(
             worldId, own.IslandId, rivalUser, own.Q + 20, own.R,
             (seen.Q, seen.R, BuildingType.Farm, 2),
-            (own.Q + 21, own.R, BuildingType.Farm, 1));
+            (own.Q + 26, own.R, BuildingType.Farm, 1));
         await _factory.SeedExploredHexesAsync(worldId, owner, [seen], Ct);
 
         var buildings = (await BuildingsAsync(client, worldId))!;
 
-        // The farm on the explored hex, plus the Longhouse next to it: its claim disc (radius 2) holds the explored hex.
+        // The farm on the explored hex, plus the Longhouse next to it (inside its 5.55-hex fringe); the farm 7 hexes on stays hidden.
         Assert.Equal(
             [(seen.Q, seen.R, "farm", 2, rivalId, (Guid?)rivalUser, false), (own.Q + 20, own.R, "longhouse", 1, rivalId, (Guid?)rivalUser, false)],
             buildings.OrderBy(b => b.Q).Select(b => (b.Q, b.R, b.Type, b.Level, b.SettlementId, b.OwnerUserId, b.OutsideRealm)).ToArray());
     }
 
     [Fact]
-    public async Task Lists_the_rivals_centre_longhouse_when_the_centre_is_explored_and_skips_a_foundation()
+    public async Task Lists_the_rivals_centre_longhouse_when_the_centre_is_explored()
     {
         var (worldId, own, _, client) = await SetUpAsync();
         using var _ = client;
-        await PlantAsync(
-            worldId, own.IslandId, SystemUserIds.Abandoned, own.Q + 5, own.R,
-            (own.Q + 4, own.R, BuildingType.Farm, 0));
+        await PlantAsync(worldId, own.IslandId, SystemUserIds.Abandoned, own.Q + 5, own.R);
 
         var building = Assert.Single((await BuildingsAsync(client, worldId))!);
 
         Assert.Equal((own.Q + 5, own.R, "longhouse", 1), (building.Q, building.R, building.Type, building.Level));
         Assert.Null(building.OwnerUserId);
+    }
+
+    [Fact]
+    public async Task Lists_a_rivals_building_under_construction_as_level_0()
+    {
+        var (worldId, own, _, client) = await SetUpAsync();
+        using var _ = client;
+        await PlantAsync(
+            worldId, own.IslandId, SystemUserIds.Abandoned, own.Q + 5, own.R,
+            (own.Q + 4, own.R, BuildingType.Farm, 0),
+            (own.Q + 4, own.R + 1, BuildingType.Palisade, 0));
+
+        var buildings = (await BuildingsAsync(client, worldId))!;
+
+        Assert.Equal(
+            [(own.Q + 4, own.R, "farm", 0), (own.Q + 4, own.R + 1, "palisade", 0), (own.Q + 5, own.R, "longhouse", 1)],
+            buildings.OrderBy(b => b.Q).ThenBy(b => b.R).Select(b => (b.Q, b.R, b.Type, b.Level)).ToArray());
     }
 
     [Fact]
@@ -132,6 +147,65 @@ public sealed class RivalBuildingsEndpointsTests : IAsyncLifetime
         using var _ = client;
 
         Assert.Empty((await BuildingsAsync(client, worldId))!);
+    }
+
+    [Fact]
+    public async Task Own_buildings_lists_every_building_of_the_callers_settlements_and_no_rivals()
+    {
+        var (worldId, own, _, client) = await SetUpAsync();
+        using var _ = client;
+        await PlantAsync(worldId, own.IslandId, SystemUserIds.Abandoned, own.Q + 5, own.R, (own.Q + 4, own.R, BuildingType.Farm, 1));
+
+        var buildings = (await client.GetFromJsonAsync<List<RivalBuildingResponse>>(
+            $"/api/v1/worlds/{worldId}/own-buildings", SqliteApiFixture.StrictJson, Ct))!;
+
+        Assert.NotEmpty(buildings);
+        Assert.All(buildings, b => Assert.Equal(own.Id, b.SettlementId));
+        Assert.Contains(buildings, b => b.Type == "longhouse" && b.Q == own.Q && b.R == own.R);
+    }
+
+    [Fact]
+    public async Task Own_build_orders_lists_the_running_build_of_the_callers_realm_with_its_timing()
+    {
+        var (worldId, own, _, client) = await SetUpAsync();
+        using var _ = client;
+        var queued = await client.PostJsonAsync(
+            $"/api/v1/settlements/{own.Id}/builds", new QueueBuildRequest("longhouse", own.Q, own.R), Ct);
+        Assert.Equal(System.Net.HttpStatusCode.Accepted, queued.StatusCode);
+
+        var orders = (await client.GetFromJsonAsync<List<OwnBuildOrdersResponse>>(
+            $"/api/v1/worlds/{worldId}/own-build-orders", SqliteApiFixture.StrictJson, Ct))!;
+
+        var realm = Assert.Single(orders);
+        Assert.Equal(own.Id, realm.SettlementId);
+        var order = Assert.Single(realm.Queue);
+        Assert.Equal((own.Q, own.R, "building"), (order.Q, order.R, order.State));
+        Assert.True(order.TotalSeconds > 0);
+    }
+
+    [Fact]
+    public async Task Own_build_orders_settles_a_finished_build_and_survives_losing_the_write_race_to_a_concurrent_writer()
+    {
+        var (worldId, own, _, client) = await SetUpAsync();
+        using var _ = client;
+        var queued = await client.PostJsonAsync(
+            $"/api/v1/settlements/{own.Id}/builds", new QueueBuildRequest("longhouse", own.Q, own.R), Ct);
+        Assert.Equal(System.Net.HttpStatusCode.Accepted, queued.StatusCode);
+        var running = (await client.GetFromJsonAsync<List<OwnBuildOrdersResponse>>(
+            $"/api/v1/worlds/{worldId}/own-build-orders", SqliteApiFixture.StrictJson, Ct))!;
+        var order = Assert.Single(Assert.Single(running).Queue);
+
+        // The build finishes, so the next read settles it and saves; a concurrent write to the same settlement lands between
+        // that read and the save (what a build/poll of the open settlement does in the browser).
+        _factory.Time.Advance(TimeSpan.FromSeconds(order.TotalSeconds * 2));
+        _factory.Race.Arm(own.Id, () => SettlementRaceInterceptor.BumpAsync(_factory.Services, own.Id, Ct), repeat: false);
+
+        var response = await client.GetAsync($"/api/v1/worlds/{worldId}/own-build-orders", Ct);
+
+        _factory.Race.Disarm();
+        Assert.Equal(1, _factory.Race.Fired);
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty(Assert.Single(await response.ReadStrictAsync<List<OwnBuildOrdersResponse>>(Ct)).Queue);
     }
 
     [Fact]

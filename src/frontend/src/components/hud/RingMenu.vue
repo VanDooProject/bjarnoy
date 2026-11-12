@@ -39,6 +39,7 @@ import { isActionable, type RingAvailability, type RingAvailabilityState } from 
 import { tapArm, type RingDock } from '../../lib/map/ringDock';
 import { ringFootprint } from '../../lib/map/markerOcclusion';
 import { motionEnabled, supportsWaapi } from '../../lib/motion';
+import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import * as ringMotion from '../../lib/map/ringMotion';
 import {
   BUB1,
@@ -188,6 +189,9 @@ const props = withDefaults(
 );
 
 const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+
+// A layer on the phone stack while mounted (GuidancePointer reads the 'ring' id to keep pointing into the bubbles).
+const layer = usePhoneLayer(true, 'ring');
 
 const emit = defineEmits<{
   select: [id: string];
@@ -506,7 +510,14 @@ const cardView = computed<CardView | null>(() => {
   const statuses: CardView['statuses'] = locks.map((text) => ({ text, tone: 'lock' as const }));
   const resourcesShort = !!a && Object.keys(a.shortfall).length > 0;
   if (a && resourcesShort) {
-    statuses.push({ text: t('hud.ringMenu.card.needResources', { resources: resourceList(a.shortfall) }), tone: 'wait' });
+    const resources = resourceList(a.shortfall);
+    statuses.push({
+      text:
+        a.resourcesReadyInSeconds === null
+          ? t('hud.ringMenu.card.needResources', { resources })
+          : t('hud.ringMenu.card.needResourcesIn', { resources, time: formatBuildTime(a.resourcesReadyInSeconds) }),
+      tone: 'wait',
+    });
   }
   if (a?.slots.short) {
     if (a.queue.hasRoom && !resourcesShort) {
@@ -886,7 +897,7 @@ function onBackdropPointerDown(e: PointerEvent) {
 <template>
   <!-- `data-swapping`: a layer change is mid-flight (old layer leaving, new one arriving), so the bubbles on screen
        are not yet the final set. -->
-  <div ref="rootEl" class="ring-backdrop" :style="{ '--ring-scale': scale }" :data-swapping="swapping || undefined" @pointerdown.self="onBackdropPointerDown" @contextmenu.prevent="emit('close')">
+  <div ref="rootEl" v-phone-hidden="layer.hidden.value" class="ring-backdrop" :style="{ '--ring-scale': scale }" :data-swapping="swapping || undefined" @pointerdown.self="onBackdropPointerDown" @contextmenu.prevent="emit('close')">
     <div
       v-if="layout.showLane1Track"
       class="ring-track"
@@ -1063,7 +1074,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         </template>
         <template v-if="cardView.gives">
           <dt>{{ t('hud.ringMenu.gives') }}</dt>
-          <dd class="nowrap">
+          <dd>
             {{ cardView.gives }}<span v-if="cardView.givesTotal" class="gives-total" data-testid="ring-card-total"> · {{ cardView.givesTotal }}</span>
           </dd>
         </template>
@@ -1214,8 +1225,9 @@ function onBackdropPointerDown(e: PointerEvent) {
      piece that has none, so nothing runs out of the circle. */
   overflow-wrap: anywhere;
   background: rgba(8, 18, 26, 0.9);
-  border: 1px solid color-mix(in oklab, var(--tint) 50%, transparent);
-  color: var(--tint);
+  /* White label, the category colour only in the rim: a tinted label on the dark bubble is too faint for some tints. */
+  border: 1px solid var(--tint);
+  color: #fff;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
 .ring-bubble:hover:not(.disabled):not(.is-locked):not(.is-waiting) {
@@ -1241,10 +1253,11 @@ function onBackdropPointerDown(e: PointerEvent) {
   color: var(--text);
   background: rgba(8, 18, 26, 0.9);
 }
+/* Locked by the tech tree: neutral grey, not red — red is kept for "not possible here" (.disabled). */
 .ring-bubble.is-locked {
   cursor: not-allowed;
-  border: 1.5px dashed rgba(226, 112, 95, 0.55);
-  color: rgba(240, 163, 150, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #a3b0b8;
 }
 .ring-bubble.is-locked.category {
   /* All its buildings are locked, but it still opens to show them. */
@@ -1279,8 +1292,8 @@ function onBackdropPointerDown(e: PointerEvent) {
   stroke-linejoin: round;
 }
 .ring-badge.locked {
-  background: #7d2e24;
-  color: #ffd9d2;
+  background: #3a4852;
+  color: #e8f0f5;
 }
 .ring-badge.ban {
   background: #4a2a26;
@@ -1292,8 +1305,8 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .ring-bubble.back {
   background: rgba(8, 18, 26, 0.92);
-  border: 1px solid rgba(255, 197, 92, 0.6);
-  color: var(--gold);
+  border: 1px solid var(--gold);
+  color: #fff;
   font-size: calc(8.6px * var(--ring-scale, 1));
   font-weight: 700;
   white-space: nowrap;
@@ -1308,8 +1321,8 @@ function onBackdropPointerDown(e: PointerEvent) {
   font-weight: 700;
 }
 .ring-bubble.child.locked {
-  border: 1.5px dashed rgba(226, 112, 95, 0.55);
-  color: rgba(240, 163, 150, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #a3b0b8;
   background: rgba(14, 24, 20, 0.94);
   cursor: not-allowed;
 }
@@ -1329,7 +1342,7 @@ function onBackdropPointerDown(e: PointerEvent) {
   color: rgba(232, 240, 245, 0.55);
 }
 .ring-bubble.child.locked.hot {
-  color: rgba(240, 163, 150, 0.85);
+  color: #a3b0b8;
 }
 .ring-card {
   position: absolute;
@@ -1338,22 +1351,24 @@ function onBackdropPointerDown(e: PointerEvent) {
      click on the bubble itself. The card carries no button of its own. */
   pointer-events: none;
   overflow: hidden;
-  border-radius: 11px;
-  background: rgba(10, 20, 27, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.6);
+  /* Same look as the map's hover tooltip (HexTooltip.vue): .panel colours,
+     square edges, the light shadow. */
+  border-radius: 0;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);
   color: var(--text);
 }
 .card-art {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  background: radial-gradient(90% 80% at 50% 40%, #1a3d4d, #0d1f29);
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--panel-border);
 }
 .card-art-img {
-  width: 50px;
-  max-height: 78px;
+  width: 40px;
+  max-height: 64px;
   object-fit: contain;
   flex: none;
 }
@@ -1364,24 +1379,24 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .card-name {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .card-sub {
   margin-top: 2px;
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 400;
   color: var(--muted);
 }
 .card-badge {
-  margin-top: 6px;
-  font-size: 9px;
+  margin-top: 4px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--food);
 }
 .card-warning {
-  margin: 8px 12px 0;
-  font-size: 10px;
+  margin: 8px 14px 0;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--gold);
 }
@@ -1396,12 +1411,12 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .card-rows {
   margin: 0;
-  padding: 11px 12px 0;
+  padding: 8px 14px 0;
   display: grid;
-  grid-template-columns: auto 1fr;
-  row-gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr);
+  row-gap: 4px;
   column-gap: 10px;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 .card-rows dt {
   color: var(--muted);
@@ -1412,16 +1427,16 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .card-rows dd {
   margin: 0;
-  font-weight: 600;
+  color: var(--text);
+  font-weight: 500;
   text-align: right;
 }
-.card-rows dd.nowrap {
-  white-space: nowrap;
-}
+/* Four resources must not run past the card's edge: the chips wrap instead. */
 .card-rows dd.cost {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 2px 10px;
 }
 .chip {
   display: inline-flex;
@@ -1436,12 +1451,12 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .card-tap-hint {
   margin: 0;
-  padding: 9px 12px 11px;
+  padding: 8px 14px 10px;
   display: flex;
   align-items: center;
   gap: 7px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 10.5px;
+  border-top: 1px solid var(--panel-border);
+  font-size: 12px;
   font-weight: 600;
   color: var(--gold);
 }
@@ -1537,14 +1552,11 @@ html[data-hud-motion='reduced'] .ring-bubble.glow {
 /* Phone layout: the card docks to a screen edge (lib/map/ringDock.ts). The
    --hud-inset-* variables come from MapView's root and keep it clear of the
    HUD bar wherever it is docked; env() keeps it clear of notches. */
-.ring-card.docked {
-  border-radius: 12px;
-}
 .ring-card.docked-bottom {
   left: calc(8px + env(safe-area-inset-left, 0px));
   right: calc(8px + env(safe-area-inset-right, 0px));
   bottom: calc(var(--hud-inset-bottom, 0px) + 8px + env(safe-area-inset-bottom, 0px));
-  max-height: 236px;
+  max-height: 260px;
 }
 .ring-card.docked-left,
 .ring-card.docked-right {
@@ -1561,11 +1573,11 @@ html[data-hud-motion='reduced'] .ring-bubble.glow {
 .card-status {
   list-style: none;
   margin: 0;
-  padding: 10px 12px 11px;
+  padding: 8px 14px 10px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  font-size: 10.5px;
+  gap: 4px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.35;
 }

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportsModal from './ReportsModal.vue';
 import type { BattleReportResponse } from '../../api/types';
 import { usePlayerStore } from '../../stores/player';
+import { useWorldStore } from '../../stores/world';
 import { createTestI18n } from '../../test/i18n';
 import enReports from '../../i18n/locales/en/reports.json';
 import enHud from '../../i18n/locales/en/hud.json';
@@ -20,18 +21,19 @@ vi.mock('../../config', async (importOriginal) => {
   return { ...actual, DEMO_MODE: false };
 });
 
-const { getSettlementReports, getSettlementTradeReports, getSettlementFieldReports, getSettlementCampReports } = vi.hoisted(() => ({
-  getSettlementReports: vi.fn(),
-  getSettlementTradeReports: vi.fn(),
-  getSettlementFieldReports: vi.fn(),
-  getSettlementCampReports: vi.fn(),
+const { getWorldReports, getWorldTradeReports, getWorldFieldReports, getWorldCampReports, getWorldArmyReports } = vi.hoisted(() => ({
+  getWorldReports: vi.fn(),
+  getWorldArmyReports: vi.fn(),
+  getWorldTradeReports: vi.fn(),
+  getWorldFieldReports: vi.fn(),
+  getWorldCampReports: vi.fn(),
 }));
 
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
   return {
     ...actual,
-    api: { getSettlementReports, getSettlementTradeReports, getSettlementFieldReports, getSettlementCampReports },
+    api: { getWorldReports, getWorldTradeReports, getWorldFieldReports, getWorldCampReports, getWorldArmyReports },
   };
 });
 
@@ -51,6 +53,11 @@ function battleReport(overrides: Partial<BattleReportResponse> = {}): BattleRepo
     attackerLines: [],
     defenderLines: [],
     siege: null,
+    shipFight: null,
+    drowned: [],
+    fireShipsBurned: 0,
+    fireSiege: null,
+    viewerSide: 'attacker',
     ...overrides,
   };
 }
@@ -90,12 +97,14 @@ beforeEach(() => {
   setActivePinia(createPinia());
   vi.clearAllMocks();
   setIsMobile(false);
-  getSettlementReports.mockResolvedValue([battleReport()]);
-  getSettlementTradeReports.mockResolvedValue([]);
-  getSettlementFieldReports.mockResolvedValue([]);
-  getSettlementCampReports.mockResolvedValue([]);
+  getWorldReports.mockResolvedValue([battleReport()]);
+  getWorldTradeReports.mockResolvedValue([]);
+  getWorldFieldReports.mockResolvedValue([]);
+  getWorldCampReports.mockResolvedValue([]);
+  getWorldArmyReports.mockResolvedValue([]);
   const player = usePlayerStore();
   player.settlementId = 'settlement-1';
+  useWorldStore().worldId = 'world-1';
 });
 
 afterEach(() => {
@@ -148,7 +157,7 @@ describe('ReportsModal', () => {
   });
 
   it('keeps several reports open at once', async () => {
-    getSettlementReports.mockResolvedValue([
+    getWorldReports.mockResolvedValue([
       battleReport({ id: 'battle-1' }),
       battleReport({ id: 'battle-2', occurredAt: '2026-01-16T00:00:00Z' }),
     ]);
@@ -165,7 +174,7 @@ describe('ReportsModal', () => {
   });
 
   it('a deep link to a report opens that row', async () => {
-    getSettlementReports.mockResolvedValue([battleReport({ id: 'battle-1' }), battleReport({ id: 'battle-2' })]);
+    getWorldReports.mockResolvedValue([battleReport({ id: 'battle-1' }), battleReport({ id: 'battle-2' })]);
     const router = testRouter();
     await router.push('/reports/battle-2');
     await router.isReady();

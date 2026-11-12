@@ -196,6 +196,7 @@ const tocLinks = computed(() =>
         <li>{{ $t('docs.landMovement.food.upkeep') }}</li>
         <li>{{ $t('docs.landMovement.food.carry') }}</li>
         <li>{{ $t('docs.landMovement.food.turnBack') }}</li>
+        <li>{{ $t('docs.landMovement.food.noWayHome') }}</li>
       </ul>
       <div v-if="unitRows.length > 0" class="table-scroll">
         <table class="small" data-testid="food-table">
@@ -228,6 +229,8 @@ const tocLinks = computed(() =>
           <template #max>{{ strongCampGuardRange(5) }}</template>
         </i18n-t>
         <li>{{ $t('docs.landMovement.road.enemies') }}</li>
+        <li>{{ $t('docs.landMovement.road.fleeing') }}</li>
+        <li>{{ $t('docs.landMovement.road.newWalls') }}</li>
         <li>{{ $t('docs.landMovement.road.orders') }}</li>
       </ul>
     </section>
@@ -235,6 +238,7 @@ const tocLinks = computed(() =>
     <section id="sendOut" class="block">
       <h2>{{ $t('docs.landMovement.sendOut.heading') }}</h2>
       <ul class="rules">
+        <li>{{ $t('docs.landMovement.sendOut.spots') }}</li>
         <li>{{ $t('docs.landMovement.sendOut.orders') }}</li>
         <li>{{ $t('docs.landMovement.sendOut.split') }}</li>
         <li>{{ $t('docs.landMovement.sendOut.reach') }}</li>

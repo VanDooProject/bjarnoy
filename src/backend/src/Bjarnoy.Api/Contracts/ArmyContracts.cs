@@ -20,6 +20,13 @@ public sealed record HexPointRequest(int Q, int R)
     public HexCoord ToHexCoord() => new(Q, R);
 }
 
+/// <summary>The units, split by the garrison spot each group leaves from.</summary>
+/// <param name="Spot">The garrison spot (longhouse, tower or dock hex) the group stands at.</param>
+/// <param name="Units">The units of this group leaving from <paramref name="Spot"/>.</param>
+public sealed record DispatchSpotUnitsRequest(
+    [property: Required] HexPointRequest Spot,
+    [property: Required] IReadOnlyList<UnitCountRequest> Units);
+
 /// <param name="Waypoints">Ordered intermediate hexes; empty/omitted for a direct route.</param>
 /// <param name="Destination">
 /// Required for a <c>"move"</c> mission (the default); ignored for
@@ -44,8 +51,15 @@ public sealed record HexPointRequest(int Q, int R)
 /// (the settlement to fight on arrival) or <c>"support"</c> (the settlement
 /// to garrison as a guest on arrival).
 /// </param>
+/// <param name="From">
+/// The units, split by the garrison spot each group leaves from (longhouse, tower or dock hex of the settlement); only units
+/// standing there can be sent, and the spot becomes the army's home spot. Entries with no units are ignored, the same spot
+/// listed twice is merged. With more than one spot, each group leaves its spot as an army of its own, they meet on the way and move on
+/// as one (<see cref="Bjarnoy.Domain.Armies.Gathering"/>); the response is the group that gets to the meeting first.
+/// </param>
 /// <param name="TargetBuildingCoord">
-/// Only meaningful for <c>"attack"</c>/<c>"raid"</c> — the
+/// <b>Required for <c>"support"</c></b>: the target settlement's garrison spot the guest joins (it must be able to hold every unit of
+/// the army). Otherwise only meaningful for <c>"attack"</c>/<c>"raid"</c> — the
 /// coordinate of a building within the target settlement to hit with any
 /// surviving catapults on arrival (issue #40 phase 5). <b>Required for a fleet</b>:
 /// a fleet sails to this building, which must stand on the target's shore (inside its claim, on a
@@ -59,7 +73,7 @@ public sealed record HexPointRequest(int Q, int R)
 /// remarks).
 /// </param>
 public sealed record DispatchArmyRequest(
-    [property: Required, MinLength(1)] IReadOnlyList<UnitCountRequest> Units,
+    [property: Required, MinLength(1)] IReadOnlyList<DispatchSpotUnitsRequest> From,
     IReadOnlyList<HexPointRequest>? Waypoints,
     HexPointRequest? Destination,
     [property: Range(0, double.MaxValue)] double Provisions,
@@ -87,7 +101,7 @@ public sealed record RetargetFoundingRequest([property: Required] HexPointReques
 /// (founding from the field is a retarget).
 /// </param>
 /// <param name="TargetSettlementId">Required for <c>"attack"</c>/<c>"support"</c>/<c>"raid"</c>.</param>
-/// <param name="TargetBuildingCoord">Only for <c>"attack"</c>/<c>"raid"</c>; required when the army that leaves is a fleet.</param>
+/// <param name="TargetBuildingCoord">For <c>"attack"</c>/<c>"raid"</c>: required when the army that leaves is a fleet. For <c>"support"</c>: the garrison spot of the target to join (required).</param>
 /// <param name="Units">
 /// What leaves, for a standing army. Omitted: the whole army goes. Naming only part of it splits the army: the units listed
 /// leave as a new army (the response), the rest keep standing where they are.
@@ -124,6 +138,15 @@ public sealed record HexPointResponse(int Q, int R)
 /// </param>
 /// <param name="ReturnCumulativeHours">The same per-hex schedule for <paramref name="ReturnPath"/>, measured from <paramref name="TurnAroundAt"/>.</param>
 /// <param name="ReturnEdgeHours">The same edge-crossing schedule for <paramref name="ReturnPath"/>, measured from <paramref name="TurnAroundAt"/>.</param>
+/// <param name="IsStranded">
+/// True when the army cannot get home and stays where it stops (<see cref="Movement.IsStranded"/>): the last hex of <paramref name="Path"/>
+/// (the path is that hex alone, or the walk there when a wall closed its way), and <see cref="ArmyResponse.StarvesAt"/> is when its food
+/// runs out and the whole army dies.
+/// </param>
+/// <param name="IsFleeing">
+/// True for an army fleeing after a lost field battle (<see cref="Movement.IsFleeing"/>), on its way home or stranded: it takes field orders
+/// from where it is like a standing army, and an order ends its flee protection.
+/// </param>
 public sealed record MovementResponse(
     DateTimeOffset DepartedAt,
     IReadOnlyList<HexPointResponse> Path,
@@ -135,7 +158,9 @@ public sealed record MovementResponse(
     IReadOnlyList<double> ReturnEdgeHours,
     DateTimeOffset TurnAroundAt,
     DateTimeOffset ReturnArrivesAt,
-    bool IsReturning)
+    bool IsReturning,
+    bool IsStranded,
+    bool IsFleeing)
 {
     public static MovementResponse From(Movement movement) => new(
         movement.DepartedAt,
@@ -148,7 +173,9 @@ public sealed record MovementResponse(
         [.. movement.ReturnEdgeHours],
         movement.TurnAroundAt,
         movement.ReturnArrivesAt,
-        movement.IsReturning);
+        movement.IsReturning,
+        movement.IsStranded,
+        movement.IsFleeing);
 }
 
 /// <param name="VisionRadius">
@@ -161,6 +188,9 @@ public sealed record MovementResponse(
 /// <paramref name="TargetSettlementId"/> (issue #40 phase 4) — mutually
 /// exclusive with <paramref name="AtHome"/>; <paramref name="Movement"/> is
 /// null here too, since a guest is not travelling.
+/// </param>
+/// <param name="StarvesAt">
+/// When the army's provisions run out and the whole army dies; only set while it cannot get home (<see cref="MovementResponse.IsStranded"/>).
 /// </param>
 /// <param name="Position">
 /// Current hex: the home settlement's centre while <paramref name="AtHome"/>,
@@ -180,7 +210,11 @@ public sealed record ArmyResponse(
     double TotalUpkeepPerHour,
     int VisionRadius,
     IReadOnlyList<ArmyUnitStackResponse> Stacks,
-    MovementResponse? Movement)
+    MovementResponse? Movement,
+    DateTimeOffset? StarvesAt,
+    Guid? GatheringId = null,
+    HexPointResponse? GatherHex = null,
+    DateTimeOffset? GatherDepartsAt = null)
 {
     public static ArmyResponse From(ArmyEntity entity, DateTimeOffset gameNow)
     {
@@ -193,10 +227,13 @@ public sealed record ArmyResponse(
         var supporting = domain.Location is ArmyLocation.Supporting;
         var movement = domain.Location is ArmyLocation.InTransit inTransit ? inTransit.Movement : null;
 
+        // The gathering the army is a group of (hex and departure, game time like every other instant here); only when it is loaded.
+        var gathering = entity.Gathering is { } loaded && loaded.Id == entity.GatheringId ? loaded.ToDomain() : null;
+
         var position = domain.Location switch
         {
             ArmyLocation.InTransit transitLeg => transitLeg.Movement.PositionAt(gameNow),
-            ArmyLocation.Supporting when entity.TargetSettlement is { } host => new HexCoord(host.CentreQ, host.CentreR),
+            ArmyLocation.Supporting guest => guest.Spot,
             _ => home,
         };
 
@@ -213,7 +250,11 @@ public sealed record ArmyResponse(
             domain.TotalUpkeepPerHour,
             FogVisionRadii.ArmyVisionRadius(domain.Stacks, entity.Settlement.ToDomain().VisionBonusRings),
             [.. domain.Stacks.Select(s => new ArmyUnitStackResponse(s.Type.ToWireName(), s.Count))],
-            movement is null ? null : MovementResponse.From(movement));
+            movement is null ? null : MovementResponse.From(movement),
+            domain.StarvesAt,
+            domain.GatheringId,
+            gathering is null ? null : HexPointResponse.From(gathering.Hex),
+            gathering?.DepartAt);
     }
 }
 
@@ -233,7 +274,7 @@ public sealed record ArmySummary(Guid Id, string Mission, bool AtHome, bool Supp
         var position = domain.Location switch
         {
             ArmyLocation.InTransit inTransit => inTransit.Movement.PositionAt(gameNow),
-            ArmyLocation.Supporting when entity.TargetSettlement is { } host => new HexCoord(host.CentreQ, host.CentreR),
+            ArmyLocation.Supporting guest => guest.Spot,
             _ => home,
         };
 
@@ -288,10 +329,41 @@ public sealed record BattleReportSiegeResponse(
                 siege.LevelBefore, siege.LevelAfter, siege.SettlementRazed);
 }
 
+/// <summary>The fight at sea of a fleet's attack: its ships against the defender's ships.</summary>
+public sealed record BattleReportShipFightResponse(
+    IReadOnlyList<BattleReportAttackerLineResponse> AttackerLines,
+    IReadOnlyList<BattleReportDefenderLineResponse> DefenderLines,
+    double AttackPower,
+    double DefensePower,
+    string Winner)
+{
+    public static BattleReportShipFightResponse? From(BattleReportShipFight? fight) =>
+        fight is null
+            ? null
+            : new BattleReportShipFightResponse(
+                [.. fight.AttackerLines.Select(l => new BattleReportAttackerLineResponse(l.Type.ToWireName(), l.Sent, l.Lost, l.Survived))],
+                [.. fight.DefenderLines.Select(l => new BattleReportDefenderLineResponse(l.Type.ToWireName(), l.Lost, l.Survived))],
+                fight.AttackPower,
+                fight.DefensePower,
+                fight.Winner.ToString().ToLowerInvariant());
+}
+
 /// <summary>A resolved battle (issue #40 phase 3), as read from either side's inbox.</summary>
 /// <param name="Mission">
 /// <c>"attack"</c> or <c>"raid"</c> (issue #40 phase 7) — which mission fought
 /// this battle; see <see cref="Domain.Armies.ArmyMission.Raid"/>.
+/// </param>
+/// <param name="Winner">The whole attack's winner: <c>"attacker"</c> unless a fight was lost.</param>
+/// <param name="AttackPower">The land fight's attack power (the only fight of a land army); zero when a fleet fought no land fight.</param>
+/// <param name="AttackerLines">The land fight's attacking side; empty when a fleet fought no land fight.</param>
+/// <param name="Siege">The siege engines' building damage after a won land fight.</param>
+/// <param name="ShipFight">The fight at sea of a fleet; <see langword="null"/> for a land army, a target without ships and older reports.</param>
+/// <param name="Drowned">The passengers the surviving ships could not carry.</param>
+/// <param name="FireShipsBurned">The Fire Ships burned by the fire damage.</param>
+/// <param name="FireSiege">The Fire Ships' damage to a building in the water, if any burned.</param>
+/// <param name="ViewerSide">
+/// <c>"attacker"</c> or <c>"defender"</c>: the side the reading player fought on (a player's reports cover all their
+/// settlements, so the side cannot be told from one settlement id); <see langword="null"/> when the reader fought neither.
 /// </param>
 public sealed record BattleReportResponse(
     Guid Id,
@@ -307,13 +379,30 @@ public sealed record BattleReportResponse(
     ResourceAmountsResponse LootTaken,
     IReadOnlyList<BattleReportAttackerLineResponse> AttackerLines,
     IReadOnlyList<BattleReportDefenderLineResponse> DefenderLines,
-    BattleReportSiegeResponse? Siege)
+    BattleReportSiegeResponse? Siege,
+    BattleReportShipFightResponse? ShipFight,
+    IReadOnlyList<ArmyUnitStackResponse> Drowned,
+    int FireShipsBurned,
+    BattleReportSiegeResponse? FireSiege,
+    string? ViewerSide = null)
 {
-    public static BattleReportResponse From(BattleReportEntity entity)
+    /// <param name="entity">The stored report.</param>
+    /// <param name="viewerOwnerId">The reading player; <see cref="ViewerSide"/> is the side that player fought on.</param>
+    public static BattleReportResponse From(BattleReportEntity entity, string? viewerOwnerId = null)
     {
         ArgumentNullException.ThrowIfNull(entity);
 
-        var domain = entity.ToDomain();
+        var side = viewerOwnerId is null ? null
+            : viewerOwnerId == entity.AttackerOwnerId ? "attacker"
+            : viewerOwnerId == entity.DefenderOwnerId ? "defender"
+            : null;
+        return From(entity.ToDomain()) with { ViewerSide = side };
+    }
+
+    public static BattleReportResponse From(BattleReport domain)
+    {
+        ArgumentNullException.ThrowIfNull(domain);
+
         return new BattleReportResponse(
             domain.Id,
             domain.OccurredAt,
@@ -328,7 +417,11 @@ public sealed record BattleReportResponse(
             ResourceAmountsResponse.From(domain.LootTaken),
             [.. domain.AttackerLines.Select(l => new BattleReportAttackerLineResponse(l.Type.ToWireName(), l.Sent, l.Lost, l.Survived))],
             [.. domain.DefenderLines.Select(l => new BattleReportDefenderLineResponse(l.Type.ToWireName(), l.Lost, l.Survived))],
-            BattleReportSiegeResponse.From(domain.Siege));
+            BattleReportSiegeResponse.From(domain.Siege),
+            BattleReportShipFightResponse.From(domain.ShipFight),
+            [.. domain.Drowned.Select(d => new ArmyUnitStackResponse(d.Type.ToWireName(), d.Count))],
+            domain.FireShipsBurned,
+            BattleReportSiegeResponse.From(domain.FireSiege));
     }
 }
 
@@ -365,11 +458,13 @@ public sealed record FieldBattleReportResponse(
     bool SideBWasDefending,
     int Seed,
     ResourceAmountsResponse LootTaken,
-    IReadOnlyList<FieldBattleReportLineResponse> Lines)
+    IReadOnlyList<FieldBattleReportLineResponse> Lines,
+    string? ViewerSide = null)
 {
     /// <param name="names">Settlement/owner names by settlement id (<c>FieldBattleReportService.GetSideNamesAsync</c>); a side whose settlement is gone has null names.</param>
+    /// <param name="viewerOwnerId">The reading player; <see cref="ViewerSide"/> is the side (<c>"sidea"</c>/<c>"sideb"</c>) that player fought on, null when neither.</param>
     public static FieldBattleReportResponse From(
-        FieldBattleReportEntity entity, IReadOnlyDictionary<Guid, FieldBattleSideName> names)
+        FieldBattleReportEntity entity, IReadOnlyDictionary<Guid, FieldBattleSideName> names, string? viewerOwnerId = null)
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(names);
@@ -396,7 +491,11 @@ public sealed record FieldBattleReportResponse(
             entity.SideBWasDefending,
             entity.Seed,
             new ResourceAmountsResponse(entity.LootWood, entity.LootStone, entity.LootFood, entity.LootIron),
-            [.. entity.Lines.Select(FieldBattleReportLineResponse.From)]);
+            [.. entity.Lines.Select(FieldBattleReportLineResponse.From)],
+            viewerOwnerId is null ? null
+                : viewerOwnerId == entity.SideAOwnerId ? "sidea"
+                : viewerOwnerId == entity.SideBOwnerId ? "sideb"
+                : null);
     }
 }
 
@@ -491,4 +590,38 @@ public sealed record ForeignArmyResponse(
             [.. army.Stretch.CumulativeHours],
             [.. army.Stretch.EdgeHours],
             army.Stretch.ArrivesAt));
+}
+
+/// <summary>One unit type's count in an army report.</summary>
+public sealed record ArmyReportUnitLineResponse(string Type, int Count);
+
+/// <summary>
+/// An army report, as read from the player's inbox (it belongs to the player, not to a settlement).
+/// </summary>
+/// <param name="Kind"><c>"stuck"</c> or <c>"starved"</c>.</param>
+/// <param name="Hex">Where the army stood.</param>
+/// <param name="Mission">The army's mission when it happened, as the army responses name it.</param>
+/// <param name="Units">The troops lost for <c>"starved"</c>, the troops in the army for <c>"stuck"</c>.</param>
+public sealed record ArmyReportResponse(
+    Guid Id,
+    string Kind,
+    DateTimeOffset OccurredAt,
+    Guid ArmyId,
+    HexPointResponse Hex,
+    string Mission,
+    IReadOnlyList<ArmyReportUnitLineResponse> Units)
+{
+    public static ArmyReportResponse From(ArmyReportEntity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        return new ArmyReportResponse(
+            entity.Id,
+            ((ArmyReportKind)entity.Kind).ToString().ToLowerInvariant(),
+            entity.OccurredAt,
+            entity.ArmyId,
+            new HexPointResponse(entity.Q, entity.R),
+            ((ArmyMission)entity.Mission).ToString().ToLowerInvariant(),
+            [.. entity.UnitLines.OrderBy(l => l.UnitType).Select(l => new ArmyReportUnitLineResponse(l.UnitType.ToWireName(), l.Count))]);
+    }
 }

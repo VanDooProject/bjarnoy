@@ -11,6 +11,7 @@ using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -42,8 +43,7 @@ public sealed class ArmyMovementRulesEndpointsTests : IAsyncLifetime
     {
         using var client = _factory.CreateClient();
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.Where(i => i.StartPositions.Count > 3).OrderByDescending(i => i.TileCount).First();
         var plot = island.StartPositions[0];
 
@@ -73,13 +73,12 @@ public sealed class ArmyMovementRulesEndpointsTests : IAsyncLifetime
             .ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
         Authorize(client, adminToken);
         var granted = await client.PostJsonAsync(
-            $"/api/v1/admin/settlements/{settlement.Id}/garrison", new AdjustGarrisonRequest("spearman", 5), Ct);
+            $"/api/v1/admin/settlements/{settlement.Id}/garrison", new AdjustGarrisonRequest("spearman", settlement.Spot(), 5), Ct);
         Assert.Equal(HttpStatusCode.OK, granted.StatusCode);
         Authorize(client, player.AccessToken);
 
         var target = await FindWalkableTargetAsync(client, world.Id, settlement);
-        DispatchArmyRequest ToTarget() => new(
-            [new UnitCountRequest("spearman", 1)], null, new HexPointRequest(target.Q, target.R), 10);
+        DispatchArmyRequest ToTarget() => new([new(settlement.Spot(), [new UnitCountRequest("spearman", 1)])], null, new HexPointRequest(target.Q, target.R), 10);
 
         // Control: the target is reachable until it is walled in.
         var control = await client.PostJsonAsync($"/api/v1/settlements/{settlement.Id}/armies", ToTarget(), Ct);
@@ -96,6 +95,9 @@ public sealed class ArmyMovementRulesEndpointsTests : IAsyncLifetime
             await db.SaveChangesAsync(Ct);
         }
 
+        // The world's river index is cached; the islands were edited behind its back.
+        WorldIslandCaches.Invalidate(world.Id);
+
         var refused = await client.PostJsonAsync($"/api/v1/settlements/{settlement.Id}/armies", ToTarget(), Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
@@ -109,8 +111,7 @@ public sealed class ArmyMovementRulesEndpointsTests : IAsyncLifetime
     {
         using var client = _factory.CreateClient();
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.Where(i => i.StartPositions.Count > 3).OrderByDescending(i => i.TileCount).First();
         var plot = island.StartPositions[0];
 
@@ -128,7 +129,7 @@ public sealed class ArmyMovementRulesEndpointsTests : IAsyncLifetime
         var waypoints = Enumerable.Range(1, 6).Select(i => new HexPointRequest(plot.Q + i, plot.R)).ToList();
         var refused = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("spearman", 1)], waypoints, new HexPointRequest(plot.Q + 8, plot.R), 10),
+            new DispatchArmyRequest([new(settlement.Spot(), [new UnitCountRequest("spearman", 1)])], waypoints, new HexPointRequest(plot.Q + 8, plot.R), 10),
             Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);

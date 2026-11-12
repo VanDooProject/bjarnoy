@@ -108,6 +108,14 @@ public static class SettlementEndpoints
             .AddEndpointFilter<UserActivityEndpointFilter>()
             .WithConcurrencyRetry();
 
+        settlements.MapPut("/{settlementId:guid}/name", Rename)
+            .WithName("RenameSettlement")
+            .WithSummary("Renames a settlement: free, any time, names need not be unique.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .RequireSettlementOwner()
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
+
         settlements.MapPost("/{settlementId:guid}/quests/{questId}/claim", ClaimQuest)
             .WithName("ClaimQuest")
             .WithSummary("Claims a completed onboarding quest's resource reward, once per settlement.")
@@ -594,6 +602,41 @@ public static class SettlementEndpoints
         return TypedResults.Conflict(problem);
     }
 
+    private static async Task<Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>, ValidationProblem>> Rename(
+        Guid settlementId,
+        RenameSettlementRequest request,
+        SettlementService settlements,
+        GameDbContext db,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        // The attribute length checks run on the raw text; the real rule is on the trimmed name.
+        var name = request.Name.Trim();
+        if (name.Length is < 2 or > 100)
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [nameof(request.Name)] = ["The name must be 2 to 100 characters long once trimmed."],
+            });
+        }
+
+        var result = await settlements.RenameAsync(settlementId, name, cancellationToken);
+
+        if (result.SettlementNotFound)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (result.WorldPaused)
+        {
+            return TypedResults.Conflict(WorldPausedProblem());
+        }
+
+        var clock = result.Clock!.Value;
+        return TypedResults.Ok(
+            await SettlementResponse.ForOwnerAsync(db, result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow()), cancellationToken));
+    }
+
     private static async Task<Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>>> ClaimQuest(
         Guid settlementId,
         string questId,
@@ -879,8 +922,8 @@ public static class SettlementEndpoints
         BuildRejection.RequiredBuildingTooLow => "A required building is not high enough level yet.",
         BuildRejection.TowerLimitReached =>
             "You already hold as many towers as your longhouse level allows. Upgrade the longhouse to raise the limit.",
-        BuildRejection.StorageHouseTooLow =>
-            "Raise your storage houses before building another: 1 at level 10, then 2 at 15, 3 at 20, 4 at 25.",
+        BuildRejection.GreatStorehouseNeedsStorageHouses =>
+            "Max out more storage houses first: each Great Storehouse needs one more Storage House at level 25 than you have Great Storehouses.",
         BuildRejection.ShrineGodAlreadyOnIsland => "That god already has a shrine on this island.",
         BuildRejection.SettlementAlreadyHasShrine => "This settlement already has a shrine.",
         BuildRejection.PalisadeWouldBranch =>
@@ -902,6 +945,7 @@ public static class SettlementEndpoints
         QuestRejection.UnknownQuest => "There is no such quest.",
         QuestRejection.AlreadyClaimed => "This quest's reward was already claimed.",
         QuestRejection.NotCompleted => "This quest is not completed yet.",
+        QuestRejection.NotFirstSettlement => "Quests are only available on your first settlement.",
         _ => "Refused.",
     };
 

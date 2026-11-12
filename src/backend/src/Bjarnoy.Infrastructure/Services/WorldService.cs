@@ -247,6 +247,9 @@ public sealed class WorldService(
             world.CreationError = null;
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+            // The world was readable (and its empty island list cacheable) while it was still being generated.
+            WorldIslandCaches.Invalidate(worldId);
+
             _logger.LogInformation(
                 "World {World} ({WorldId}) created with {Islands} islands and {Land} land hexes.",
                 world.Name, world.Id, generated.Islands.Count, generated.LandTileCount);
@@ -477,8 +480,8 @@ public sealed class WorldService(
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        // The old islands' bogland is gone with them.
-        WorldTerrain.Invalidate(worldId);
+        // The old islands' bog, rivers and start positions are gone with them.
+        WorldIslandCaches.Invalidate(worldId);
 
         // Every settlement this world had is now gone — RealmDirectory's
         // cached realms for it (by settlement id, by user, by owner id) would
@@ -514,15 +517,11 @@ public sealed class WorldService(
         }
 
         // Order matters: each step clears the references the next one would
-        // otherwise trip over. Shipments and reports before the offers they
-        // hang off, everything before the settlements themselves.
+        // otherwise trip over. Shipments before the offers they hang off,
+        // everything before the settlements themselves. Reports (battle, field
+        // battle, camp, trade) are not deleted: they belong to the players.
         await _dbContext.Shipments
             .Where(s => settlementIds.Contains(s.FromSettlementId) || settlementIds.Contains(s.ToSettlementId))
-            .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-
-        await _dbContext.TradeReports
-            .Where(r => settlementIds.Contains(r.PosterSettlementId)
-                || settlementIds.Contains(r.AcceptorSettlementId))
             .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 
         await _dbContext.TradeOffers
@@ -534,13 +533,6 @@ public sealed class WorldService(
         await _dbContext.Armies
             .Where(a => settlementIds.Contains(a.SettlementId)
                 || (a.TargetSettlementId != null && settlementIds.Contains(a.TargetSettlementId.Value)))
-            .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-
-        // No FK to settlements at all (only indexes — see GameDbContext), so
-        // these would survive as unreadable orphans rather than fail loudly.
-        await _dbContext.BattleReports
-            .Where(r => settlementIds.Contains(r.AttackerSettlementId)
-                || settlementIds.Contains(r.DefenderSettlementId))
             .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 
         // The settlements themselves last; their own children (buildings,
@@ -574,6 +566,7 @@ public sealed class WorldService(
         FogChunks = FogChunkLayout.ChunksOf(island.Tiles),
         RiverTiles = [.. island.RiverTiles.Select(ToRiverTileRecord)],
         BogTiles = [.. island.BogTiles.Select(ToBogTileRecord)],
+        InlandLakeTiles = [.. island.InlandLakeTiles.Select(p => new HexPoint(p.Q, p.R))],
         Giants = [.. island.Giants.Select(ToGiantRecord)],
         Camps = [.. island.Camps.Select(ToCampRecord)],
         UtgardWalls = [.. island.UtgardWalls.Select(w => new UtgardWallRecord(
@@ -1055,11 +1048,29 @@ public sealed class WorldService(
         return due;
     }
 
-    public Task<List<IslandEntity>> GetIslandsAsync(Guid worldId, CancellationToken cancellationToken = default) =>
+    /// <summary>
+    /// The islands of a world in index order as summaries: the labels and what changes while the world runs, without the bog tiles,
+    /// river tiles and start positions. Those are the bulk of the row (tens of megabytes for a large world), change only on a reseed
+    /// and are served cached by their own endpoints. A dedicated record, not <see cref="IslandEntity"/>, so no caller can mistake the
+    /// missing terrain columns for an island that has none.
+    /// </summary>
+    public Task<List<IslandSummary>> GetIslandSummariesAsync(Guid worldId, CancellationToken cancellationToken = default) =>
         _dbContext.Islands
             .AsNoTracking()
             .Where(i => i.WorldId == worldId)
             .OrderBy(i => i.Index)
+            .Select(i => new IslandSummary(
+                i.Id,
+                i.Index,
+                i.Name,
+                i.CentreQ,
+                i.CentreR,
+                i.TileCount,
+                i.IsWasted,
+                i.Giants,
+                i.Camps,
+                i.UtgardWalls,
+                i.JotunTowers))
             .ToListAsync(cancellationToken);
 
     /// <summary>
@@ -1101,7 +1112,7 @@ public sealed class WorldService(
         }
     }
 
-    /// <summary>The bog overlay (bog / lake per hex) of every island of a world, for <see cref="GetTiles"/> and the game rules.</summary>
+    /// <summary>The bog overlay (bog / lake / inland lake per hex) of every island of a world, for <see cref="GetTiles"/> and the game rules.</summary>
     public Task<IReadOnlyDictionary<HexCoord, Terrain>> GetBogOverlayAsync(Guid worldId, CancellationToken cancellationToken = default) =>
         WorldTerrain.OverlayAsync(_dbContext, worldId, cancellationToken);
 

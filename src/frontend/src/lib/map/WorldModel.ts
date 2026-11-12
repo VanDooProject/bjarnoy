@@ -7,7 +7,8 @@
 import { coordKey, hexDistance, hexesInRadius, hexRing, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import {
   SHRINE_BUILDING_TYPES,
-  additionalStorageHouseRequirement,
+  GREAT_STOREHOUSE_STORAGE_HOUSE_LEVEL,
+  greatStorehouseStorageHousesNeeded,
   maxTowers,
   ravensRings,
   wisdomBuildTimeFactor,
@@ -22,7 +23,7 @@ import { campGuardRange, isStrongCampFamily, placeCamps, placeWhaleRoads, StartP
 import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
 import type { PalisadePiece } from './palisadeTiles';
 import type { CampStateResponse } from '../../api/types';
-import { claimDiscs, longhouseDiscs, type ClaimDisc } from './shoreline';
+import { centreClaimDiscs, centreVisionDiscs, claimDiscs, type ClaimDisc } from './shoreline';
 import type { FogCoverageLookup } from './fog/fogCoverage';
 import { claimsWithGiants } from './territory';
 import { realmFromDiscs, resolveRealm, type ConnectedRealm } from './realmChain';
@@ -47,12 +48,14 @@ import {
 } from './worldGenerator';
 import { generateRiversWithBogs, isWideRiverTile } from './riverGenerator';
 import { BOG_REACH } from './bogGenerator';
+import { enclosedWaterTiles } from './enclosedWater';
 import { placeLakeProps, type LakeProp, type LakePropBuilding } from './lakeProps';
 import { isOutsideRealm } from './realmDecay';
 import {
   emptyResources,
   mouthSeaDirection,
   TILE_ORIENTATIONS,
+  drawsAsSea,
   type BogTile,
   type CartShipment,
   type IslandLabel,
@@ -344,6 +347,15 @@ export class WorldModel {
   overlayRevision = 0;
   /** The island bogland known so far (live mode: every island at once; demo mode: island by island), by coordinate — see `setBogTiles`. */
   private bogByHex = new Map<string, BogTile>();
+  /**
+   * The terrain the island overlays (bog moss, bog lakes, inland lakes) give a hex that the seed alone cannot, by `terrainKey`.
+   * `terrainOf` answers from it before the seed, so a cache sweep (`setWastedRevealed`) re-derives the same answer.
+   */
+  private overlayTerrain = new Map<number, Terrain>();
+  /** The `overlayTerrain` keys of a wasted island's inland lakes (demo mode): plain sea until the wasted islands are revealed. */
+  private wastedInlandLakeKeys = new Set<number>();
+  /** The inland lakes known so far (live mode: every island at once; demo mode: island by island), by `terrainKey`. */
+  private inlandLakeKeys = new Set<number>();
   /** The lake decorations (fish weir, boats) the buildings on the shores ask for, by coordinate — see `lakeProps.ts` and `recomputeLakeProps`. */
   private lakePropByHex = new Map<string, LakeProp>();
   /** Set whenever the bog or a building that can ask for a lake decoration changes; `getTile` recomputes them lazily. */
@@ -399,6 +411,15 @@ export class WorldModel {
    * (`wisdomFactor`, shorter builds) read. Updated alongside `settlementTowers`.
    */
   private settlementOdinLevels = new Map<string, number>();
+  /** Settlements that are beach camps (a `beachcamp` building in the server's list): they see like a level-1 Longhouse. */
+  private beachCampIds = new Set<string>();
+  /** Rival settlements whose `beachcamp` the server delivered (`applyRivalBuildings`): they claim their own hex only. */
+  private rivalBeachCampIds = new Set<string>();
+
+  /** Whether the settlement is a beach camp (it has a `beachcamp` instead of a Longhouse): the one place the client tells. */
+  isBeachCamp(settlementId: string): boolean {
+    return this.beachCampIds.has(settlementId) || this.rivalBeachCampIds.has(settlementId);
+  }
   /**
    * Every hex belonging to a giant's 7-hex footprint, mapped to that giant's
    * own anchor coord — this model's own `IGiantIndex` (see the backend's
@@ -498,7 +519,10 @@ export class WorldModel {
    * them (pathing, buildability, art) follow this overlay.
    */
   setBogTiles(tiles: BogTile[]) {
-    for (const tile of this.bogByHex.values()) this.terrain.delete(terrainKey(tile.q, tile.r));
+    for (const tile of this.bogByHex.values()) {
+      this.overlayTerrain.delete(terrainKey(tile.q, tile.r));
+      this.terrain.delete(terrainKey(tile.q, tile.r));
+    }
     for (const tile of this.bogByHex.values()) this.tiles.delete(coordKey(tile));
     this.bogByHex = new Map();
     this.overlayRevision++;
@@ -519,6 +543,7 @@ export class WorldModel {
       const key = coordKey(bog);
       this.bogByHex.set(key, bog);
       const terrain: Terrain = bog.kind === 'lake' ? 'lake' : 'bog';
+      this.overlayTerrain.set(terrainKey(bog.q, bog.r), terrain);
       this.terrain.set(terrainKey(bog.q, bog.r), terrain);
       const existing = this.tiles.get(key);
       if (existing) this.decorateBogTile(existing, bog, world);
@@ -527,6 +552,48 @@ export class WorldModel {
     this.previewIslandTilesCache.clear();
     this.previewIslandFloodCache.clear();
     this.lakePropsDirty = true;
+  }
+
+  /**
+   * Live mode: every fetched island's inland lakes (water an island encloses that the bog did not fill, see
+   * `IslandResponse.inlandLakeTiles`), replacing what was known. An inland lake reads as terrain `inlandlake` from here on:
+   * not land, not sea, but drawn like the sea (`drawsAsSea`).
+   */
+  setInlandLakeTiles(coords: AxialCoord[]) {
+    for (const key of this.inlandLakeKeys) {
+      this.overlayTerrain.delete(key);
+      this.terrain.delete(key);
+      const { q, r } = decodeTerrainKey(key);
+      this.tiles.delete(coordKey({ q, r }));
+    }
+    this.inlandLakeKeys = new Set();
+    this.wastedInlandLakeKeys = new Set();
+    this.overlayRevision++;
+    this.addInlandLakeTiles(coords);
+  }
+
+  /**
+   * Adds `coords` as inland lakes to what this model knows (demo mode generates island by island, see `placeGiantsForIsland`).
+   * A wasted island's lakes only count once the wasted islands are revealed, like the rest of the wasted terrain.
+   * Updates the pure terrain cache and any tile already materialised (its coastal-water flag, orientation and variant stay valid:
+   * an inland lake borders land exactly where the sea there would).
+   */
+  private addInlandLakeTiles(coords: AxialCoord[], wasted = false) {
+    if (coords.length === 0) return;
+    this.overlayRevision++;
+    for (const c of coords) {
+      const key = terrainKey(c.q, c.r);
+      this.inlandLakeKeys.add(key);
+      this.overlayTerrain.set(key, 'inlandlake');
+      if (wasted) this.wastedInlandLakeKeys.add(key);
+      if (wasted && !this.wastedRevealed) continue;
+      this.terrain.set(key, 'inlandlake');
+      const existing = this.tiles.get(coordKey(c));
+      if (existing) existing.terrain = 'inlandlake';
+    }
+    this.islandFootprintCache.clear();
+    this.previewIslandTilesCache.clear();
+    this.previewIslandFloodCache.clear();
   }
 
   /**
@@ -760,7 +827,11 @@ export class WorldModel {
     const k = terrainKey(q, r);
     let terrain = this.terrain.get(k);
     if (terrain === undefined) {
-      terrain = terrainAt(q, r, { seed: this.seed, generation: this.generation });
+      const overlay = this.overlayTerrain.get(k);
+      terrain =
+        overlay !== undefined && (this.wastedRevealed || !this.wastedInlandLakeKeys.has(k))
+          ? overlay
+          : terrainAt(q, r, { seed: this.seed, generation: this.generation });
       if (terrain === 'sea' && this.wastedRevealed) {
         const wasted = wastedTerrainAt(q, r, { seed: this.seed, generation: this.generation });
         if (wasted !== 'sea') terrain = wasted;
@@ -894,7 +965,7 @@ export class WorldModel {
           tile.wasted = true;
           delete tile.forestKind; // wasted forest stays deadforest
           tile.variant = wastedVariantAt(q, r, { seed: this.seed, generation: this.generation }, tile.terrain);
-        } else if (tile.terrain === 'sea' && tile.isCoastalWater) {
+        } else if (drawsAsSea(tile.terrain) && tile.isCoastalWater) {
           // Coastal water bordering wasted land also renders as wasted
           // (blacksandcoast) — see textures.ts's wasted family mapping.
           const bordersWasted = neighbors({ q, r }).some((n) => this.isWastedLandAt(n.q, n.r));
@@ -929,7 +1000,7 @@ export class WorldModel {
    */
   seaFacingDirectionOf(coord: AxialCoord, inDirection?: TileOrientation): TileOrientation | null {
     const dirs = neighbors(coord);
-    const isSea = dirs.map((d) => this.getTile(d.q, d.r).terrain === 'sea');
+    const isSea = dirs.map((d) => drawsAsSea(this.getTile(d.q, d.r).terrain));
     // With the river's inflow known, prefer the sea straight ahead (the only angle the delta and
     // the widening mouth draw), then a bend, then the hairpin - see `mouthSeaDirection`.
     if (inDirection) return mouthSeaDirection(inDirection, isSea);
@@ -1017,6 +1088,7 @@ export class WorldModel {
       signature += `|${s.id}:${s.level}:${s.q},${s.r}`;
       for (const t of this.settlementTowers.get(s.id) ?? []) signature += `;${t.q},${t.r},${t.level}`;
       signature += `;odin${this.settlementOdinLevels.get(s.id) ?? 0}`;
+      if (this.isBeachCamp(s.id)) signature += ';camp';
     }
     return signature;
   }
@@ -1059,19 +1131,25 @@ export class WorldModel {
     return this.riverRevision + this.overlayRevision;
   }
 
+  /** The open sea only: not land, and not water an island encloses (a bog lake, an inland lake). */
+  isSea(q: number, r: number): boolean {
+    return this.terrainOf(q, r) === 'sea';
+  }
+
   /**
    * Everything an island's picture is made of: land and the bog lakes among it (not the sea).
    * Also what the water mask calls land: a bog lake is drawn by its own art, never by the sea's
-   * water shader, so the shader (foam included) must stop at the sea's coast.
+   * water shader, so the shader (foam included) must stop at the sea's coast. An inland lake is water here
+   * (not in this set): it is drawn like the sea, shader and foam included.
    */
   isLandOrLake(q: number, r: number): boolean {
     return this.isLand(q, r) || this.terrainOf(q, r) === 'lake';
   }
 
-  /** Land: everything that is neither the sea nor a bog lake (a lake is water, but not the sea). */
+  /** Land: everything that is neither the sea, a bog lake nor an inland lake (a lake is water, but not the sea). */
   isLand(q: number, r: number): boolean {
     const terrain = this.terrainOf(q, r);
-    return terrain !== 'sea' && terrain !== 'lake';
+    return terrain !== 'sea' && terrain !== 'lake' && terrain !== 'inlandlake';
   }
 
   /**
@@ -1269,6 +1347,20 @@ export class WorldModel {
     return [...types];
   }
 
+  /** Every building standing on a settlement's claimed hexes (coord, type, level) — the demo's counterpart of the live building list. */
+  listBuildings(settlementId: string): { q: number; r: number; type: string; level: number }[] {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return [];
+    const buildings: { q: number; r: number; type: string; level: number }[] = [];
+    for (const c of this.claimedHexes(settlement)) {
+      const tile = this.getTile(c.q, c.r);
+      if (tile.ownerId === settlementId && tile.buildingType) {
+        buildings.push({ q: c.q, r: c.r, type: tile.buildingType, level: tile.buildingLevel ?? 1 });
+      }
+    }
+    return buildings;
+  }
+
   /**
    * How many of each building type a settlement has standing (by wire name) —
    * `listPlacedBuildings` keeps only the distinct types, but the onboarding
@@ -1376,10 +1468,10 @@ export class WorldModel {
    * `HexMapRenderer.rebuildSettlementLabels`). Fog radius
    * (`visibleHexes`/`exploredRadius`) is tower-aware via `visionDiscsFor`
    * instead. HUD territory-size readouts use `claimedHexCount` instead,
-   * which also accounts for towers. 0 when the Longhouse is destroyed (`longhouseDiscs` has no disc then).
+   * which also accounts for towers. 0 when the Longhouse is destroyed (`centreClaimDiscs` has no disc then); 0 for a beach camp, which claims its own hex only.
    */
   borderRadius(settlement: Settlement): number {
-    return longhouseDiscs(settlement, settlement.level)[0]?.radius ?? 0;
+    return centreClaimDiscs(settlement, settlement.level, this.isBeachCamp(settlement.id))[0]?.radius ?? 0;
   }
 
   /**
@@ -1416,6 +1508,7 @@ export class WorldModel {
         q: m.q,
         r: m.r,
         level: m.level,
+        isBeachCamp: this.isBeachCamp(m.id),
         towers: this.settlementTowers.get(m.id) ?? [],
       })),
     );
@@ -1429,7 +1522,7 @@ export class WorldModel {
     // A rival's claim is its Longhouse plus every tower the server delivered, whether or not the chain connects it: the client
     // cannot resolve another player's realm and draws what the server showed it.
     if (this.isRivalSettlement(settlement)) {
-      return claimDiscs({ q: settlement.q, r: settlement.r }, settlement.level, this.rivalTowers.get(settlement.id) ?? []);
+      return claimDiscs({ q: settlement.q, r: settlement.r }, settlement.level, this.rivalTowers.get(settlement.id) ?? [], this.isBeachCamp(settlement.id));
     }
     return this.realmOf(settlement).discsOf(settlement.id);
   }
@@ -1440,6 +1533,12 @@ export class WorldModel {
    */
   private isRivalSettlement(settlement: Settlement): boolean {
     return settlement.ownerId === settlement.id;
+  }
+
+  /** Whether the id is one of the player's own registered settlements; false for a rival and for an unknown id. */
+  private isOwnRealm(settlementId: string): boolean {
+    const settlement = this.settlements.get(settlementId);
+    return settlement !== undefined && !this.isRivalSettlement(settlement);
   }
 
   /** `isRivalSettlement` by id; false for an unknown id. */
@@ -1473,7 +1572,7 @@ export class WorldModel {
     // A tower cut off from every longhouse of the player's realm sees nothing (and gets no Ravens rings either).
     const realm = this.realmOf(settlement);
     return [
-      ...longhouseDiscs(settlement, settlement.level).map((d) => ({ ...d, radius: d.radius + ravens })),
+      ...centreVisionDiscs(settlement, settlement.level, this.isBeachCamp(settlement.id)).map((d) => ({ ...d, radius: d.radius + ravens })),
       ...(this.settlementTowers.get(settlement.id) ?? []).filter((t) => realm.isTowerConnected(settlement.id, t)).map((t) => ({
         q: t.q,
         r: t.r,
@@ -1760,6 +1859,11 @@ export class WorldModel {
     this.settlementOdinLevels.set(settlementId, odin);
     const ravensChanged = ravensRings(odin) !== ravensRings(previousOdin);
 
+    const wasBeachCamp = this.beachCampIds.has(settlementId);
+    const isBeachCamp = snapshot.buildings.some((b) => b.type === 'beachcamp' && b.level >= 1);
+    if (isBeachCamp) this.beachCampIds.add(settlementId);
+    else this.beachCampIds.delete(settlementId);
+
     const levelIncreased = snapshot.level > settlement.level;
     if (levelIncreased) settlement.level = snapshot.level;
 
@@ -1767,7 +1871,7 @@ export class WorldModel {
     // centre disc grew (a longhouse level-up) or the set of Tower satellite
     // discs changed (a new, levelled-up, downgraded or burnt tower) — not
     // every poll, since claiming is otherwise pure repeated work.
-    const claimChanged = levelIncreased || towersChanged || ravensChanged || realmChanged;
+    const claimChanged = levelIncreased || towersChanged || ravensChanged || realmChanged || isBeachCamp !== wasBeachCamp;
     if (claimChanged) this.exploreRealm(settlement);
     settlement.resources = snapshot.resources;
     settlement.rates = snapshot.rates;
@@ -1895,8 +1999,7 @@ export class WorldModel {
 
   /**
    * This settlement's standing storage houses (hex and level), for the
-   * additional-storage-house rule (`additionalStorageHouseRequirement`): a new
-   * one needs enough of these at a high enough level.
+   * Great Storehouse count rule: the n-th Great Storehouse needs n of them at level 25.
    */
   storageHouses(settlementId: string): { q: number; r: number; level: number }[] {
     const levels: { q: number; r: number; level: number }[] = [];
@@ -1908,26 +2011,42 @@ export class WorldModel {
     return levels;
   }
 
+  /** This settlement's standing Great Storehouses (hex and level). */
+  greatStorehouses(settlementId: string): { q: number; r: number; level: number }[] {
+    const levels: { q: number; r: number; level: number }[] = [];
+    for (const tile of this.tiles.values()) {
+      if (tile.ownerId === settlementId && tile.buildingType === 'greatstorehouse') {
+        levels.push({ q: tile.q, r: tile.r, level: tile.buildingLevel ?? 1 });
+      }
+    }
+    return levels;
+  }
+
   /** The rival buildings `applyRivalBuildings` last placed, by hex: who owns each (a user id, null for an anonymous settlement) and its settlement. */
-  private rivalBuildings = new Map<string, { settlementId: string; ownerUserId: string | null }>();
+  private rivalBuildings = new Map<string, { settlementId: string; ownerUserId: string | null; own: boolean }>();
 
   /**
-   * Replaces the set of other players' buildings this model knows (live mode: `GET /worlds/{id}/rival-buildings`, which is fog-gated
-   * per hex and leaves the player's own buildings out). Each building is put on its tile the way an own one is (type, level, owning
+   * Replaces the set of buildings this model learns from the world read rather than from an opened settlement (live mode:
+   * `GET /worlds/{id}/rival-buildings`: other players' buildings, fog-gated per hex, plus every building of the player's own
+   * settlements, so one they have not opened yet is drawn too; the hexes of the open settlement, `openSettlementId`, are skipped). Each building is put on its tile the way an own one is (type, level, owning
    * settlement), so the piece it draws, the hit-test and the route rules need nothing special. A building of the previous call that
    * is missing now is cleared; a hex one of the player's own settlements renders is never touched.
    */
   applyRivalBuildings(
     buildings: { q: number; r: number; type: string; level: number; settlementId: string; ownerUserId: string | null; outsideRealm?: boolean }[],
+    openSettlementId: string | null = null,
   ) {
-    const ownRendered = new Set<string>();
-    for (const keys of this.renderedBuildingCoords.values()) for (const key of keys) ownRendered.add(key);
+    // Only the open settlement's snapshot is polled, so only its hexes are left to it; a settlement the player opened earlier and left
+    // is kept current by these rows like any other.
+    const ownRendered = new Set<string>(openSettlementId ? this.renderedBuildingCoords.get(openSettlementId) : []);
 
-    const next = new Map<string, { settlementId: string; ownerUserId: string | null }>();
+    const next = new Map<string, { settlementId: string; ownerUserId: string | null; own: boolean }>();
     const towers = new Map<string, { q: number; r: number; level: number }[]>();
+    const rivalCamps = new Set<string>();
     for (const building of buildings) {
       const key = coordKey({ q: building.q, r: building.r });
       if (ownRendered.has(key)) continue;
+      if (building.type === 'beachcamp' && building.level >= 1) rivalCamps.add(building.settlementId);
       if (building.type === 'tower' && building.level >= 1) {
         const list = towers.get(building.settlementId) ?? [];
         list.push({ q: building.q, r: building.r, level: building.level });
@@ -1938,7 +2057,7 @@ export class WorldModel {
       tile.buildingType = building.type as Tile['buildingType'];
       tile.buildingLevel = building.level;
       tile.buildingOutsideRealm = building.outsideRealm === true || undefined;
-      next.set(key, { settlementId: building.settlementId, ownerUserId: building.ownerUserId });
+      next.set(key, { settlementId: building.settlementId, ownerUserId: building.ownerUserId, own: this.isOwnRealm(building.settlementId) });
     }
 
     for (const [key, previous] of this.rivalBuildings) {
@@ -1953,6 +2072,7 @@ export class WorldModel {
 
     this.rivalBuildings = next;
     this.rivalTowers = towers;
+    this.rivalBeachCampIds = rivalCamps;
     this.rivalClaimRevision++;
     this.wallRevision++;
   }
@@ -1991,7 +2111,8 @@ export class WorldModel {
    * a rival building `applyRivalBuildings` placed (the player's own, or none). What the siege action's own/friendly check reads.
    */
   rivalBuildingOwner(q: number, r: number): string | null | undefined {
-    return this.rivalBuildings.get(coordKey({ q, r }))?.ownerUserId;
+    const building = this.rivalBuildings.get(coordKey({ q, r }));
+    return building && !building.own ? building.ownerUserId : undefined;
   }
 
   /**
@@ -2050,7 +2171,8 @@ export class WorldModel {
     for (const [key, wall] of this.palisadeIndex()) {
       if (wall.level < 1) continue;
       // A rival wall's owner key is the one the server's PalisadeIndex uses: the account, or the settlement for an anonymous one.
-      const rival = this.rivalBuildings.get(key);
+      const rivalEntry = this.rivalBuildings.get(key);
+      const rival = rivalEntry && !rivalEntry.own ? rivalEntry : undefined;
       const owner = rival
         ? (rival.ownerUserId ?? rival.settlementId)
         : wall.tileOwner
@@ -2186,13 +2308,12 @@ export class WorldModel {
     // A settlement raises one shrine in total, of any god (matches
     // BuildRejection.SettlementAlreadyHasShrine).
     if (type && SHRINE_BUILDING_TYPES.has(type) && this.shrineCoords(settlementId).length >= 1) return false;
-    // An additional storage house needs enough standing ones at a high enough
-    // level (matches BuildRejection.StorageHouseTooLow). Upgrades never go
-    // through here.
-    if (type === 'storagehouse') {
-      const held = this.storageHouses(settlementId);
-      const need = additionalStorageHouseRequirement(held.length);
-      if (held.length >= 1 && held.filter((h) => h.level >= need.level).length < need.count) return false;
+    // The n-th Great Storehouse needs n Storage Houses at level 25 (matches
+    // BuildRejection.GreatStorehouseNeedsStorageHouses). Upgrades never go through here.
+    if (type === 'greatstorehouse') {
+      const needed = greatStorehouseStorageHousesNeeded(this.greatStorehouses(settlementId).length);
+      const maxed = this.storageHouses(settlementId).filter((h) => h.level >= GREAT_STOREHOUSE_STORAGE_HOUSE_LEVEL).length;
+      if (maxed < needed) return false;
     }
     // A wall hex must keep every wall hex drawable (matches BuildRejection.PalisadeWouldBranch/GateNotOnStraight and the terrain
     // refusals): no branch, a gate only on a straight, no river, the sea end on exactly one land wall.
@@ -2359,7 +2480,7 @@ export class WorldModel {
     // choice (never `this.isLand`, which folds in a revealed wasted layer
     // `terrainAt` alone knows nothing about).
     const globalIsLand = (c: AxialCoord) => terrainAt(c.q, c.r, world) !== 'sea';
-    const { rivers: riverTiles, bogs: bogTiles } = generateRiversWithBogs(
+    const { rivers: riverTiles, bogs: bogTiles, inlandLakes: greenInlandLakes } = generateRiversWithBogs(
       islandTiles,
       (c) => this.terrainOf(c.q, c.r),
       depthAt,
@@ -2373,6 +2494,15 @@ export class WorldModel {
     // Bogland (placed inside the river pipeline: a river runs through every lake) is terrain from here on, so
     // giants and camps below see it: no giant stands on a bog or a lake, and only plain moss holds a bog camp.
     this.addBogTiles(bogTiles);
+    // Water the island encloses that the bog did not fill: a green island's come out of the river pipeline; a wasted island
+    // has no bog, so every pocket is one (mirrors `WorldGenerator`'s wasted branch). Added as terrain only after generation below:
+    // the backend's giant, camp and endgame generators see that water as sea (its overlay holds bog only), so this must too.
+    const inlandLakes = wasted
+      ? enclosedWaterTiles(
+          islandTiles,
+          (c) => terrainAt(c.q, c.r, world) !== 'sea' || wastedTerrainAt(c.q, c.r, world) !== 'sea',
+        )
+      : greenInlandLakes;
     const plainBog = new Set(bogTiles.filter((t) => t.kind === 'bog').map((t) => coordKey(t)));
     const riverKeys = new Set(riverTiles.map((t) => coordKey(t)));
     const isRiver = (c: AxialCoord) => riverKeys.has(coordKey(c));
@@ -2450,6 +2580,7 @@ export class WorldModel {
         sites.towers.map((coord) => ({ coord, orientation: this.getTile(coord.q, coord.r).orientation ?? 'SE', level: 2 })),
       );
     }
+    this.addInlandLakeTiles(inlandLakes, wasted);
   }
 
   /**

@@ -6,8 +6,15 @@ import {
   buildFieldOrderRequest,
   buildHuntDispatchRequest,
   garrisonCanHunt,
+  fleetLacksLandTroops,
   isHuntUnit,
   buildMoveDispatchRequest,
+  buildFoundDispatchRequest,
+  buildCampDispatchRequest,
+  campReadyAtMs,
+  dispatchHasDestination,
+  dispatchTargetCoord,
+  isRouteDestination,
   buildSupportDispatchRequest,
   canFieldOrderArmy,
   classifyUnitSelection,
@@ -72,19 +79,28 @@ describe('routeToWaypointsAndDestination', () => {
   });
 });
 
+// The units of a test dispatch, all leaving from one spot: the shape `DispatchArmyRequest.from` wants.
+const at = (counts: Record<string, number>) => {
+  const units = Object.entries(counts)
+    .filter(([, count]) => count > 0)
+    .map(([unit, count]) => ({ unit, count }));
+  return units.length > 0 ? [{ spot: { q: 0, r: 0 }, units }] : [];
+};
+const spot = { q: 7, r: 1 };
+
 describe('buildMoveDispatchRequest', () => {
   it('returns null when no units are selected', () => {
-    expect(buildMoveDispatchRequest({ spearman: 0 }, [{ q: 1, r: 1 }], 100)).toBeNull();
+    expect(buildMoveDispatchRequest(at({ spearman: 0 }), [{ q: 1, r: 1 }], 100)).toBeNull();
   });
 
   it('returns null when no route has been drawn yet', () => {
-    expect(buildMoveDispatchRequest({ spearman: 5 }, [], 100)).toBeNull();
+    expect(buildMoveDispatchRequest(at({ spearman: 5 }), [], 100)).toBeNull();
   });
 
   it('builds a move request, omitting waypoints when the route is destination-only', () => {
-    const request = buildMoveDispatchRequest({ spearman: 5, axeman: 0 }, [{ q: 2, r: -2 }], 50);
+    const request = buildMoveDispatchRequest(at({ spearman: 5, axeman: 0 }), [{ q: 2, r: -2 }], 50);
     expect(request).toEqual({
-      units: [{ unit: 'spearman', count: 5 }],
+      from: [{ spot: { q: 0, r: 0 }, units: [{ unit: 'spearman', count: 5 }] }],
       waypoints: undefined,
       destination: { q: 2, r: -2 },
       provisions: 50,
@@ -94,25 +110,106 @@ describe('buildMoveDispatchRequest', () => {
 
   it('carries intermediate waypoints through for a multi-hop route', () => {
     const route = [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }];
-    const request = buildMoveDispatchRequest({ spearman: 3 }, route, 20);
+    const request = buildMoveDispatchRequest(at({ spearman: 3 }), route, 20);
     expect(request?.waypoints).toEqual([{ q: 0, r: 0 }, { q: 1, r: 0 }]);
     expect(request?.destination).toEqual({ q: 2, r: 0 });
   });
 });
 
+describe('buildFoundDispatchRequest', () => {
+  it('returns null without units or without a route', () => {
+    expect(buildFoundDispatchRequest(at({ settler: 0 }), [{ q: 1, r: 1 }], 10)).toBeNull();
+    expect(buildFoundDispatchRequest(at({ settler: 5 }), [], 10)).toBeNull();
+  });
+
+  it('is a move-shaped request with mission found: last hex is the destination', () => {
+    const route = [{ q: 0, r: 0 }, { q: 3, r: -1 }];
+    expect(buildFoundDispatchRequest(at({ settler: 5, karve: 0 }), route, 40)).toEqual({
+      from: [{ spot: { q: 0, r: 0 }, units: [{ unit: 'settler', count: 5 }] }],
+      waypoints: [{ q: 0, r: 0 }],
+      destination: { q: 3, r: -1 },
+      provisions: 40,
+      mission: 'found',
+    });
+  });
+
+  it('carries ships and land escorts next to the settlers', () => {
+    const request = buildFoundDispatchRequest(at({ settler: 5, karve: 1, spearman: 4 }), [{ q: 2, r: 0 }], 12);
+    expect(request?.from[0].units).toEqual(
+      expect.arrayContaining([{ unit: 'settler', count: 5 }, { unit: 'karve', count: 1 }, { unit: 'spearman', count: 4 }]),
+    );
+    expect(request?.from[0].units).toHaveLength(3);
+  });
+
+  it('matches the move request except for the mission', () => {
+    const route = [{ q: 1, r: 1 }, { q: 2, r: 2 }];
+    const counts = { settler: 5, karve: 1 };
+    expect({ ...buildFoundDispatchRequest(at(counts), route, 7), mission: 'move' }).toEqual(
+      buildMoveDispatchRequest(at(counts), route, 7),
+    );
+  });
+});
+
+describe('buildCampDispatchRequest', () => {
+  it('returns null without units or without a route', () => {
+    expect(buildCampDispatchRequest(at({ campbuilder: 0 }), [{ q: 1, r: 1 }], 10)).toBeNull();
+    expect(buildCampDispatchRequest(at({ campbuilder: 2 }), [], 10)).toBeNull();
+  });
+
+  it('is a move-shaped request with mission setupcamp: the last hex is the camp hex', () => {
+    const route = [{ q: 0, r: 0 }, { q: 3, r: -1 }];
+    expect(buildCampDispatchRequest(at({ campbuilder: 2, karve: 1, spearman: 3 }), route, 40)).toEqual({
+      from: [{ spot: { q: 0, r: 0 }, units: [{ unit: 'campbuilder', count: 2 }, { unit: 'karve', count: 1 }, { unit: 'spearman', count: 3 }] }],
+      waypoints: [{ q: 0, r: 0 }],
+      destination: { q: 3, r: -1 },
+      provisions: 40,
+      mission: 'setupcamp',
+    });
+  });
+});
+
+describe('isRouteDestination', () => {
+  it('marks the last hex of a move or found route only', () => {
+    expect(isRouteDestination('move', 1, 2)).toBe(true);
+    expect(isRouteDestination('found', 1, 2)).toBe(true);
+    expect(isRouteDestination('found', 0, 2)).toBe(false);
+    expect(isRouteDestination('setupcamp', 1, 2)).toBe(true);
+    expect(isRouteDestination('setupcamp', 0, 2)).toBe(false);
+    expect(isRouteDestination('attack', 1, 2)).toBe(false);
+    expect(isRouteDestination('hunt', 1, 2)).toBe(false);
+  });
+});
+
+describe('dispatchHasDestination', () => {
+  const base = { targetSettlementId: null, targetCamp: null, route: [] };
+  it('needs a route for move and found', () => {
+    expect(dispatchHasDestination({ ...base, mission: 'setupcamp' })).toBe(false);
+    expect(dispatchHasDestination({ ...base, mission: 'setupcamp', route: [{ q: 1, r: 0 }] })).toBe(true);
+    expect(dispatchHasDestination({ ...base, mission: 'found' })).toBe(false);
+    expect(dispatchHasDestination({ ...base, mission: 'found', route: [{ q: 1, r: 0 }] })).toBe(true);
+    expect(dispatchHasDestination({ ...base, mission: 'move', route: [{ q: 1, r: 0 }] })).toBe(true);
+  });
+  it('needs a target settlement for attack and support, a camp for hunt', () => {
+    expect(dispatchHasDestination({ ...base, mission: 'attack', route: [{ q: 1, r: 0 }] })).toBe(false);
+    expect(dispatchHasDestination({ ...base, mission: 'support', targetSettlementId: 's1' })).toBe(true);
+    expect(dispatchHasDestination({ ...base, mission: 'hunt', targetCamp: { q: 0, r: 0 } })).toBe(true);
+  });
+});
+
+
 describe('buildAttackDispatchRequest', () => {
   it('returns null when no units are selected', () => {
-    expect(buildAttackDispatchRequest({ spearman: 0 }, [], 100, 'target-1')).toBeNull();
+    expect(buildAttackDispatchRequest(at({ spearman: 0 }), [], 100, 'target-1')).toBeNull();
   });
 
   it('returns null when no target settlement is chosen', () => {
-    expect(buildAttackDispatchRequest({ spearman: 5 }, [], 100, null)).toBeNull();
+    expect(buildAttackDispatchRequest(at({ spearman: 5 }), [], 100, null)).toBeNull();
   });
 
   it('builds an attack request with no waypoints when the route is empty (a direct route)', () => {
-    const request = buildAttackDispatchRequest({ spearman: 5, axeman: 0 }, [], 50, 'target-1');
+    const request = buildAttackDispatchRequest(at({ spearman: 5, axeman: 0 }), [], 50, 'target-1');
     expect(request).toEqual({
-      units: [{ unit: 'spearman', count: 5 }],
+      from: [{ spot: { q: 0, r: 0 }, units: [{ unit: 'spearman', count: 5 }] }],
       waypoints: undefined,
       provisions: 50,
       mission: 'attack',
@@ -122,23 +219,23 @@ describe('buildAttackDispatchRequest', () => {
 
   it('treats every clicked hex as a waypoint — never a destination, unlike a move dispatch', () => {
     const route = [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }];
-    const request = buildAttackDispatchRequest({ spearman: 3 }, route, 20, 'target-1');
+    const request = buildAttackDispatchRequest(at({ spearman: 3 }), route, 20, 'target-1');
     expect(request?.waypoints).toEqual([{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }]);
     expect(request?.destination).toBeUndefined();
   });
 
   it('omits targetBuildingCoord when no preferred target building was picked', () => {
-    const request = buildAttackDispatchRequest({ catapult: 3 }, [], 20, 'target-1');
+    const request = buildAttackDispatchRequest(at({ catapult: 3 }), [], 20, 'target-1');
     expect(request?.targetBuildingCoord).toBeUndefined();
   });
 
   it('carries a preferred target building coordinate through when one was picked', () => {
-    const request = buildAttackDispatchRequest({ catapult: 3 }, [], 20, 'target-1', { q: 4, r: -2 });
+    const request = buildAttackDispatchRequest(at({ catapult: 3 }), [], 20, 'target-1', { q: 4, r: -2 });
     expect(request?.targetBuildingCoord).toEqual({ q: 4, r: -2 });
   });
 
   it('treats an explicit null target building the same as "no preference"', () => {
-    const request = buildAttackDispatchRequest({ catapult: 3 }, [], 20, 'target-1', null);
+    const request = buildAttackDispatchRequest(at({ catapult: 3 }), [], 20, 'target-1', null);
     expect(request?.targetBuildingCoord).toBeUndefined();
   });
 });
@@ -199,27 +296,32 @@ describe('siege engines by target', () => {
 
 describe('buildSupportDispatchRequest', () => {
   it('returns null when no units are selected', () => {
-    expect(buildSupportDispatchRequest({ spearman: 0 }, [], 100, 'target-1')).toBeNull();
+    expect(buildSupportDispatchRequest(at({ spearman: 0 }), [], 100, 'target-1', spot)).toBeNull();
   });
 
   it('returns null when no target settlement is chosen', () => {
-    expect(buildSupportDispatchRequest({ spearman: 5 }, [], 100, null)).toBeNull();
+    expect(buildSupportDispatchRequest(at({ spearman: 5 }), [], 100, null, spot)).toBeNull();
   });
 
   it('builds a support request with no waypoints when the route is empty (a direct route)', () => {
-    const request = buildSupportDispatchRequest({ spearman: 5, axeman: 0 }, [], 50, 'target-1');
+    const request = buildSupportDispatchRequest(at({ spearman: 5, axeman: 0 }), [], 50, 'target-1', spot);
     expect(request).toEqual({
-      units: [{ unit: 'spearman', count: 5 }],
+      from: [{ spot: { q: 0, r: 0 }, units: [{ unit: 'spearman', count: 5 }] }],
       waypoints: undefined,
       provisions: 50,
       mission: 'support',
       targetSettlementId: 'target-1',
+      targetBuildingCoord: spot,
     });
+  });
+
+  it('returns null without the host garrison spot it joins', () => {
+    expect(buildSupportDispatchRequest(at({ spearman: 5 }), [], 100, 'target-1', null)).toBeNull();
   });
 
   it('treats every clicked hex as a waypoint — never a destination, same as an attack dispatch', () => {
     const route = [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }];
-    const request = buildSupportDispatchRequest({ spearman: 3 }, route, 20, 'target-1');
+    const request = buildSupportDispatchRequest(at({ spearman: 3 }), route, 20, 'target-1', spot);
     expect(request?.waypoints).toEqual([{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }]);
     expect(request?.destination).toBeUndefined();
   });
@@ -282,6 +384,12 @@ describe('formatEta', () => {
 describe('armyStatusLabel', () => {
   it('labels a home army', () => {
     expect(armyStatusLabel({ atHome: true, supporting: false, movement: null })).toBe('At home');
+  });
+
+  it('labels an army that cannot get home, whatever its mission', () => {
+    expect(
+      armyStatusLabel({ atHome: false, supporting: false, mission: 'hunt', movement: { isReturning: false, isStranded: true } }),
+    ).toBe('Cannot get home');
   });
 
   it('labels a supporting guest army with no settlement name given', () => {
@@ -425,11 +533,15 @@ describe('buildFieldOrderRequest (mission, target and split)', () => {
     expect(request).not.toHaveProperty('destination');
   });
 
-  it('a support carries no building even if one was left in the draft', () => {
+  it('a support carries the host garrison spot it joins', () => {
     const request = buildFieldOrderRequest([], { mission: 'support', targetSettlementId: 'own-2', targetBuildingCoord: { q: 1, r: 1 } });
 
-    expect(request?.targetBuildingCoord).toBeUndefined();
+    expect(request?.targetBuildingCoord).toEqual({ q: 1, r: 1 });
     expect(request?.targetSettlementId).toBe('own-2');
+  });
+
+  it('a support without a garrison spot is incomplete', () => {
+    expect(buildFieldOrderRequest([], { mission: 'support', targetSettlementId: 'own-2' })).toBeNull();
   });
 
   it('an attack or support without a target settlement is incomplete', () => {
@@ -478,6 +590,15 @@ describe('canFieldOrderArmy', () => {
     }
   });
 
+  it('allows a fleeing or stranded army on any mission, even one fleeing home', () => {
+    for (const movement of [
+      { isReturning: true, isFleeing: true, isStranded: false },
+      { isReturning: false, isFleeing: false, isStranded: true },
+    ]) {
+      expect(canFieldOrderArmy({ atHome: false, supporting: false, mission: 'attack', movement })).toBe(true);
+    }
+  });
+
   it('allows a standing or marching move/found army', () => {
     for (const mission of ['move', 'found']) {
       expect(
@@ -515,19 +636,19 @@ describe('isFieldOrderMidMarch', () => {
 
 describe('buildHuntDispatchRequest', () => {
   it('returns null without units or a camp target', () => {
-    expect(buildHuntDispatchRequest({ spearman: 0 }, [], 10, { q: 1, r: 2 })).toBeNull();
-    expect(buildHuntDispatchRequest({ spearman: 3 }, [], 10, null)).toBeNull();
+    expect(buildHuntDispatchRequest(at({ spearman: 0 }), [], 10, { q: 1, r: 2 })).toBeNull();
+    expect(buildHuntDispatchRequest(at({ spearman: 3 }), [], 10, null)).toBeNull();
   });
 
   it('sends the camp hex as the destination with a hunt mission and the route as waypoints', () => {
-    expect(buildHuntDispatchRequest({ spearman: 3, axeman: 0 }, [{ q: 0, r: 1 }], 40, { q: 4, r: -2 })).toEqual({
-      units: [{ unit: 'spearman', count: 3 }],
+    expect(buildHuntDispatchRequest(at({ spearman: 3, axeman: 0 }), [{ q: 0, r: 1 }], 40, { q: 4, r: -2 })).toEqual({
+      from: [{ spot: { q: 0, r: 0 }, units: [{ unit: 'spearman', count: 3 }] }],
       waypoints: [{ q: 0, r: 1 }],
       destination: { q: 4, r: -2 },
       provisions: 40,
       mission: 'hunt',
     });
-    expect(buildHuntDispatchRequest({ spearman: 1 }, [], 0, { q: 4, r: -2 })?.waypoints).toBeUndefined();
+    expect(buildHuntDispatchRequest(at({ spearman: 1 }), [], 0, { q: 4, r: -2 })?.waypoints).toBeUndefined();
   });
 
   it('only land units may hunt', () => {
@@ -542,6 +663,27 @@ describe('buildHuntDispatchRequest', () => {
     expect(isHuntUnit('longship', byType, true)).toBe(true);
     expect(isHuntUnit('spearman', byType, true)).toBe(true);
     expect(isHuntUnit('unknown', byType, true)).toBe(false);
+  });
+
+  it('a sand camp is hunted by land units that a fleet may carry: ships and land units both selectable', () => {
+    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), longship: unit({ type: 'longship', class: 'ship' }) };
+    expect(isHuntUnit('longship', byType, false, true)).toBe(true);
+    expect(isHuntUnit('spearman', byType, false, true)).toBe(true);
+    expect(isHuntUnit('unknown', byType, false, true)).toBe(false);
+    // The ships take no part in the fight: a sand hunt needs a land unit to lead it, so ships alone cannot.
+    const shipsOnly = [{ unit: 'longship', count: 2 }];
+    const withLand = [{ unit: 'longship', count: 2 }, { unit: 'spearman', count: 1 }];
+    expect(garrisonCanHunt(shipsOnly, byType, false)).toBe(false);
+    expect(garrisonCanHunt(withLand, byType, false)).toBe(true);
+  });
+
+  it('a fleet without land troops aboard lacks what a sand hunt needs', () => {
+    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), longship: unit({ type: 'longship', class: 'ship' }) };
+    expect(fleetLacksLandTroops({ longship: 2 }, byType)).toBe(true);
+    expect(fleetLacksLandTroops({ longship: 2, spearman: 0 }, byType)).toBe(true);
+    expect(fleetLacksLandTroops({ longship: 2, spearman: 1 }, byType)).toBe(false);
+    expect(fleetLacksLandTroops({ spearman: 4 }, byType)).toBe(false);
+    expect(fleetLacksLandTroops({}, byType)).toBe(false);
   });
 
   it('the hunt ring action needs land units at home for a land camp and a ship for a camp at sea', () => {
@@ -582,7 +724,7 @@ describe('targetBuildingPickerMode', () => {
 
 describe('shoreBuildings', () => {
   // Land at q >= 0, sea at q < 0.
-  const coast = { isLand: (q: number) => q >= 0 };
+  const coast = { isLand: (q: number) => q >= 0, isSea: (q: number) => q < 0 };
 
   it('keeps only buildings on a shoreline hex or a sea hex', () => {
     const farm = { q: 3, r: 0, type: 'farm' };
@@ -594,7 +736,7 @@ describe('shoreBuildings', () => {
 
 describe('a fleet attack request', () => {
   it('carries the chosen shore building as the target building', () => {
-    const request = buildAttackDispatchRequest({ karve: 3 }, [], 30, 'target-1', { q: 9, r: 0 });
+    const request = buildAttackDispatchRequest(at({ karve: 3 }), [], 30, 'target-1', { q: 9, r: 0 });
     expect(request?.targetBuildingCoord).toEqual({ q: 9, r: 0 });
   });
 });
@@ -635,5 +777,50 @@ describe('trainingSite', () => {
     expect(trainingSite(centre, [range], { spearman: 1 }, byType)).toEqual(centre);
     expect(trainingSite(centre, [barracks], {}, byType)).toEqual(centre);
     expect(trainingSite(centre, [barracks], { spearman: 0 }, byType)).toEqual(centre);
+  });
+});
+
+describe('campReadyAtMs', () => {
+  const arrivesAt = '2026-01-01T00:00:00Z';
+  const base = Date.parse(arrivesAt);
+  const standing = { mission: 'setupcamp', movement: { isReturning: false, arrivesAt } };
+
+  it('is arrival plus the 10 minute build time at world speed 1', () => {
+    expect(campReadyAtMs(standing, base + 1000, 1)).toBe(base + 10 * 60_000);
+  });
+
+  it('scales with the world speed', () => {
+    expect(campReadyAtMs(standing, base, 4)).toBe(base + 150_000);
+  });
+
+  it('is null before arrival, once recalled, and for any other mission', () => {
+    expect(campReadyAtMs(standing, base - 1, 1)).toBeNull();
+    expect(campReadyAtMs({ ...standing, movement: { isReturning: true, arrivesAt } }, base + 1, 1)).toBeNull();
+    expect(campReadyAtMs({ ...standing, mission: 'found' }, base + 1, 1)).toBeNull();
+    expect(campReadyAtMs({ mission: 'setupcamp', movement: null }, base + 1, 1)).toBeNull();
+  });
+});
+
+describe('dispatchTargetCoord', () => {
+  const base = { mission: 'move', targetSettlementId: null, targetCamp: null, targetBuildingCoord: null, route: [] as { q: number; r: number }[] };
+  const centreOf = (id: string) => (id === 'host' ? { q: 10, r: 0 } : undefined);
+
+  it('is the last clicked hex of a move or a founding', () => {
+    expect(dispatchTargetCoord({ ...base, route: [{ q: 1, r: 1 }, { q: 4, r: 2 }] }, centreOf)).toEqual({ q: 4, r: 2 });
+    expect(dispatchTargetCoord({ ...base, mission: 'found', route: [{ q: 3, r: 3 }] }, centreOf)).toEqual({ q: 3, r: 3 });
+    expect(dispatchTargetCoord(base, centreOf)).toBeNull();
+  });
+
+  it('is the camp of a hunt', () => {
+    expect(dispatchTargetCoord({ ...base, mission: 'hunt', targetCamp: { q: 5, r: -1 } }, centreOf)).toEqual({ q: 5, r: -1 });
+  });
+
+  it('is the settlement of an attack, and the named garrison spot of a support', () => {
+    expect(dispatchTargetCoord({ ...base, mission: 'attack', targetSettlementId: 'host' }, centreOf)).toEqual({ q: 10, r: 0 });
+    expect(dispatchTargetCoord({ ...base, mission: 'support', targetSettlementId: 'host' }, centreOf)).toEqual({ q: 10, r: 0 });
+    expect(
+      dispatchTargetCoord({ ...base, mission: 'support', targetSettlementId: 'host', targetBuildingCoord: { q: 12, r: 1 } }, centreOf),
+    ).toEqual({ q: 12, r: 1 });
+    expect(dispatchTargetCoord({ ...base, mission: 'attack' }, centreOf)).toBeNull();
   });
 });

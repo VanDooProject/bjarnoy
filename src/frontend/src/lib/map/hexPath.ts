@@ -302,8 +302,30 @@ function openKeyLess(a: OpenKey, b: OpenKey): boolean {
  * Prices exactly what the backend does; `ctx.restrictions` can add a palisade or (preview tool only) switch a rule off.
  */
 export function findPath(from: AxialCoord, to: AxialCoord, ctx: PathContext): AxialCoord[] | null {
-  if (ctx.rules.land[ctx.terrainAt(from)] === undefined || ctx.rules.land[ctx.terrainAt(to)] === undefined) return null;
+  return drain(findPathSteps(from, to, ctx));
+}
+
+/** `findPath` as a generator: yields every `SLICE_EXPANSIONS` expansions so a caller can spread the search over time; returns the route. */
+export function findPathSteps(from: AxialCoord, to: AxialCoord, ctx: PathContext): PathSearch {
+  if (ctx.rules.land[ctx.terrainAt(from)] === undefined || ctx.rules.land[ctx.terrainAt(to)] === undefined) return doneSearch(null);
   return aStar(from, to, (a, b) => halfAndHalf(a, b, ctx));
+}
+
+/** A route search that can be paused: yields now and then, returns the route (or `null`) when finished. */
+export type PathSearch = Generator<void, AxialCoord[] | null, void>;
+
+/** Expansions between two yields of a sliced search. */
+export const SLICE_EXPANSIONS = 1024;
+
+/** Hexes the reverse reachability probe visits at most before it gives up and lets the real search decide. */
+export const REVERSE_PROBE_NODES = 4096;
+
+function* doneSearch(path: AxialCoord[] | null): PathSearch {
+  return path;
+}
+
+function drain(search: PathSearch): AxialCoord[] | null {
+  for (let r = search.next(); ; r = search.next()) if (r.done) return r.value;
 }
 
 /**
@@ -311,11 +333,11 @@ export function findPath(from: AxialCoord, to: AxialCoord, ctx: PathContext): Ax
  * tables): plain hex distance as the heuristic, the endpoints padded by their distance (at least 10) as the bounding box, and
  * `MAX_EXPANDED_NODES` as the expansion cap. `step` prices the move between two neighbours, `null` when it is impassable.
  */
-function aStar(
+function* aStar(
   from: AxialCoord,
   to: AxialCoord,
   step: (a: AxialCoord, b: AxialCoord) => number | null,
-): AxialCoord[] | null {
+): PathSearch {
   if (from.q === to.q && from.r === to.r) return [from];
 
   const padding = Math.max(10, hexDistance(from, to));
@@ -323,6 +345,11 @@ function aStar(
   const qMax = Math.max(from.q, to.q) + padding;
   const rMin = Math.min(from.r, to.r) - padding;
   const rMax = Math.max(from.r, to.r) + padding;
+
+  // Fail fast for an unreachable goal (an inland hex for a fleet, a walled-in camp): a small flood fill backwards from the goal over
+  // the same box. The search below never leaves that box, so if the flood runs dry without meeting `from`, no route exists and the
+  // 250,000-node search would only prove it slowly. A flood that hits its cap says nothing, and the real search decides.
+  if (!reverseProbeMayReach(from, to, step, qMin, qMax, rMin, rMax)) return null;
 
   const open = new MinHeap<AxialCoord, OpenKey>(openKeyLess);
   const g = new Map<string, number>([[coordKey(from), 0]]);
@@ -342,6 +369,7 @@ function aStar(
       return path.reverse();
     }
     if (++expanded > MAX_EXPANDED_NODES) return null;
+    if (expanded % SLICE_EXPANSIONS === 0) yield;
 
     for (const n of neighbors(current)) {
       if (n.q < qMin || n.q > qMax || n.r < rMin || n.r > rMax) continue;
@@ -358,6 +386,33 @@ function aStar(
     }
   }
   return null;
+}
+
+/** False only when a flood backwards from `to` (edge n to cur priced by `step(n, cur)`) runs dry inside the box without reaching `from`. */
+function reverseProbeMayReach(
+  from: AxialCoord,
+  to: AxialCoord,
+  step: (a: AxialCoord, b: AxialCoord) => number | null,
+  qMin: number,
+  qMax: number,
+  rMin: number,
+  rMax: number,
+): boolean {
+  const seen = new Set<string>([coordKey(to)]);
+  const queue: AxialCoord[] = [to];
+  for (let i = 0; i < queue.length; i++) {
+    const cur = queue[i]!;
+    for (const n of neighbors(cur)) {
+      if (n.q < qMin || n.q > qMax || n.r < rMin || n.r > rMax) continue;
+      const k = coordKey(n);
+      if (seen.has(k) || step(n, cur) === null) continue;
+      if (n.q === from.q && n.r === from.r) return true;
+      seen.add(k);
+      if (seen.size >= REVERSE_PROBE_NODES) return true;
+      queue.push(n);
+    }
+  }
+  return false;
 }
 
 /** Terrain-and-river cost of walking `path`, in hex-cost units: every step is half the leave price of the hex left plus half the enter price of the hex entered; `Infinity` through an impassable hex. */
@@ -385,14 +440,62 @@ export function reachableFrom(origin: AxialCoord, ctx: PathContext, limit = 200_
 }
 
 /**
+ * What a fleet pays for a sand hex at either end of its route (a beach to land on or push off from): twice a sea hex
+ * (`HexPathfinder.FleetSandCost`).
+ */
+export const FLEET_SAND_COST = 2.0;
+
+/** The price of a fleet's land endpoint (a harbour or beaching hex): 1.0, except sand (`HexPathfinder.FleetLandEndpointCost`). */
+function fleetEndpointCost(terrain: Terrain): number {
+  return terrain === 'sand' ? FLEET_SAND_COST : 1.0;
+}
+
+/**
+ * Price of the step from `a` to its neighbour `b` for a fleet, the TS twin of the backend's search: half the leave price of `a` (sea 1,
+ * or the land-endpoint price for the harbour it starts from) plus half the enter price of `b` (sea 1; the goal, whatever it is, at the land-endpoint
+ * price); `null` when `b` is neither sea nor the goal.
+ */
+function fleetStepCost(
+  a: AxialCoord,
+  b: AxialCoord,
+  from: AxialCoord,
+  to: AxialCoord,
+  terrainAt: (c: AxialCoord) => Terrain,
+): number | null {
+  const isGoal = b.q === to.q && b.r === to.r;
+  const enterTerrain = terrainAt(b);
+  if (!isGoal && enterTerrain !== 'sea') return null;
+  const enter = enterTerrain === 'sea' ? 1 : fleetEndpointCost(enterTerrain);
+  // Only the start can be land: every other hex a route leaves is sea.
+  const leave = a.q === from.q && a.r === from.r ? fleetEndpointCost(terrainAt(a)) : 1;
+  return (leave + enter) / 2;
+}
+
+/**
  * Shortest route for a fleet from `from` to `to` (both included), or `null` if there is none: the TS twin of `HexPathfinder.FindPath`
- * for ships. Open sea costs a flat 1.0 per hex (`SeaTerrainCost`) and the two endpoints are exempt from the sea-only rule (a harbour or
- * beaching hex, the shore a fleet is sent at), so every hex in between has to be sea. Same bounding box and expansion cap as `findPath`.
+ * for ships. Open sea costs a flat 1.0 per hex (`SeaTerrainCost`), a sand endpoint `FLEET_SAND_COST`, and the two endpoints are exempt
+ * from the sea-only rule (a harbour or beaching hex, the shore a fleet is sent at), so every hex in between has to be sea. Same
+ * bounding box and expansion cap as `findPath`.
  */
 export function findSeaPath(
   from: AxialCoord,
   to: AxialCoord,
   terrainAt: (c: AxialCoord) => Terrain,
 ): AxialCoord[] | null {
-  return aStar(from, to, (_, b) => ((b.q === to.q && b.r === to.r) || terrainAt(b) === 'sea' ? 1 : null));
+  return drain(findSeaPathSteps(from, to, terrainAt));
+}
+
+/** `findSeaPath` as a generator, see `findPathSteps`. */
+export function findSeaPathSteps(from: AxialCoord, to: AxialCoord, terrainAt: (c: AxialCoord) => Terrain): PathSearch {
+  return aStar(from, to, (a, b) => fleetStepCost(a, b, from, to, terrainAt));
+}
+
+/** Cost of sailing `path` (from `findSeaPath`), in hex-cost units (sea hex = 1): the sum of its steps' `fleetStepCost`. */
+export function seaPathCost(path: readonly AxialCoord[], terrainAt: (c: AxialCoord) => Terrain): number {
+  const from = path[0];
+  const to = path[path.length - 1];
+  if (!from || !to) return 0;
+  let total = 0;
+  for (let i = 1; i < path.length; i++) total += fleetStepCost(path[i - 1]!, path[i]!, from, to, terrainAt) ?? Number.POSITIVE_INFINITY;
+  return total;
 }

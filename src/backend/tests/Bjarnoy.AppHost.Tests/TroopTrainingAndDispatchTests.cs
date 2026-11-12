@@ -6,6 +6,7 @@ using Aspire.Hosting.Testing;
 using Bjarnoy.Api.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.AppHost.Tests;
 
@@ -148,8 +149,7 @@ public class TroopTrainingAndDispatchTests(AppHostFixture fixture)
         // anything.
         var layout = await adminHttpClient.GetFromJsonAsync<AdminSettlementLayoutResponse>(
             $"/api/v1/admin/settlements/{settlementId}/layout", cancellationToken);
-        var islands = await apiClient.GetFromJsonAsync<IslandResponse[]>(
-            $"/api/v1/worlds/{world.Id}/islands", cancellationToken);
+        var islands = await apiClient.GetFullIslandsAsync(world.Id, cancellationToken);
         var riverHexes = islands!.SelectMany(i => i.RiverTiles).Select(t => (t.Q, t.R)).ToHashSet();
         var plainLand = layout!.Hexes
             .Where(h => !h.IsCentre

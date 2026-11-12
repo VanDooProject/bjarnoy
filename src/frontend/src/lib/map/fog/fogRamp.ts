@@ -45,3 +45,12 @@ export const UNKNOWN_RAMP_MARGIN_HEXES = 14;
  * which rival data to deliver from the same number.
  */
 export const SOURCE_MIST_OPAQUE_MARGIN_HEXES = UNKNOWN_RAMP_MARGIN_HEXES * FOG_MIST_OPAQUE_AT_RAMP;
+
+/**
+ * The troop's white (unknown) ramp, in hexes past its vision radius: starts `ARMY_FOG_WHITE_OFFSET` out and fades over
+ * `ARMY_FOG_WHITE_MARGIN` (fogShader.ts's armyRamps). The server bakes the same ramp around explored ground
+ * (`FogVisionRadii.ArmyFogWhiteOffsetHexes` / `ArmyFogWhiteMarginHexes`, which must equal these), so a stored trail reads
+ * like the live clearing.
+ */
+export const ARMY_FOG_WHITE_OFFSET = 0.75;
+export const ARMY_FOG_WHITE_MARGIN = 6;

@@ -7,6 +7,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -53,6 +54,15 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
         var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
         var user = await db.Users.SingleAsync(u => u.Id == userId, Ct);
         user.Status = status;
+        await db.SaveChangesAsync(Ct);
+    }
+
+    private async Task SetPremiumUntilAsync(Guid userId, DateTimeOffset until)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        var user = await db.Users.SingleAsync(u => u.Id == userId, Ct);
+        user.PremiumUntil = until;
         await db.SaveChangesAsync(Ct);
     }
 
@@ -262,14 +272,32 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Premium_until_makes_the_account_premium_only_until_it_expires()
+    {
+        using var client = Client();
+        var userName = Unique("premiumuntil-");
+        var registered = await RegisterAsync(client, userName);
+
+        // Logs in afresh each time: the 14 days pass the access token's lifetime on the test clock.
+        async Task<bool> IsPremiumAsync() =>
+            (await (await client.PostJsonAsync("/api/v1/auth/login", new LoginRequest(userName, "correct-horse"), Ct))
+                .ReadStrictAsync<AuthResponse>(Ct)).User.IsPremium;
+
+        await SetPremiumUntilAsync(registered.User.Id, _factory.Time.GetUtcNow().AddDays(14));
+        Assert.True(await IsPremiumAsync());
+
+        _factory.Time.Advance(TimeSpan.FromDays(14) + TimeSpan.FromSeconds(1));
+        Assert.False(await IsPremiumAsync());
+    }
+
+    [Fact]
     public async Task A_locked_user_is_refused_a_mutating_settlement_action_while_anonymous_still_succeeds()
     {
         using var client = Client();
 
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -303,8 +331,7 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
         using var client = Client();
 
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -346,8 +373,7 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
         using var client = Client();
 
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 

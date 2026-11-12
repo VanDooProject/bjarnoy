@@ -24,6 +24,7 @@ function army(overrides: Partial<AdminArmyResponse['army']> = {}): AdminArmyResp
     worldId: 'world-1',
     settlementName: 'Bjornstad',
     ownerName: 'Ragnar',
+    loot: { wood: 37.6, stone: 2, food: 3, iron: 4 },
     army: {
       id: 'army-1',
       settlementId: 'settlement-1',
@@ -49,7 +50,10 @@ function army(overrides: Partial<AdminArmyResponse['army']> = {}): AdminArmyResp
         turnAroundAt: '2026-01-01T20:00:00Z',
         returnArrivesAt: '2026-01-02T06:00:00Z',
         isReturning: false,
+        isStranded: false,
+        isFleeing: false,
       },
+      starvesAt: null,
       ...overrides,
     },
   };
@@ -78,6 +82,19 @@ describe('ArmyEditor', () => {
     expect(adminListArmies).toHaveBeenCalledWith({ settlementId: 'settlement-1' });
     expect(wrapper.text()).toContain('5x thrall');
     expect(wrapper.text()).toContain('(3, 4)');
+  });
+
+  it('shows each army as a table row with its provisions and full loot', async () => {
+    adminListArmies.mockResolvedValue([army()]);
+
+    const wrapper = mount(ArmyEditor, { props: { settlementId: 'settlement-1' }, global });
+    await flushPromises();
+
+    const headers = wrapper.findAll('th').map((h) => h.text());
+    expect(headers).toEqual(expect.arrayContaining(['Mission', 'Units', 'Provisions', 'Loot carried', 'Position']));
+    const row = wrapper.find('tr.summary');
+    expect(row.find('.provisions').text()).toBe('120');
+    expect(row.find('.loot').text()).toBe('38 wood, 2 stone, 3 food, 4 iron');
   });
 
   it('says so when a settlement has no armies in the field', async () => {

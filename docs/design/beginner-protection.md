@@ -100,8 +100,9 @@ This issue trades on a feature that doesn't exist yet: issue #108 plans
 **Current state, verified in code:** there is no beginner-area logic today,
 and what exists is entirely backend-fed, unfiltered. `GET
 /worlds/{worldId}/islands` (`WorldEndpoints.cs:36-38` →
-`WorldService.GetIslandsAsync` → `IslandResponse.From`) returns **every**
-island's `StartPositions` for the world, with no per-island signal about who
+`WorldService.GetIslandSummariesAsync` → `IslandResponse.From`) lists every
+island but no longer carries `StartPositions`: `GET
+/worlds/{id}/start-positions` returns **every** island's `StartPositions` for the world, with no per-island signal about who
 (if anyone) is already settled there. The frontend does no more than pick a
 point out of that full set: `LandingView.vue` previews
 `world.nearestStartPosition({ q: 0, r: 0 })` and lets the player found on any
@@ -134,7 +135,7 @@ something already built; this issue is where that gets designed:
 - **Island suggestion rule:** an island offered as a landing spot should have
   no players on it yet, or only other players still inside their own shield
   window (i.e., still beginners by the same clock this issue defines in §1).
-  Concretely: the backend query answering `GetIslandsAsync` (or its new
+  Concretely: the backend query answering `/worlds/{id}/start-positions` (or its new
   beginner-suggestion counterpart) joins each island's `StartPositions`
   against `Settlements` on that island and keeps only islands where every
   founded settlement has `ShieldExpiresAtUtc > now`. Once an island has any

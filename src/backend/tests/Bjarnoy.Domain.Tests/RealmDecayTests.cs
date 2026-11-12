@@ -76,7 +76,7 @@ public class RealmDecayTests
     }
 
     [Theory]
-    [InlineData(BuildingType.Tower, 10)]
+    [InlineData(BuildingType.Tower, 7)]
     [InlineData(BuildingType.Farm, 25)]
     [InlineData(BuildingType.Barracks, 20)]
     [InlineData(BuildingType.OdinStatue, 7)]

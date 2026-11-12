@@ -38,6 +38,8 @@ public abstract record ArmyLocation
     /// the same settlement <see cref="Army.TargetSettlementId"/> named at
     /// dispatch — the guest's destination and its current host are one and
     /// the same, so no separate field is stored on <c>Army</c> for it.
+    /// <paramref name="Spot"/> is the host's garrison spot the guest stands at
+    /// (<see cref="Army.TargetBuildingCoord"/> named it at dispatch).
     /// </summary>
-    public sealed record Supporting(Guid HostSettlementId) : ArmyLocation;
+    public sealed record Supporting(Guid HostSettlementId, Bjarnoy.Domain.World.HexCoord Spot) : ArmyLocation;
 }

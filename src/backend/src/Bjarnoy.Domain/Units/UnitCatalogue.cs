@@ -153,12 +153,30 @@ public static class UnitCatalogue
             FoodCarryCapacity = 40,
             CargoSlots = 1,
             UpkeepPerHour = 0.25,
-            // Base cost before Bjarnoy.Domain.Settlers.SettlerCostScaling's
-            // per-existing-settlement multiplier (issue #55 §4) — deliberately
-            // steep even at the base rate, mirroring Travian's settlers being
-            // one of the most expensive units in the game.
+            // Flat price, the same for every settlement a player holds (only the
+            // renown asked for the next settlement escalates) — deliberately
+            // steep, mirroring Travian's settlers being one of the most
+            // expensive units in the game.
             TrainingCost = new ResourceAmounts(Wood: 120, Stone: 90, Food: 60, Iron: 60),
             TrainingDuration = TimeSpan.FromMinutes(24),
+            RequiredLonghouseLevel = 10,
+            RequiredBuildingType = BuildingType.CartWorkshop,
+        },
+        [UnitType.CampBuilder] = new UnitDefinition
+        {
+            Type = UnitType.CampBuilder,
+            VisionRadius = 2,
+            Class = UnitClass.Civilian,
+            Attack = 0,
+            Defense = 3,
+            Speed = 4,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 40,
+            CargoSlots = 1,
+            UpkeepPerHour = 0.25,
+            // Flat price like the Settler's, but far cheaper: a camp is a stopgap base, not a new realm.
+            TrainingCost = new ResourceAmounts(Wood: 80, Stone: 40, Food: 40, Iron: 20),
+            TrainingDuration = TimeSpan.FromMinutes(12),
             RequiredLonghouseLevel = 10,
             RequiredBuildingType = BuildingType.CartWorkshop,
         },
@@ -222,10 +240,6 @@ public static class UnitCatalogue
             FoodCarryCapacity = 600,
             ShipSlots = 10,
             UpkeepPerHour = 1.5,
-            // Starting value, to be tuned: a won fleet attack damages the building it was sent at by
-            // SiegeResolver.LevelsDestroyed over the surviving ships' summed SiegePower (catapult: 40).
-            SiegePower = 10,
-            SiegeTargets = SiegeTargets.Walls | SiegeTargets.Towers | SiegeTargets.Buildings,
             TrainingCost = new ResourceAmounts(Wood: 250, Stone: 100, Food: 40, Iron: 100),
             TrainingDuration = TimeSpan.FromMinutes(45),
             RequiredLonghouseLevel = 8,
@@ -243,12 +257,28 @@ public static class UnitCatalogue
             FoodCarryCapacity = 320,
             ShipSlots = 20,
             UpkeepPerHour = 2,
-            // Starting value, to be tuned (see Karve).
-            SiegePower = 20,
-            SiegeTargets = SiegeTargets.Walls | SiegeTargets.Towers | SiegeTargets.Buildings,
             TrainingCost = new ResourceAmounts(Wood: 400, Stone: 200, Food: 60, Iron: 220),
             TrainingDuration = TimeSpan.FromHours(1.5),
             RequiredLonghouseLevel = 20,
+            RequiredUnitType = UnitType.Karve,
+            RequiredBuildingType = BuildingType.Dockyard,
+        },
+        [UnitType.FireShip] = new UnitDefinition
+        {
+            Type = UnitType.FireShip,
+            VisionRadius = 6,
+            Class = UnitClass.Ship,
+            // Starting values, to be tuned. No attack and no slots: ten Fire Ships burn one building level in the water.
+            Attack = 0,
+            Defense = 25,
+            Speed = 8,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 200,
+            ShipSlots = 0,
+            UpkeepPerHour = 5,
+            TrainingCost = new ResourceAmounts(Wood: 300, Stone: 60, Food: 40, Iron: 80),
+            TrainingDuration = TimeSpan.FromMinutes(40),
+            RequiredLonghouseLevel = 12,
             RequiredUnitType = UnitType.Karve,
             RequiredBuildingType = BuildingType.Dockyard,
         },

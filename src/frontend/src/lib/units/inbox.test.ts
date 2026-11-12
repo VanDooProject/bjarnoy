@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { filterInbox, inboxUnreadCount, isInboxItemUnread, mergeInbox } from './inbox';
-import type { BattleReportResponse, CampReportResponse, FieldBattleReportResponse, TradeReportResponse } from '../../api/types';
+import type { ArmyReportResponse, BattleReportResponse, CampReportResponse, FieldBattleReportResponse, TradeReportResponse } from '../../api/types';
 
 function battle(id: string, occurredAt: string): BattleReportResponse {
   return {
@@ -18,6 +18,11 @@ function battle(id: string, occurredAt: string): BattleReportResponse {
     attackerLines: [],
     defenderLines: [],
     siege: null,
+    shipFight: null,
+    drowned: [],
+    fireShipsBurned: 0,
+    fireSiege: null,
+    viewerSide: 'attacker',
   };
 }
 
@@ -42,6 +47,7 @@ function field(id: string, occurredAt: string): FieldBattleReportResponse {
     seed: 1,
     lootTaken: { wood: 0, stone: 0, food: 0, iron: 0 },
     lines: [],
+    viewerSide: 'sidea',
   };
 }
 
@@ -58,6 +64,7 @@ function trade(id: string, completedAt: string): TradeReportResponse {
     requestedAmount: 100,
     guildTrade: false,
     travelHours: 1,
+    viewerSide: 'poster',
   };
 }
 
@@ -157,5 +164,32 @@ describe('inbox camp reports', () => {
     const items = mergeInbox([], [], [], [camp('c1', '2026-01-03T00:00:00Z'), camp('c2', '2026-01-01T00:00:00Z')]);
     expect(inboxUnreadCount(items, '2026-01-02T00:00:00Z')).toBe(1);
     expect(inboxUnreadCount(items, null)).toBe(2);
+  });
+});
+
+describe('inbox army reports', () => {
+  const army = (id: string, occurredAt: string): ArmyReportResponse => ({
+    id,
+    kind: 'starved',
+    occurredAt,
+    armyId: 'army-1',
+    hex: { q: 1, r: 2 },
+    mission: 'move',
+    units: [{ type: 'axeman', count: 3 }],
+  });
+
+  it('merges army reports newest-first with the other kinds and filters them under "army"', () => {
+    const items = mergeInbox(
+      [battle('b1', '2026-01-01T00:00:00Z')], [], [], [],
+      [army('a1', '2026-01-03T00:00:00Z'), army('a2', '2026-01-02T00:00:00Z')],
+    );
+    expect(items.map((i) => i.report.id)).toEqual(['a1', 'a2', 'b1']);
+    expect(filterInbox(items, 'army').map((i) => i.kind)).toEqual(['army', 'army']);
+    expect(filterInbox(items, 'battle').map((i) => i.kind)).toEqual(['battle']);
+  });
+
+  it('counts army reports as unread like the other kinds', () => {
+    const items = mergeInbox([], [], [], [], [army('a1', '2026-01-03T00:00:00Z'), army('a2', '2026-01-01T00:00:00Z')]);
+    expect(inboxUnreadCount(items, '2026-01-02T00:00:00Z')).toBe(1);
   });
 });

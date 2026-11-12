@@ -54,7 +54,11 @@ public sealed record RenownAccount
     /// after <see cref="SettledAt"/>; renown never decays, so there is nothing
     /// to roll backwards.
     /// </summary>
-    public RenownAccount SettleTo(DateTimeOffset now, int totalBuildingLevels)
+    /// <param name="speedFactor">
+    /// The world's <c>SpeedFactor</c> — multiplies the accrual rate the same
+    /// way it multiplies production (economy.md, world speed).
+    /// </param>
+    public RenownAccount SettleTo(DateTimeOffset now, int totalBuildingLevels, double speedFactor = 1.0)
     {
         if (now <= SettledAt)
         {
@@ -62,7 +66,7 @@ public sealed record RenownAccount
         }
 
         var elapsedHours = (now - SettledAt).TotalHours;
-        var accrued = totalBuildingLevels * PointsPerLevelPerHour * elapsedHours;
+        var accrued = totalBuildingLevels * PointsPerLevelPerHour * speedFactor * elapsedHours;
 
         return this with { Total = Total + accrued, SettledAt = now };
     }
@@ -79,13 +83,13 @@ public sealed record RenownAccount
 public static class RenownThresholds
 {
     /// <summary>Renown required to found the 2nd settlement — the base of the escalating curve.</summary>
-    public const double BaseThreshold = 55_000;
+    public const double BaseThreshold = 80_000;
 
     /// <summary>
     /// Renown required, at dispatch time, to found the
     /// <paramref name="settlementNumber"/>th settlement (2, 3, 4, …) — the 1st
     /// is free (see the type-level remarks). <c>BaseThreshold × 2^(n-2)</c>:
-    /// 55 000 for the 2nd, 110 000 for the 3rd, 220 000 for the 4th, and so on.
+    /// 80 000 for the 2nd, 160 000 for the 3rd, 320 000 for the 4th, and so on.
     /// </summary>
     public static double RequiredFor(int settlementNumber)
     {

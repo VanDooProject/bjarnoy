@@ -8,6 +8,7 @@
   "ready": "Ready to claim",
   "alsoReady": "Also ready",
   "rewardLabel": "Reward",
+  "premiumReward": "{n} days of Premium",
   "overflowNote": "Some of this reward won't fit in storage.",
   "claimError": "Couldn't claim that reward. Try again.",
   "more": "More",
@@ -37,6 +38,10 @@
     "longhouse3": {
       "title": "Upgrade your Longhouse to level 3",
       "hint": "Open the Longhouse and choose Upgrade again."
+    },
+    "register": {
+      "title": "Name your jarl",
+      "hint": "Create an account with the name your jarl at the top. It keeps your island on every device."
     },
     "tower3": {
       "title": "Build a Tower to level 3",

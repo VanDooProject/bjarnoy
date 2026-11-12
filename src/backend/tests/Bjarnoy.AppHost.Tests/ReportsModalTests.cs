@@ -8,6 +8,7 @@ using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.AppHost.Tests;
 
@@ -156,8 +157,7 @@ public class ReportsModalTests(AppHostFixture fixture)
             cancellationToken);
         reseedResponse.EnsureSuccessStatusCode();
 
-        var islands = await apiClient.GetFromJsonAsync<IslandResponse[]>(
-            $"/api/v1/worlds/{world.Id}/islands", cancellationToken);
+        var islands = await apiClient.GetFullIslandsAsync(world.Id, cancellationToken);
         var targetIsland = Assert.Single(islands!, i => i.Index == islandIndex);
 
         // --- Found both settlements anonymously (see class remarks) ---
@@ -202,7 +202,7 @@ public class ReportsModalTests(AppHostFixture fixture)
         // bypasses — see UnitCatalogue.Get(UnitType.Spearman)) ---
         var garrisonResponse = await adminHttpClient.PostAsJsonAsync(
             $"/api/v1/admin/settlements/{playerSettlement.Id}/garrison",
-            new AdjustGarrisonRequest("spearman", 10),
+            new AdjustGarrisonRequest("spearman", new HexPointRequest(playerSettlement.Q, playerSettlement.R), 10),
             cancellationToken);
         garrisonResponse.EnsureSuccessStatusCode();
 
@@ -210,7 +210,7 @@ public class ReportsModalTests(AppHostFixture fixture)
         var dispatchResponse = await playerHttpClient.PostAsJsonAsync(
             $"/api/v1/settlements/{playerSettlement.Id}/armies",
             new DispatchArmyRequest(
-                Units: [new UnitCountRequest("spearman", 10)],
+                From: [new(new HexPointRequest(playerSettlement.Q, playerSettlement.R), [new UnitCountRequest("spearman", 10)])],
                 Waypoints: null,
                 Destination: null,
                 Provisions: 50,
@@ -241,7 +241,7 @@ public class ReportsModalTests(AppHostFixture fixture)
         arrivedArmyResponse.EnsureSuccessStatusCode();
 
         var reports = await playerHttpClient.GetFromJsonAsync<BattleReportResponse[]>(
-            $"/api/v1/settlements/{playerSettlement.Id}/reports", cancellationToken);
+            $"/api/v1/worlds/{playerSettlement.WorldId}/reports", cancellationToken);
         var report = Assert.Single(reports!);
         // The rival garrison is empty, so any attacker with positive attack
         // power wins outright (BattleResolver.Resolve) — the attacker here

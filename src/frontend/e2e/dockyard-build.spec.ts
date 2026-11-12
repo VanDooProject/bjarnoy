@@ -23,6 +23,8 @@ test('building a dockyard from the ring menu on coastal water places it', async 
   await settlement.setSettlementLevel(8);
   // ...and stand its prerequisite, a level-5 fishing hut (BuildingCatalogue.cs Prerequisites).
   await settlement.standBuildings([{ type: 'fishinghut', level: 5 }]);
+  // Late buildings cost more than a fresh settlement can hold: fund it (and its storage) so the bubble is affordable.
+  await settlement.fund(10_000_000);
 
   // Find a real owned coastal-water hex within the settlement's claim radius
   // — same approach as shrine-build.spec.ts's grass-hex search, but for

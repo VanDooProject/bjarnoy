@@ -7,6 +7,7 @@ import type { BeatId } from './beats/types';
 import { introLoad } from './introLoad';
 import { beatsFor, holdMinMs, IntroVoice } from './introVoice';
 import { buildTimeline, selectBeats } from './timeline';
+import { advanceAndRender } from '../test/advanceAndRender';
 
 // jsdom has no canvas 2D context; the texture is irrelevant to the host's behaviour.
 vi.mock('./fogTexture', () => ({ introFogUrl: () => 'data:image/png;base64,' }));
@@ -194,7 +195,7 @@ describe('LandingIntro timeline', () => {
       await pointer(hit, 'pointerup');
       expect(root(w).attributes('data-voice-state')).toBe('playing');
       expect(w.get('[data-testid="intro-pause"]').attributes('aria-pressed')).toBe('false');
-      await vi.advanceTimersByTimeAsync(60_000);
+      await advanceAndRender(60_000);
       expect(beat(w)).not.toBe(dragged);
     });
 
@@ -339,6 +340,16 @@ describe('LandingIntro timeline', () => {
       introLoad.buildings = { loaded: 1, total: 11 };
       await flushPromises();
       expect(row('buildings')).toBe('1/11');
+    });
+
+    // Regression: with joining blocked no map renders, so terrain and buildings never report; they stayed 0/? to the
+    // end of the intro although the map had already said it was ready.
+    it('drops terrain and buildings once the map is ready without them loading (no map renders)', async () => {
+      // the main app reports the totals up front (useIntroTilesSignal), before it knows whether a map renders
+      introLoad.terrain = { loaded: 0, total: 9 };
+      introLoad.buildings = { loaded: 0, total: 11 };
+      const w = await mountIntro({ loaded: true });
+      expect(w.findAll('[data-testid="intro-load-detail"] .srow').map((r) => r.attributes('data-group'))).toEqual(['voices']);
     });
   });
 

@@ -1,17 +1,17 @@
 // @vitest-environment jsdom
-import { defineComponent, h, nextTick, type Ref } from 'vue';
+import { defineComponent, h, nextTick, ref, type Ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { animationPreference } from '../lib/perf/animationPreference';
 import { useAnimationClock } from './useAnimationClock';
 
+// The device's reduce-motion flag as animationPreference reads it (its own live, cached media query),
+// stubbed reactively so a flip while a page is open can be tested too.
+const deviceReduced = ref(false);
+const realReducedMotion = Object.getOwnPropertyDescriptor(animationPreference, 'reducedMotion')!;
+
 function mockMatchMedia(reduced: boolean): void {
-  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-    matches: reduced && query === '(prefers-reduced-motion: reduce)',
-    media: query,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  })) as unknown as typeof window.matchMedia;
+  deviceReduced.value = reduced;
 }
 
 function mountClock(): { wrapper: ReturnType<typeof mount>; now: Ref<number> } {
@@ -26,10 +26,14 @@ function mountClock(): { wrapper: ReturnType<typeof mount>; now: Ref<number> } {
 }
 
 describe('useAnimationClock', () => {
-  beforeEach(() => vi.useFakeTimers());
+  beforeEach(() => {
+    vi.useFakeTimers();
+    Object.defineProperty(animationPreference, 'reducedMotion', { get: () => deviceReduced.value, configurable: true });
+  });
   afterEach(() => {
     vi.useRealTimers();
     animationPreference.setting = 'auto';
+    Object.defineProperty(animationPreference, 'reducedMotion', realReducedMotion);
   });
 
   it('advances `now` from 0 as frames pass', () => {
@@ -95,6 +99,27 @@ describe('useAnimationClock', () => {
     const stopped = now.value;
     vi.advanceTimersByTime(500);
     expect(now.value).toBe(stopped);
+    wrapper.unmount();
+  });
+
+  // Regression: the clock used to query `prefers-reduced-motion` itself, once at mount, instead of
+  // the resolved building-animation setting, so a device flag flip on 'auto' never reached it.
+  it("follows the device's reduce-motion flag live while the setting is 'auto'", async () => {
+    mockMatchMedia(false);
+    const { wrapper, now } = mountClock();
+    vi.advanceTimersByTime(500);
+    expect(now.value).toBeGreaterThan(0);
+
+    mockMatchMedia(true);
+    await nextTick();
+    const held = now.value;
+    vi.advanceTimersByTime(500);
+    expect(now.value).toBe(held);
+
+    mockMatchMedia(false);
+    await nextTick();
+    vi.advanceTimersByTime(500);
+    expect(now.value).toBeGreaterThan(held);
     wrapper.unmount();
   });
 });

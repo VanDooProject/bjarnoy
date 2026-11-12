@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import ResourceIcon from '../ResourceIcon.vue';
 // Onboarding quest tray in the settlement view (docs/design/economy.md
 // section 7). The landing page's found -> reindeer herder -> lumberjack checklist
 // (OnboardingChecklist.vue) hands off to the settlement view; from there
@@ -11,44 +10,32 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { apiErrorMessage } from '../../i18n/apiErrors';
-import { resourceName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
 import { questProgressKind, rewardOverflows } from '../../lib/quests';
-import { useQuestSeen } from '../../composables/useQuestSeen';
+import { useQuests } from '../../composables/useQuests';
+import QuestIcon from './QuestIcon.vue';
+import QuestReward from './QuestReward.vue';
 import QuestProgress from './QuestProgress.vue';
+import { useHiddenUnderPhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
 import type { QuestResponse } from '../../api/types';
 
-const { t, te, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const world = useWorldStore();
 
-const REWARD_KINDS = ['wood', 'stone', 'food'] as const;
-
-// A quest id from a newer server that this build has no copy for is left out
-// rather than shown as a raw key.
-const known = computed(() => world.hud.quests.filter((q) => te(`quests.items.${q.id}.title`)));
-const unclaimed = computed(() => known.value.filter((q) => !q.claimed));
+const { known, unclaimed, current, alsoReady, noticeKeys, hasNew, markSeen } = useQuests();
 const claimedCount = computed(() => known.value.length - unclaimed.value.length);
-const current = computed<QuestResponse | undefined>(() => unclaimed.value[0]);
-const alsoReady = computed(() => unclaimed.value.slice(1).filter((q) => q.completed));
 
 // Phones: the tray is a peek strip (quest title + progress) until tapped open —
 // the full card covered a third of a landscape screen. The dot says there is
 // something the player has not seen in the opened card yet: a quest that became
 // current, or one that became claimable.
 const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
+const hudHidden = useHiddenUnderPhoneLayer();
 const expanded = ref(false);
 const collapsed = computed(() => isCompact.value && !expanded.value);
 
-const noticeKeys = computed(() => {
-  const keys: string[] = [];
-  if (current.value) keys.push(`${current.value.id}:open`);
-  for (const q of unclaimed.value) if (q.completed) keys.push(`${q.id}:ready`);
-  return keys;
-});
-const { hasUnseen, markSeen } = useQuestSeen(computed(() => world.selectedSettlementId));
-const hasNew = computed(() => hasUnseen(noticeKeys.value));
 // Whatever the opened card shows counts as seen (always open on desktop).
 // Only once mounted: the media query is read in onMounted, so before that a
 // phone still looks like a desktop and would mark everything seen unseen.
@@ -110,6 +97,7 @@ async function claim(q: QuestResponse) {
   <button
     v-if="current && collapsed"
     key="strip"
+    v-phone-hidden="hudHidden"
     type="button"
     class="quest-toggle"
     data-testid="quest-toggle"
@@ -117,11 +105,7 @@ async function claim(q: QuestResponse) {
     @click="expanded = true"
   >
     <span class="quest-icon-wrap">
-      <svg class="quest-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M18 17V6a2 2 0 0 0-2-2H5" />
-        <path d="M8 20h11a2 2 0 0 0 2-2v-.5a.5.5 0 0 0-.5-.5H10.5a.5.5 0 0 0-.5.5v.5a2 2 0 1 1-4 0V6a2 2 0 1 0-4 0v1.5a.5.5 0 0 0 .5.5H6" />
-        <path d="M10 9h5M10 12.5h5" />
-      </svg>
+      <QuestIcon />
       <span v-if="hasNew" class="quest-dot" data-testid="quest-ready-dot" aria-hidden="true" />
     </span>
     <span class="strip-text">
@@ -130,8 +114,8 @@ async function claim(q: QuestResponse) {
     </span>
     <span class="strip-chevron" aria-hidden="true" />
   </button>
-  <aside v-else-if="current" key="card" class="quest-tray" data-testid="quest-tray" :aria-label="t('quests.title')">
-    <div class="quest-header">
+  <aside v-else-if="current" key="card" v-phone-hidden="hudHidden" class="quest-tray" data-testid="quest-tray" :aria-label="t('quests.title')">
+    <div class="quest-header" data-dock-handle>
       <span class="quest-heading">{{ t('quests.title') }}</span>
       <span class="quest-progress" data-testid="quest-progress">
         {{ t('quests.progress', { done: claimedCount, total: known.length }) }}
@@ -161,11 +145,7 @@ async function claim(q: QuestResponse) {
       </button>
       <QuestProgress v-if="currentProgress" :kind="currentProgress.kind" :progress="currentProgress.progress" />
       <div class="quest-footer">
-        <span class="quest-reward" :aria-label="t('quests.rewardLabel')">
-          <span v-for="kind in REWARD_KINDS" :key="kind" class="reward-item" :title="resourceName(kind)">
-            <ResourceIcon :kind="kind" :size="14" />{{ current.reward[kind] }}
-          </span>
-        </span>
+        <QuestReward :quest="current" />
         <button
           v-if="current.completed"
           type="button"
@@ -187,11 +167,7 @@ async function claim(q: QuestResponse) {
       <div v-for="q in alsoReady" :key="q.id" class="quest-row" data-testid="quest-ready-row" :data-quest-id="q.id">
         <div class="quest-row-main">
           <div class="quest-row-title">{{ t(`quests.items.${q.id}.title`) }}</div>
-          <span class="quest-reward">
-            <span v-for="kind in REWARD_KINDS" :key="kind" class="reward-item" :title="resourceName(kind)">
-              <ResourceIcon :kind="kind" :size="14" />{{ q.reward[kind] }}
-            </span>
-          </span>
+          <QuestReward :quest="q" />
           <div v-if="overflows(q)" class="quest-note">{{ t('quests.overflowNote') }}</div>
         </div>
         <button type="button" class="claim-button" :disabled="busyId !== null" @click="claim(q)">
@@ -206,9 +182,8 @@ async function claim(q: QuestResponse) {
 </template>
 
 <style scoped>
-/* Bottom-left of the settlement view: the queue/expansion cards hang from the
-   top-left, the army panel sits bottom-right, and the bottom bar of a
-   bottom-docked mobile HUD is cleared through --hud-inset-bottom (MapView). */
+/* Phones: a strip / card at the bottom-left of the settlement view, the bottom bar of a bottom-docked HUD cleared through
+   --hud-inset-bottom (MapView). Desktop: one of the dockable panels; HudPanelDock overrides this positioning. */
 .quest-tray {
   position: absolute;
   /* `--hud-inset-left` is the landscape rail's width (0 everywhere else): the
@@ -272,19 +247,6 @@ async function claim(q: QuestResponse) {
   justify-content: space-between;
   gap: 8px;
   margin-top: 8px;
-}
-.quest-reward {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-}
-.reward-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
 }
 .claim-button {
   flex: none;
@@ -392,13 +354,8 @@ async function claim(q: QuestResponse) {
   width: 22px;
   height: 22px;
   flex: none;
-}
-.quest-icon path {
-  fill: none;
-  stroke: var(--gold);
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  --quest-icon-stroke: var(--gold);
+  --quest-icon-width: 1.6;
 }
 .strip-text {
   flex: 1;

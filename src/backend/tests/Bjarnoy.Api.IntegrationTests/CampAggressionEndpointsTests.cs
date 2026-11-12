@@ -12,6 +12,7 @@ using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -54,11 +55,10 @@ public sealed class CampAggressionEndpointsTests : IAsyncLifetime
     {
         worldId ??= (await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct)).Id;
         var world = new { Id = worldId.Value };
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
         HttpResponseMessage? founded = null;
-        IslandResponse? island = null;
+        FullIslandResponse? island = null;
         TileCoordinate? plot = null;
         foreach (var (candidateIsland, candidate) in islands!.SelectMany(i => i.StartPositions.Select(p => (Island: i, Plot: p))))
         {
@@ -87,7 +87,7 @@ public sealed class CampAggressionEndpointsTests : IAsyncLifetime
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Axeman, Count = axemen });
+            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Axeman, Count = axemen });
             await db.SaveChangesAsync(Ct);
         }
 
@@ -123,11 +123,11 @@ public sealed class CampAggressionEndpointsTests : IAsyncLifetime
 
     private DateTimeOffset GameNow() => _factory.Time.GetUtcNow();
 
-    private static Task<HttpResponseMessage> MoveAsync(
+    private static async Task<HttpResponseMessage> MoveAsync(
         HttpClient client, Guid settlementId, HexCoord to, int count, double provisions) =>
-        client.PostJsonAsync(
+        await client.PostJsonAsync(
             $"/api/v1/settlements/{settlementId}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("axeman", count)], null, new HexPointRequest(to.Q, to.R), provisions),
+            new DispatchArmyRequest([new(await client.SpotOfAsync(settlementId, Ct), [new UnitCountRequest("axeman", count)])], null, new HexPointRequest(to.Q, to.R), provisions),
             Ct);
 
     /// <summary>
@@ -180,9 +180,14 @@ public sealed class CampAggressionEndpointsTests : IAsyncLifetime
         return campHex;
     }
 
-    private Task<List<CampReportResponse>?> CampReportsAsync(HttpClient client, Guid settlementId) =>
-        client.GetFromJsonAsync<List<CampReportResponse>>(
-            $"/api/v1/settlements/{settlementId}/camp-reports", SqliteApiFixture.StrictJson, Ct);
+    /// <summary>The camp reports of the player owning <paramref name="settlementId"/>, from the player's inbox of its world.</summary>
+    private async Task<List<CampReportResponse>?> CampReportsAsync(HttpClient client, Guid settlementId)
+    {
+        var settlement = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlementId}", SqliteApiFixture.StrictJson, Ct);
+        return await client.GetFromJsonAsync<List<CampReportResponse>>(
+            $"/api/v1/worlds/{settlement!.WorldId}/camp-reports", SqliteApiFixture.StrictJson, Ct);
+    }
 
     private async Task<CampStateResponse> CampAtAsync(HttpClient client, Guid worldId, HexCoord hex) =>
         (await client.GetFromJsonAsync<List<CampStateResponse>>(
@@ -246,6 +251,8 @@ public sealed class CampAggressionEndpointsTests : IAsyncLifetime
         var army = new ArmyEntity
         {
             SettlementId = setup.Settlement.Id,
+            HomeSpotQ = setup.Settlement.Q,
+            HomeSpotR = setup.Settlement.R,
             Mission = (int)ArmyMission.Move,
             AtHome = false,
             Provisions = 100,

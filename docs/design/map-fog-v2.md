@@ -47,7 +47,7 @@ That invariant is what makes the layer stack in §4 correct as a plain stack:
 - **The mist quad simply covers it up** wherever the mist is opaque. The
   dark band you actually see is therefore the window where the mist above
   has not gone fully opaque yet — its width is set by where the mist ramp
-  turns over (`UNKNOWN_EDGE` in `FogMaskLayer.ts`), not by anything in the
+  turns over (`UNKNOWN_EDGE` in `FogField.ts`), not by anything in the
   G channel.
 
 Two consequences worth stating so they aren't "fixed" later by someone
@@ -309,6 +309,16 @@ alongside B and C, not an extension of either:
   without touching what that player personally OR-ed into their own
   record.
 
+**Trail fringe.** Explored history has no hard edge. Every unexplored hex
+within 6.75 hexes (euclidean) of explored ground gets the troop's own ramp
+in R: `trailRamp = round(255 * clamp((d - 0.75) / 6, 0, 1))` (offset 0.75,
+margin 6, `d` = distance to the nearest explored hex), and the baked value
+is `min(sourceRamp, trailRamp)`. A stored army trail therefore reads as the
+same soft path as the troop's live clearing. Constants:
+`FogMaskGenerator.TrailFringeOffsetHexes` / `TrailFringeMarginHexes`, equal to
+the frontend's `ARMY_FOG_WHITE_OFFSET` / `ARMY_FOG_WHITE_MARGIN`. The reach
+(8 steps) stays inside the one-chunk history ring of §3.
+
 ### 1f. What fog is protecting — current state, not terrain shape
 
 The same review flagged that `GET /api/v1/worlds/{id}/tiles` has no
@@ -377,10 +387,12 @@ to the one genuinely pre-authentication, current-state-exposing path. (Since res
 A rival settlement is delivered as soon as you can see any of it through the fog: its Longhouse centre or one of its
 standing buildings lies where your fog is not fully opaque, or such ground lies inside the claim disc of its Longhouse or of
 one of its towers. A building is only sent when its own hex lies in that area; a Longhouse or tower is sent as soon as any
-hex of its claim disc does, wherever it stands itself. The realm border is drawn from the full discs of the Longhouse and
+hex of its claim disc does, wherever it stands itself. A building under construction is shown as a construction site
+(level 0) when its hex lies in that area. The realm border is drawn from the full discs of the Longhouse and
 every tower sent, without the chain rule, and clipped by fog. "Not fully opaque" reaches 11.2 hexes (straight-line
 distance) past the explored ring of each of your settlements and towers and 5.55 hexes past the vision of each of your
-marching armies; explored ground without current vision has no such margin. The label rule stays: on the Longhouse when its
+marching armies. Stored explored ground gets the same 5.55 hexes as a marching army's vision, because the fog fades out
+from it the same way (the mask bakes that fringe around it). The label rule stays: on the Longhouse when its
 hex is explored, otherwise on the nearest visible hex of the realm.
 
 ### 1g. Foreign troops
@@ -636,6 +648,43 @@ This is Phase 6 work in the original phased breakdown (cut over once v1
 is fully deleted, not before — a mid-cutover panel showing half-real,
 half-stale data is worse than the old one), but it's listed here as a
 concrete requirement so it doesn't fall through as "obviously implied."
+
+### 2.9 Shared field (one fog pass, two cheap quads)
+
+The two stage quads (dark fog under `markerLayer`, white mist over it) used to each run the whole fog shader (mask +
+cross-fade, army vision, edge noise, drift) over every screen pixel, every frame. Now the shader runs once, into a
+world-anchored render texture, and the quads only sample it.
+
+- **`FogField`** (`lib/map/fog/FogField.ts`, shader `FOG_FIELD_FRAGMENT`) writes `R` = out-of-sight tier alpha and
+  `G` = unknown tier alpha (both tiers' colours are constants, so alpha is all that varies). It is the only place with the
+  mask/noise/army math. `FogMaskLayer` is the composite quad (`FOG_COMPOSITE_FRAGMENT`): it maps its pixel to world space,
+  samples the field with linear filtering and outputs `tierColour * alpha`, premultiplied. Stage slots are unchanged.
+- **Anchoring and resolution** (`fogFieldPlan.ts`): the field covers the visible world rect plus a quarter viewport on each
+  side, at 2 CSS pixels per texel at the zoom it was rendered at, capped at 2048 texels per side (so the texels get
+  coarser than 2 CSS px once the viewport is wider than ~2730 CSS px). The world rect is snapped outwards to a grid of
+  one world-space texel anchored at world origin (and is one texel larger than the unsnapped rect, so coverage never
+  shrinks), so every re-render at the same zoom samples the same world points and the edge does not shimmer.
+- **Re-render triggers** (`fogFieldRenderReason`, pure and unit-tested): the visible rect leaves the covered rect; zoom
+  changed by more than 20% since the render; mask texture, placement, army vision sources, debug switches or viewport
+  size changed; every frame while the reveal cross-fade runs; and at most every 125 ms (~8 fps) while drift is on
+  (`fogDebugFlags.drift` and fog motion allowed). Otherwise the previous texture is reused. A reveal fade that finishes
+  while the fog quads are hidden leaves the field marked dirty, so the first visible frame re-renders it.
+- **Smooth drift**: `FogField` keeps two snapshots (previous and newest, two render targets, each with its own world
+  rect since the anchor can move between renders). A periodic drift render goes into the other slot and is rendered one
+  drift interval ahead (`driftRenderPhase`); the composite samples both snapshots at the pixel's world position and mixes
+  them by `driftBlendWeight` = clamp((now - newestRenderedAt) / 125 ms, 0, 1), updated every frame. The previous snapshot
+  therefore fades into the newest one just as the next render replaces it, and the edge moves steadily instead of
+  jumping ~5 px eight times a second. Every other render (first, input change, camera, army sources, reveal fade) is
+  shown alone (weight 1 on the newest snapshot), so it neither lags nor ghosts; the first drift render after such a
+  render covers two intervals of drift over one interval, i.e. the clouds move at up to twice their speed for 125 ms.
+- **Debug views**: `showRawMask` / `showEffectiveMask` are written into the field's RGB by the field pass and shown as-is by
+  the visible tier quads (field resolution, linear filtered); `warp` zeroes the noise amplitudes in the field pass.
+- **Unchanged**: the CPU-side lookups (`fogCoverage`, `pickerFogShare`, `fogPerfStats`) do not touch the field.
+
+Measured in a software renderer at 1280x800 (settlement view, fog quads hidden vs shown, median frame; the machine was
+shared, so numbers are +-100 ms): fog cost was ~190 ms/frame with drift on and ~320 ms with drift off on `main` (two
+full-screen shader quads); with the field it is ~60 ms with drift on (field re-rendered at ~8 fps plus two sampling quads)
+and ~40 ms at rest (sampling quads only).
 
 ## 3. Chunked mask delivery — adopted, not deferred
 

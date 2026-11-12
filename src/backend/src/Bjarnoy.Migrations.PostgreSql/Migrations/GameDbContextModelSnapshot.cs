@@ -17,7 +17,7 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -309,7 +309,25 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTimeOffset?>("FieldBattleImmuneUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("GatherDepartAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("GatheringId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("HomeSpotQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("HomeSpotR")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("IsReturning")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsStranded")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsSupporting")
@@ -337,9 +355,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<double>("Provisions")
                         .HasColumnType("double precision");
 
-                    b.Property<bool>("RetreatImmune")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("ReturnCumulativeHours")
                         .IsRequired()
                         .HasColumnType("text");
@@ -351,6 +366,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<string>("ReturnPath")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("RoutePlannedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("SettlementId")
                         .HasColumnType("uuid");
@@ -375,6 +393,8 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("GatheringId");
+
                     b.HasIndex("SettlementId");
 
                     b.HasIndex("AtHome", "IsSupporting");
@@ -382,6 +402,68 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.HasIndex("TargetSettlementId", "IsSupporting");
 
                     b.ToTable("armies", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyReportEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ArmyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Mission")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Q")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("R")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorldId", "OwnerId");
+
+                    b.ToTable("army_reports", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyReportUnitLineEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ArmyReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UnitType")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArmyReportId");
+
+                    b.ToTable("army_report_unit_lines", (string)null);
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyUnitStackEntity", b =>
@@ -413,6 +495,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("BattleReportId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Fight")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Lost")
                         .HasColumnType("integer");
 
@@ -439,6 +524,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<Guid>("BattleReportId")
                         .HasColumnType("uuid");
+
+                    b.Property<int>("Fight")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Lost")
                         .HasColumnType("integer");
@@ -467,14 +555,45 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("AttackerArmyId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AttackerOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<Guid>("AttackerSettlementId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("DefenderOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<Guid>("DefenderSettlementId")
                         .HasColumnType("uuid");
 
                     b.Property<double>("DefensePower")
                         .HasColumnType("double precision");
+
+                    b.Property<int>("FireShipsBurned")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("FireSiegeLevelAfter")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("FireSiegeLevelBefore")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("FireSiegeSettlementRazed")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("FireSiegeTargetQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("FireSiegeTargetR")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("FireSiegeTargetType")
+                        .HasColumnType("integer");
 
                     b.Property<double>("LootFood")
                         .HasColumnType("double precision");
@@ -492,6 +611,15 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Seed")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("ShipFightAttackPower")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("ShipFightDefensePower")
+                        .HasColumnType("double precision");
+
+                    b.Property<int?>("ShipFightWinner")
                         .HasColumnType("integer");
 
                     b.Property<int?>("SiegeLevelAfter")
@@ -518,11 +646,18 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("Winner")
                         .HasColumnType("integer");
 
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AttackerSettlementId");
 
                     b.HasIndex("DefenderSettlementId");
+
+                    b.HasIndex("WorldId", "AttackerOwnerId");
+
+                    b.HasIndex("WorldId", "DefenderOwnerId");
 
                     b.ToTable("battle_reports", (string)null);
                 });
@@ -643,6 +778,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<DateTimeOffset>("OccurredAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<int>("Seed")
                         .HasColumnType("integer");
 
@@ -666,9 +806,7 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SettlementId");
-
-                    b.HasIndex("WorldId");
+                    b.HasIndex("WorldId", "OwnerId");
 
                     b.ToTable("camp_reports", (string)null);
                 });
@@ -791,6 +929,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("SideAArmyId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("SideAOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<double>("SideAPower")
                         .HasColumnType("double precision");
 
@@ -802,6 +945,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<Guid>("SideBArmyId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("SideBOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<double>("SideBPower")
                         .HasColumnType("double precision");
@@ -815,11 +963,18 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("Winner")
                         .HasColumnType("integer");
 
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("SideASettlementId");
 
                     b.HasIndex("SideBSettlementId");
+
+                    b.HasIndex("WorldId", "SideAOwnerId");
+
+                    b.HasIndex("WorldId", "SideBOwnerId");
 
                     b.ToTable("field_battle_reports", (string)null);
                 });
@@ -849,6 +1004,78 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.HasIndex("FieldBattleReportId");
 
                     b.ToTable("field_battle_report_lines", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GatheringEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("BoardingQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("BoardingR")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("DepartAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("HexQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("HexR")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("HomeSpotQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("HomeSpotR")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsFleet")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Mission")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ParentGatheringId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SettlementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Stops")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("TargetBuildingQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TargetBuildingR")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TargetCampQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TargetCampR")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("TargetSettlementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DepartAt");
+
+                    b.HasIndex("ParentGatheringId");
+
+                    b.HasIndex("SettlementId");
+
+                    b.ToTable("gatherings", (string)null);
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GuildBoardPostEntity", b =>
@@ -1042,6 +1269,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<int>("Index")
                         .HasColumnType("integer");
+
+                    b.Property<string>("InlandLakeTiles")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<bool>("IsWasted")
                         .HasColumnType("boolean");
@@ -1245,6 +1476,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<Guid>("SettlementId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("StandingSince")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Type")
                         .HasColumnType("integer");
@@ -1632,6 +1866,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AcceptorOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<Guid>("AcceptorSettlementId")
                         .HasColumnType("uuid");
 
@@ -1650,6 +1889,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("OfferedResource")
                         .HasColumnType("integer");
 
+                    b.Property<string>("PosterOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<Guid>("PosterSettlementId")
                         .HasColumnType("uuid");
 
@@ -1662,6 +1906,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<double>("TravelHours")
                         .HasColumnType("double precision");
 
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AcceptorSettlementId");
@@ -1670,6 +1917,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsUnique();
 
                     b.HasIndex("PosterSettlementId");
+
+                    b.HasIndex("WorldId", "AcceptorOwnerId");
+
+                    b.HasIndex("WorldId", "PosterOwnerId");
 
                     b.ToTable("trade_reports", (string)null);
                 });
@@ -1718,12 +1969,18 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("SettlementId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("SpotQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SpotR")
+                        .HasColumnType("integer");
+
                     b.Property<int>("UnitType")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SettlementId", "UnitType")
+                    b.HasIndex("SettlementId", "SpotQ", "SpotR", "UnitType")
                         .IsUnique();
 
                     b.ToTable("unit_stacks", (string)null);
@@ -1805,6 +2062,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<string>("PreferredLocale")
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
+
+                    b.Property<DateTimeOffset?>("PremiumUntil")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTimeOffset>("RenownSettledAt")
                         .HasColumnType("timestamp with time zone");
@@ -2106,6 +2366,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyEntity", b =>
                 {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.GatheringEntity", "Gathering")
+                        .WithMany()
+                        .HasForeignKey("GatheringId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
                         .WithMany()
                         .HasForeignKey("SettlementId")
@@ -2117,9 +2382,31 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasForeignKey("TargetSettlementId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.Navigation("Gathering");
+
                     b.Navigation("Settlement");
 
                     b.Navigation("TargetSettlement");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyReportEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", null)
+                        .WithMany()
+                        .HasForeignKey("WorldId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyReportUnitLineEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.ArmyReportEntity", "ArmyReport")
+                        .WithMany("UnitLines")
+                        .HasForeignKey("ArmyReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ArmyReport");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyUnitStackEntity", b =>
@@ -2179,12 +2466,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.CampReportEntity", b =>
                 {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
-                        .WithMany()
-                        .HasForeignKey("SettlementId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", null)
                         .WithMany()
                         .HasForeignKey("WorldId")
@@ -2223,6 +2504,24 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsRequired();
 
                     b.Navigation("FieldBattleReport");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GatheringEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.GatheringEntity", "ParentGathering")
+                        .WithMany()
+                        .HasForeignKey("ParentGatheringId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
+                        .WithMany()
+                        .HasForeignKey("SettlementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ParentGathering");
+
+                    b.Navigation("Settlement");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GuildBoardPostEntity", b =>
@@ -2497,15 +2796,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TradeReportEntity", b =>
-                {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", null)
-                        .WithMany()
-                        .HasForeignKey("OfferId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TrainingOrderEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
@@ -2579,6 +2869,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyEntity", b =>
                 {
                     b.Navigation("Stacks");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyReportEntity", b =>
+                {
+                    b.Navigation("UnitLines");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.BattleReportEntity", b =>

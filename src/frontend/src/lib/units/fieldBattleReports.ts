@@ -95,16 +95,6 @@ export function fieldBattleSummaryLine(
   return parts.join(', ');
 }
 
-/** Which side `settlementId` fought on in this report, or `null` if it fought neither (shouldn't happen for reports fetched for that settlement). */
-export function fieldBattleSideFor(
-  report: { sideASettlementId: string; sideBSettlementId: string },
-  settlementId: string,
-): FieldBattleSide | null {
-  if (report.sideASettlementId === settlementId) return 'sidea';
-  if (report.sideBSettlementId === settlementId) return 'sideb';
-  return null;
-}
-
 /** Who `viewerSide` fought: the other side's owner and settlement name, `null` for a part that is not known. */
 export function fieldBattleOpponent(
   report: Pick<FieldBattleReportResponse, 'sideAName' | 'sideAOwnerName' | 'sideBName' | 'sideBOwnerName'>,
