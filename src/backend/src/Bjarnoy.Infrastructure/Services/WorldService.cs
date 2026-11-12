@@ -1058,11 +1058,31 @@ public sealed class WorldService(
         return due;
     }
 
+    /// <summary>
+    /// The islands of a world in index order, without their bog tiles, river tiles and start positions: those are the bulk of the
+    /// row (tens of megabytes for a large world), change only on a reseed and are served cached by their own endpoints. The
+    /// projection keeps them out of the SELECT; the returned entities have them empty.
+    /// </summary>
     public Task<List<IslandEntity>> GetIslandsAsync(Guid worldId, CancellationToken cancellationToken = default) =>
         _dbContext.Islands
             .AsNoTracking()
             .Where(i => i.WorldId == worldId)
             .OrderBy(i => i.Index)
+            .Select(i => new IslandEntity
+            {
+                Id = i.Id,
+                WorldId = i.WorldId,
+                Index = i.Index,
+                Name = i.Name,
+                CentreQ = i.CentreQ,
+                CentreR = i.CentreR,
+                TileCount = i.TileCount,
+                IsWasted = i.IsWasted,
+                Giants = i.Giants,
+                Camps = i.Camps,
+                UtgardWalls = i.UtgardWalls,
+                JotunTowers = i.JotunTowers,
+            })
             .ToListAsync(cancellationToken);
 
     /// <summary>

@@ -10,6 +10,7 @@ using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -37,8 +38,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
     /// <summary>Founds a settlement (one longhouse) on <paramref name="world"/>'s first usable plot.</summary>
     private async Task<SettlementResponse> FoundSettlementAsync(HttpClient client, WorldEntity world)
     {
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -137,8 +137,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
     {
         using var client = _fixture.CreateClient();
         var world = await CreateWorldAsync(client);
-        var islands = (await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct))!
+        var islands = (await client.GetFullIslandsAsync(world.Id, Ct))!
             .Where(i => i.StartPositions.Count > 0)
             .ToList();
         Assert.True(islands.Count >= 2, "the test seed needs two islands with start positions");
@@ -556,8 +555,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         client.DefaultRequestHeaders.Authorization = null;
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -592,8 +590,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         client.DefaultRequestHeaders.Authorization = null;
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -794,6 +791,30 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
 
         var gone = await client.GetAsync($"/api/v1/settlements/{settlement.Id}", Ct);
         Assert.Equal(HttpStatusCode.NotFound, gone.StatusCode);
+    }
+
+    [Fact]
+    public async Task Reseeding_replaces_the_cached_terrain_chunks_and_start_positions()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+
+        // Reads prime the per-world caches.
+        var before = await client.GetFullIslandsAsync(world.Id, Ct);
+        var manifestBefore = await client.GetStringAsync($"/api/v1/worlds/{world.Id}/terrain-chunks", Ct);
+
+        Authorize(client, await CreateAdminTokenAsync(client));
+        var response = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/reseed", new ReseedWorldRequest(world.Name, Seed: 9001), Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var after = await client.GetFullIslandsAsync(world.Id, Ct);
+        var manifestAfter = await client.GetStringAsync($"/api/v1/worlds/{world.Id}/terrain-chunks", Ct);
+
+        Assert.Empty(before.Select(i => i.Id).Intersect(after.Select(i => i.Id)));
+        Assert.NotEqual(manifestBefore, manifestAfter);
+        Assert.Contains(after, i => i.StartPositions.Count > 0);
+        Assert.Contains(after, i => i.RiverTiles.Count > 0 || i.BogTiles.Count > 0);
     }
 
     [Fact]
