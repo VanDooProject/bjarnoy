@@ -9,6 +9,7 @@ using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -596,5 +597,35 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
         Assert.Equal(foreignGathering, armies[foreignGroup].GatheringId);
         Assert.Equal(
             (int)ArmyMission.Move, await InDbAsync(db => db.Gatherings.Where(g => g.Id == foreignGathering).Select(g => g.Mission).SingleAsync(Ct)));
+    }
+
+    [Fact]
+    public async Task The_realm_cache_forgets_the_camp_once_its_destruction_commits_not_before()
+    {
+        var scene = await PlantAsync(campArmyProvisions: null);
+        await using (var before = _factory.Services.CreateAsyncScope())
+        {
+            Assert.NotNull(await before.ServiceProvider.GetRequiredService<RealmDirectory>().GetOwnershipAsync(scene.CampId, Ct));
+        }
+
+        _factory.Time.Advance(TimeSpan.FromHours(4.5));
+        await using (var writer = _factory.Services.CreateAsyncScope())
+        {
+            await writer.ServiceProvider.GetRequiredService<ConcurrentWriteExecutor>().ExecuteAsync(
+                async ct =>
+                {
+                    // Settles the attack: the camp falls and is deleted, not committed yet.
+                    await writer.ServiceProvider.GetRequiredService<ArmyService>().GetAsync(scene.AttackerArmyId, ct);
+
+                    // Another request reads the camp's ownership before the commit: it still sees the camp.
+                    await using var racing = _factory.Services.CreateAsyncScope();
+                    Assert.NotNull(await racing.ServiceProvider.GetRequiredService<RealmDirectory>().GetOwnershipAsync(scene.CampId, ct));
+                    return 0;
+                },
+                Ct);
+        }
+
+        await using var after = _factory.Services.CreateAsyncScope();
+        Assert.Null(await after.ServiceProvider.GetRequiredService<RealmDirectory>().GetOwnershipAsync(scene.CampId, Ct));
     }
 }

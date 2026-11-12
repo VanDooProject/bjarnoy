@@ -117,7 +117,7 @@ public sealed class ArmyService(
     /// <summary>Settlements a siege changed during the settle in progress; <see cref="SettleAndFoldAsync"/> reconciles their realm once the settle is saved.</summary>
     private readonly HashSet<Guid> _realmDirty = [];
 
-    /// <summary>The worlds a beach camp was destroyed in during this request (<see cref="DestroyCampAsync"/>): their realm cache is flushed after the save.</summary>
+    /// <summary>The worlds a beach camp was destroyed in during this request (<see cref="DestroyCampAsync"/>): their realm cache is flushed once the save commits.</summary>
     private readonly HashSet<Guid> _destroyedInWorlds = [];
     private readonly RenownService _renownService = renownService;
     private readonly AuthService _authService = authService;
@@ -1155,10 +1155,12 @@ public sealed class ArmyService(
             _realmDirty.Clear();
             await SaveAsync(cancellationToken).ConfigureAwait(false);
 
-            // A destroyed camp's cached realm lookups are stale once its row is gone.
+            // A destroyed camp's cached realm lookups are stale once its delete commits: flushed after the commit, not now, or a read
+            // racing the commit would cache the camp again (as AuthService does for claimed settlements). A failed or retried
+            // attempt drops the callback.
             foreach (var worldId in _destroyedInWorlds)
             {
-                RealmDirectory.InvalidateWorld(worldId);
+                _dbContext.OnCommitted(() => RealmDirectory.InvalidateWorld(worldId));
             }
 
             _destroyedInWorlds.Clear();
