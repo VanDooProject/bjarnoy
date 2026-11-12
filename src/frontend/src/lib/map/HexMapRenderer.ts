@@ -2283,6 +2283,8 @@ export class HexMapRenderer {
   // is time-based, unlike everything else here which only redraws on a
   // cull rebuild (camera pan/zoom).
   private highlightLayer = new Graphics();
+  // Whether highlightLayer holds a drawing from an earlier frame (so drawHighlight can skip idle frames).
+  private highlightDrawn = false;
   // Design handoff "2a": the one-shot landfall burst, recorded by
   // `setLandfallBurst` and drawn (then dropped) by `drawHighlight` — see
   // `landfallBurstFrames`'s own doc comment for why this self-clears
@@ -3075,12 +3077,21 @@ export class HexMapRenderer {
   }
 
   private drawHighlight() {
-    this.highlightLayer.clear();
-    const now = performance.now();
     const coords = [
       ...(this.options.highlightCoord ? [this.options.highlightCoord] : []),
       ...(this.options.highlightCoords ?? []),
     ];
+    // Nothing to animate: clear once (when something was shown) and then skip the whole frame's work.
+    if (coords.length === 0 && this.attentionPulse === null && !this.landfallBurst) {
+      if (this.highlightDrawn) {
+        this.highlightLayer.clear();
+        this.highlightDrawn = false;
+      }
+      return;
+    }
+    this.highlightLayer.clear();
+    this.highlightDrawn = true;
+    const now = performance.now();
     // L6a: self-clears exactly like `landfallBurst` below once the flash has
     // run its full duration, so a stale pulse never lingers as dead state.
     // (Checked against the duration directly, not against `attention === 0`
