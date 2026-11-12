@@ -1291,7 +1291,7 @@
     "pace": {
       "heading": "Wie schnell Armeen ziehen",
       "body": "Das Tempo wird in Feldern pro Stunde auf Gras angegeben. Eine Armee zieht so schnell wie ihre langsamste Einheit. Eine Flotte fährt so schnell wie ihr langsamstes Schiff; Truppen an Bord bremsen sie nicht.",
-      "start": "Deine Truppen ziehen aus dem Gebäude los, in dem sie ausgebildet wurden, und kehren dorthin zurück. Eine Armee aus mehreren Einheitentypen bricht vom Gebäude ihrer langsamsten Einheit auf.",
+      "start": "Deine Truppen stehen an Garnisonsorten: im Langhaus, in Wachtürmen und in Werften. Eine Armee kannst du aus mehreren Orten zusammenstellen. Jede Gruppe bricht sofort von ihrem Ort auf. Getroffen wird auf dem ersten Feld, das ihre Wege gemeinsam haben, oder auf dem Feld direkt vor dem Ziel, wenn sie keines teilen. Wer zuerst ankommt, wartet dort und isst. Danach zieht die Armee gemeinsam weiter, im Tempo ihrer langsamsten Einheit. Die Heimat der Armee ist der Ort, der dem Treffpunkt am nächsten liegt. Wird eine Gruppe vor dem Treffen zurückgerufen, bekommt sie einen anderen Befehl, wird sie abgespalten oder verliert sie einen Kampf, bleibt sie zurück, und die anderen ziehen weiter. Willst du die ganze Armee abbrechen, ruf jede Gruppe zurück. Passagiere einer Flotte, die an einem Ort ohne Schiffe stehen, laufen zu einer der Werften der Flotte und gehen dort an Bord.",
       "example": "Zum Beispiel braucht ein {unit} für ein Grasfeld {minutes}.",
       "columns": {
         "unit": "Einheit",

@@ -90,17 +90,15 @@ describe('useDispatchUnitPicker with a garrison at several spots', () => {
     world.setDispatchUnitCount('spearman', 3);
     expect(picker.unitSourceText('spearman')).toBe('from Tower');
     expect(picker.unitSourceText('karve')).toBe('');
-    expect(picker.severalSpots.value).toBe(false);
     expect(picker.selectionSendable.value).toBe(true);
   });
 
-  it('is not sendable while the units come from several spots, and says where from', () => {
+  it('is sendable while the units come from several spots, and says where from', () => {
     const world = useWorldStore();
     const picker = useDispatchUnitPicker(rows);
     world.setDispatchUnitCount('spearman', 6);
     expect(picker.unitSourceText('spearman')).toBe('from Tower and Longhouse');
-    expect(picker.severalSpots.value).toBe(true);
-    expect(picker.selectionSendable.value).toBe(false);
+    expect(picker.selectionSendable.value).toBe(true);
   });
 });
 

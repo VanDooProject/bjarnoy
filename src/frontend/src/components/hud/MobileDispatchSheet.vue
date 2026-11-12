@@ -307,7 +307,6 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
           </div>
           <div v-if="!garrisonRows.length" class="status-subtext">{{ t('hud.armyPanel.noUnitsAvailable') }}</div>
         </div>
-        <p v-if="picker.severalSpots.value" class="status-subtext error-note" data-testid="several-spots">{{ t('hud.garrisonSpots.severalSpots') }}</p>
 
         <DispatchSlots :unit-counts="draft.unitCounts" />
 

@@ -2314,11 +2314,6 @@ export const useWorldStore = defineStore('world', {
         return;
       }
       const groups = this.dispatchSpotGroups(draft);
-      // Gathering an army from several spots is not possible yet: the dispatch is not attempted.
-      if (groups.length > 1) {
-        draft.error = i18n.global.t('hud.garrisonSpots.severalSpots');
-        return;
-      }
       const from = toDispatchFrom(groups);
       const request =
         draft.mission === 'attack'

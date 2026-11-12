@@ -1291,7 +1291,7 @@
     "pace": {
       "heading": "How fast armies move",
       "body": "Speed is counted in hexes per hour on grass. An army marches at the speed of its slowest unit. A fleet moves at the speed of its slowest ship; troops aboard do not slow it.",
-      "start": "Your troops set out from the building that trained them and return there. An army of several unit types leaves from the building of its slowest unit.",
+      "start": "Your troops stand at garrison spots: the Longhouse, towers and docks. You can put one army together from several spots. Each group leaves its own spot at once. They meet on the first hex their routes share, or on the hex just before the target if they share none. Whoever arrives first waits there and eats. Then the army moves on together at the pace of its slowest unit. The army's home is the spot nearest the meeting hex. A group that is recalled, gets another order, is split off or loses a fight before the meeting stays behind, and the others go on. To call off the whole army, recall every group. Fleet passengers at a spot without ships walk to one of the fleet's docks and board there.",
       "example": "Example: a {unit} crosses a grass hex in {minutes}.",
       "columns": {
         "unit": "Unit",
