@@ -4830,7 +4830,11 @@ export class HexMapRenderer {
       },
       artOrigin,
     );
-    const flowBounds = hexBoundsOfRect(visibleWorldRect(this.camera, this.viewport, WATER_MASK_VIEW_MARGIN));
+    // The terrain is only rebuilt every REBUILD_MOVE_THRESHOLD of camera movement, so the flow cells reach that much further
+    // than the mask's view margin: a river hex whose art scrolls into view before the next rebuild already has its flow.
+    const flowBounds = hexBoundsOfRect(
+      visibleWorldRect(this.camera, this.viewport, WATER_MASK_VIEW_MARGIN + REBUILD_MOVE_THRESHOLD),
+    );
     this.riverFlowEntries = [];
     for (const { texture, coord, crop } of baseEntries.values()) {
       if (!texture || crop || !hexInBounds(coord, flowBounds)) continue;
