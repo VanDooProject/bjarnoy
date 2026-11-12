@@ -949,7 +949,14 @@ const TILE_TOPFACE_Y_OFFSET = TILE_W * TILE_ART_TOPFACE_Y_FRAC;
 // their own hex's canvas: the tallest shipped part (giantmountain, 692 native
 // px) rises 392 native px = TILE_W * 392 / 200 ≈ 329 world units, inside
 // this margin. A taller giant would need this widened.
-const VISIBLE_RECT_MARGIN = TILE_W * 2;
+//
+// The terrain is only rebuilt once the camera has moved REBUILD_MOVE_THRESHOLD, so
+// the margin must stay above it or a hex at the viewport edge could be undrawn
+// right before the next rebuild (asserted in HexMapRenderer.test.ts).
+export const VISIBLE_RECT_MARGIN = TILE_W * 4;
+export const REBUILD_MOVE_THRESHOLD = TILE_W * 1.5;
+// The water mask's own bake window around the viewport (unchanged by the terrain margin above).
+const WATER_MASK_VIEW_MARGIN = TILE_W * 2;
 
 // The flat top-face diamond (isoTopPoints) spans world-y 0..TILE_H from the
 // tile's grid origin, so its own vertical centre is TILE_H/2 — NOT
@@ -3968,7 +3975,7 @@ export class HexMapRenderer {
     const prev = this.lastBuiltCamera;
     if (!prev) return true;
     const moved = Math.hypot(this.camera.x - prev.x, this.camera.y - prev.y);
-    return moved > TILE_W * 0.4 || Math.abs(this.camera.zoom - prev.zoom) / prev.zoom > 0.08;
+    return moved > REBUILD_MOVE_THRESHOLD || Math.abs(this.camera.zoom - prev.zoom) / prev.zoom > 0.08;
   }
 
   /** Every hex axial coord whose grid position falls within `rect` (world-space). */
@@ -4385,7 +4392,7 @@ export class HexMapRenderer {
       return;
     }
     this.waterMaskDirty = false;
-    const region = waterMaskRegion(visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN), TILE_W);
+    const region = waterMaskRegion(visibleWorldRect(this.camera, this.viewport, WATER_MASK_VIEW_MARGIN), TILE_W);
     // Timed rather than estimated: the bake is one isoPixelToAxial per texel
     // plus three distance transforms, and it is the only CPU work this
     // feature does — everything else it costs is on the GPU, where this

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  REBUILD_MOVE_THRESHOLD,
+  VISIBLE_RECT_MARGIN,
   armyMarkerColor,
   armyMarkerAt,
   armyTapSwallowed,
@@ -1303,5 +1305,13 @@ describe('armyTapSwallowed', () => {
 
   it('keeps the tap on the marker while the send picker is open', () => {
     expect(armyTapSwallowed([marker('a'), marker('b', { pick: 'eligible' })])).toBe(true);
+  });
+});
+
+describe('terrain rebuild cadence', () => {
+  it('rebuilds only once the camera has moved less far than the drawn area reaches past the viewport', () => {
+    // The drawn area covers the viewport plus VISIBLE_RECT_MARGIN; a pan shorter than the threshold needs no rebuild, so
+    // the threshold has to stay inside the margin or the edge hexes would be undrawn before the next rebuild.
+    expect(REBUILD_MOVE_THRESHOLD).toBeLessThan(VISIBLE_RECT_MARGIN);
   });
 });
