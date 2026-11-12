@@ -318,7 +318,7 @@ export interface FogDebugFlags {
  */
 export interface FogDebugTuning {
   /**
-   * Multiplier on the cloud field's wind speed (FogMaskLayer's WIND). 1 is
+   * Multiplier on the cloud field's wind speed (FogField's WIND). 1 is
    * the shipped rate; the panel offers a slider around it so a better one
    * can be found by eye, on a live map, instead of by rebuilding between
    * guesses. Not persisted — a reload is back to 1.
@@ -6341,7 +6341,7 @@ export class HexMapRenderer {
    * the whole demo world (`worldMaskBounds`). The placement is derived from
    * `bounds` on every call, so this is cheap to call again even when only the
    * texture itself changed, and the previous texture keeps its own placement
-   * for the cross-fade (FogMaskLayer.setMaskTexture). Ground outside `bounds`
+   * for the cross-fade (FogField.setMaskTexture). Ground outside `bounds`
    * reads as fully unknown (fogShader.ts's sampleMask) — §3's default for a
    * chunk that isn't loaded. `coverage` is the same pixels as per-hex lookups: the world model keeps it
    * (`isExplored`) and the terrain cull, borders and markers read it, so they are rebuilt when its clear set changes.
@@ -6771,7 +6771,7 @@ export class HexMapRenderer {
     }
 
     // §1c: pushed every tick, independent of any mask fetch — see
-    // FogMaskLayer.setArmyVisionSources's own remarks on why this stays out
+    // FogField.setArmyVisionSources's own remarks on why this stays out
     // of the cached mask texture entirely.
     this.fogField.setArmyVisionSources(armyVisionSources, ARMY_HEX_SIZE);
     this.syncArmyCullSources(armyCullSourcesOf(armyVisionLegs));
@@ -6795,7 +6795,7 @@ export class HexMapRenderer {
    * camera to its new position/zoom over CAMERA_TRANSITION_MS. The fog
    * reveal itself needs no explicit trigger here any more: founding fetches
    * a fresh mask shortly after (stores/world.ts's fetchFogMask), and
-   * FogMaskLayer.setMaskTexture's own cross-fade (§2.6) reveals it the
+   * FogField.setMaskTexture's own cross-fade (§2.6) reveals it the
    * moment that resolves — the same mechanism that handles "newly explored"
    * generally, not a founding-specific special case.
    */

@@ -47,7 +47,7 @@ That invariant is what makes the layer stack in §4 correct as a plain stack:
 - **The mist quad simply covers it up** wherever the mist is opaque. The
   dark band you actually see is therefore the window where the mist above
   has not gone fully opaque yet — its width is set by where the mist ramp
-  turns over (`UNKNOWN_EDGE` in `FogMaskLayer.ts`), not by anything in the
+  turns over (`UNKNOWN_EDGE` in `FogField.ts`), not by anything in the
   G channel.
 
 Two consequences worth stating so they aren't "fixed" later by someone
@@ -660,11 +660,23 @@ world-anchored render texture, and the quads only sample it.
   mask/noise/army math. `FogMaskLayer` is the composite quad (`FOG_COMPOSITE_FRAGMENT`): it maps its pixel to world space,
   samples the field with linear filtering and outputs `tierColour * alpha`, premultiplied. Stage slots are unchanged.
 - **Anchoring and resolution** (`fogFieldPlan.ts`): the field covers the visible world rect plus a quarter viewport on each
-  side, at 2 screen pixels per texel at the zoom it was rendered at, capped at 2048 texels per side.
-- **Re-render triggers** (`fogFieldNeedsRender`, pure and unit-tested): the visible rect leaves the covered rect; zoom
+  side, at 2 CSS pixels per texel at the zoom it was rendered at, capped at 2048 texels per side (so the texels get
+  coarser than 2 CSS px once the viewport is wider than ~2730 CSS px). The world rect is snapped outwards to a grid of
+  one world-space texel anchored at world origin (and is one texel larger than the unsnapped rect, so coverage never
+  shrinks), so every re-render at the same zoom samples the same world points and the edge does not shimmer.
+- **Re-render triggers** (`fogFieldRenderReason`, pure and unit-tested): the visible rect leaves the covered rect; zoom
   changed by more than 20% since the render; mask texture, placement, army vision sources, debug switches or viewport
   size changed; every frame while the reveal cross-fade runs; and at most every 125 ms (~8 fps) while drift is on
-  (`fogDebugFlags.drift` and fog motion allowed). Otherwise the previous texture is reused.
+  (`fogDebugFlags.drift` and fog motion allowed). Otherwise the previous texture is reused. A reveal fade that finishes
+  while the fog quads are hidden leaves the field marked dirty, so the first visible frame re-renders it.
+- **Smooth drift**: `FogField` keeps two snapshots (previous and newest, two render targets, each with its own world
+  rect since the anchor can move between renders). A periodic drift render goes into the other slot and is rendered one
+  drift interval ahead (`driftRenderPhase`); the composite samples both snapshots at the pixel's world position and mixes
+  them by `driftBlendWeight` = clamp((now - newestRenderedAt) / 125 ms, 0, 1), updated every frame. The previous snapshot
+  therefore fades into the newest one just as the next render replaces it, and the edge moves steadily instead of
+  jumping ~5 px eight times a second. Every other render (first, input change, camera, army sources, reveal fade) is
+  shown alone (weight 1 on the newest snapshot), so it neither lags nor ghosts; the first drift render after such a
+  render covers two intervals of drift over one interval, i.e. the clouds move at up to twice their speed for 125 ms.
 - **Debug views**: `showRawMask` / `showEffectiveMask` are written into the field's RGB by the field pass and shown as-is by
   the visible tier quads (field resolution, linear filtered); `warp` zeroes the noise amplitudes in the field pass.
 - **Unchanged**: the CPU-side lookups (`fogCoverage`, `pickerFogShare`, `fogPerfStats`) do not touch the field.

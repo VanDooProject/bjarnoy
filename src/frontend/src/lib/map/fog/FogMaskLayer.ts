@@ -1,5 +1,5 @@
 // One of fog v2's two stage quads (§4: "black fog" out-of-sight tint, "white mist" never-scouted mist). Each is a cheap
-// composite: it samples the shared FogField texture (FogField.ts, which runs the expensive mask/noise shader once for
+// composite: it samples the shared FogField textures (FogField.ts, which runs the expensive mask/noise shader once for
 // both tiers) at its pixel's world position and tints one channel with the tier's constant colour. They are two quads
 // only because markerLayer sits between them in the stage: dark fog under the markers, white mist over them.
 import { GlProgram, Mesh, MeshGeometry, Shader, UniformGroup } from 'pixi.js';
@@ -54,7 +54,8 @@ function fogCompositeGlProgram(): GlProgram {
   return sharedGlProgram;
 }
 
-function fullscreenGeometry(): MeshGeometry {
+/** The screen-covering quad both the field pass and the composite quads draw. */
+export function fullscreenGeometry(): MeshGeometry {
   // Clip-space corners paired with DOM-style (top=0) UVs — see fogShader.ts's
   // vertex shader: this mesh always covers the whole framebuffer, with no
   // projection/world matrix of its own, so the geometry itself is the only
@@ -91,7 +92,8 @@ export class FogMaskLayer {
       resources: {
         fogTierUniforms: tierUniforms,
         fogFieldUniforms: field.compositeUniforms,
-        uField: field.texture.source,
+        uFieldA: field.textures[0].source,
+        uFieldB: field.textures[1].source,
       },
     });
 

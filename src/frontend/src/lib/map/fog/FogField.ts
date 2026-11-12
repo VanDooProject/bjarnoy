@@ -1,16 +1,26 @@
 // The fog's shared field (docs/design/map-fog-v2.md, "Shared field"): ONE pass of the fog shader (fogShader.ts's
 // FOG_FIELD_FRAGMENT: mask, cross-fade, army vision, edge noise, drift) into a world-anchored RenderTexture with
 // R = out-of-sight tier alpha and G = unknown tier alpha. The two stage quads (FogMaskLayer) only sample it. It is
-// re-rendered only when fogFieldPlan.ts's fogFieldNeedsRender says so, not every frame.
+// re-rendered only when fogFieldPlan.ts's fogFieldRenderReason says so, not every frame. Two snapshots are kept (previous
+// and newest) so the periodic drift render does not make the edge jump: see `update`.
 import { BufferImageSource, GlProgram, Mesh, MeshGeometry, RenderTexture, Shader, Texture, UniformGroup, type Renderer } from 'pixi.js';
 import { noiseLatticeTexture } from '../shaderNoise';
 import { FOG_FIELD_FRAGMENT, FOG_VERTEX, MAX_ARMY_VISION_SOURCES } from './fogShader';
-import { ARMY_FOG_BLACK_MARGIN, ARMY_FOG_BLACK_OFFSET, ARMY_FOG_WHITE_MARGIN, ARMY_FOG_WHITE_OFFSET, type ArmyVisionSource } from './FogMaskLayer';
+import {
+  ARMY_FOG_BLACK_MARGIN,
+  ARMY_FOG_BLACK_OFFSET,
+  ARMY_FOG_WHITE_MARGIN,
+  ARMY_FOG_WHITE_OFFSET,
+  fullscreenGeometry,
+  type ArmyVisionSource,
+} from './FogMaskLayer';
 import { NOISE_REACH } from './fogRamp';
 import {
+  driftBlendWeight,
+  driftRenderPhase,
   fieldTargetSize,
   fieldWorldRect,
-  fogFieldNeedsRender,
+  fogFieldRenderReason,
   type FogCamera,
   type FogFieldRendered,
   type FogViewport,
@@ -130,21 +140,9 @@ function placeholderTexture(): Texture {
   return sharedPlaceholderTexture;
 }
 
-function fullscreenGeometry(): MeshGeometry {
-  // Clip-space corners paired with DOM-style (top=0) UVs — see fogShader.ts's
-  // vertex shader: this mesh always covers the whole framebuffer, with no
-  // projection/world matrix of its own, so the geometry itself is the only
-  // place the screen-covering quad is defined.
-  return new MeshGeometry({
-    positions: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
-    uvs: new Float32Array([0, 1, 1, 1, 1, 0, 0, 0]),
-    indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
-  });
-}
-
 /**
  * World-to-mask-UV affine (map-fog-v2.md §2.1) plus the mask's own texel
- * dimensions — everything FogMaskLayer needs to place a fetched texture
+ * dimensions — everything FogField needs to place a fetched texture
  * correctly, computed by the caller from `worldMaskBounds` (fogMaskLayout.ts)
  * and the isoGridPosition-derived tile constants (TILE_W/TILE_H).
  */
@@ -155,11 +153,14 @@ export interface FogMaskPlacement {
 
 
 export class FogField {
-  /** The field texture the composite quads sample. Resized in place, so a shader can stay bound to its source. */
-  readonly texture: RenderTexture;
+  /**
+   * The two field snapshots the composite quads sample (slots A and B; `newest` says which one the last render went
+   * into). Resized in place, so a shader can stay bound to its source.
+   */
+  readonly textures: readonly [RenderTexture, RenderTexture];
   /**
    * What the composite quads need to place the field (shared by both of them): the screen -> world inputs (camera,
-   * viewport), the world rect the field covers, and the debug-view switch.
+   * viewport), the world rect each snapshot covers, the weight of snapshot B and the debug-view switch.
    */
   readonly compositeUniforms: UniformGroup;
   private readonly mesh: Mesh<MeshGeometry, Shader>;
@@ -176,6 +177,10 @@ export class FogField {
   private fading = false;
   private drifting = false;
   private nowMs = 0;
+  private driftSpeed = 1;
+  // Which slot the last render went into, and whether the composite shows only that one (anything but a drift render).
+  private newest: 0 | 1 = 0;
+  private aliased = true;
   private debugKey = '';
   private armyKey = '';
 
@@ -231,12 +236,16 @@ export class FogField {
       uCameraPos: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
       uZoom: { value: 1, type: 'f32' },
       uViewport: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
-      uFieldOrigin: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
-      uFieldSize: { value: new Float32Array([1, 1]), type: 'vec2<f32>' },
+      uFieldOriginA: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
+      uFieldSizeA: { value: new Float32Array([1, 1]), type: 'vec2<f32>' },
+      uFieldOriginB: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
+      uFieldSizeB: { value: new Float32Array([1, 1]), type: 'vec2<f32>' },
+      uFieldBlendB: { value: 0, type: 'f32' },
       uDebugView: { value: 0, type: 'f32' },
     });
 
-    this.texture = RenderTexture.create({ width: 1, height: 1, resolution: 1, scaleMode: 'linear' });
+    const target = () => RenderTexture.create({ width: 1, height: 1, resolution: 1, scaleMode: 'linear' });
+    this.textures = [target(), target()];
 
     const shader = new Shader({
       glProgram: fogFieldGlProgram(),
@@ -382,13 +391,14 @@ export class FogField {
     this.lastTickAtMs = nowMs;
     this.nowMs = nowMs;
     this.drifting = driftEnabled;
-    if (driftEnabled) {
-      this.driftPhase += (sinceLast / 1000) * speed;
-      this.uniforms.uniforms.uTime = this.driftPhase;
-    }
+    this.driftSpeed = speed;
+    if (driftEnabled) this.driftPhase += (sinceLast / 1000) * speed;
 
     this.fading = false;
     if (this.fadeStartedAt === null) return;
+    // Latched, not just the per-frame `fading` flag: update() is not called while the fog quads are hidden, and the
+    // frame that lands blend == 1 must still be rendered once they show again.
+    this.dirty = true;
     const t = Math.min(1, (nowMs - this.fadeStartedAt) / REVEAL_FADE_MS);
     this.uniforms.uniforms.uMaskBlend = this.fadeFromBlend + (1 - this.fadeFromBlend) * t;
     // The frame that lands blend == 1 still has to be rendered, so it counts as fading too.
@@ -397,47 +407,71 @@ export class FogField {
   }
 
   /**
-   * Re-renders the field if this frame needs a fresh one (fogFieldNeedsRender); otherwise it does nothing and the
-   * quads keep sampling the previous texture. Returns whether it rendered. Call after `setCamera`/`tick`.
+   * Re-renders the field if this frame needs a fresh one (fogFieldRenderReason); otherwise the quads keep sampling the
+   * existing snapshots. Returns whether it rendered. Call after `setCamera`/`tick`. Also moves the composite's blend
+   * weight every call.
+   *
+   * Smooth drift: a periodic drift render goes into the slot that is not the newest one and is rendered one drift
+   * interval ahead (driftRenderPhase); the composite then fades from the previous snapshot to it over the next interval
+   * (driftBlendWeight), reaching it just as the next render replaces it. Any other render (first, an input changed,
+   * camera, army sources, reveal fade) shows only itself, rendered at the current drift phase, so nothing lags or ghosts
+   * however often it repeats.
    */
   update(renderer: Renderer): boolean {
     const { viewport, camera } = this;
     if (viewport.width <= 0 || viewport.height <= 0) return false;
-    if (
-      !fogFieldNeedsRender({
-        rendered: this.rendered,
-        camera,
-        viewport,
-        nowMs: this.nowMs,
-        dirty: this.dirty,
-        fading: this.fading,
-        drifting: this.drifting,
-      })
-    ) {
+    const reason = fogFieldRenderReason({
+      rendered: this.rendered,
+      camera,
+      viewport,
+      nowMs: this.nowMs,
+      dirty: this.dirty,
+      fading: this.fading,
+      drifting: this.drifting,
+    });
+    if (reason === 'none') {
+      this.applyBlend();
       return false;
     }
 
     const size = fieldTargetSize(viewport);
-    if (this.texture.width !== size.width || this.texture.height !== size.height) {
-      this.texture.source.resize(size.width, size.height, 1);
+    for (const texture of this.textures) {
+      if (texture.width !== size.width || texture.height !== size.height) texture.source.resize(size.width, size.height, 1);
     }
     const rect = fieldWorldRect(camera, viewport);
-    for (const group of [this.uniforms, this.compositeUniforms]) {
-      const origin = group.uniforms.uFieldOrigin as Float32Array;
+    const slot: 0 | 1 = this.newest === 0 ? 1 : 0;
+    const set = (group: UniformGroup, originName: string, sizeName: string) => {
+      const origin = group.uniforms[originName] as Float32Array;
       origin[0] = rect.x;
       origin[1] = rect.y;
-      const span = group.uniforms.uFieldSize as Float32Array;
+      const span = group.uniforms[sizeName] as Float32Array;
       span[0] = rect.w;
       span[1] = rect.h;
+    };
+    set(this.uniforms, 'uFieldOrigin', 'uFieldSize');
+    set(this.compositeUniforms, slot === 0 ? 'uFieldOriginA' : 'uFieldOriginB', slot === 0 ? 'uFieldSizeA' : 'uFieldSizeB');
+    // Not drifting: uTime stays where the last render left it, matching what is on screen.
+    if (this.drifting) {
+      this.uniforms.uniforms.uTime = reason === 'drift' ? driftRenderPhase(this.driftPhase, this.driftSpeed) : this.driftPhase;
     }
-    renderer.render({ container: this.mesh, target: this.texture, clear: true, clearColor: [0, 0, 0, 0] });
+    renderer.render({ container: this.mesh, target: this.textures[slot], clear: true, clearColor: [0, 0, 0, 0] });
+    this.newest = slot;
+    this.aliased = reason !== 'drift';
     this.rendered = { rect, zoom: camera.zoom, atMs: this.nowMs };
     this.dirty = false;
+    this.applyBlend();
     return true;
+  }
+
+  /** Sets the composite's weight of snapshot B: the newest one alone, or the previous-to-newest cross-fade while a drift render is settling in. */
+  private applyBlend(): void {
+    const showNewestOnly = this.aliased || !this.drifting || this.rendered === null;
+    const weightOfNewest = showNewestOnly ? 1 : driftBlendWeight(this.nowMs, this.rendered!.atMs);
+    this.compositeUniforms.uniforms.uFieldBlendB = this.newest === 1 ? weightOfNewest : 1 - weightOfNewest;
   }
 
   destroy(): void {
     this.mesh.destroy();
-    this.texture.destroy(true);
+    for (const texture of this.textures) texture.destroy(true);
   }
 }

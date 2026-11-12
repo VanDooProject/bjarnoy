@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 // Pixi's GlProgram probes a throwaway canvas for the max fragment precision
 // as it compiles, so constructing a real FogField needs a DOM.
-import { describe, expect, it } from 'vitest';
-import type { UniformGroup } from 'pixi.js';
+import { describe, expect, it, vi } from 'vitest';
+import { BufferImageSource, Texture, type Renderer, type UniformGroup } from 'pixi.js';
 import { FogField } from './FogField';
 import { MAX_ARMY_VISION_SOURCES } from './fogShader';
+import { FOG_FIELD_DRIFT_INTERVAL_MS } from './fogFieldPlan';
 
 function fogUniformsOf(field: FogField): UniformGroup {
   return (field as unknown as { uniforms: UniformGroup }).uniforms;
@@ -85,5 +86,101 @@ describe('FogField army vision sources', () => {
     layer.setArmyVisionSources(points, { x: 1, y: 1 });
 
     expect(fogUniformsOf(layer).uniforms.uArmyVisionCount).toBe(MAX_ARMY_VISION_SOURCES);
+  });
+});
+
+describe('FogField update rules', () => {
+  const CAMERA = { x: 100, y: 50, zoom: 1 };
+  const VIEWPORT = { width: 800, height: 600 };
+  const SOURCES = () => [{ x: 5, y: 6, radiusHexes: 3 }];
+  const HEX = { x: 2, y: 3 };
+
+  function setup() {
+    const render = vi.fn();
+    const renderer = { render } as unknown as Renderer;
+    const field = new FogField();
+    field.setCamera(CAMERA, VIEWPORT);
+    field.setArmyVisionSources(SOURCES(), HEX);
+    field.setDebug({ warpEnabled: true, showRawMask: false, showEffectiveMask: false });
+    return { field, render, renderer };
+  }
+
+  it('does not render again while idle, however often unchanged values are pushed in', () => {
+    const { field, render, renderer } = setup();
+    field.tick(0, false);
+    expect(field.update(renderer)).toBe(true);
+
+    for (let i = 1; i <= 5; i++) {
+      field.setArmyVisionSources(SOURCES(), HEX);
+      field.setDebug({ warpEnabled: true, showRawMask: false, showEffectiveMask: false });
+      field.setCamera({ ...CAMERA }, { ...VIEWPORT });
+      field.tick(i * 1000, false);
+      expect(field.update(renderer)).toBe(false);
+    }
+
+    expect(render).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders once per drift interval while drifting', () => {
+    const { field, render, renderer } = setup();
+    field.tick(0, true);
+    field.update(renderer);
+
+    field.tick(FOG_FIELD_DRIFT_INTERVAL_MS - 1, true);
+    field.update(renderer);
+    expect(render).toHaveBeenCalledTimes(1);
+
+    field.tick(FOG_FIELD_DRIFT_INTERVAL_MS, true);
+    field.update(renderer);
+    field.tick(FOG_FIELD_DRIFT_INTERVAL_MS + 50, true);
+    field.update(renderer);
+    expect(render).toHaveBeenCalledTimes(2);
+
+    field.tick(2 * FOG_FIELD_DRIFT_INTERVAL_MS, true);
+    field.update(renderer);
+    expect(render).toHaveBeenCalledTimes(3);
+  });
+
+  it('cross-fades from the previous drift snapshot to the newest over one interval, and shows other renders alone', () => {
+    const { field, renderer } = setup();
+    const blendB = () => field.compositeUniforms.uniforms.uFieldBlendB as number;
+    field.tick(0, true);
+    field.update(renderer); // first render: slot B (newest starts at A), shown alone
+    expect(blendB()).toBe(1);
+
+    field.tick(FOG_FIELD_DRIFT_INTERVAL_MS, true);
+    field.update(renderer); // drift render into slot A; B is the previous snapshot
+    expect(blendB()).toBe(1);
+    field.tick(FOG_FIELD_DRIFT_INTERVAL_MS + FOG_FIELD_DRIFT_INTERVAL_MS / 2, true);
+    field.update(renderer);
+    expect(blendB()).toBeCloseTo(0.5);
+    field.tick(FOG_FIELD_DRIFT_INTERVAL_MS * 2 - 1, true);
+    field.update(renderer);
+    expect(blendB()).toBeLessThan(0.01);
+
+    field.setArmyVisionSources([{ x: 9, y: 9, radiusHexes: 3 }], HEX); // a non-drift trigger: only the new render shows
+    field.tick(FOG_FIELD_DRIFT_INTERVAL_MS * 2, true);
+    field.update(renderer);
+    expect(blendB()).toBe(1);
+  });
+
+  // update() is not called while the fog quads are hidden, so a fade that ends in that time must still be rendered later.
+  it('re-renders after a reveal fade that finished while the field was not being updated', () => {
+    const { field, render, renderer } = setup();
+    field.tick(0, false);
+    field.update(renderer);
+    const placeholder = new Texture({ source: new BufferImageSource({ resource: new Uint8Array([255, 0, 0, 255]), width: 1, height: 1 }) });
+    field.setMaskTexture(placeholder);
+    field.tick(performance.now(), false);
+    field.update(renderer);
+    const rendered = render.mock.calls.length;
+
+    field.tick(performance.now() + 5000, false); // the fade completes here, with no update() call
+    field.tick(performance.now() + 6000, false);
+
+    expect(field.update(renderer)).toBe(true);
+    expect(render.mock.calls.length).toBe(rendered + 1);
+    field.tick(performance.now() + 7000, false);
+    expect(field.update(renderer)).toBe(false);
   });
 });

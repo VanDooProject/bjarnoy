@@ -21,7 +21,7 @@
 // §1c's live army-granted vision: `uArmyVisionSources` is a small, bounded
 // (MAX_ARMY_VISION_SOURCES) array of world-space points, uploaded fresh every
 // frame from HexMapRenderer's already-computed live army render positions
-// (FogMaskLayer.setArmyVisionSources) — never written into `uMask`/`uMaskPrev`
+// (FogField.setArmyVisionSources) — never written into `uMask`/`uMaskPrev`
 // themselves, so an army in transit never busts the server's cached PNG (see
 // FogMaskService's own remarks on why §1c stays shader-only). The troop writes
 // its own pair of ramps (`armyRamps` below) in the mask's own units — 0 at the
@@ -73,7 +73,7 @@ out vec2 vUV;
 
 void main() {
   vUV = aUV;
-  // Positions are already in clip space (see FogMaskLayer's geometry) — this
+  // Positions are already in clip space (see fullscreenGeometry in FogMaskLayer.ts) — this
   // mesh always covers the whole viewport, independent of camera/world
   // transforms, so there is no projection/world matrix to apply.
   gl_Position = vec4(aPosition, 0.0, 1.0);
@@ -85,7 +85,7 @@ void main() {
  * — see FOG_FRAGMENT's `uArmyVisionSources` array. "A handful of entries —
  * current armies in transit" per §1c; a real GLSL array needs a fixed
  * compile-time size, and 8 is comfortably above what a single settlement
- * view or world map would ever show moving at once. FogMaskLayer.ts truncates
+ * view or world map would ever show moving at once. FogField.setArmyVisionSources truncates
  * to this count if HexMapRenderer ever hands it more.
  */
 export const MAX_ARMY_VISION_SOURCES = 8;
@@ -107,7 +107,7 @@ uniform vec2 uWorldToMaskScale;
 uniform vec2 uWorldToMaskOffset;
 // The placement uMaskPrev was uploaded with: the mask is a chunk window that
 // moves with the camera, so the texture being faded out generally sits at a
-// different place than the one fading in (see FogMaskLayer.setMaskTexture).
+// different place than the one fading in (see FogField.setMaskTexture).
 uniform vec2 uWorldToMaskScalePrev;
 uniform vec2 uWorldToMaskOffsetPrev;
 // Where each tier's ramp turns over, in ramp units (0 = at the ring, 1 = the
@@ -397,24 +397,47 @@ precision highp float;
 in vec2 vUV;
 out vec4 finalColor;
 
-uniform sampler2D uField;
+// The field's two snapshots (FogField keeps the previous and the newest drift render), each with the world rect it was
+// rendered for, and the weight of snapshot B in the mix (0 = only A, 1 = only B).
+uniform sampler2D uFieldA;
+uniform sampler2D uFieldB;
 uniform vec2 uViewport;
 uniform vec2 uCameraPos;
 uniform float uZoom;
-uniform vec2 uFieldOrigin;
-uniform vec2 uFieldSize;
+uniform vec2 uFieldOriginA;
+uniform vec2 uFieldSizeA;
+uniform vec2 uFieldOriginB;
+uniform vec2 uFieldSizeB;
+uniform float uFieldBlendB;
 uniform float uDebugView;
 uniform float uTier;
 uniform vec3 uScoutedColor;
 uniform vec3 uUnexploredColor;
 uniform float uScoutedAlpha;
 
+// The field is drawn through a clip-space quad, so its first texel row is its bottom edge: flip v.
+vec4 sampleField(sampler2D field, vec2 origin, vec2 size, vec2 world) {
+  vec2 f = (world - origin) / size;
+  return texture(field, vec2(f.x, 1.0 - f.y));
+}
+
 void main() {
   vec2 screen = vUV * uViewport;
   vec2 world = (screen - uViewport * 0.5) / uZoom + uCameraPos;
-  vec2 f = (world - uFieldOrigin) / uFieldSize;
-  // The field is drawn through a clip-space quad, so its first texel row is its bottom edge: flip v.
-  vec4 field = texture(uField, vec2(f.x, 1.0 - f.y));
+  // Each snapshot is sampled at this pixel's world position through its own rect (the anchor can differ between them).
+  // Outside the blend only one of them is fetched.
+  vec4 field;
+  if (uFieldBlendB <= 0.0) {
+    field = sampleField(uFieldA, uFieldOriginA, uFieldSizeA, world);
+  } else if (uFieldBlendB >= 1.0) {
+    field = sampleField(uFieldB, uFieldOriginB, uFieldSizeB, world);
+  } else {
+    field = mix(
+      sampleField(uFieldA, uFieldOriginA, uFieldSizeA, world),
+      sampleField(uFieldB, uFieldOriginB, uFieldSizeB, world),
+      uFieldBlendB
+    );
+  }
 
   if (uDebugView > 0.5) {
     finalColor = vec4(field.rgb, 1.0);
