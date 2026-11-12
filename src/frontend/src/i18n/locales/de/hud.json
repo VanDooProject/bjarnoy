@@ -109,7 +109,7 @@
   },
   "ringMenu": {
     "shrineLimitLock": "Dein Gebiet hat bereits einen Schrein",
-    "storageHouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
+    "greatStorehouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
     "occupiedLock": {
       "giant": "Von einem Riesenwahrzeichen belegt",
       "camp": "Hier hausen wilde Tiere – räum erst ihr Lager",

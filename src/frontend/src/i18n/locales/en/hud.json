@@ -109,7 +109,7 @@
   },
   "ringMenu": {
     "shrineLimitLock": "Your realm already has a shrine",
-    "storageHouseLock": "Needs {count} Storehouse at level {level} | Needs {count} Storehouses at level {level}",
+    "greatStorehouseLock": "Needs {count} Storehouse at level {level} | Needs {count} Storehouses at level {level}",
     "occupiedLock": {
       "giant": "Occupied by a giant landmark",
       "camp": "Wild beasts hold this hex: clear their camp first",

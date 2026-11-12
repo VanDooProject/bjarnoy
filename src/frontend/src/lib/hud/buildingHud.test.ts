@@ -107,8 +107,8 @@ describe('upgrade state', () => {
   });
 
   it('is max at the type ceiling, with a full ring', () => {
-    const vm = buildingHudViewModel(input({ type: 'tower', level: 10 }));
-    expect(vm.maxLevel).toBe(10);
+    const vm = buildingHudViewModel(input({ type: 'tower', level: 5 }));
+    expect(vm.maxLevel).toBe(5);
     expect(vm.upgrade.state).toBe('max');
     expect(vm.dial).toMatchObject({ ring: 'max', progress: 1 });
   });

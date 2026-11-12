@@ -255,7 +255,7 @@
       "water": "Wasser"
     },
     "lore": {
-      "longhouse": "Das Herz der Siedlung. Seine Stufe bestimmt Claim-Radius, Bauplätze und welche Gebäude freigeschaltet sind. Außerdem liefert es von jedem Rohstoff ein wenig und erweitert das Lager. Jede Siedlung beginnt mit einem Langhaus auf Gras oder, wenn sie vom Meer aus gegründet wurde, auf dem Sandstrand.",
+      "longhouse": "Das Herz der Siedlung. Seine Stufe bestimmt Claim-Radius, Bauplätze und welche Gebäude freigeschaltet sind. Außerdem liefert es ein wenig Holz und Nahrung und erweitert das Lager. Jede Siedlung beginnt mit einem Langhaus auf Gras oder, wenn sie vom Meer aus gegründet wurde, auf dem Sandstrand.",
       "lumberjack": "Schlägt Holz auf bewaldetem Boden – das Holz hinter jeder Wand und jedem Dach.",
       "quarry": "Bricht Stein aus einem Bergkamm – die Knochen jeder Festung.",
       "odinstatue": "Odins Statue steht auf Gras und wird ab Langhaus 25 hinter einer Druidenhütte der Stufe 10 freigeschaltet. Weisheit: Jeder Bau in dieser Siedlung dauert pro Stufe 2 % kürzer (auf Stufe 5 sind es 10 %). Raben: Das Gebiet, die Türme und die Armeen der Siedlung sehen pro Stufe 2 Ringe weiter (auf Stufe 5 sind es 10). Sie zählt als der eine Schrein der Siedlung.",
@@ -273,7 +273,7 @@
       "shrineofnjord": "Für Njörd auf Küstenwasser errichtet, hinter einer Werft der Stufe 10. Die Gunst des Meeresgottes stärkt den Angriff deiner Schiffe (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
       "archeryrange": "Bildet auf Gras die Bogenschützen der Landarmee aus.",
       "dockyard": "Bildet auf flachem (Küsten-)Wasser Schiffe aus.",
-      "greatstorehouse": "Eine Lagerstufe für das Endspiel auf Gras. Sie setzt voraus, dass sowohl das Langhaus als auch das Lagerhaus dieser Siedlung auf Stufe 15 stehen.",
+      "greatstorehouse": "Eine Lagerstufe für das Endspiel auf Gras. Du brauchst dafür ein Langhaus auf Stufe 15 und ein Lagerhaus auf Stufe 25. Jedes weitere verlangt ein zusätzliches Lagerhaus auf Stufe 25.",
       "barracks": "Bildet auf Gras an der Grenze die Kernlinie der Landarmee aus – Thralls, Speerkämpfer, Axtkämpfer und Berserker. Die Bogenschützen bildet der Schießplatz aus, die Belagerungswaffen die Belagerungswerkstatt. Keine Einheit lässt sich an zwei Gebäuden ausbilden.",
       "sawmill": "Verarbeitet Holz direkt auf einem geraden, sanft gebogenen oder eng gebogenen Flussfeld – ein Wasserrad, das sich mit der Strömung dreht, wie bei der Getreidemühle. Sie liefert kein eigenes Holz, sondern steigert jeden Holzfäller im Umkreis ihrer Stufe. Mit steigender Stufe wachsen Reichweite und Bonus.",
       "meadery": "Züchtet Bienen auf Gras hinter einem Bauernhof der Stufe 5 – Bienenkörbe, eine Honigpresse und ein Metkeller. Sie hat noch keine eigene Wirkung, der Met ist für einen künftigen Moralbonus gedacht.",
@@ -834,7 +834,7 @@
   },
   "walls": {
     "title": "Mauern",
-    "intro": "Die Palisade ist die Mauer aus Erde und Holz der Wikingerzeit und vor allem eine Bewegungssperre: Sie hält Landarmeen auf, Boote aber nicht. Sie wird mit Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet und hat 3 Stufen. Jedes Mauerfeld kostet auf Stufe 1 etwa 40 Holz und 10 Stein.",
+    "intro": "Die Palisade ist die Mauer aus Erde und Holz der Wikingerzeit und vor allem eine Bewegungssperre: Sie hält Landarmeen auf, Boote aber nicht. Sie wird mit Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet und hat 3 Stufen. Jedes Mauerfeld kostet auf Stufe 1 etwa 540 Holz, 150 Stein und 40 Nahrung.",
     "stage": "Stufe",
     "camera": "Blickrichtung",
     "stages": {
@@ -961,7 +961,7 @@
     },
     "producers": {
       "heading": "Produzenten",
-      "growth": "Die Leistung eines Produzenten wächst mit jeder Stufe um 20 %: Jede Stufe liefert das 1,2-Fache der vorigen.",
+      "growth": "Die Leistung eines Produzenten wächst mit jeder Stufe, und jede Stufe bringt 20 % mehr dazu als die vorige.",
       "columns": {
         "building": "Gebäude",
         "makes": "Liefert",
@@ -977,7 +977,7 @@
         "claybrickworks": "Nur auf reinem Moorboden",
         "bogoreworks": "Nur auf reinem Moorboden, nicht an Ufer, Bach oder See"
       },
-      "longhouse": "Das Langhaus ist die Ausnahme: Es liefert mit jeder Stufe dieselbe feste Menge dazu ({amounts} pro Stunde: Holz / Stein / Nahrung / Eisen), statt um 20 % zu wachsen.",
+      "longhouse": "Das Langhaus ist die Ausnahme: Es liefert mit jeder Stufe dieselbe feste Menge dazu ({amounts} pro Stunde: Holz / Nahrung), statt jedes Mal 20 % mehr zu bringen.",
       "soil": "Jede Insel hat Weizen- oder Kürbisboden, etwa die Hälfte von jedem. Eine {pumpkin} passt nur auf Kürbisboden und bringt auf Stufe 1 {pumpkinRate} Nahrung, wo ein {farm} {farmRate} bringt. Ein {farm} kannst du auf jeder Insel bauen."
     },
     "boost": {
@@ -1007,16 +1007,8 @@
       "body": "Jeder Rohstoff wächst nur bis zu deiner Lagergrenze, was darüber liegt, geht verloren. Ohne Lagergebäude liegt die Grenze bei {base} pro Rohstoff. Diese Gebäude heben sie an.",
       "capacity": "Fasst zusätzlich, pro Rohstoff",
       "cell": "Stufe {level}: {capacity}",
-      "levelCap": "Ein {storehouse} oder ein {great} darf nicht höher ausgebaut sein als dein {longhouse}.",
-      "moreHeading": "Weitere Lagerhäuser",
-      "moreBody": "Du kannst mehr als ein Lagerhaus bauen, aber jedes weitere verlangt mehr von den vorhandenen.",
-      "step": {
-        "which": "Lagerhaus",
-        "needs": "Voraussetzung",
-        "nth": "Nr. {n}",
-        "later": "Nr. {n} und jedes weitere",
-        "needsCell": "{count} Lagerhaus auf Stufe {level} | {count} Lagerhäuser auf Stufe {level}"
-      },
+      "levelCap": "Ein {great} darf nicht höher ausgebaut sein als dein {longhouse}.",
+      "greatCount": "Lagerhäuser kannst du in beliebiger Zahl bauen, und ihre Stufe hängt nicht vom Langhaus ab. Für ein {great} brauchst du ein {storehouse} auf Stufe 25, für jedes weitere eines mehr: Das zweite verlangt zwei auf Stufe 25, das dritte drei und so weiter.",
       "overCap": "Kosten über deiner Lagergrenze kannst du nie bezahlen, egal wie lange du wartest. Baue also Lager aus, bevor du etwas aufwertest, das mehr kostet, als du fassen kannst."
     },
     "upkeep": {

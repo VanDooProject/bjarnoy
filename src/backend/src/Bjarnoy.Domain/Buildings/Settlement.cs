@@ -1688,28 +1688,6 @@ public sealed record Settlement
             }
         }
 
-        // Storage houses keep their Longhouse cap, and an additional one is only
-        // allowed once enough of them stand high enough
-        // (BuildingCatalogue.AdditionalStorageHouseRequirement). Only a *new*
-        // storage house counts (baseLevel 0) — upgrading one is never refused.
-        if (type == BuildingType.StorageHouse && baseLevel == 0)
-        {
-            // A linked realm counts all of its storage houses, in every member.
-            var storageHexes = Buildings.Where(b => b.Type == BuildingType.StorageHouse).Select(b => b.Coord)
-                .Concat(Queue.Where(o => o.Type == BuildingType.StorageHouse).Select(o => o.Coord))
-                .Concat(Linked?.OtherBuildings.Where(b => b.Type == BuildingType.StorageHouse).Select(b => b.Coord) ?? [])
-                .Concat(Linked?.OtherQueue.Where(o => o.Type == BuildingType.StorageHouse).Select(o => o.Coord) ?? [])
-                .Distinct()
-                .Count();
-            var (needCount, needLevel) = BuildingCatalogue.AdditionalStorageHouseRequirement(storageHexes);
-            if (storageHexes >= 1
-                && Buildings.Count(b => b.Type == BuildingType.StorageHouse && b.Level >= needLevel)
-                    + (Linked?.OtherBuildings.Count(b => b.Type == BuildingType.StorageHouse && b.Level >= needLevel) ?? 0) < needCount)
-            {
-                return BuildDecision.Rejected(BuildRejection.StorageHouseTooLow);
-            }
-        }
-
         // Every prerequisite must be met, and each is judged against the
         // settlement's *highest-level* building of that type — not the first
         // one in coordinate order, which would let a second, lower building of
@@ -1724,6 +1702,26 @@ public sealed record Settlement
             if (highest < prerequisite.Level)
             {
                 return BuildDecision.Rejected(BuildRejection.RequiredBuildingTooLow, prerequisite);
+            }
+        }
+
+        // The n-th Great Storehouse needs n Storage Houses standing at the top
+        // level (BuildingCatalogue.GreatStorehouseStorageHouseLevel). Only a
+        // *new* Great Storehouse counts (baseLevel 0) — upgrading one is never
+        // refused. A linked realm counts every member's buildings and orders.
+        if (type == BuildingType.GreatStorehouse && baseLevel == 0)
+        {
+            var held = Buildings.Where(b => b.Type == BuildingType.GreatStorehouse).Select(b => b.Coord)
+                .Concat(Queue.Where(o => o.Type == BuildingType.GreatStorehouse).Select(o => o.Coord))
+                .Concat(Linked?.OtherBuildings.Where(b => b.Type == BuildingType.GreatStorehouse).Select(b => b.Coord) ?? [])
+                .Concat(Linked?.OtherQueue.Where(o => o.Type == BuildingType.GreatStorehouse).Select(o => o.Coord) ?? [])
+                .Distinct()
+                .Count();
+            var maxed = Buildings.Count(b => b.Type == BuildingType.StorageHouse && b.Level >= BuildingCatalogue.GreatStorehouseStorageHouseLevel)
+                + (Linked?.OtherBuildings.Count(b => b.Type == BuildingType.StorageHouse && b.Level >= BuildingCatalogue.GreatStorehouseStorageHouseLevel) ?? 0);
+            if (maxed < held + 1)
+            {
+                return BuildDecision.Rejected(BuildRejection.GreatStorehouseNeedsStorageHouses);
             }
         }
 

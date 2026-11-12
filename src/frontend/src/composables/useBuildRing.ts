@@ -34,7 +34,7 @@ import {
   riverBuildingAllowedHere,
   riverFitLock,
   shrineLimitLock,
-  storageHouseLock,
+  greatStorehouseLock,
   towerLimitLock,
 } from '../lib/map/ringCatalogue';
 import {
@@ -162,7 +162,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
     return world.selectedSettlementId ? world.model.soilForSettlement(world.selectedSettlementId) : undefined;
   }
 
-  const STORAGE_HOUSE_TYPES: ReadonlySet<string> = new Set(['storagehouse']);
+  const GREAT_STOREHOUSE_TYPES: ReadonlySet<string> = new Set(['greatstorehouse']);
 
   // Towers counting against the limit. Live mode reads the server's numbers for the whole (linked) realm
   // (`construction.towersHeld` / `towerLimit`: connected standing plus queued towers, the members' limits added up), the same
@@ -201,16 +201,19 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
     return heldHexes(SHRINE_BUILDING_TYPES, standing).size;
   }
 
-  // Storage houses held (standing plus queued, distinct hexes like Settlement.PlanBuild counts them; a linked realm's
-  // whole set) and the standing levels, for the additional-storage-house lock.
-  function storageHouseLockFor(): string | undefined {
+  // Great Storehouses held (standing plus queued, distinct hexes like Settlement.PlanBuild counts them; a linked realm's
+  // whole set) and the standing Storage House levels, for the Great Storehouse count lock.
+  function greatStorehouseLockFor(): string | undefined {
     const id = world.selectedSettlementId;
     if (!id) return undefined;
-    const standing = DEMO_MODE
+    const greatStanding = DEMO_MODE
+      ? world.model.greatStorehouses(id)
+      : world.hud.buildings.filter((b) => b.type === 'greatstorehouse');
+    const storageStanding = DEMO_MODE
       ? world.model.storageHouses(id)
       : world.hud.buildings.filter((b) => b.type === 'storagehouse');
-    const held = heldHexes(STORAGE_HOUSE_TYPES, standing);
-    return storageHouseLock(held.size, standing.map((h) => h.level));
+    const held = heldHexes(GREAT_STOREHOUSE_TYPES, greatStanding);
+    return greatStorehouseLock(held.size, storageStanding.map((h) => h.level));
   }
 
   // Wall orders still in the queue (live mode only; demo places instantly): the server counts them as wall hexes when it judges the next one.
@@ -278,7 +281,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
       longhouseLock(definition?.requiredLonghouseLevel, world.hud.level),
       type === 'tower' ? towerLimitLock(towersHeld(), towerLimit()) : undefined,
       SHRINE_BUILDING_TYPES.has(type) ? shrineLimitLock(shrinesHeld()) : undefined,
-      type === 'storagehouse' ? storageHouseLockFor() : undefined,
+      type === 'greatstorehouse' ? greatStorehouseLockFor() : undefined,
       isWallBuilding(type) ? palisadeLock(world.model.palisadePlacement(coord, type === 'palisadegate', queuedWalls())) : undefined,
       type === 'bridge' ? bridgeLock(world.model.bridgePlacement(coord)) : undefined,
       riverFitLock(type, riverShapeAt(coord), riverVariantAt(coord), riverWidthAt(coord)),

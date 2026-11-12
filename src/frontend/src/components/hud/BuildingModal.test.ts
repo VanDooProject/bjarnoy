@@ -124,7 +124,7 @@ describe('BuildingModal Town Square feast', () => {
     const renownOf = (over: Partial<RenownResponse> = {}): RenownResponse => ({
       total: 12340,
       settlementCount: 1,
-      requiredForNextSettlement: 55000,
+      requiredForNextSettlement: 80000,
       canFoundAnother: false,
       perHour: 48,
       pendingFeastRenown: 0,
@@ -137,18 +137,18 @@ describe('BuildingModal Town Square feast', () => {
       world.hud.renown = renownOf();
       const wrapper = mountModal();
 
-      expect(wrapper.get('[data-testid="renown-line"]').text()).toBe('Renown 12,340 / 55,000 for settlement no. 2');
+      expect(wrapper.get('[data-testid="renown-line"]').text()).toBe('Renown 12,340 / 80,000 for settlement no. 2');
       expect(wrapper.get('[data-testid="renown-rate"]').text()).toContain('+48 renown per hour');
-      expect(wrapper.get('[data-testid="renown-missing"]').text()).toContain('42,660');
-      // 42 660 / 48 = 888.75 h = 37 d 0 h 45 min
-      expect(wrapper.get('[data-testid="renown-eta"]').text()).toBe('About 37 d 0 h at this rate (without feasts)');
+      expect(wrapper.get('[data-testid="renown-missing"]').text()).toContain('67,660');
+      // 67 660 / 48 = 1409.6 h = 58 d 17 h
+      expect(wrapper.get('[data-testid="renown-eta"]').text()).toBe('About 58 d 17 h at this rate (without feasts)');
       expect(wrapper.find('[data-testid="renown-eta-feast"]').exists()).toBe(false);
     });
 
     it('uses hours and minutes for a near target', () => {
       const world = useWorldStore();
       rich(world);
-      world.hud.renown = renownOf({ total: 54000 });
+      world.hud.renown = renownOf({ total: 79000 });
       const wrapper = mountModal();
 
       expect(wrapper.get('[data-testid="renown-eta"]').text()).toContain('20 h 50 min');
@@ -167,7 +167,7 @@ describe('BuildingModal Town Square feast', () => {
     it('adds the running feast to the outlook', () => {
       const world = useWorldStore();
       rich(world);
-      world.hud.renown = renownOf({ total: 52000, pendingFeastRenown: 4629 });
+      world.hud.renown = renownOf({ total: 77000, pendingFeastRenown: 4629 });
       world.hud.feast = {
         startedAtGameTime: '2026-01-01T00:00:00Z',
         endsAtGameTime: '2026-01-01T12:00:00Z',

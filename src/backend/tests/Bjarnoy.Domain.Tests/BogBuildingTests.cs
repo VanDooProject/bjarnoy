@@ -28,7 +28,7 @@ public class BogBuildingTests
             Name = "Bjornstad",
             Centre = Origin,
             Buildings = buildings,
-            Resources = ResourcePool.Create(ResourceAmounts.Uniform(1_000_000), production, capacity, T0),
+            Resources = ResourcePool.Create(ResourceAmounts.Uniform(1_000_000), production, capacity + ResourceAmounts.Uniform(1_000_000), T0),
         };
     }
 
@@ -253,9 +253,9 @@ public class BogBuildingTests
     [Fact]
     public void The_bog_ore_works_level_1_iron_is_the_number_tuned_in_the_economy_lab()
     {
-        // 20 iron/h, mirrored as BOG_ORE_WORKS_IRON_AT_LEVEL_ONE in the frontend's buildingEconomy.ts (docs/design/economy.md section 8).
-        Assert.Equal(20, BuildingCatalogue.BogOreWorksIronAtLevelOne);
-        Assert.Equal(20, BuildingCatalogue.Get(BuildingType.BogOreWorks, 1).ProductionPerHour.Iron);
+        // 4 iron/h (the level-1 increment), mirrored as BOG_ORE_WORKS_IRON_AT_LEVEL_ONE in the frontend's buildingEconomy.ts (docs/design/economy.md section 8).
+        Assert.Equal(4, BuildingCatalogue.BogOreWorksIronAtLevelOne);
+        Assert.Equal(4, BuildingCatalogue.Get(BuildingType.BogOreWorks, 1).ProductionPerHour.Iron);
     }
 
     [Fact]
@@ -269,7 +269,7 @@ public class BogBuildingTests
             Assert.Equal(0, production.Wood);
             Assert.Equal(0, production.Stone);
             Assert.Equal(0, production.Food);
-            Assert.Equal(BuildingCatalogue.BogOreWorksIronAtLevelOne * Math.Pow(1.20, level - 1), production.Iron, 6);
+            Assert.Equal(BuildingCatalogue.BogOreWorksIronAtLevelOne * (Math.Pow(1.20, level) - 1) / 0.20, production.Iron, 6);
             Assert.Equal(0, definition.Cost.Iron);
             Assert.Equal(3, definition.RequiredLonghouseLevel);
             Assert.Equal(level == 1 ? [new BuildingPrerequisite(BuildingType.ClayBrickworks, 3)] : [], definition.Prerequisites);

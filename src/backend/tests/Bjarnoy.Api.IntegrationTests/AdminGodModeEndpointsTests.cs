@@ -302,11 +302,10 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// A second storage house is refused with <c>StorageHouseTooLow</c> while the
-    /// first (queued, level 0 stub) is below level 10.
+    /// Any number of storage houses can be queued: a second one is accepted while the first is still a level 0 stub.
     /// </summary>
     [Fact]
-    public async Task A_second_storage_house_is_refused_with_StorageHouseTooLow_below_level_10()
+    public async Task A_second_storage_house_is_accepted_whatever_the_first_ones_level()
     {
         using var client = Client();
         var (_, settlement) = await FoundAsync(client);
@@ -324,8 +323,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
 
         var second = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/builds", new QueueBuildRequest("storagehouse", grass[1].Q, grass[1].R), Ct);
-        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
-        Assert.Equal("StorageHouseTooLow", await second.RejectionAsync(Ct));
+        Assert.Equal(HttpStatusCode.Accepted, second.StatusCode);
     }
 
     [Fact]

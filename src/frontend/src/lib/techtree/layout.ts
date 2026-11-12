@@ -29,11 +29,11 @@ export const ANCHOR = 'longhouse';
 /**
  * Buildings still in the catalogue that the docs should not advertise — a
  * docs-only omission, add an entry to hide one. The Quarry is hidden because
- * no new one can be built (existing quarries keep standing); the Magic Tower
+ * no new one can be built (existing quarries keep standing); the Beach Camp because a sea landing sets it up, it is never built; the Magic Tower
  * and the Fisher Hut (merged into the Fishing Hut) are gone from the
  * catalogue altogether.
  */
-export const HIDDEN_FROM_DOCS: readonly string[] = ['quarry'];
+export const HIDDEN_FROM_DOCS: readonly string[] = ['quarry', 'beachcamp'];
 
 export const COLUMN_TITLES: readonly string[] = ['Anchor', 'First works', 'Refining', 'Advanced', 'Capstone'];
 

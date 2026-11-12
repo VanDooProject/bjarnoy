@@ -46,9 +46,9 @@ describe('FoundingView', () => {
     const wrapper = await mountPage();
 
     const row = (n: number) => wrapper.get(`[data-settlement="${n}"]`).findAll('th, td').map((c) => c.text());
-    expect(row(2)).toEqual(['Settlement no. 2', '55,000']);
-    expect(row(3)).toEqual(['Settlement no. 3', '110,000']);
-    expect(row(5)).toEqual(['Settlement no. 5', '440,000']);
+    expect(row(2)).toEqual(['Settlement no. 2', '80,000']);
+    expect(row(3)).toEqual(['Settlement no. 3', '160,000']);
+    expect(row(5)).toEqual(['Settlement no. 5', '640,000']);
     wrapper.unmount();
   });
 

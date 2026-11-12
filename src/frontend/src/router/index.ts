@@ -315,6 +315,12 @@ export const router = createRouter({
           component: () => import('../views/admin/AdminEconomyView.vue'),
         },
         {
+          // The knob-driven pacing simulator: milestones and charts per player profile against a pinned reference.
+          path: 'pacing-bench',
+          name: 'admin-pacing-bench',
+          component: () => import('../views/admin/AdminPacingBenchView.vue'),
+        },
+        {
           // A live, backend-free playground for the island-shape generation
           // params (worldGenerator.ts mirrors the backend algorithm exactly)
           // — lets an admin compare several seed/parameter combos' minimaps

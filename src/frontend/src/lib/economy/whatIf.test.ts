@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyWhatIf, defaultWhatIf } from './whatIf';
+import { niceRound } from '../map/buildingEconomy';
 import { group } from './testFixtures';
 import type { BuildingDefinitionResponse, ResourceLine } from '../../api/types';
 import catalogueSnapshot from '../../data/building-catalogue.json';
@@ -20,7 +21,7 @@ describe('applyWhatIf', () => {
         expect(lineNear(n.cost, d.cost), `${type} ${d.level} cost`).toBe(true);
         expect(lineNear(n.productionPerHour, d.productionPerHour), `${type} ${d.level} production`).toBe(true);
         expect(Math.abs(n.buildSeconds - d.buildSeconds), `${type} ${d.level} time`).toBeLessThanOrEqual(1);
-        expect(n.storageCapacity).toEqual(d.storageCapacity);
+        expect(lineNear(n.storageCapacity, d.storageCapacity), `${type} ${d.level} storage`).toBe(true);
         expect(n.requiredLonghouseLevel).toBe(d.requiredLonghouseLevel);
         expect(n.prerequisites).toEqual(d.prerequisites);
       }
@@ -37,27 +38,113 @@ describe('applyWhatIf', () => {
   });
 
   it('a changed growth factor changes the curve from level 2 on, level 1 stays', () => {
-    const w = applyWhatIf(live, { ...defaultWhatIf(), costGrowth: 1.5, timeGrowth: 1.5, productionGrowth: 1.1 });
+    const w = applyWhatIf(live, { ...defaultWhatIf(), costGrowth: 1.5, productionGrowth: 1.1 });
     const [l1, l5] = [live.quarry[0], live.quarry[4]];
     expect(w.quarry[0].cost).toEqual(l1.cost);
-    expect(w.quarry[4].cost.wood).toBeCloseTo(l1.cost.wood * 1.5 ** 4, 6);
-    expect(w.quarry[4].buildSeconds).toBe(Math.round(l1.buildSeconds * 1.5 ** 4));
-    expect(w.quarry[4].productionPerHour.stone).toBeCloseTo(l1.productionPerHour.stone * 1.1 ** 4, 6);
+    expect(w.quarry[4].cost.wood).toBe(niceRound(55 * 1.5 ** 4));
+    // Increment-geometric: level 5 totals I1 · (1 + g + g² + g³ + g⁴).
+    expect(w.quarry[4].productionPerHour.stone).toBeCloseTo(l1.productionPerHour.stone * (1 + 1.1 + 1.1 ** 2 + 1.1 ** 3 + 1.1 ** 4), 6);
     expect(w.quarry[4].cost.wood).toBeGreaterThan(l5.cost.wood);
+  });
+
+  it('the build-time knobs move the tail of their own group only', () => {
+    const w = applyWhatIf(live, { ...defaultWhatIf(), topProducers: 10, prodShape: 0 });
+    // Straight line from the knee (L6, 64 min) to the top (10 h at L25).
+    expect(w.quarry[9].buildSeconds).toBe(Math.round((64 + (600 - 64) * (4 / 19)) * 60));
+    expect(w.quarry[24].buildSeconds).toBe(10 * 3600);
+    expect(w.quarry[2].buildSeconds).toBe(live.quarry[2].buildSeconds);
+    expect(w.lumberjack[24].buildSeconds).toBe(live.lumberjack[24].buildSeconds);
+    expect(w.longhouse[29].buildSeconds).toBe(live.longhouse[29].buildSeconds);
+  });
+
+  it('the Great Storehouse top and the tech shape move the tech curves', () => {
+    const w = applyWhatIf(live, { ...defaultWhatIf(), gsTopHours: 20, techShape: 3 });
+    expect(w.greatstorehouse[9].buildSeconds).toBe(20 * 3600);
+    expect(w.barracks[9].buildSeconds).toBeGreaterThan(live.barracks[9].buildSeconds);
+    expect(w.barracks[0].buildSeconds).toBe(live.barracks[0].buildSeconds);
   });
 
   it('the Longhouse has its own growth factors and stays linear in production', () => {
     const w = applyWhatIf(live, { ...defaultWhatIf(), longhouseCostGrowth: 1.5, productionGrowth: 3 });
     const lh1 = live.longhouse[0];
-    expect(w.longhouse[9].cost.stone).toBeCloseTo(lh1.cost.stone * 1.5 ** 9, 6);
+    expect(w.longhouse[9].cost.stone).toBe(niceRound(100 * 1.5 ** 9));
     expect(w.longhouse[9].productionPerHour.wood).toBeCloseTo(lh1.productionPerHour.wood * 10, 6);
+  });
+
+  it('keeps the start buildings brick-free for their first levels, whatever the knobs', () => {
+    const w = applyWhatIf(live, { ...defaultWhatIf(), producerCostScale: 2, costGrowth: 1.5 });
+    for (const level of [1, 5]) expect(w.lumberjack[level - 1].cost.stone, `lumberjack ${level}`).toBe(0);
+    expect(w.lumberjack[5].cost.stone).toBe(niceRound(49 * 2 * 1.5 ** 5));
+    expect(w.claybrickworks[0].cost.stone).toBe(0);
+    expect(w.claybrickworks[1].cost.stone).toBeGreaterThan(0);
   });
 
   it('level-1 multipliers scale whole curves and only their own group', () => {
     const w = applyWhatIf(live, { ...defaultWhatIf(), producerCostScale: 2, longhouseCostScale: 0.5, timeScale: 3 });
-    expect(w.farm[3].cost.wood).toBeCloseTo(live.farm[3].cost.wood * 2, 3);
-    expect(w.longhouse[3].cost.wood).toBeCloseTo(live.longhouse[3].cost.wood * 0.5, 3);
+    expect(w.farm[3].cost.wood).toBe(niceRound(57 * 1.3 ** 3 * 2));
+    expect(w.longhouse[3].cost.wood).toBe(niceRound(120 * 1.34 ** 3 * 0.5));
     expect(Math.abs(w.farm[3].buildSeconds - live.farm[3].buildSeconds * 3)).toBeLessThanOrEqual(3);
     expect(w.farm[3].productionPerHour).toEqual(live.farm[3].productionPerHour);
+  });
+
+  it('the bench knobs, at the live values, still reproduce the live catalogue', () => {
+    const knobs = {
+      ...defaultWhatIf(),
+      levelOneOutput: Object.fromEntries(
+        ['lumberjack', 'claybrickworks', 'reindeerherder', 'farm', 'pumpkinfarm', 'fishinghut', 'bogoreworks'].map((t) => {
+          const p = live[t][0].productionPerHour;
+          return [t, p.wood + p.stone + p.food + p.iron];
+        }),
+      ),
+    };
+    const w = applyWhatIf(live, knobs);
+    for (const [type, defs] of Object.entries(live)) {
+      for (const d of defs) {
+        const n = w[type].find((x) => x.level === d.level)!;
+        expect(lineNear(n.cost, d.cost), `${type} ${d.level} cost`).toBe(true);
+        expect(lineNear(n.productionPerHour, d.productionPerHour), `${type} ${d.level} production`).toBe(true);
+        expect(lineNear(n.storageCapacity, d.storageCapacity), `${type} ${d.level} storage`).toBe(true);
+      }
+    }
+  });
+
+  it('level-1 output replaces the live row and the growth still applies from it', () => {
+    const w = applyWhatIf(live, { ...defaultWhatIf(), levelOneOutput: { farm: 20 }, productionGrowth: 1.5 });
+    expect(w.farm[0].productionPerHour.food).toBeCloseTo(20, 6);
+    expect(w.farm[2].productionPerHour.food).toBeCloseTo(20 * (1 + 1.5 + 1.5 ** 2), 6);
+    expect(w.lumberjack[0].productionPerHour.wood).toBeCloseTo(live.lumberjack[0].productionPerHour.wood, 6);
+  });
+
+  it('the early price factors replace the 60/75/90% of levels 1-3 and leave level 4 alone', () => {
+    const w = applyWhatIf(live, { ...defaultWhatIf(), producerEarlyDiscount: [1, 1, 0.5] });
+    expect(w.farm[0].cost.wood).toBe(niceRound(57));
+    expect(w.farm[2].cost.wood).toBe(niceRound(57 * 1.3 ** 2 * 0.5));
+    expect(w.farm[3].cost).toEqual(live.farm[3].cost);
+    expect(w.longhouse[2].cost).toEqual(live.longhouse[2].cost);
+  });
+
+  it('the Longhouse break level moves where the late growth starts', () => {
+    const w = applyWhatIf(live, { ...defaultWhatIf(), longhouseBreakLevel: 5 });
+    expect(w.longhouse[4].cost.food).toBe(live.longhouse[4].cost.food);
+    expect(w.longhouse[5].cost.stone).toBe(niceRound(100 * 1.34 ** 4 * 1.6));
+    expect(w.longhouse[5].cost.stone).toBeGreaterThan(live.longhouse[5].cost.stone);
+  });
+
+  it('storage knobs set capacity and cost of the two storage types and are independent of the standard cost growth', () => {
+    const w = applyWhatIf(live, {
+      ...defaultWhatIf(),
+      costGrowth: 2,
+      storageHouseCapacity: 100,
+      storageHouseCapacityGrowth: 1.5,
+      storageHouseCostGrowth: 1.1,
+      greatStorehouseCapacity: 1000,
+      greatStorehouseCapacityGrowth: 2,
+      greatStorehouseCostGrowth: 1.5,
+    });
+    expect(w.storagehouse[2].storageCapacity.iron).toBeCloseTo(100 * (1 + 1.5 + 1.5 ** 2), 6);
+    expect(w.storagehouse[2].cost.wood).toBe(niceRound(90 * 1.1 ** 2));
+    expect(w.greatstorehouse[1].storageCapacity.wood).toBeCloseTo(3000, 6);
+    expect(w.greatstorehouse[1].cost.wood).toBe(niceRound(4500 * 1.5));
+    expect(w.greatstorehouse[0].prerequisites).toEqual(live.greatstorehouse[0].prerequisites);
   });
 });
