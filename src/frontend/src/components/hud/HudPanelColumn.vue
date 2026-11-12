@@ -1,11 +1,13 @@
 <script setup lang="ts">
 // Desktop settlement view: the vertical icon column at the map's bottom left. Top to bottom: the building info switch, then
-// one icon per dockable panel (Construction, Garrison, Armies, Quests) that has something to show right now. A panel icon
-// collapses its panel to just the icon and opens it again (pressed = open); the panels themselves are HudPanelDock's.
+// one icon per dockable panel (Construction, Garrison, Armies, Quests) that has something to show right now (Construction is
+// the exception: its icon is always there, dimmed and disabled while nothing is being built). A panel icon
+// collapses its panel to just the icon and opens it again (pressed = open), and a collapsed icon carries a count badge for
+// what waits in its panel; the panels themselves are HudPanelDock's.
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
-import { useHudPanelContent } from '../../composables/useHudPanelContent';
+import { useHudPanelContent, useHudPanelCounts } from '../../composables/useHudPanelContent';
 import { useHudPanelShown } from '../../composables/useHudPanelShown';
 import { useHudRail } from '../../composables/useHudRail';
 import { animate, motionEnabled } from '../../lib/motion';
@@ -19,12 +21,18 @@ import HudIconButton from './HudIconButton.vue';
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const prefs = useHudPrefsStore();
 const content = useHudPanelContent();
+const counts = useHudPanelCounts();
 const { shown, heldOpen } = useHudPanelShown();
 const { hasNew } = useQuests();
 
 const label = (id: HudPanelId) => t(HUD_PANEL_LABEL_KEYS[id] as 'hud.buildQueue.title');
 
-const icons = computed(() => HUD_PANEL_IDS.filter((id) => content[id].value));
+// Construction is always in the column; the others only while their panel has something to show.
+const icons = computed(() => HUD_PANEL_IDS.filter((id) => id === 'construction' || content[id].value));
+const isEmpty = (id: HudPanelId) => id === 'construction' && !content.construction.value;
+// The badge: only on a collapsed icon (panel closed, not held open) and only for a count above zero.
+const badge = (id: HudPanelId) => (!prefs.panels[id].open && !shown[id].value && counts[id].value > 0 ? counts[id].value : 0);
+const ariaLabel = (id: HudPanelId) => (badge(id) ? t('hud.panelColumn.withCount', { panel: label(id), count: badge(id) }) : label(id));
 
 // The x comes from the dock (it moves right of the left panel columns that reach down to it); the rail reports its height back.
 const { railHeight, railLeft } = useHudRail();
@@ -62,9 +70,10 @@ onUnmounted(() => observer?.disconnect());
       class="hud-panel-column__button"
       :data-testid="`hud-panel-toggle-${id}`"
       :pressed="shown[id].value"
-      :disabled="heldOpen[id].value"
-      :aria-label="label(id)"
-      :title="t('hud.panelColumn.toggle', { panel: label(id) })"
+      :class="{ 'hud-panel-column__button--empty': isEmpty(id) }"
+      :disabled="heldOpen[id].value || isEmpty(id)"
+      :aria-label="ariaLabel(id)"
+      :title="isEmpty(id) ? t('hud.panelColumn.constructionEmpty') : t('hud.panelColumn.toggle', { panel: label(id) })"
       @click="prefs.togglePanel(id)"
     >
       <!-- Construction: a hammer. -->
@@ -84,8 +93,9 @@ onUnmounted(() => observer?.disconnect());
         <path d="M15.5 15.5 18.5 18.5M8.5 15.5 5.5 18.5" />
       </svg>
       <QuestIcon v-else />
-      <!-- A collapsed tray cannot show its "new" dot itself. -->
-      <span v-if="id === 'quests' && hasNew && !prefs.panels.quests.open" class="hud-panel-column__dot" data-testid="quest-ready-dot" aria-hidden="true" />
+      <span v-if="badge(id)" class="hud-panel-column__badge" :data-testid="`hud-panel-badge-${id}`" aria-hidden="true">{{ badge(id) }}</span>
+      <!-- A collapsed tray cannot show its "new" dot itself; the quest count badge wins over it. -->
+      <span v-else-if="id === 'quests' && hasNew && !prefs.panels.quests.open" class="hud-panel-column__dot" data-testid="quest-ready-dot" aria-hidden="true" />
     </HudIconButton>
   </div>
 </template>
@@ -103,6 +113,27 @@ onUnmounted(() => observer?.disconnect());
 }
 .hud-panel-column__button {
   position: relative;
+}
+.hud-panel-column__button--empty {
+  opacity: 0.4;
+}
+.hud-panel-column__badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: var(--gold, #ffc55c);
+  color: #1a1408;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 2px var(--panel-bg);
 }
 .hud-panel-column__dot {
   position: absolute;
