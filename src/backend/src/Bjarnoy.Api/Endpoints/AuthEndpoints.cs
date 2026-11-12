@@ -54,6 +54,7 @@ public static class AuthEndpoints
         RegisterRequest request,
         AuthService authService,
         JwtTokenService tokens,
+        TimeProvider time,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -72,13 +73,14 @@ public static class AuthEndpoints
             return Results.Conflict(problem);
         }
 
-        return Results.Ok(ToAuthResponse(result.User!, result.RefreshToken!, tokens));
+        return Results.Ok(ToAuthResponse(result.User!, result.RefreshToken!, tokens, time));
     }
 
     private static async Task<IResult> Login(
         LoginRequest request,
         AuthService authService,
         JwtTokenService tokens,
+        TimeProvider time,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -89,7 +91,7 @@ public static class AuthEndpoints
         {
             AuthOutcome.InvalidCredentials => InvalidCredentials(),
             AuthOutcome.Banned => Banned(),
-            _ => Results.Ok(ToAuthResponse(result.User!, result.RefreshToken!, tokens)),
+            _ => Results.Ok(ToAuthResponse(result.User!, result.RefreshToken!, tokens, time)),
         };
     }
 
@@ -97,6 +99,7 @@ public static class AuthEndpoints
         RefreshRequest request,
         AuthService authService,
         JwtTokenService tokens,
+        TimeProvider time,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -107,7 +110,7 @@ public static class AuthEndpoints
         {
             RefreshOutcome.Invalid => InvalidRefreshToken(),
             RefreshOutcome.Banned => Banned(),
-            _ => Results.Ok(ToAuthResponse(result.User!, result.RefreshToken!, tokens)),
+            _ => Results.Ok(ToAuthResponse(result.User!, result.RefreshToken!, tokens, time)),
         };
     }
 
@@ -125,6 +128,7 @@ public static class AuthEndpoints
     private static async Task<IResult> Me(
         ClaimsPrincipal principal,
         AuthService authService,
+        TimeProvider time,
         CancellationToken cancellationToken)
     {
         var idClaim = principal.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -137,7 +141,7 @@ public static class AuthEndpoints
         // change (locked/banned) shows up here immediately rather than only
         // once the access token expires.
         var user = await authService.GetByIdAsync(id, cancellationToken);
-        return user is null ? Unauthenticated() : Results.Ok(UserResponse.From(user));
+        return user is null ? Unauthenticated() : Results.Ok(UserResponse.From(user, time));
     }
 
     private static IResult Banned() =>
@@ -153,6 +157,6 @@ public static class AuthEndpoints
         Results.Json(new AuthErrorResponse("authentication_required"), statusCode: StatusCodes.Status401Unauthorized);
 
     private static AuthResponse ToAuthResponse(
-        Bjarnoy.Infrastructure.Entities.UserEntity user, string refreshToken, JwtTokenService tokens) =>
-        new(tokens.CreateAccessToken(user), refreshToken, UserResponse.From(user));
+        Bjarnoy.Infrastructure.Entities.UserEntity user, string refreshToken, JwtTokenService tokens, TimeProvider time) =>
+        new(tokens.CreateAccessToken(user), refreshToken, UserResponse.From(user, time));
 }

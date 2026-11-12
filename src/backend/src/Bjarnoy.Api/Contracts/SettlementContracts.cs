@@ -358,7 +358,7 @@ public sealed record SettlementResponse(
         var members = shown.Select(m => (Entity: session.EntityOf(m), Domain: store.Outcome(m).Settlement)).ToList();
 
         var speedFactor = session.SpeedFactor;
-        var maxWaitingOrders = session.Anchor.Owner?.IsPremium ?? false ? Settlement.MaxWaitingOrders : 0;
+        var maxWaitingOrders = session.Anchor.Owner?.IsPremiumAt(TimeProvider.System.GetUtcNow()) ?? false ? Settlement.MaxWaitingOrders : 0;
 
         // Only a fishing hut needs its own orientation (see PlacedBuildingResponse), read off its own member's shore.
         string? OrientationFor(SettlementEntity member, BuildingType type, HexCoord coord) =>
