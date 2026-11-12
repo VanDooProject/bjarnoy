@@ -456,6 +456,11 @@ under the river (grass, forest or sand).
 **Movement** (land armies; fleets are unaffected). Only standing bridges count (level 1
 or more): a foundation leaves the river shut. The bridge's price replaces the
 impassable wide river in `HexPathfinder.LandStepCost`; streams keep their own price.
+A build or raze order is applied when its owner's settlement is next settled, but the river opens
+or shuts for every army from the instant the order **completes**: a finished build order counts at
+the level it reaches (the price table below is by level), a finished raze at the level it leaves
+(0: no bridge). `WorldBridges.TimelineAsync` reads that, and route planning asks it for the
+instant it plans at, like the walls (`WorldPalisades.TimelineAsync`).
 
 | Level | Land army |
 |---|---|
