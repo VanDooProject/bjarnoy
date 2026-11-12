@@ -1885,6 +1885,14 @@ describe('bog buildings and lake decorations', () => {
     expect(textureKeyFor(tower({ terrain: 'bog', bog: bog('bog', [], null) }))).toBe('towerbog');
   });
 
+  it('draws a Longhouse on sand with its own beach art and keeps the grass one on grass', () => {
+    expect(KEY_FAMILY.longhousesand).toBe('greathall_sand');
+    const hall = (terrain: 'sand' | 'grass'): Tile => ({ q: 0, r: 0, terrain, buildingType: 'longhouse', buildingLevel: 1 });
+
+    expect(textureKeyFor(hall('sand'))).toBe('longhousesand');
+    expect(textureKeyFor(hall('grass'))).toBe('longhouse');
+  });
+
   it('draws a Fishing Hut on a half shore with the lake art, and one on the coast with the coastal art', () => {
     const half: Tile = { q: 0, r: 0, terrain: 'bog', orientation: 'NW', buildingType: 'fishinghut', buildingLevel: 2, bog: bog('half', [], null, ['SE', 'E', 'NE']) };
     expect(textureKeyFor(half)).toBe('fisherhutlake');
@@ -2109,17 +2117,13 @@ describe('palisade art', () => {
     expect(topTextureFor(textures, tile, art)).toBe('wall-1');
   });
 
-  it('a Longhouse on sand draws the plain sand base under the grass version\'s building top; on grass it keeps its own base', () => {
+  it('a Longhouse on sand takes its base from its own art, not the plain sand ground', () => {
     const textures = emptyTextures();
     textures.base.sand = Object.fromEntries(ORIENTATIONS.map((o) => [o, `sand-base-${o}`])) as never;
-    textures.base.grass = Object.fromEntries(ORIENTATIONS.map((o) => [o, `grass-base-${o}`])) as never;
-    textures.baseIndexed.longhouse = orientationMap(['hall-base-0', 'hall-base-1'] as unknown as never);
-    textures.top.longhouse = orientationMap(['hall-top-0', 'hall-top-1'] as unknown as never);
-    const tile = (terrain: 'sand' | 'grass'): Tile => ({ q: 0, r: 0, terrain, orientation: 'NE', buildingType: 'longhouse', buildingLevel: 1 });
+    textures.baseIndexed.longhousesand = orientationMap(['beach-base-0', 'beach-base-1'] as unknown as never);
+    const tile: Tile = { q: 0, r: 0, terrain: 'sand', orientation: 'NE', buildingType: 'longhouse', buildingLevel: 1 };
 
-    expect(baseTextureFor(textures, tile('sand'))).toBe('sand-base-NE');
-    expect(topTextureFor(textures, tile('sand'))).toBe('hall-top-1');
-    expect(baseTextureFor(textures, tile('grass'))).toBe('hall-base-1');
+    expect(baseTextureFor(textures, tile)).toBe('beach-base-1');
   });
 
   it('keeps the sea end on its own coastal base', () => {

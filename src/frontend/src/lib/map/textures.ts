@@ -146,6 +146,7 @@ export type TextureKey =
   | 'hammerschmiedebend'
   // The stave tower on sand, on a forest hex and on plain bog moss: texture-lookup keys, the wire type is `tower`.
   | 'towersand'
+  | 'longhousesand'
   | 'towerforest'
   | 'towerbog'
   // The palisade's six pieces (`palisadeArtFor`): which one a wall hex draws is decided by its wall neighbours, so these are
@@ -222,6 +223,7 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   // hextile148), sand (hextile151), forest (hextile150) and plain bog moss (hextile149).
   tower: 'stavetower',
   towersand: 'stavetower_sand',
+  longhousesand: 'greathall_sand',
   towerforest: 'stavetower_forest',
   towerbog: 'stavetower_bog',
   dockyard: 'dockyard',
@@ -1776,9 +1778,11 @@ export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
     return bogTextureKey(tile.bog) === 'bogcreek' ? 'hammerschmiede' : 'hammerschmiedebend';
   }
   // A tower replaces the tile it stands on, so its art depends on the ground: sand, forest and plain bog moss have their own, grass is `tower`.
+  // A Longhouse on sand has its own art too (the same hall, the beach kept round it); on grass it is `longhouse`.
   if (tile.buildingType === 'tower' && tile.bog?.kind === 'bog') return 'towerbog';
   if (tile.buildingType === 'tower' && tile.terrain === 'forest') return 'towerforest';
   if (tile.buildingType === 'tower' && tile.terrain === 'sand') return 'towersand';
+  if (tile.buildingType === 'longhouse' && tile.terrain === 'sand') return 'longhousesand';
   if (tile.buildingType) return tile.buildingType;
   if (tile.wasted) return WASTED_TEXTURE_KEY[tile.terrain] ?? tile.terrain;
   if (tile.bog) return bogTextureKey(tile.bog);
@@ -1988,8 +1992,7 @@ function coastalBaseAndTop(classified: ClassifiedFamily<Texture>): { base: Orien
 export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): Texture {
   // A land wall hex keeps its own ground: the terrain's base (grass, forest floor without the trees, sand, bog moss) as that hex would be drawn
   // plain, in the hex's own rotation so it blends with its neighbours; only the wall's top is drawn over it.
-  // A Longhouse on a beach does the same: the grass version's building top over the plain sand base, not the grass base it ships with.
-  if ((riverArt && LAND_WALL_KEYS.has(riverArt.key)) || (!riverArt && tile.buildingType === 'longhouse' && tile.terrain === 'sand')) {
+  if (riverArt && LAND_WALL_KEYS.has(riverArt.key)) {
     const ground: Tile = { ...tile, buildingType: undefined, buildingLevel: undefined, variant: 0 };
     // The plain base, never a bog look's own props: slot 0 directly, since bare moss never draws that (retired) look.
     const bogBase = tile.bog?.kind === 'bog' ? textures.baseIndexed.bog?.[tileOrientationFor(ground)]?.[0] : undefined;
