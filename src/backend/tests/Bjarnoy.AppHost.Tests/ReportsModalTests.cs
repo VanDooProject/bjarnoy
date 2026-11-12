@@ -8,6 +8,7 @@ using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.AppHost.Tests;
 
@@ -156,8 +157,7 @@ public class ReportsModalTests(AppHostFixture fixture)
             cancellationToken);
         reseedResponse.EnsureSuccessStatusCode();
 
-        var islands = await apiClient.GetFromJsonAsync<IslandResponse[]>(
-            $"/api/v1/worlds/{world.Id}/islands", cancellationToken);
+        var islands = await apiClient.GetFullIslandsAsync(world.Id, cancellationToken);
         var targetIsland = Assert.Single(islands!, i => i.Index == islandIndex);
 
         // --- Found both settlements anonymously (see class remarks) ---

@@ -9,6 +9,7 @@ using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -46,8 +47,7 @@ public sealed class BogBuildingEndpointsTests : IAsyncLifetime
     {
         var client = _factory.CreateClient();
         var world = await _factory.CreateWorldAsync(Unique("w"), seed: 21, radius: 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -107,7 +107,7 @@ public sealed class BogBuildingEndpointsTests : IAsyncLifetime
             await db.SaveChangesAsync(Ct);
         }
 
-        WorldTerrain.Invalidate(world.Id);
+        WorldIslandCaches.Invalidate(world.Id);
         return (client, settlement, hexes);
     }
 

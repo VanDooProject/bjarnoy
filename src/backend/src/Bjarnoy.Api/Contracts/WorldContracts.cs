@@ -244,6 +244,12 @@ public sealed record WorldMovementResponse(
         HexPathfinder.RiverCrossingCost);
 }
 
+/// <summary>
+/// One island as <c>GET /worlds/{id}/islands</c> lists it: the labels and everything that changes while the world runs (camps, walls,
+/// towers). The island's terrain data — river and bog tiles (<see cref="IslandTerrainResponse"/>, served in chunks) and its start
+/// positions (<see cref="IslandStartPositionsResponse"/>) — is big and only changes when the world is reseeded, so it has its own
+/// cached endpoints.
+/// </summary>
 public sealed record IslandResponse(
     Guid Id,
     int Index,
@@ -251,18 +257,15 @@ public sealed record IslandResponse(
     int Q,
     int R,
     int TileCount,
-    IReadOnlyList<TileCoordinate> StartPositions,
-    IReadOnlyList<RiverTileResponse> RiverTiles,
     IReadOnlyList<GiantResponse> Giants,
     bool Wasted,
     IReadOnlyList<CampResponse> Camps,
-    IReadOnlyList<BogTileResponse> BogTiles,
     IReadOnlyList<UtgardWallResponse> UtgardWalls,
     IReadOnlyList<JotunTowerResponse> JotunTowers)
 {
-    /// <param name="island">The stored island.</param>
+    /// <param name="island">The island summary (no terrain columns).</param>
     /// <param name="includeCamps">Whether the island's camps ship; false answers an empty list (the island is not one the caller has seen).</param>
-    public static IslandResponse From(IslandEntity island, bool includeCamps = true)
+    public static IslandResponse From(IslandSummary island, bool includeCamps = true)
     {
         ArgumentNullException.ThrowIfNull(island);
 
@@ -273,16 +276,39 @@ public sealed record IslandResponse(
             island.CentreQ,
             island.CentreR,
             island.TileCount,
-            [.. island.StartPositions.Select(p => new TileCoordinate(p.Q, p.R))],
-            [.. island.RiverTiles.Select(RiverTileResponse.From)],
             [.. island.Giants.Select(GiantResponse.From)],
             island.IsWasted,
             [.. (includeCamps ? island.Camps : []).Select(CampResponse.From)],
-            [.. island.BogTiles.Select(BogTileResponse.From)],
             [.. island.UtgardWalls.Select(UtgardWallResponse.From)],
             [.. island.JotunTowers.Select(JotunTowerResponse.From)]);
     }
 }
+
+/// <summary>The river and bog tiles of one island — the same tile shapes the island list used to carry.</summary>
+public sealed record IslandTerrainResponse(
+    Guid Id,
+    IReadOnlyList<RiverTileResponse> RiverTiles,
+    IReadOnlyList<BogTileResponse> BogTiles)
+{
+    public static IslandTerrainResponse From(Guid id, IEnumerable<RiverTileRecord> riverTiles, IEnumerable<BogTileRecord> bogTiles) => new(
+        id,
+        [.. riverTiles.Select(RiverTileResponse.From)],
+        [.. bogTiles.Select(BogTileResponse.From)]);
+}
+
+/// <summary>One chunk of <c>GET /worlds/{id}/terrain-chunks/{chunk}</c>: the terrain of a fixed range of islands (by <see cref="IslandResponse.Index"/> order).</summary>
+public sealed record TerrainChunkResponse(int Chunk, IReadOnlyList<IslandTerrainResponse> Islands);
+
+/// <param name="Index">The chunk's number, as used in <c>/terrain-chunks/{chunk}</c>.</param>
+/// <param name="ETag">The chunk's strong entity tag; changes exactly when its content does.</param>
+public sealed record TerrainChunkInfo(int Index, string ETag);
+
+/// <summary>What <c>GET /worlds/{id}/terrain-chunks</c> answers: how many chunks the world's terrain is cut into.</summary>
+/// <param name="ChunkSize">Islands per chunk (the last one may hold fewer).</param>
+public sealed record TerrainChunkManifestResponse(int ChunkSize, int ChunkCount, IReadOnlyList<TerrainChunkInfo> Chunks);
+
+/// <summary>The founding plots of one island, best first (<see cref="IslandEntity.StartPositions"/>).</summary>
+public sealed record IslandStartPositionsResponse(Guid Id, IReadOnlyList<TileCoordinate> StartPositions);
 
 /// <summary>
 /// One hex of an Utgard wall ring — see <see cref="Bjarnoy.Domain.World.UtgardWall"/> and <c>docs/design/endgame.md</c>.

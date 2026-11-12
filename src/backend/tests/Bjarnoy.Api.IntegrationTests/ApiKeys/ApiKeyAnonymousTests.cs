@@ -4,6 +4,7 @@ using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests.ApiKeys;
 
@@ -146,8 +147,7 @@ public sealed class ApiKeyAnonymousTests : ApiKeyTestBase
         ActAs(client, "jarl:Jarl-aae5");
 
         using var plain = Factory.CreateClient();
-        var islands = await plain.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await plain.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
         var response = await client.PostJsonAsync(

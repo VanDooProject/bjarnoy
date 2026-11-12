@@ -34,6 +34,7 @@ const releasePlotSuggestion = vi.fn();
 const buildDemoFogMask = vi.fn();
 const getWorld = vi.fn();
 const getIslands = vi.fn();
+const getTerrainChunks = vi.fn();
 const listWorlds = vi.fn();
 const getWorldMembership = vi.fn();
 const dispatchArmy = vi.fn();
@@ -98,6 +99,7 @@ async function loadStoreModule(demoMode: boolean) {
       releasePlotSuggestion: (...args: unknown[]) => releasePlotSuggestion(...args),
       getWorld: (...args: unknown[]) => getWorld(...args),
       getIslands: (...args: unknown[]) => getIslands(...args),
+      getTerrainChunks: (...args: unknown[]) => getTerrainChunks(...args),
       listWorlds: (...args: unknown[]) => listWorlds(...args),
       getWorldMembership: (...args: unknown[]) => getWorldMembership(...args),
       dispatchArmy: (...args: unknown[]) => dispatchArmy(...args),
@@ -116,6 +118,8 @@ async function loadStoreModule(demoMode: boolean) {
       err instanceof MockApiError && err.problem?.error === 'world_not_found',
     isSettlementNotFound: (err: unknown) =>
       err instanceof MockApiError && err.problem?.error === 'settlement_not_found',
+    isTerrainChunkNotFound: (err: unknown) =>
+      err instanceof MockApiError && err.problem?.error === 'terrain_chunk_not_found',
     // `stores/auth.ts` wires its refresh/lock hooks onto this at module load
     // (`authHooks.getAccessToken = ...`) — world.ts now imports that store
     // for the field-order premium check below, so the mock needs a plain
@@ -606,11 +610,8 @@ describe('useWorldStore founding a settlement (live mode)', () => {
         q: 0,
         r: 0,
         tileCount: 10,
-        startPositions: [NEAR_ISLAND.at],
-        riverTiles: [],
         giants: [],
         camps: [],
-        bogTiles: [],
         wasted: false,
       },
       {
@@ -620,11 +621,8 @@ describe('useWorldStore founding a settlement (live mode)', () => {
         q: 5,
         r: 5,
         tileCount: 10,
-        startPositions: [FAR_ISLAND.at],
-        riverTiles: [],
         giants: [],
         camps: [],
-        bogTiles: [],
         wasted: false,
       },
     ];
@@ -773,11 +771,8 @@ describe('useWorldStore founding a settlement (L6b: persist before reconciling)'
         q: 0,
         r: 0,
         tileCount: 10,
-        startPositions: [ISLAND.at],
-        riverTiles: [],
         giants: [],
         camps: [],
-        bogTiles: [],
         wasted: false,
       },
     ];
@@ -1354,6 +1349,111 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     expect(store.worldJoinableReason).toBe('NoWorldYet');
   });
 
+  it('falls back to NoWorldYet when the world disappears before its terrain chunks load', async () => {
+    const store = await loadStoreModule(false);
+    const { ApiError: MockedApiError } = await import('../api/client');
+
+    listWorlds.mockReset().mockResolvedValue([
+      {
+        id: 'world-1',
+        name: 'Kettil Sea',
+        status: 'Running',
+        joinable: true,
+        joinableReason: 'None',
+        playerCount: 0,
+        maxPlayers: 100,
+        freeSlots: 100,
+        startsAt: null,
+      },
+    ]);
+    getWorld.mockReset().mockResolvedValue({
+      id: 'world-1',
+      name: 'Kettil Sea',
+      seed: 1,
+      radius: 30,
+      maxPlayers: 100,
+      status: 'Running',
+      islandCount: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      joinable: true,
+      joinableReason: 'None',
+      startsAt: null,
+      endbossTriggered: false,
+      frozenIslesEnabled: false,
+      speedFactor: 1,
+      generation: generationResponse(),
+      movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+    });
+    getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockRejectedValue(new MockedApiError(404, { error: 'world_not_found' }));
+
+    await expect(store.bootstrapLiveWorld()).resolves.toBeUndefined();
+
+    expect(store.worldId).toBeNull();
+    expect(store.liveReady).toBe(false);
+    expect(store.worldJoinableReason).toBe('NoWorldYet');
+  });
+
+  it('hands the river and bog tiles of the terrain chunks to the model once, matched to their island by id', async () => {
+    const store = await loadStoreModule(false);
+
+    listWorlds.mockReset().mockResolvedValue([
+      {
+        id: 'world-1',
+        name: 'Kettil Sea',
+        status: 'Running',
+        joinable: true,
+        joinableReason: 'None',
+        playerCount: 0,
+        maxPlayers: 100,
+        freeSlots: 100,
+        startsAt: null,
+      },
+    ]);
+    getWorld.mockReset().mockResolvedValue({
+      id: 'world-1',
+      name: 'Kettil Sea',
+      seed: 1,
+      radius: 30,
+      maxPlayers: 100,
+      status: 'Running',
+      islandCount: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      joinable: true,
+      joinableReason: 'None',
+      startsAt: null,
+      endbossTriggered: false,
+      frozenIslesEnabled: false,
+      speedFactor: 1,
+      generation: generationResponse(),
+      movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+    });
+    getIslands.mockReset().mockResolvedValue([
+      { id: 'island-a', index: 0, name: 'A', q: 0, r: 0, tileCount: 5, giants: [], camps: [], wasted: false },
+      { id: 'island-w', index: 1, name: 'W', q: 9, r: 9, tileCount: 5, giants: [], camps: [], wasted: true },
+    ]);
+    getTerrainChunks.mockReset().mockResolvedValue([
+      {
+        id: 'island-w',
+        riverTiles: [{ q: 9, r: 9, shape: 'straight', inDirections: ['N'], outDirection: 'S', width: 'stream' }],
+        bogTiles: [],
+      },
+      {
+        id: 'island-a',
+        riverTiles: [{ q: 1, r: 2, shape: 'bend', inDirections: ['N'], outDirection: 'SE' }],
+        bogTiles: [{ q: 3, r: 4, kind: 'bog', inDirections: [], outDirection: null, waterEdges: [] }],
+      },
+    ]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(getTerrainChunks).toHaveBeenCalledWith('world-1');
+    const model = store.model!;
+    expect(model.getRiverTile(1, 2)).toMatchObject({ shape: 'bend', width: 'river', wasted: false });
+    expect(model.getRiverTile(9, 9)).toMatchObject({ shape: 'straight', width: 'stream', wasted: true });
+    expect(model.getBogTile(3, 4)).toMatchObject({ kind: 'bog' });
+  });
+
   it('still throws on an ordinary (non-world_not_found) getIslands failure', async () => {
     const store = await loadStoreModule(false);
 
@@ -1393,6 +1493,75 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     await expect(store.bootstrapLiveWorld()).rejects.toThrow('network error');
   });
 
+  describe('a world reseeded between the chunk manifest and a chunk', () => {
+    const arrangeWorld = () => {
+      listWorlds.mockReset().mockResolvedValue([
+        {
+          id: 'world-1',
+          name: 'Kettil Sea',
+          status: 'Running',
+          joinable: true,
+          joinableReason: 'None',
+          playerCount: 0,
+          maxPlayers: 100,
+          freeSlots: 100,
+          startsAt: null,
+        },
+      ]);
+      getWorld.mockReset().mockResolvedValue({
+        id: 'world-1',
+        name: 'Kettil Sea',
+        seed: 1,
+        radius: 30,
+        maxPlayers: 100,
+        status: 'Running',
+        islandCount: 1,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        joinable: true,
+        joinableReason: 'None',
+        startsAt: null,
+        endbossTriggered: false,
+        frozenIslesEnabled: false,
+        speedFactor: 1,
+        generation: generationResponse(),
+        movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+      });
+    };
+
+    it('reads the islands and the terrain again once, and uses the second answer', async () => {
+      const store = await loadStoreModule(false);
+      const { ApiError: MockedApiError } = await import('../api/client');
+      arrangeWorld();
+      getIslands
+        .mockReset()
+        .mockResolvedValueOnce([{ id: 'old', index: 0, name: 'Old', q: 0, r: 0, tileCount: 5, giants: [], camps: [], wasted: false }])
+        .mockResolvedValueOnce([{ id: 'new', index: 0, name: 'New', q: 1, r: 1, tileCount: 5, giants: [], camps: [], wasted: false }]);
+      getTerrainChunks
+        .mockReset()
+        .mockRejectedValueOnce(new MockedApiError(404, { error: 'terrain_chunk_not_found' }))
+        .mockResolvedValueOnce([{ id: 'new', riverTiles: [], bogTiles: [{ q: 3, r: 4, kind: 'bog', inDirections: [], outDirection: null, waterEdges: [] }] }]);
+
+      await store.bootstrapLiveWorld();
+
+      expect(getIslands).toHaveBeenCalledTimes(2);
+      expect(getTerrainChunks).toHaveBeenCalledTimes(2);
+      expect(store.islands.map((i) => i.id)).toEqual(['new']);
+      expect(store.model!.getBogTile(3, 4)).toMatchObject({ kind: 'bog' });
+    });
+
+    it('throws when the second read misses a chunk too', async () => {
+      const store = await loadStoreModule(false);
+      const { ApiError: MockedApiError } = await import('../api/client');
+      arrangeWorld();
+      getIslands.mockReset().mockResolvedValue([]);
+      getTerrainChunks.mockReset().mockRejectedValue(new MockedApiError(404, { error: 'terrain_chunk_not_found' }));
+
+      await expect(store.bootstrapLiveWorld()).rejects.toMatchObject({ status: 404 });
+
+      expect(getTerrainChunks).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('propagates frozenIslesEnabled onto the world model', async () => {
     const store = await loadStoreModule(false);
 
@@ -1428,6 +1597,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     });
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
 
     await store.bootstrapLiveWorld();
 
@@ -1472,6 +1642,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     });
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
 
     await store.bootstrapLiveWorld();
 
@@ -1519,6 +1690,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     listWorlds.mockReset().mockResolvedValue([listedNewest]);
     getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
 
     await store.bootstrapLiveWorld();
 
@@ -1531,6 +1703,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     listWorlds.mockReset().mockResolvedValue([{ ...listedNewest, id: 'world-old', name: 'world-old' }, listedNewest]);
     getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
 
     await store.bootstrapLiveWorld();
 
@@ -1543,6 +1716,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     listWorlds.mockReset().mockResolvedValue([listedNewest]);
     getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
 
     await store.bootstrapLiveWorld();
 
@@ -1557,6 +1731,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     listWorlds.mockReset().mockResolvedValue([listedNewest]);
     getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
 
     await store.bootstrapLiveWorld();
 
@@ -1932,6 +2107,7 @@ describe('useWorldStore fetchFogMask', () => {
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     });
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
     listSettlements.mockReset().mockResolvedValue([]);
 
     store.worldId = 'world-1';
@@ -2082,6 +2258,7 @@ describe('useWorldStore joinWorld', () => {
   it('switches to a world with an existing realm and restores it immediately', async () => {
     getWorld.mockReset().mockResolvedValue(worldFixture('world-2'));
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
     listSettlements.mockReset().mockResolvedValue([]);
     getWorldMembership.mockReset().mockResolvedValue({
       worldId: 'world-2',
@@ -2126,6 +2303,7 @@ describe('useWorldStore joinWorld', () => {
   it('switches to a brand-new world with no realm, leaving no stale state from the previous world behind', async () => {
     getWorld.mockReset().mockResolvedValue(worldFixture('world-3'));
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
     listSettlements.mockReset().mockResolvedValue([]);
     getSettlement.mockReset();
     getWorldMembership.mockReset().mockResolvedValue({
@@ -2146,7 +2324,7 @@ describe('useWorldStore joinWorld', () => {
       reservedUntil: null,
     };
     store.islands = [
-      { id: 'old-island', index: 0, name: 'Old', q: 0, r: 0, tileCount: 1, startPositions: [], riverTiles: [], giants: [], camps: [], bogTiles: [], wasted: false },
+      { id: 'old-island', index: 0, name: 'Old', q: 0, r: 0, tileCount: 1, giants: [], camps: [], wasted: false },
     ];
     store.armies = [{ id: 'old-army' } as never];
     store.liveReady = true;
