@@ -149,6 +149,17 @@ public static class ArmyEndpoints
             .WithSummary("Lists wildlife camp reports of a settlement, newest first.")
             .RequireSettlementOwner();
 
+        reports.MapGet("/army-reports/{reportId:guid}", GetArmyReport)
+            .WithName("GetArmyReport")
+            .WithSummary("Fetches one army report (army stuck, army starved) by id.")
+            // Only the player the report belongs to.
+            .RequireArmyReportOwner();
+
+        reports.MapGet("/worlds/{worldId:guid}/army-reports", ListArmyReportsForPlayer)
+            .WithName("ListWorldArmyReports")
+            .WithSummary("Lists the caller's own army reports in a world, newest first.")
+            .RequireCallerRealm();
+
         return app;
     }
 
@@ -219,7 +230,7 @@ public static class ArmyEndpoints
             return TypedResults.BadRequest(new ProblemDetails
             {
                 Title = "Unknown mission.",
-                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid, found, hunt.",
+                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid, found, hunt, setupcamp.",
                 Status = StatusCodes.Status400BadRequest,
             });
         }
@@ -664,6 +675,35 @@ public static class ArmyEndpoints
         return TypedResults.Ok(response);
     }
 
+    private static async Task<Results<Ok<ArmyReportResponse>, NotFound>> GetArmyReport(
+        Guid reportId,
+        ArmyReportService reports,
+        CancellationToken cancellationToken)
+    {
+        var report = await reports.GetAsync(reportId, cancellationToken);
+        return report is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(ArmyReportResponse.From(report));
+    }
+
+    private static async Task<Ok<IReadOnlyList<ArmyReportResponse>>> ListArmyReportsForPlayer(
+        Guid worldId,
+        HttpContext httpContext,
+        ArmyReportService reports,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<ArmyReportResponse>>([]);
+        }
+
+        var entities = await reports.GetForPlayerAsync(worldId, realm.OwnerId!, cancellationToken);
+        IReadOnlyList<ArmyReportResponse> response = [.. entities.Select(ArmyReportResponse.From)];
+        return TypedResults.Ok(response);
+    }
+
     /// <summary>Internal, not private: reused by <see cref="SimulatorEndpoints"/> to parse the simulator's own attack/raid mission field.</summary>
     internal static bool TryParseMission(string? value, out ArmyMission mission)
     {
@@ -700,6 +740,12 @@ public static class ArmyEndpoints
         if (string.Equals(value, "hunt", StringComparison.OrdinalIgnoreCase))
         {
             mission = ArmyMission.Hunt;
+            return true;
+        }
+
+        if (string.Equals(value, "setupcamp", StringComparison.OrdinalIgnoreCase))
+        {
+            mission = ArmyMission.SetUpCamp;
             return true;
         }
 
@@ -770,6 +816,11 @@ public static class ArmyEndpoints
                 DispatchRejection.NoCampAtDestination => "No wildlife camp stands on the destination hex.",
                 DispatchRejection.HuntRequiresLandUnits => "A fleet needs land troops aboard to hunt a camp on land.",
                 DispatchRejection.HuntRequiresFleet => "Only ships can hunt a camp at sea (the whale road); land units cannot reach it.",
+                DispatchRejection.WrongCampBuilderCount =>
+                    $"A beach camp mission requires exactly {BeachCamp.RequiredBuilders} camp builders, no more, no fewer.",
+                DispatchRejection.CampSiteNotSandShore => "A beach camp can only be set up on a sand hex on the shore.",
+                DispatchRejection.CampSiteNotFree =>
+                    "That hex is taken: a building, a settlement, a wildlife camp or a giant stands on it.",
                 _ => "Refused.",
             },
             Status = StatusCodes.Status409Conflict,

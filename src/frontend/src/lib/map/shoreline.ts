@@ -63,10 +63,27 @@ export function claimRadiusForLevel(longhouseLevel: number): number {
 /**
  * Mirrors `Settlement.LonghouseDisc`: the settlement's Longhouse (centre) claim disc — as a list so callers spread it —
  * or no disc at all when its Longhouse is destroyed (level 0): such a settlement has no claim, not even its centre hex.
- * The one place the client decides this (`claimDiscs` and `resolveRealm` both read it).
+ * The one place the client decides this (`centreClaimDiscs`, which `claimDiscs` and `resolveRealm` read, builds on it).
  */
 export function longhouseDiscs(center: AxialCoord, longhouseLevel: number): ClaimDisc[] {
   return longhouseLevel <= 0 ? [] : [{ q: center.q, r: center.r, radius: claimRadiusForLevel(longhouseLevel) }];
+}
+
+/**
+ * Mirrors `Settlement.CentreDisc`: the claim disc of a settlement's centre — for a beach camp (`isBeachCamp`) always its own hex
+ * only (radius 0, fixed), otherwise the Longhouse's (`longhouseDiscs`). The one place the client reads a centre claim
+ * (`claimDiscs`, `resolveRealm` and the model's border radius all go through it).
+ */
+export function centreClaimDiscs(center: AxialCoord, longhouseLevel: number, isBeachCamp: boolean): ClaimDisc[] {
+  return isBeachCamp ? [{ q: center.q, r: center.r, radius: 0 }] : longhouseDiscs(center, longhouseLevel);
+}
+
+/**
+ * Mirrors `FogVisionRadii.ToVisionSource`'s centre: the sight disc of a settlement's centre. A beach camp (`isBeachCamp`) sees
+ * like a level-1 Longhouse, fixed (it has no Longhouse level of its own); otherwise the Longhouse's own disc (`longhouseDiscs`).
+ */
+export function centreVisionDiscs(center: AxialCoord, longhouseLevel: number, isBeachCamp: boolean): ClaimDisc[] {
+  return longhouseDiscs(center, isBeachCamp ? 1 : longhouseLevel);
 }
 
 /**
@@ -101,9 +118,10 @@ export function claimDiscs(
   center: AxialCoord,
   longhouseLevel: number,
   towers: Array<{ q: number; r: number; level: number }>,
+  isBeachCamp = false,
 ): ClaimDisc[] {
   return [
-    ...longhouseDiscs(center, longhouseLevel),
+    ...centreClaimDiscs(center, longhouseLevel, isBeachCamp),
     ...towers.map((t) => ({ q: t.q, r: t.r, radius: towerClaimRadiusForLevel(t.level) })),
   ];
 }

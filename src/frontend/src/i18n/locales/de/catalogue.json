@@ -32,6 +32,7 @@
     "palisadegate": "Palisaden-Tor",
     "bridge": "Brücke",
     "siegeworkshop": "Belagerungswerkstatt",
+    "beachcamp": "Strandlager",
     "reindeerherder": "Rentierhirte"
   },
   "units": {
@@ -46,7 +47,8 @@
     "karve": "Karve",
     "longship": "Langschiff",
     "fireship": "Brandschiff",
-    "settler": "Siedler"
+    "settler": "Siedler",
+    "campbuilder": "Lagerbauer"
   },
   "giants": {
     "giantmountain": "Riesenberg",
@@ -97,6 +99,7 @@
     "support": "Unterstützung",
     "raid": "Überfall",
     "found": "Siedlung gründen",
+    "setupcamp": "Strandlager errichten",
     "hunt": "Jagd"
   },
   "runes": {

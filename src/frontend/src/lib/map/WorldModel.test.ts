@@ -11,7 +11,7 @@ import { giantCoverage } from './giantTiles';
 import { guardRange, placeCamps } from './campPlacement';
 import { BOG_REACH } from './bogGenerator';
 import { placeLakeProps } from './lakeProps';
-import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
+import { FOG_SCOUT_RING, floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
 import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } from './worldGenerator';
 import type { BogTile, RiverTile, Settlement } from './types';
 import { JOTNAR_OWNER_KEY } from './endgamePlacement';
@@ -416,6 +416,50 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     // a level-0 foundation stub grants nothing yet
     model.applyServerSnapshot(settlement.id, snapshot([{ q: settlement.q + 1, r: settlement.r, type: 'odinstatue', level: 0 }]));
     expect(model.ravensRingsFor(settlement.id)).toBe(0);
+  });
+
+  it('gives a beach camp (a beachcamp building, no Longhouse) the sight of a level-1 Longhouse, Ravens included', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    settlement.level = 0;
+    const snapshot = (buildings: { q: number; r: number; type: string; level: number }[]) => ({
+      level: 0,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.capacity!,
+      buildings,
+    });
+
+    // a Longhouse-less settlement without a camp sees nothing
+    model.applyServerSnapshot(settlement.id, snapshot([]));
+    expect(model.visionDiscsFor(settlement)).toEqual([]);
+    const signatureBefore = model.fogSignature();
+
+    model.applyServerSnapshot(settlement.id, snapshot([{ q: settlement.q, r: settlement.r, type: 'beachcamp', level: 1 }]));
+    expect(model.visionDiscsFor(settlement)).toEqual([{ q: settlement.q, r: settlement.r, radius: 2 }]);
+    expect(model.exploredRadius(settlement)).toBe(2 + FOG_SCOUT_RING);
+    expect(model.fogSignature()).not.toBe(signatureBefore);
+  });
+
+  it('gives a beach camp a claim of its own hex only (border radius 0), not the nothing of a destroyed Longhouse', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    settlement.level = 0;
+    const snapshot = (buildings: { q: number; r: number; type: string; level: number }[]) => ({
+      level: 0,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.capacity!,
+      buildings,
+    });
+
+    model.applyServerSnapshot(settlement.id, snapshot([]));
+    expect(model.borderRadius(settlement)).toBe(0);
+    expect(model.claimDiscsOf(settlement.id)).toEqual([]);
+
+    model.applyServerSnapshot(settlement.id, snapshot([{ q: settlement.q, r: settlement.r, type: 'beachcamp', level: 1 }]));
+    expect(model.claimDiscsOf(settlement.id)).toEqual([{ q: settlement.q, r: settlement.r, radius: 0 }]);
+    expect(model.claimedHexCount(settlement.id)).toBe(1);
   });
 
   it('refuses to place a tower outside the existing border, so it can only bump the shape outward, never teleport it', () => {

@@ -17,17 +17,21 @@ public enum GarrisonSpotKind
 
     /// <summary>A Dockyard. Ships only.</summary>
     Dock,
+
+    /// <summary>A beach camp's centre (<c>docs/design/skirmish/beach-camp.md</c>). Land units and ships.</summary>
+    BeachCamp,
 }
 
 /// <summary>Wire names of <see cref="GarrisonSpotKind"/>.</summary>
 public static class GarrisonSpotKindExtensions
 {
-    /// <summary>The lower camel wire name (<c>"longhouse"</c> / <c>"tower"</c> / <c>"dock"</c>).</summary>
+    /// <summary>The lower camel wire name (<c>"longhouse"</c> / <c>"tower"</c> / <c>"dock"</c> / <c>"beachcamp"</c>).</summary>
     public static string ToWireName(this GarrisonSpotKind kind) => kind switch
     {
         GarrisonSpotKind.Longhouse => "longhouse",
         GarrisonSpotKind.Tower => "tower",
         GarrisonSpotKind.Dock => "dock",
+        GarrisonSpotKind.BeachCamp => "beachcamp",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 }
@@ -59,6 +63,7 @@ public sealed record GarrisonSpot(
         GarrisonSpotKind.Longhouse => (true, centreHarboursShips),
         GarrisonSpotKind.Tower => (true, false),
         GarrisonSpotKind.Dock => (false, true),
+        GarrisonSpotKind.BeachCamp => (true, true),
         _ => (false, false),
     };
 }

@@ -93,6 +93,9 @@ public enum QuestRejection
     UnknownQuest,
     AlreadyClaimed,
     NotCompleted,
+
+    /// <summary>Quests are enabled only on a player's first settlement.</summary>
+    NotFirstSettlement,
 }
 
 /// <summary>The outcome of asking to claim a quest reward.</summary>

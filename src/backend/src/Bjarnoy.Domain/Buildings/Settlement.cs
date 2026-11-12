@@ -13,8 +13,12 @@ namespace Bjarnoy.Domain.Buildings;
 /// player's realm (<c>docs/design/economy.md</c> section 5, "Buildings outside the realm decay"), or <see langword="null"/>
 /// while it is inside: a building with a value there has no function (<see cref="IsFunctioning"/>) and loses a level every
 /// <see cref="BuildingCatalogue.DecayInterval(BuildingType, double)"/>. Only <see cref="Settlement.ApplyRealmState"/> sets or clears it.
+/// <paramref name="StandingSince"/> is, for a palisade or a gate, the game instant its build order raised it to a standing wall (level 1,
+/// or a palisade turned gate or back): armies already marching react to a wall from then on (<c>docs/design/troop-movement-range.md</c>
+/// §5). <see langword="null"/> for every other building and for walls that stood before it was recorded.
 /// </summary>
-public readonly record struct PlacedBuilding(HexCoord Coord, BuildingType Type, int Level, DateTimeOffset? OutsideRealmSince = null)
+public readonly record struct PlacedBuilding(
+    HexCoord Coord, BuildingType Type, int Level, DateTimeOffset? OutsideRealmSince = null, DateTimeOffset? StandingSince = null)
 {
     /// <summary>Whether the hex is inside the realm, so the building produces, boosts and trains.</summary>
     public bool IsFunctioning => OutsideRealmSince is null;
@@ -114,7 +118,7 @@ public sealed record Settlement
     {
         get
         {
-            var coords = new List<(HexCoord Coord, GarrisonSpotKind Kind)> { (Centre, GarrisonSpotKind.Longhouse) };
+            var coords = new List<(HexCoord Coord, GarrisonSpotKind Kind)> { (Centre, IsBeachCamp ? GarrisonSpotKind.BeachCamp : GarrisonSpotKind.Longhouse) };
             coords.AddRange(Buildings
                 .Where(b => b.Type is BuildingType.Tower or BuildingType.Dockyard && b.Level >= 1 && b.Coord != Centre)
                 .OrderBy(b => b.Coord.Q).ThenBy(b => b.Coord.R)
@@ -285,6 +289,17 @@ public sealed record Settlement
     public int LonghouseLevel =>
         Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
 
+    /// <summary>
+    /// Whether this is a beach camp: a <see cref="BuildingType.BeachCamp"/> stands at the <see cref="Centre"/> (one hex, a stock
+    /// and a garrison, no production). It has no Longhouse, so <see cref="LonghouseLevel"/> stays 0 and nothing that asks for a
+    /// Longhouse is satisfied by it.
+    /// </summary>
+    public bool IsBeachCamp => HasBeachCampAt(Buildings, Centre);
+
+    /// <summary>Whether a <see cref="BuildingType.BeachCamp"/> stands at <paramref name="centre"/> among <paramref name="buildings"/>.</summary>
+    public static bool HasBeachCampAt(IEnumerable<PlacedBuilding> buildings, HexCoord centre) =>
+        buildings.Any(b => b.Type == BuildingType.BeachCamp && b.Coord == centre && b.Level >= 1);
+
     /// <summary>The level of the highest standing Tower (0 when there is none). Completes the onboarding quest <c>tower3</c>.</summary>
     public int TowerLevel => HighestLevelOf(BuildingType.Tower);
 
@@ -339,6 +354,13 @@ public sealed record Settlement
     /// </summary>
     public static (HexCoord Centre, int Radius)? LonghouseDisc(HexCoord centre, int longhouseLevel) =>
         longhouseLevel <= 0 ? null : (centre, ClaimRadiusForLonghouseLevel(longhouseLevel));
+
+    /// <summary>
+    /// The claim disc of a settlement's centre: for a beach camp (<paramref name="isBeachCamp"/>) always its own hex only (radius
+    /// 0, fixed, never grows); otherwise <see cref="LonghouseDisc"/>. The one place callers read a settlement's centre claim.
+    /// </summary>
+    public static (HexCoord Centre, int Radius)? CentreDisc(HexCoord centre, int longhouseLevel, bool isBeachCamp) =>
+        isBeachCamp ? (centre, 0) : LonghouseDisc(centre, longhouseLevel);
 
     /// <summary>
     /// How many towers the whole (linked) realm may hold: this settlement's limit (<see cref="BuildingCatalogue.MaxTowers"/>) plus
@@ -402,6 +424,12 @@ public sealed record Settlement
 
     private static int ConstructionSlotsFor(IReadOnlyList<PlacedBuilding> buildings)
     {
+        // A beach camp has no Longhouse and builds nothing of its own: no slots, so it adds none to a linked realm.
+        if (!buildings.Any(b => b.Type == BuildingType.Longhouse) && buildings.Any(b => b.Type == BuildingType.BeachCamp))
+        {
+            return 0;
+        }
+
         var longhouseLevel = buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
         return Math.Max(2, longhouseLevel);
     }
@@ -622,6 +650,21 @@ public sealed record Settlement
     public int Score => Buildings.Sum(b => b.Level * (b.Level + 1) / 2);
 
     /// <summary>
+    /// <see cref="PlacedBuilding.StandingSince"/> after <paramref name="order"/> completes at <paramref name="completedAt"/> on
+    /// <paramref name="before"/> (<see langword="null"/>: nothing stood there): a palisade or gate that becomes a standing wall (from
+    /// below level 1, or turned from one kind into the other) stands from then; an upgrade keeps the instant it already had.
+    /// </summary>
+    private static DateTimeOffset? WallStandsFrom(PlacedBuilding? before, BuildOrder order, DateTimeOffset completedAt)
+    {
+        if (order.Type is not (BuildingType.Palisade or BuildingType.PalisadeGate) || order.TargetLevel < 1)
+        {
+            return before?.StandingSince;
+        }
+
+        return before is { Level: >= 1 } standing && standing.Type == order.Type ? standing.StandingSince : completedAt;
+    }
+
+    /// <summary>
     /// The settlement as of <paramref name="now"/>: every order whose time has
     /// come is applied, and production and capacity are recomputed from what is
     /// then standing.
@@ -730,11 +773,19 @@ public sealed record Settlement
                 }
                 else if (index >= 0)
                 {
-                    buildings[index] = buildings[index] with { Type = order.Type, Level = order.TargetLevel };
+                    var before = buildings[index];
+                    buildings[index] = before with
+                    {
+                        Type = order.Type,
+                        Level = order.TargetLevel,
+                        StandingSince = WallStandsFrom(before, order, eventTime),
+                    };
                 }
                 else
                 {
-                    buildings.Add(new PlacedBuilding(order.Coord, order.Type, order.TargetLevel));
+                    buildings.Add(new PlacedBuilding(
+                        order.Coord, order.Type, order.TargetLevel,
+                        StandingSince: WallStandsFrom(null, order, eventTime)));
                 }
 
                 queue.Remove(order);

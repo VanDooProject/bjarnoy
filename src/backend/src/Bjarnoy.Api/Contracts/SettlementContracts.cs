@@ -27,6 +27,10 @@ public sealed record FoundSettlementRequest(
     [property: Required, MinLength(2), MaxLength(100)] string OwnerName,
     [property: Required, MinLength(1), MaxLength(200)] string OwnerId);
 
+/// <param name="Name">The new display name; trimmed server-side, 2-100 characters after trimming.</param>
+public sealed record RenameSettlementRequest(
+    [property: Required, MinLength(2), MaxLength(100)] string Name);
+
 /// <param name="Q">The hex whose building loses one level.</param>
 public sealed record RazeBuildingRequest(int Q, int R);
 
@@ -427,7 +431,8 @@ public sealed record SettlementResponse(
                     Feasts.Duration.TotalSeconds / speedFactor,
                     Feasts.RenownFor(domain.TownSquareLevel))
                 : null,
-            [.. Bjarnoy.Domain.Settlers.Quests.All.Select(q => new QuestResponse(
+            // Quests are enabled on the player's first settlement only (economy.md section 7).
+            [.. Bjarnoy.Domain.Settlers.Quests.All.Where(_ => id == session.FirstSettlementId).Select(q => new QuestResponse(
                 q.Id, q.IsCompleted(domain), domain.HasClaimed(q), ResourceLine.From(q.Reward),
                 q.Progress?.Invoke(domain) is { } p ? new QuestProgressResponse(p.Current, p.Target) : null))],
             WorldClockResponse.From(clock, gameNow),
@@ -570,9 +575,10 @@ public sealed record BuildingDefinitionResponse(
 /// <param name="Relation">How the owner stands to the caller, which picks the realm colour: <c>mine</c>, <c>guild</c> (same guild), <c>treaty</c> (guild with an active peace treaty) or <c>rival</c>.</param>
 /// <param name="LabelQ">Axial q of the hex the client puts the settlement's label on, decided here: the centre for the caller's own settlements and for a rival whose centre is visible, else the visible hex (a standing building's or one inside its claim) of a rival closest to its centre.</param>
 /// <param name="LabelR">Axial r of the label hex, see <paramref name="LabelQ"/>.</param>
+/// <param name="IsBeachCamp">Whether the settlement is a beach camp (<see cref="Settlement.IsBeachCamp"/>): a one-hex settlement with no Longhouse.</param>
 public sealed record SettlementSummary(
     Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine, Guid RealmId, string Relation,
-    int LabelQ, int LabelR)
+    int LabelQ, int LabelR, bool IsBeachCamp = false)
 {
     public static SettlementSummary From(SettlementEntity s, bool mine, RealmLabel realm, string relation, HexCoord label)
     {
@@ -581,7 +587,8 @@ public sealed record SettlementSummary(
         return new SettlementSummary(
             s.Id, realm.Name, s.OwnerName, s.CentreQ, s.CentreR,
             s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
-            s.IslandId, mine, realm.RealmId, relation, label.Q, label.R);
+            s.IslandId, mine, realm.RealmId, relation, label.Q, label.R,
+            Settlement.HasBeachCampAt([.. s.Buildings.Select(b => b.ToPlacedBuilding())], new HexCoord(s.CentreQ, s.CentreR)));
     }
 }
 

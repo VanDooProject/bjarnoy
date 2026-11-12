@@ -9,7 +9,7 @@ import { useAuthStore } from '../stores/auth';
 import { useGuildStore } from '../stores/guild';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import type { AxialCoord } from '../lib/hex/coords';
-import { findPathSteps, findSeaPathSteps, pathCost } from '../lib/map/hexPath';
+import { findPathSteps, findSeaPathSteps, pathCost, seaPathCost } from '../lib/map/hexPath';
 import { clearRouteCache, routeCacheVersion, routeKey, routeOrQueue, type RouteJob } from '../lib/map/routeQueue';
 import { gamePathContext } from '../lib/map/movementContext';
 import { isSandCampFamily, isWaterCampFamily } from '../lib/map/campPlacement';
@@ -38,10 +38,10 @@ export function useSendSources() {
   const guild = useGuildStore();
   const catalogue = useUnitCatalogueStore();
 
-  /** The target a ring action or the open picker aims at; a hunt at a camp on the sea is sent ships, not land units. */
-  function targetAt(mission: SendMission, coord: AxialCoord): SendTarget {
+  /** The target a ring action or the open picker aims at; a hunt at a camp on the sea is sent ships, not land units. `own` marks a hex of the player's own realm. */
+  function targetAt(mission: SendMission, coord: AxialCoord, own?: Pick<SendTarget, 'targetSettlementId' | 'ownRealmId' | 'supportSpot'>): SendTarget {
     const camp = mission === 'hunt' ? world.model.campAt(coord) : undefined;
-    return { mission, coord, campAtSea: !!camp && isWaterCampFamily(camp.family), campOnSand: !!camp && isSandCampFamily(camp.family) };
+    return { mission, coord, campAtSea: !!camp && isWaterCampFamily(camp.family), campOnSand: !!camp && isSandCampFamily(camp.family), ...own };
   }
 
   function env(): FeasibilityEnv {
@@ -55,9 +55,10 @@ export function useSendSources() {
       guild.friendlyUserIds,
     );
     function* routeJob(from: AxialCoord, to: AxialCoord, fleet: boolean): RouteJob {
-      const path = yield* (fleet ? findSeaPathSteps(from, to, (c) => world.model.getTile(c.q, c.r).terrain) : findPathSteps(from, to, ctx));
+      const terrainAt = (c: AxialCoord) => world.model.getTile(c.q, c.r).terrain;
+      const path = yield* (fleet ? findSeaPathSteps(from, to, terrainAt) : findPathSteps(from, to, ctx));
       if (!path) return null;
-      const cost = fleet ? path.length - 1 : pathCost(path, ctx);
+      const cost = fleet ? seaPathCost(path, terrainAt) : pathCost(path, ctx);
       return Number.isFinite(cost) ? { path, cost } : null;
     }
     return {
@@ -76,8 +77,7 @@ export function useSendSources() {
     void routeCacheVersion.value; // re-run when a background route search finishes
     return evaluateSendSources({
       target,
-      garrison: world.hud.garrison,
-      armies: world.armies,
+      realms: world.sendRealms,
       isPremium: auth.isPremium,
       byType: catalogue.byType,
       env: env(),
@@ -97,7 +97,16 @@ export function useSendSources() {
 export function useSendPickerRows() {
   const world = useWorldStore();
   const sources = useSendSources();
-  const target = computed(() => (world.sendPicker ? sources.targetAt(world.sendPicker.mission, world.sendPicker.coord) : null));
+  const target = computed(() => {
+    const picker = world.sendPicker;
+    return picker
+      ? sources.targetAt(picker.mission, picker.coord, {
+          targetSettlementId: picker.targetSettlementId,
+          ownRealmId: picker.targetRealmId,
+          supportSpot: picker.targetBuildingCoord,
+        })
+      : null;
+  });
   const rows = computed(() => (target.value ? sources.evaluate(target.value) : []));
   return { target, rows, verdictFor: sources.verdictFor };
 }

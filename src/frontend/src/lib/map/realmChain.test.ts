@@ -11,6 +11,29 @@ const settlement = (id: string, q: number, towerQs: number[] = [], towerLevel = 
 });
 const at = (q: number) => ({ q, r: 0 });
 
+describe('resolveRealm with a beach camp', () => {
+  const camp = (id: string, q: number): RealmSettlementInput => ({ id, q, r: 0, level: 0, isBeachCamp: true, towers: [] });
+
+  it('gives a camp a disc of its own hex only', () => {
+    const realm = resolveRealm([camp('c', 10)]);
+
+    expect(realm.discsOf('c')).toEqual([{ q: 10, r: 0, radius: 0 }]);
+    expect(realm.covers(at(10))).toBe(true);
+    expect(realm.covers(at(11))).toBe(false);
+  });
+
+  it('keeps a Longhouse-less settlement without a camp disc-less', () => {
+    expect(resolveRealm([{ id: 'x', q: 10, r: 0, level: 0, towers: [] }]).discsOf('x')).toEqual([]);
+  });
+
+  it('lets a tower stand on the camp hex neighbourhood only through its own disc: a tower beside a camp is not connected by it', () => {
+    const realm = resolveRealm([camp('c', 10), settlement('a', 0, [7], 1)]);
+
+    // the camp's radius-0 disc does not reach the tower at 7, which the longhouse at 0 (radius 3) does not reach either
+    expect(realm.isTowerConnected('a', at(7))).toBe(false);
+  });
+});
+
 describe('resolveRealm (the chain rule)', () => {
   it('keeps a straight chain from the longhouse connected', () => {
     const realm = resolveRealm([settlement('a', 0, [3, 5, 7])]);

@@ -12,9 +12,12 @@ import { createMemoryHistory, createRouter, type Router } from 'vue-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LoginView from './LoginView.vue';
 import { useAuthStore } from '../stores/auth';
+import { ApiError } from '../api/client';
 import { useWorldStore } from '../stores/world';
+import { useLoginFlowStore } from '../stores/loginFlow';
 import { createTestI18n } from '../test/i18n';
 import enLogin from '../i18n/locales/en/login.json';
+import enHud from '../i18n/locales/en/hud.json';
 
 // Player logout/login gate: forced to live mode so the "restore realm after
 // login" assertion below (useLoginForm's `!DEMO_MODE && world.worldId`
@@ -39,12 +42,13 @@ function testRouter() {
   });
 }
 
-async function mountLoginView(query: Record<string, string> = {}): Promise<{ wrapper: ReturnType<typeof mount>; router: Router }> {
+async function mountLoginView(query: Record<string, string> = {}, attachTo?: HTMLElement): Promise<{ wrapper: ReturnType<typeof mount>; router: Router }> {
   const router = testRouter();
   await router.push({ path: '/login', query });
   await router.isReady();
   const wrapper = mount(LoginView, {
-    global: { plugins: [router, createTestI18n({ login: enLogin })] },
+    attachTo,
+    global: { plugins: [router, createTestI18n({ login: enLogin, hud: enHud })] },
   });
   return { wrapper, router };
 }
@@ -109,7 +113,108 @@ describe('LoginView world linkage', () => {
     await submit(wrapper);
 
     expect(world.joinWorld).not.toHaveBeenCalled();
-    expect(wrapper.find('.error').exists()).toBe(true);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+  });
+
+  it('stays busy through the realm restore: relabelled button, disabled inputs, one login only', async () => {
+    const { wrapper } = await mountLoginView();
+    const auth = useAuthStore();
+    auth.login = vi.fn().mockResolvedValue(undefined);
+    const world = useWorldStore();
+    world.worldId = 'world-9';
+    let resolveJoin!: () => void;
+    world.joinWorld = vi.fn(() => new Promise<void>((r) => (resolveJoin = r)));
+
+    await submit(wrapper);
+
+    const button = wrapper.find('button[type="submit"]');
+    expect(button.text()).toBe('Loading your realm…');
+    expect(button.attributes('disabled')).toBeDefined();
+    expect(wrapper.find('fieldset').attributes('disabled')).toBeDefined();
+    // The map overlay narrates the restore.
+    expect(wrapper.find('[data-testid="map-status-overlay"]').text()).toContain('Welcome back, ragnar. Loading your realm…');
+
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+    expect(auth.login).toHaveBeenCalledTimes(1);
+    expect(world.joinWorld).toHaveBeenCalledTimes(1);
+
+    resolveJoin();
+    await flushPromises();
+    expect(useLoginFlowStore().phase).toBe('idle');
+  });
+
+  it('shows a failed restore on the overlay and Retry re-runs only the restore', async () => {
+    const { wrapper, router } = await mountLoginView();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const auth = useAuthStore();
+    auth.login = vi.fn().mockResolvedValue(undefined);
+    const world = useWorldStore();
+    world.worldId = 'world-9';
+    world.joinWorld = vi.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue(undefined);
+
+    await submit(wrapper);
+
+    const overlay = wrapper.find('[data-testid="map-status-overlay"]');
+    expect(overlay.attributes('data-state')).toBe('error');
+    expect(overlay.text()).toContain("You're logged in, but your realm didn't load");
+    expect(router.currentRoute.value.path).toBe('/login');
+
+    await overlay.find('button.retry').trigger('click');
+    await flushPromises();
+
+    expect(auth.login).toHaveBeenCalledTimes(1);
+    expect(world.joinWorld).toHaveBeenCalledTimes(2);
+    expect(router.currentRoute.value.path).toBe('/');
+  });
+
+  it('does not stay busy after leaving the screen with a failed restore', async () => {
+    const { wrapper } = await mountLoginView();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    useAuthStore().login = vi.fn().mockResolvedValue(undefined);
+    const world = useWorldStore();
+    world.worldId = 'world-9';
+    world.joinWorld = vi.fn().mockRejectedValue(new Error('boom'));
+    await submit(wrapper);
+    expect(useLoginFlowStore().phase).toBe('restore');
+
+    wrapper.unmount();
+    expect(useLoginFlowStore().phase).toBe('idle');
+
+    const { wrapper: again } = await mountLoginView();
+    expect(again.find('button[type="submit"]').text()).toBe('Log in');
+    expect(again.find('fieldset').attributes('disabled')).toBeUndefined();
+  });
+
+  it('uses the query from submit time for the restore and redirect', async () => {
+    const { wrapper, router } = await mountLoginView({ worldId: 'world-1' });
+    useAuthStore().login = vi.fn().mockResolvedValue(undefined);
+    const world = useWorldStore();
+    let resolveJoin!: () => void;
+    world.joinWorld = vi.fn(() => new Promise<void>((r) => (resolveJoin = r)));
+
+    await submit(wrapper);
+    await router.replace({ path: '/login', query: { worldId: 'other', redirect: '/elsewhere' } });
+    resolveJoin();
+    await flushPromises();
+
+    expect(world.joinWorld).toHaveBeenCalledWith('world-1');
+    expect(router.currentRoute.value.path).toBe('/');
+  });
+
+  it('marks the inputs invalid and focuses the password after a 401', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { wrapper: attached } = await mountLoginView({}, host);
+    useAuthStore().login = vi.fn().mockRejectedValue(new ApiError(401, undefined));
+    await submit(attached);
+
+    expect(attached.find('[role="alert"]').text()).toBe('Wrong username or password.');
+    expect(attached.find('#password').attributes('aria-invalid')).toBe('true');
+    expect(attached.find('#password').attributes('aria-describedby')).toBe(attached.find('[role="alert"]').attributes('id'));
+    expect(document.activeElement).toBe(attached.find('#password').element);
+    attached.unmount();
+    host.remove();
   });
 
   // Player logout/login gate: a plain login (no linked world) still needs

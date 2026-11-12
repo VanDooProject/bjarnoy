@@ -148,6 +148,16 @@
      the resource palette above, since it isn't one of the four resources. */
   --water: #5aa8c9;
 
+  /* Build categories: one tint each, shared by the build ring (category and
+     building bubbles) and the docs tech tree. Lifted so a rim reads on the
+     dark bubble; no two categories share a hue, none is error-red. */
+  --cat-resource: #a8d870;
+  --cat-military: #d3dce2;
+  --cat-defense: #8fb8d8;
+  --cat-logistics: #e88fb4;
+  --cat-religion: #c7aaf0;
+  --cat-water: var(--water);
+
   --sans: 'Outfit', system-ui, 'Segoe UI', Roboto, sans-serif;
   color-scheme: dark;
 }

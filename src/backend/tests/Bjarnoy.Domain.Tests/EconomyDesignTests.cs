@@ -62,7 +62,7 @@ public class EconomyDesignTests
         var covered = Ladder.Select(l => l.Type).ToHashSet();
 
         Assert.Equal(
-            BuildingCatalogue.AllTypes.Where(t => t != BuildingType.Longhouse).ToHashSet(),
+            BuildingCatalogue.AllTypes.Where(t => t is not (BuildingType.Longhouse or BuildingType.BeachCamp)).ToHashSet(),
             covered);
     }
 
@@ -361,7 +361,7 @@ public class EconomyDesignTests
 
         Assert.Equal(BuildRejection.NewPlacementDisabled, decision.Rejection);
         Assert.Null(decision.Order);
-        Assert.Equal([BuildingType.Quarry], BuildingCatalogue.NewPlacementDisabled);
+        Assert.Equal([BuildingType.Quarry, BuildingType.BeachCamp], BuildingCatalogue.NewPlacementDisabled.OrderBy(t => t == BuildingType.BeachCamp));
     }
 
     [Fact]

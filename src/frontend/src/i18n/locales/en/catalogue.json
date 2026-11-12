@@ -32,6 +32,7 @@
     "palisadegate": "Palisade Gate",
     "bridge": "Bridge",
     "siegeworkshop": "Siege workshop",
+    "beachcamp": "Beach camp",
     "reindeerherder": "Reindeer Herder"
   },
   "units": {
@@ -46,7 +47,8 @@
     "karve": "Karve",
     "longship": "Longship",
     "fireship": "Fire Ship",
-    "settler": "Settler"
+    "settler": "Settler",
+    "campbuilder": "Camp builder"
   },
   "giants": {
     "giantmountain": "Giant mountain",
@@ -97,6 +99,7 @@
     "support": "Support",
     "raid": "Raid",
     "found": "Found settlement",
+    "setupcamp": "Set up camp",
     "hunt": "Hunt"
   },
   "runes": {

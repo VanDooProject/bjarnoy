@@ -7,6 +7,26 @@ namespace Bjarnoy.Domain.Tests;
 public class UnitCatalogueTests
 {
     [Fact]
+    public void The_camp_builder_has_the_settlers_stats_at_the_camp_price()
+    {
+        var builder = UnitCatalogue.Get(UnitType.CampBuilder);
+        var settler = UnitCatalogue.Get(UnitType.Settler);
+
+        Assert.Equal("campbuilder", UnitType.CampBuilder.ToWireName());
+        Assert.Equal(UnitClass.Civilian, builder.Class);
+        Assert.Equal(settler.VisionRadius, builder.VisionRadius);
+        Assert.Equal(settler.Defense, builder.Defense);
+        Assert.Equal(settler.Speed, builder.Speed);
+        Assert.Equal(settler.FoodCarryCapacity, builder.FoodCarryCapacity);
+        Assert.Equal(settler.CargoSlots, builder.CargoSlots);
+        Assert.Equal(settler.UpkeepPerHour, builder.UpkeepPerHour);
+        Assert.Equal(settler.RequiredLonghouseLevel, builder.RequiredLonghouseLevel);
+        Assert.Equal(BuildingType.CartWorkshop, builder.RequiredBuildingType);
+        Assert.Equal(new ResourceAmounts(Wood: 80, Stone: 40, Food: 40, Iron: 20), builder.TrainingCost);
+        Assert.Equal(TimeSpan.FromMinutes(12), builder.TrainingDuration);
+    }
+
+    [Fact]
     public void Every_unit_type_has_a_definition()
     {
         foreach (var type in UnitCatalogue.AllTypes)

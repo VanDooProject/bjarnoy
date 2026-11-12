@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { coordKey, hexDistance, type AxialCoord } from '../hex/coords';
-import { BURNT_BRIDGE_LEAVE_COST, findPath, findSeaPath, HALF_OPEN_END_COST, hoursFrom, leaveCost, MAX_TINT_HEXES, pathCost, reachableFrom, reachableRange, timeOnHex, type MovementRules, type PathContext } from './hexPath';
+import { BURNT_BRIDGE_LEAVE_COST, findPath, findSeaPath, FLEET_SAND_COST, HALF_OPEN_END_COST, hoursFrom, leaveCost, MAX_TINT_HEXES, pathCost, reachableFrom, reachableRange, seaPathCost, timeOnHex, type MovementRules, type PathContext } from './hexPath';
 import type { Terrain } from './types';
 
 // Mirrors HexPathfinder's own cost tables (issue #159 part A/B) — kept as a
@@ -476,6 +476,24 @@ describe('findSeaPath (a fleet)', () => {
     const path = findSeaPath({ q: 0, r: 0 }, { q: 3, r: 0 }, sea)!;
 
     expect(path[path.length - 1]).toEqual({ q: 3, r: 0 });
+  });
+
+  it('prices a sand beach at the end of the route at twice a sea hex, other land at 1', () => {
+    const beach = (terrain: Terrain) => (c: AxialCoord): Terrain => (c.q === 3 && c.r === 0 ? terrain : 'sea');
+    const toSand = findSeaPath({ q: 0, r: 0 }, { q: 3, r: 0 }, beach('sand'))!;
+    const toGrass = findSeaPath({ q: 0, r: 0 }, { q: 3, r: 0 }, beach('grass'))!;
+
+    // two full sea steps, then the beaching hop: half a sea hex plus half the beach
+    expect(seaPathCost(toGrass, beach('grass'))).toBe(1 + 1 + (1 + 1) / 2);
+    expect(seaPathCost(toSand, beach('sand'))).toBe(1 + 1 + (1 + FLEET_SAND_COST) / 2);
+    expect(FLEET_SAND_COST).toBe(2);
+  });
+
+  it('prices pushing off a sand harbour at the start the same way', () => {
+    const harbour = (c: AxialCoord): Terrain => (c.q === 0 && c.r === 0 ? 'sand' : 'sea');
+    const path = findSeaPath({ q: 0, r: 0 }, { q: 2, r: 0 }, harbour)!;
+
+    expect(seaPathCost(path, harbour)).toBe((FLEET_SAND_COST + 1) / 2 + 1);
   });
 
   it('finds nothing when the target is walled off by land', () => {

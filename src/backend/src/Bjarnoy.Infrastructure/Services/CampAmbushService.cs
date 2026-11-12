@@ -47,8 +47,7 @@ public sealed class CampAmbushService(
         ArgumentNullException.ThrowIfNull(armyEntity);
         ArgumentNullException.ThrowIfNull(domain);
 
-        if (domain.Location is not ArmyLocation.InTransit { Movement: var movement }
-            || movement.RetreatImmune)
+        if (domain.Location is not ArmyLocation.InTransit { Movement: var movement })
         {
             return CampAmbushOutcome.None;
         }
@@ -123,7 +122,12 @@ public sealed class CampAmbushService(
 
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
         var home = settlement.HomeHexFor(survivors);
-        armyEntity.ApplyDomain(survivors.ForceFieldRetreat(ambush.At, ambush.Hex, home, sampler.TerrainAt, world.SpeedFactor));
+        var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, worldId, sampler.TerrainAt, rivers.IsWide, ambush.At, cancellationToken).ConfigureAwait(false))
+            .ForOwner(WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id));
+        armyEntity.ApplyDomain(survivors.ForceFieldRetreat(
+            ambush.At, ambush.Hex, home, sampler.TerrainAt, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls,
+            provisionsAtBattle: domain.ProvisionsAt(ambush.At)));
         return CampAmbushOutcome.Fought;
     }
 
