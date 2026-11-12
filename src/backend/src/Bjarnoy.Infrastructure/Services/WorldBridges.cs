@@ -37,14 +37,20 @@ public static class WorldBridges
             .Select(o => new { o.Q, o.R, o.Kind, o.TargetLevel, o.SettlementId, o.Settlement!.UserId, o.CompletesAt })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
-        var rowAt = rows.ToDictionary(r => new HexCoord(r.Q, r.R));
+        // Nothing enforces one bridge row per hex across settlements; the last one wins, as for the walls.
+        var rowAt = new Dictionary<HexCoord, (int Level, Guid SettlementId, Guid UserId, bool OutsideRealm)>();
+        foreach (var r in rows)
+        {
+            rowAt[new HexCoord(r.Q, r.R)] = (r.Level, r.SettlementId, r.UserId, r.OutsideRealm);
+        }
+
         var ordersAt = orders.GroupBy(o => new HexCoord(o.Q, o.R)).ToDictionary(g => g.Key, g => g.OrderBy(o => o.CompletesAt).ToList());
         var timeline = new List<TimedBridge>();
         foreach (var coord in rowAt.Keys.Union(ordersAt.Keys))
         {
-            rowAt.TryGetValue(coord, out var row);
+            var hasRow = rowAt.TryGetValue(coord, out var row);
             ordersAt.TryGetValue(coord, out var hexOrders);
-            var level = row?.Level ?? 0;
+            var level = hasRow ? row.Level : 0;
             List<BridgeStage> stages = [new(DateTimeOffset.MinValue, level)];
             foreach (var order in hexOrders ?? [])
             {
@@ -58,10 +64,10 @@ public static class WorldBridges
                 continue;
             }
 
-            var owner = row is not null
+            var owner = hasRow
                 ? WorldPalisades.OwnerKeyOf(row.UserId, row.SettlementId)
                 : WorldPalisades.OwnerKeyOf(hexOrders![0].UserId, hexOrders[0].SettlementId);
-            timeline.Add(new TimedBridge(coord, owner, row?.OutsideRealm ?? false, stages));
+            timeline.Add(new TimedBridge(coord, owner, hasRow && row.OutsideRealm, stages));
         }
 
         return timeline;

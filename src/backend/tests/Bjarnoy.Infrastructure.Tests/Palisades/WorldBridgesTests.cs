@@ -246,4 +246,44 @@ public sealed class WorldBridgesTests : IDisposable
         Assert.Equal(1.5, index.CrossingCost(new HexCoord(2, 0), stranger));
         Assert.Equal(1.5, index.CrossingCost(new HexCoord(1, 0), WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id)));
     }
+
+    [Fact]
+    public async Task Chained_orders_an_order_without_a_row_and_a_raze_that_would_raise_follow_the_settle_rules()
+    {
+        await using var db = CreateContext();
+        var (world, settlement) = await SeedWorldAsync(db);
+        // Hex 1: no row at all, an order to 2 then one to 3. Hex 2: already lowered to 1 by a siege, a raze to 2 never raises it.
+        settlement.Buildings.Add(new PlacedBuildingEntity { Q = 2, R = 0, Type = BuildingType.Bridge, Level = 1 });
+        settlement.Queue.Add(Order(1, 2, T0.AddHours(-2)));
+        settlement.Queue.Add(Order(1, 3, T0.AddHours(-1)));
+        settlement.Queue.Add(Order(2, 2, T0.AddHours(-1), BuildOrderKind.Raze));
+        await db.SaveChangesAsync(Ct);
+
+        var walker = Guid.NewGuid();
+        var between = await WorldBridges.IndexAsync(db, world.Id, _ => Terrain.Grass, T0.AddMinutes(-90), Ct);
+        Assert.Equal(4.0, between.CrossingCost(new HexCoord(1, 0), walker));
+        var now = await WorldBridges.IndexAsync(db, world.Id, _ => Terrain.Grass, T0, Ct);
+        Assert.Equal(1.5, now.CrossingCost(new HexCoord(1, 0), walker));
+        Assert.Equal(1.0 + HexPathfinder.CausewayCrossingCost, now.CrossingCost(new HexCoord(2, 0), walker));
+    }
+
+    [Fact]
+    public async Task Two_settlements_with_a_bridge_row_on_one_hex_do_not_break_the_timeline()
+    {
+        await using var db = CreateContext();
+        var (world, settlement) = await SeedWorldAsync(db);
+        var other = new SettlementEntity
+        {
+            WorldId = world.Id, IslandId = settlement.IslandId, Name = "H2", OwnerName = "O2", OwnerId = settlement.UserId.ToString(), UserId = settlement.UserId,
+            CentreQ = 5, CentreR = 5,
+        };
+        settlement.Buildings.Add(new PlacedBuildingEntity { Q = 1, R = 0, Type = BuildingType.Bridge, Level = 1 });
+        other.Buildings.Add(new PlacedBuildingEntity { Q = 1, R = 0, Type = BuildingType.Bridge, Level = 2 });
+        db.Settlements.Add(other);
+        await db.SaveChangesAsync(Ct);
+
+        var timeline = await WorldBridges.TimelineAsync(db, world.Id, Ct);
+
+        Assert.Single(timeline);
+    }
 }
