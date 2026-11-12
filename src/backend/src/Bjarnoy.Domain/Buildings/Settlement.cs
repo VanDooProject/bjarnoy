@@ -2966,54 +2966,97 @@ public sealed record Settlement
     {
         ArgumentNullException.ThrowIfNull(requestedUnits);
 
-        if (SpotAt(fromSpot) is null)
-        {
-            return SettlementDispatchDecision.Rejected(DispatchRejection.NotAGarrisonSpot);
-        }
+        var decision = PlanDispatch([(fromSpot, requestedUnits)], provisions, now);
+        return decision.Accepted
+            ? SettlementDispatchDecision.Accept(decision.Settlement!, decision.GroupStacks![0].Units)
+            : SettlementDispatchDecision.Rejected(decision.Rejection);
+    }
 
-        var normalised = requestedUnits
-            .Where(s => s.Count > 0)
-            .GroupBy(s => s.Type)
-            .Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))
-            .ToList();
+    /// <summary>
+    /// The settlement-side half of sending an army put together from the units of several garrison spots
+    /// (<c>docs/design/garrison.md</c>, "Training, sending out, losing a spot"): every group must stand at a garrison spot of its
+    /// own and hold the units asked for, the provisions must not exceed what all the units together can carry, and they are
+    /// paid once. Returns the settlement with every group's units and the food removed, and each group's normalised stacks (in the
+    /// order of <paramref name="groups"/>; a spot listed twice is one group). The single-spot overload is this with one group.
+    /// </summary>
+    public GatheredSettlementDispatchDecision PlanDispatch(
+        IReadOnlyList<(HexCoord Spot, IReadOnlyList<UnitStack> Units)> groups, double provisions, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(groups);
 
-        if (normalised.Count == 0)
+        var normalisedGroups = new List<(HexCoord Spot, List<UnitStack> Units)>();
+        foreach (var (spot, units) in groups)
         {
-            return SettlementDispatchDecision.Rejected(DispatchRejection.NoUnitsRequested);
-        }
-
-        var atSpot = GarrisonAt(fromSpot);
-        foreach (var stack in normalised)
-        {
-            if (atSpot.Where(g => g.Type == stack.Type).Sum(g => g.Count) < stack.Count)
+            ArgumentNullException.ThrowIfNull(units);
+            if (SpotAt(spot) is null)
             {
-                return SettlementDispatchDecision.Rejected(DispatchRejection.InsufficientGarrison);
+                return GatheredSettlementDispatchDecision.Rejected(DispatchRejection.NotAGarrisonSpot);
+            }
+
+            var merged = units
+                .Where(s => s.Count > 0)
+                .GroupBy(s => s.Type)
+                .Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))
+                .ToList();
+            var existing = normalisedGroups.FindIndex(g => g.Spot == spot);
+            if (existing >= 0)
+            {
+                normalisedGroups[existing] = (spot, [.. normalisedGroups[existing].Units.Concat(merged)
+                    .GroupBy(s => s.Type).Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))]);
+            }
+            else
+            {
+                normalisedGroups.Add((spot, merged));
+            }
+        }
+
+        if (normalisedGroups.Count == 0 || normalisedGroups.All(g => g.Units.Count == 0))
+        {
+            return GatheredSettlementDispatchDecision.Rejected(DispatchRejection.NoUnitsRequested);
+        }
+
+        normalisedGroups.RemoveAll(g => g.Units.Count == 0);
+
+        foreach (var (spot, units) in normalisedGroups)
+        {
+            var atSpot = GarrisonAt(spot);
+            foreach (var stack in units)
+            {
+                if (atSpot.Where(g => g.Type == stack.Type).Sum(g => g.Count) < stack.Count)
+                {
+                    return GatheredSettlementDispatchDecision.Rejected(DispatchRejection.InsufficientGarrison);
+                }
             }
         }
 
         if (provisions < 0)
         {
-            return SettlementDispatchDecision.Rejected(DispatchRejection.ProvisionsExceedCarryCapacity);
+            return GatheredSettlementDispatchDecision.Rejected(DispatchRejection.ProvisionsExceedCarryCapacity);
         }
 
-        var carryCapacity = normalised.Sum(s => UnitCatalogue.Get(s.Type).FoodCarryCapacity * s.Count);
+        var carryCapacity = normalisedGroups.Sum(g => g.Units.Sum(s => UnitCatalogue.Get(s.Type).FoodCarryCapacity * s.Count));
         if (provisions > carryCapacity)
         {
-            return SettlementDispatchDecision.Rejected(DispatchRejection.ProvisionsExceedCarryCapacity);
+            return GatheredSettlementDispatchDecision.Rejected(DispatchRejection.ProvisionsExceedCarryCapacity);
         }
 
         // Issue #158 stage 1c: provisions are a voluntary spend too — they
         // must not dip into what is reserved for the waiting build queue.
         if (!TrySpendAvailable(new ResourceAmounts(Wood: 0, Stone: 0, Food: provisions, Iron: 0), now, out var paidResources))
         {
-            return SettlementDispatchDecision.Rejected(DispatchRejection.InsufficientResources);
+            return GatheredSettlementDispatchDecision.Rejected(DispatchRejection.InsufficientResources);
         }
 
-        var left = atSpot
-            .Select(g => g with { Count = g.Count - normalised.Where(n => n.Type == g.Type).Sum(n => n.Count) })
-            .Where(g => g.Count > 0);
-        var updated = WithGarrisonAt(fromSpot, left) with { Resources = paidResources };
-        return SettlementDispatchDecision.Accept(updated, normalised);
+        var updated = this with { Resources = paidResources };
+        foreach (var (spot, units) in normalisedGroups)
+        {
+            var left = updated.GarrisonAt(spot)
+                .Select(g => g with { Count = g.Count - units.Where(n => n.Type == g.Type).Sum(n => n.Count) })
+                .Where(g => g.Count > 0);
+            updated = updated.WithGarrisonAt(spot, left);
+        }
+
+        return GatheredSettlementDispatchDecision.Accept(updated, [.. normalisedGroups.Select(g => (g.Spot, (IReadOnlyList<UnitStack>)g.Units))]);
     }
 }
 

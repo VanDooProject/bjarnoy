@@ -43,8 +43,6 @@ export function useDispatchUnitPicker(garrisonRows: ComputedRef<ReadonlyArray<{ 
   const overCapacity = computed(() => exceedsShipCapacity(unitCounts.value, catalogue.byType));
   // Where the picked units are taken from: each unit type from the garrison spot nearest the target first (one rule, the store's).
   const spotGroups = computed(() => (draft.value ? world.dispatchSpotGroups(draft.value) : []));
-  // Gathering an army from several spots is not possible yet: the dispatch waits.
-  const severalSpots = computed(() => spotGroups.value.length > 1);
   /** "from Tower" / "from Longhouse and Dock": the spots the picked units of this type are taken from; empty while none is picked. */
   function unitSourceText(unit: string): string {
     const kinds = spotKindsForUnit(spotGroups.value, unit);
@@ -61,7 +59,6 @@ export function useDispatchUnitPicker(garrisonRows: ComputedRef<ReadonlyArray<{ 
   const selectionSendable = computed(
     () =>
       !overCapacity.value &&
-      !severalSpots.value &&
       !sandHuntLacksTroops.value &&
       !(isHunt.value && huntAtSea.value && selectionKind.value !== 'fleet'),
   );
@@ -77,7 +74,6 @@ export function useDispatchUnitPicker(garrisonRows: ComputedRef<ReadonlyArray<{ 
     sandHuntLacksTroops,
     overCapacity,
     selectionSendable,
-    severalSpots,
     unitSourceText,
   };
 }

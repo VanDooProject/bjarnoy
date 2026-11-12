@@ -218,13 +218,6 @@ public static class ArmyEndpoints
             return TypedResults.Conflict(Problem(DispatchRejection.NoUnitsRequested));
         }
 
-        if (bySpot.Count > 1)
-        {
-            return TypedResults.Conflict(Problem(DispatchRejection.UnitsAtSeveralSpots));
-        }
-
-        var (fromSpot, unitStacks) = bySpot[0];
-
         if (!TryParseMission(request.Mission, out var mission))
         {
             return TypedResults.BadRequest(new ProblemDetails
@@ -239,7 +232,7 @@ public static class ArmyEndpoints
         var destination = request.Destination?.ToHexCoord();
 
         var result = await armies.DispatchAsync(
-            settlementId, fromSpot, unitStacks, waypoints, destination, request.Provisions,
+            settlementId, [.. bySpot.Select(g => (g.Spot, (IReadOnlyList<UnitStack>)g.Stacks))], waypoints, destination, request.Provisions,
             mission, request.TargetSettlementId, request.TargetBuildingCoord?.ToHexCoord(), cancellationToken);
 
         if (result.WorldPaused)
@@ -429,7 +422,10 @@ public static class ArmyEndpoints
 
         var found = await armies.GetAsync(armyId, cancellationToken);
         var (entity, clock) = found!.Value;
-        return TypedResults.Ok(ArmyResponse.From(entity!, clock.ToGameTime(time.GetUtcNow())));
+
+        // An army recalled while it stands on its home spot (a group of a gathering that stands on its own spot) is home again at
+        // once and folded into the garrison by the read above: the answer is the army as it was recalled.
+        return TypedResults.Ok(ArmyResponse.From(entity ?? result.Army!, clock.ToGameTime(time.GetUtcNow())));
     }
 
     private static async Task<Results<Ok<ArmyResponse>, NotFound, Conflict<ProblemDetails>>> RetargetFounding(
@@ -780,7 +776,6 @@ public static class ArmyEndpoints
                 DispatchRejection.NoUnitsRequested => "At least one unit must be requested.",
                 DispatchRejection.InsufficientGarrison => "The garrison spot does not hold that many of one or more requested unit types.",
                 DispatchRejection.NotAGarrisonSpot => "The hex is not a garrison spot (longhouse, tower or dock) of the settlement.",
-                DispatchRejection.UnitsAtSeveralSpots => "Units at several garrison spots cannot be sent together yet; send from one spot.",
                 DispatchRejection.SupportSpotRequired => "A support mission must name a garrison spot of the target to join.",
                 DispatchRejection.SupportSpotCannotHold => "That hex is not a garrison spot of the target that can hold every unit of the army.",
                 DispatchRejection.ProvisionsExceedCarryCapacity => "The requested provisions exceed what these units can carry.",

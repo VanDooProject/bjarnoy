@@ -1752,6 +1752,12 @@ export interface ArmyResponse {
   movement: MovementResponse | null;
   /** When the provisions of an army that cannot get home run out and the whole army dies; null for every other army. */
   starvesAt: string | null;
+  /** Set while this army is one group of a gathering army from several garrison spots; all groups of one army share it. */
+  gatheringId?: string | null;
+  /** The hex the groups of a gathering army meet on. */
+  gatherHex?: HexPoint | null;
+  /** When this group leaves its spot for the meeting hex. */
+  gatherDepartsAt?: string | null;
 }
 
 export interface ArmyUnitStackResponse {

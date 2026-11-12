@@ -256,15 +256,18 @@ describe('useWorldStore confirmDispatch from garrison spots', () => {
     expect(dispatchArmy.mock.calls[0][1]).not.toHaveProperty('units');
   });
 
-  it('does not attempt a dispatch whose units stand at several spots', async () => {
+  it('sends a `from` group for every spot the units are taken from', async () => {
     const store = await composed({ spearman: 6 });
     store.addWaypoint({ q: 8, r: 0 });
 
     await store.confirmDispatch();
 
-    expect(dispatchArmy).not.toHaveBeenCalled();
-    expect(store.dispatchDraft!.error).toMatch(/several spots/i);
-    expect(store.dispatchSpotGroups(store.dispatchDraft!)).toHaveLength(2);
+    expect(dispatchArmy).toHaveBeenCalledTimes(1);
+    expect(dispatchArmy.mock.calls[0][1].from).toEqual([
+      { spot: { q: 6, r: 0 }, units: [{ unit: 'spearman', count: 4 }] },
+      { spot: { q: 0, r: 0 }, units: [{ unit: 'spearman', count: 2 }] },
+    ]);
+    expect(store.dispatchDraft).toBeNull();
   });
 
   it('sends a support to the host spot the ring named', async () => {

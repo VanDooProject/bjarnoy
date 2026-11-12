@@ -37,6 +37,14 @@ public class ArmyEntity
 
     public int Mission { get; set; }
 
+    /// <summary>The gathering this army is a group of until it merges or leaves it — <see cref="Army.GatheringId"/>.</summary>
+    public Guid? GatheringId { get; set; }
+
+    public GatheringEntity? Gathering { get; set; }
+
+    /// <summary>When that gathering leaves — <see cref="Army.GatherDepartAt"/>; set and cleared together with <see cref="GatheringId"/>.</summary>
+    public DateTimeOffset? GatherDepartAt { get; set; }
+
     /// <summary>
     /// The settlement an <see cref="ArmyMission.Attack"/> army is headed to
     /// fight, or an <see cref="ArmyMission.Support"/> army is headed to (and,
@@ -162,6 +170,8 @@ public class ArmyEntity
             Location = location,
             Provisions = Provisions,
             Mission = (ArmyMission)Mission,
+            GatheringId = GatheringId,
+            GatherDepartAt = GatherDepartAt,
             TargetSettlementId = TargetSettlementId,
             TargetBuildingCoord = TargetBuildingQ is { } q ? new HexCoord(q, TargetBuildingR!.Value) : null,
             TargetCampCoord = TargetCampQ is { } cq ? new HexCoord(cq, TargetCampR!.Value) : null,
@@ -206,6 +216,8 @@ public class ArmyEntity
         HomeSpotQ = army.HomeSpot.Q;
         HomeSpotR = army.HomeSpot.R;
         Mission = (int)army.Mission;
+        GatheringId = army.GatheringId;
+        GatherDepartAt = army.GatherDepartAt;
         TargetSettlementId = army.TargetSettlementId;
         TargetBuildingQ = army.TargetBuildingCoord?.Q;
         TargetBuildingR = army.TargetBuildingCoord?.R;

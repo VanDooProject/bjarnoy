@@ -54,8 +54,8 @@ public sealed record DispatchSpotUnitsRequest(
 /// <param name="From">
 /// The units, split by the garrison spot each group leaves from (longhouse, tower or dock hex of the settlement); only units
 /// standing there can be sent, and the spot becomes the army's home spot. Entries with no units are ignored, the same spot
-/// listed twice is merged. Gathering from several spots on the way is not built yet: more than one spot is refused with
-/// <see cref="DispatchRejection.UnitsAtSeveralSpots"/>.
+/// listed twice is merged. With more than one spot, each group leaves its spot as an army of its own, they meet on the way and move on
+/// as one (<see cref="Bjarnoy.Domain.Armies.Gathering"/>); the response is the group that gets to the meeting first.
 /// </param>
 /// <param name="TargetBuildingCoord">
 /// <b>Required for <c>"support"</c></b>: the target settlement's garrison spot the guest joins (it must be able to hold every unit of
@@ -211,7 +211,10 @@ public sealed record ArmyResponse(
     int VisionRadius,
     IReadOnlyList<ArmyUnitStackResponse> Stacks,
     MovementResponse? Movement,
-    DateTimeOffset? StarvesAt)
+    DateTimeOffset? StarvesAt,
+    Guid? GatheringId = null,
+    HexPointResponse? GatherHex = null,
+    DateTimeOffset? GatherDepartsAt = null)
 {
     public static ArmyResponse From(ArmyEntity entity, DateTimeOffset gameNow)
     {
@@ -223,6 +226,9 @@ public sealed record ArmyResponse(
         var atHome = domain.Location is ArmyLocation.AtHome;
         var supporting = domain.Location is ArmyLocation.Supporting;
         var movement = domain.Location is ArmyLocation.InTransit inTransit ? inTransit.Movement : null;
+
+        // The gathering the army is a group of (hex and departure, game time like every other instant here); only when it is loaded.
+        var gathering = entity.Gathering is { } loaded && loaded.Id == entity.GatheringId ? loaded.ToDomain() : null;
 
         var position = domain.Location switch
         {
@@ -245,7 +251,10 @@ public sealed record ArmyResponse(
             FogVisionRadii.ArmyVisionRadius(domain.Stacks, entity.Settlement.ToDomain().VisionBonusRings),
             [.. domain.Stacks.Select(s => new ArmyUnitStackResponse(s.Type.ToWireName(), s.Count))],
             movement is null ? null : MovementResponse.From(movement),
-            domain.StarvesAt);
+            domain.StarvesAt,
+            domain.GatheringId,
+            gathering is null ? null : HexPointResponse.From(gathering.Hex),
+            gathering?.DepartAt);
     }
 }
 
