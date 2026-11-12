@@ -23,6 +23,8 @@ let spawns = 0;
 let pocketsFound = 0;
 let pocketsFilled = 0;
 let pocketSinks = 0;
+let inlandLakePockets = 0;
+let inlandLakeTiles = 0;
 let guaranteeThrough = 0;
 let guaranteeSpawns = 0;
 let landTotal = 0;
@@ -58,6 +60,8 @@ for (let seed = from; seed <= to; seed++) {
     pocketsFound += i.pocketsFound;
     pocketsFilled += i.pocketsFilled;
     pocketSinks += i.pocketSinks;
+    inlandLakePockets += i.inlandLakePockets;
+    inlandLakeTiles += i.inlandLakeTiles;
     guaranteeThrough += i.guaranteeThrough;
     guaranteeSpawns += i.guaranteeSpawns;
     lakes.push(...i.lakes);
@@ -86,6 +90,7 @@ console.log(
 );
 console.log(`bog tiles ${bogTiles} (${((100 * bogTiles) / Math.max(1, landTotal)).toFixed(2)}% of ${landTotal} land tiles); padding (R12): sites rejected ${paddingRejected} by the normal pass, ${guaranteePaddingRejected} guarantee attempts; ${holeTiles} enclosed grass/forest tiles filled with moss`);
 console.log(`pockets found ${pocketsFound}, filled ${pocketsFilled}, rivers sunk into pockets ${pocketSinks}`);
+console.log(`inland lakes (enclosed water the bog did not fill): ${inlandLakePockets} pockets, ${inlandLakeTiles} tiles`);
 console.log(`inland mouths (rivers): ${inlandMouths}`);
 console.log(`RULE VIOLATIONS: ${JSON.stringify(violations)} total ${totalViolations(violations)}`);
 void bigIslands;

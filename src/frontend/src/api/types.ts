@@ -257,11 +257,13 @@ export interface IslandResponse {
   wasted: boolean;
 }
 
-/** Mirrors `IslandTerrainResponse`: one island's river and bog tiles (empty lists when it has none). */
+/** Mirrors `IslandTerrainResponse`: one island's river, bog and inland-lake tiles (empty lists when it has none). */
 export interface IslandTerrainResponse {
   id: string;
   riverTiles: RiverTileResponse[];
   bogTiles: BogTileResponse[];
+  /** Water this island encloses that the bog did not fill (empty when it has none) — drawn like the sea, see `drawsAsSea`. */
+  inlandLakeTiles: TileCoordinate[];
 }
 
 /** Mirrors `TerrainChunkResponse`: the terrain of a fixed range of islands, in island index order. */
@@ -1486,6 +1488,8 @@ export interface BuildingDefinitionResponse {
   requiresCoastalWater: boolean;
   /** Land terrain AND (as an exception) coastal water: the palisade's sea end. */
   alsoOnCoastalWater?: boolean;
+  /** Also stands on an inland-lake hex beside land (the fishing hut) — see BuildingDefinition.AlsoOnInlandLakeShore. */
+  alsoOnInlandLakeShore?: boolean;
   requiredLonghouseLevel: number;
   /** Construction slots one order for this building occupies while building — ignored when `occupiesMostSlots` is set. */
   slotCost: number;

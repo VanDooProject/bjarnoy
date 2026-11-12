@@ -724,7 +724,7 @@ describe('targetBuildingPickerMode', () => {
 
 describe('shoreBuildings', () => {
   // Land at q >= 0, sea at q < 0.
-  const coast = { isLand: (q: number) => q >= 0 };
+  const coast = { isLand: (q: number) => q >= 0, isSea: (q: number) => q < 0 };
 
   it('keeps only buildings on a shoreline hex or a sea hex', () => {
     const farm = { q: 3, r: 0, type: 'farm' };

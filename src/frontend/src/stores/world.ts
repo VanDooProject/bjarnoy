@@ -759,6 +759,13 @@ export const useWorldStore = defineStore('world', {
           })),
         ),
       );
+      // Water an island encloses that the bog did not fill (`IslandTerrainResponse.inlandLakeTiles`): drawn like the sea, not land. The API
+      // only lists a wasted island once the endboss has triggered, so a hidden one's lakes never get here.
+      this.model.setInlandLakeTiles(
+        this.islands.flatMap((island) =>
+          (terrainById.get(island.id)?.inlandLakeTiles ?? []).map((tile) => ({ q: tile.q, r: tile.r })),
+        ),
+      );
       // Server-generated 7-hex giant features (see `IslandResponse.giants`)
       // — the server is authoritative on where these sit, so this only
       // tags the covered tiles for rendering (`WorldModel.setGiants`), no

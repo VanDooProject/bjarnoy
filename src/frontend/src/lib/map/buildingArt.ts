@@ -98,6 +98,7 @@ function pngBuildingArt(family: string, level: number): string | undefined {
 
 const TERRAIN_SHOWCASE_FAMILY: Record<string, string> = {
   sea: 'watertile',
+  inlandlake: 'watertile',
   sand: 'sandtile',
   grass: 'grasstile',
   forest: 'foresttile',

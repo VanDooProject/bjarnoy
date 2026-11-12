@@ -246,7 +246,7 @@ public sealed record WorldMovementResponse(
 
 /// <summary>
 /// One island as <c>GET /worlds/{id}/islands</c> lists it: the labels and everything that changes while the world runs (camps, walls,
-/// towers). The island's terrain data — river and bog tiles (<see cref="IslandTerrainResponse"/>, served in chunks) and its start
+/// towers). The island's terrain data — river, bog and inland-lake tiles (<see cref="IslandTerrainResponse"/>, served in chunks) and its start
 /// positions (<see cref="IslandStartPositionsResponse"/>) — is big and only changes when the world is reseeded, so it has its own
 /// cached endpoints.
 /// </summary>
@@ -284,16 +284,20 @@ public sealed record IslandResponse(
     }
 }
 
-/// <summary>The river and bog tiles of one island — the same tile shapes the island list used to carry.</summary>
+/// <summary>The river, bog and inland-lake tiles of one island — the same tile shapes the island list used to carry.</summary>
+/// <param name="InlandLakeTiles">Enclosed water the bog did not fill (<see cref="Bjarnoy.Domain.World.Terrain.InlandLake"/>).</param>
 public sealed record IslandTerrainResponse(
     Guid Id,
     IReadOnlyList<RiverTileResponse> RiverTiles,
-    IReadOnlyList<BogTileResponse> BogTiles)
+    IReadOnlyList<BogTileResponse> BogTiles,
+    IReadOnlyList<TileCoordinate> InlandLakeTiles)
 {
-    public static IslandTerrainResponse From(Guid id, IEnumerable<RiverTileRecord> riverTiles, IEnumerable<BogTileRecord> bogTiles) => new(
+    public static IslandTerrainResponse From(
+        Guid id, IEnumerable<RiverTileRecord> riverTiles, IEnumerable<BogTileRecord> bogTiles, IEnumerable<HexPoint> inlandLakeTiles) => new(
         id,
         [.. riverTiles.Select(RiverTileResponse.From)],
-        [.. bogTiles.Select(BogTileResponse.From)]);
+        [.. bogTiles.Select(BogTileResponse.From)],
+        [.. inlandLakeTiles.Select(p => new TileCoordinate(p.Q, p.R))]);
 }
 
 /// <summary>One chunk of <c>GET /worlds/{id}/terrain-chunks/{chunk}</c>: the terrain of a fixed range of islands (by <see cref="IslandResponse.Index"/> order).</summary>

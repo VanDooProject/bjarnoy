@@ -1607,6 +1607,54 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     expect(store.model?.isFrozenEnabled()).toBe(true);
   });
 
+  it('lays every island’s inland lakes over the terrain', async () => {
+    const store = await loadStoreModule(false);
+    listWorlds.mockReset().mockResolvedValue([
+      { id: 'world-1', name: 'Kettil Sea', status: 'Running', joinable: true, joinableReason: 'None', playerCount: 0, maxPlayers: 100, freeSlots: 100, startsAt: null },
+    ]);
+    getWorld.mockReset().mockResolvedValue({
+      id: 'world-1',
+      name: 'Kettil Sea',
+      seed: 1,
+      radius: 30,
+      maxPlayers: 100,
+      status: 'Running',
+      islandCount: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      joinable: true,
+      joinableReason: 'None',
+      startsAt: null,
+      endbossTriggered: false,
+      frozenIslesEnabled: false,
+      speedFactor: 1,
+      generation: generationResponse(),
+      movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+    });
+    getIslands.mockReset().mockResolvedValue([
+      {
+        id: 'island-1',
+        index: 0,
+        name: 'Near',
+        q: 0,
+        r: 0,
+        tileCount: 10,
+        startPositions: [],
+        giants: [],
+        camps: [],
+        wasted: false,
+      },
+    ]);
+    // The lakes ride with the terrain chunks, matched to the island by id, like the bog tiles.
+    getTerrainChunks.mockReset().mockResolvedValue([
+      { id: 'island-1', riverTiles: [], bogTiles: [], inlandLakeTiles: [{ q: 700, r: 700 }] },
+    ]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(store.model?.terrainOf(700, 700)).toBe('inlandlake');
+    expect(store.model?.terrainOf(701, 700)).toBe('sea');
+  });
+
   // Regression: see 'refreshCampStates' - /islands hides the camps of unseen islands from a caller it cannot identify.
   it('asks for the islands as the local player, so an account-less player gets the camps of the islands they have seen', async () => {
     const store = await loadStoreModule(false);

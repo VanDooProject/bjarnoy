@@ -577,6 +577,7 @@ public sealed class WorldService(
         FogChunks = FogChunkLayout.ChunksOf(island.Tiles),
         RiverTiles = [.. island.RiverTiles.Select(ToRiverTileRecord)],
         BogTiles = [.. island.BogTiles.Select(ToBogTileRecord)],
+        InlandLakeTiles = [.. island.InlandLakeTiles.Select(p => new HexPoint(p.Q, p.R))],
         Giants = [.. island.Giants.Select(ToGiantRecord)],
         Camps = [.. island.Camps.Select(ToCampRecord)],
         UtgardWalls = [.. island.UtgardWalls.Select(w => new UtgardWallRecord(
@@ -1122,7 +1123,7 @@ public sealed class WorldService(
         }
     }
 
-    /// <summary>The bog overlay (bog / lake per hex) of every island of a world, for <see cref="GetTiles"/> and the game rules.</summary>
+    /// <summary>The bog overlay (bog / lake / inland lake per hex) of every island of a world, for <see cref="GetTiles"/> and the game rules.</summary>
     public Task<IReadOnlyDictionary<HexCoord, Terrain>> GetBogOverlayAsync(Guid worldId, CancellationToken cancellationToken = default) =>
         WorldTerrain.OverlayAsync(_dbContext, worldId, cancellationToken);
 

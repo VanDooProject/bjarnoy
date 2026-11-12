@@ -46,7 +46,7 @@ public sealed record TerrainChunks(IReadOnlyList<GzipPayload> Chunks)
 }
 
 /// <summary>
-/// The big, rarely changing parts of a world's islands — river and bog tiles, start positions — serialized and compressed once per
+/// The big, rarely changing parts of a world's islands — river, bog and inland-lake tiles, start positions — serialized and compressed once per
 /// world and kept (<see cref="PerWorldCache{T}"/>), so serving them reads no island data and does no serialization. They only change
 /// when a world is reseeded (<see cref="WorldIslandCaches.Invalidate"/>), which clears them.
 /// </summary>
@@ -81,14 +81,14 @@ public static class IslandPayloads
             .AsNoTracking()
             .Where(i => i.WorldId == worldId && (wastedRevealed || !i.IsWasted))
             .OrderBy(i => i.Index)
-            .Select(i => new { i.Id, i.RiverTiles, i.BogTiles })
+            .Select(i => new { i.Id, i.RiverTiles, i.BogTiles, i.InlandLakeTiles })
             .ToListAsync(CancellationToken.None)).ConfigureAwait(false);
 
         var chunks = new List<GzipPayload>((rows.Count + TerrainChunkSize - 1) / TerrainChunkSize);
         for (var from = 0; from < rows.Count; from += TerrainChunkSize)
         {
             var islands = rows.Skip(from).Take(TerrainChunkSize)
-                .Select(r => IslandTerrainResponse.From(r.Id, r.RiverTiles, r.BogTiles))
+                .Select(r => IslandTerrainResponse.From(r.Id, r.RiverTiles, r.BogTiles, r.InlandLakeTiles))
                 .ToList();
             chunks.Add(GzipPayload.Create(new TerrainChunkResponse(chunks.Count, islands), json));
         }

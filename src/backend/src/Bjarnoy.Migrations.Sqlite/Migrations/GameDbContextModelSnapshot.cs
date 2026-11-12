@@ -1228,6 +1228,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("Index")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("InlandLakeTiles")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("IsWasted")
                         .HasColumnType("INTEGER");
 
