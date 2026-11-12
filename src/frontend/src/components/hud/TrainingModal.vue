@@ -311,7 +311,6 @@ async function train(type: string, count: number) {
   inset: 0;
   z-index: 40;
   background: var(--layer-backdrop);
-  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
