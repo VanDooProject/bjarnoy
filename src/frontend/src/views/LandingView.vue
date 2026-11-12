@@ -8,6 +8,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
+import { topPhoneLayerId, useHiddenUnderPhoneLayer, vPhoneHidden } from '../composables/usePhoneLayer';
 import { useJoinBlockedLabel } from '../composables/useJoinBlockedLabel';
 import PlayIntroButton from '../intro/PlayIntroButton.vue';
 import FeatureList from '../intro/FeatureList.vue';
@@ -414,6 +415,12 @@ const ringLaneSpots = computed(() =>
 );
 
 const isMobile = useIsMobile();
+// HUD overlays hide while a layer (modal, drawer, ring, ...) is open on a phone. The guidance arrow is the one
+// exception: in screen mode it points into the ring's own bubbles, so the ring does not hide it.
+const hudHidden = useHiddenUnderPhoneLayer();
+const guidanceHidden = computed(
+  () => hudHidden.value && !(pointerTarget.value?.mode === 'screen' && topPhoneLayerId.value === 'ring'),
+);
 const queueDrawerOpen = ref(false);
 
 // Finding #12: mirrors MapView.vue's own hudInset*Px exactly — this view's
@@ -992,7 +999,7 @@ watch(
     <!-- Before founding there is no header band: the floating group at the top right holds "How to play" and the
          returning-player menu (log in, other worlds, settings, start page). No `#drawer`, no HudNav: nothing here
          is a dead click for someone who has not founded anything (docs/design/zip-brainstorms.md:44). -->
-    <div v-if="!player.hasFoundedSettlement" class="topright">
+    <div v-if="!player.hasFoundedSettlement" v-phone-hidden="hudHidden" class="topright">
       <HudNavLink :href="docsHref" class="howto" data-testid="map-how-to-play" @navigate="router.push('/docs')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1z" />
@@ -1014,8 +1021,8 @@ watch(
     <!-- Player logout/login gate: replaces the founding column entirely while
          this device remembers a real account that's currently logged out —
          see `showReturningLoginGate`'s own comment above. -->
-    <ReturningLoginPanel v-if="showReturningLoginGate" />
-    <div v-else-if="!player.hasFoundedSettlement" class="founding-col" :class="{ 'founding-col--blocked': joinBlocked }">
+    <ReturningLoginPanel v-if="showReturningLoginGate" v-phone-hidden="hudHidden" />
+    <div v-else-if="!player.hasFoundedSettlement" v-phone-hidden="hudHidden" class="founding-col" :class="{ 'founding-col--blocked': joinBlocked }">
       <h1 class="wordmark">{{ WORDMARK }}</h1>
       <template v-if="joinBlocked">
         <h2 class="heading">{{ t('landing.hero.notOpenTitle') }}</h2>
@@ -1028,10 +1035,11 @@ watch(
         <FeatureList class="features" :locale="introLocale" id-prefix="map" />
       </template>
     </div>
-    <ImpressumLink v-if="!player.hasFoundedSettlement" class="impressum" :locale="introLocale" testid="map-impressum" />
+    <ImpressumLink v-if="!player.hasFoundedSettlement" v-phone-hidden="hudHidden" class="impressum" :locale="introLocale" testid="map-impressum" />
 
     <GuidancePointer
       v-if="pointerTarget && mapDrawn"
+      v-phone-hidden="guidanceHidden"
       :coord="pointerTarget.mode === 'hex' ? pointerTarget.coord : undefined"
       :renderer="pointerTarget.mode === 'hex' ? canvasRef?.renderer : undefined"
       :screen="pointerTarget.mode === 'screen' ? pointerTarget.screen : undefined"
@@ -1050,8 +1058,8 @@ watch(
          checklist (still at the bottom) — the mockup shows both at once,
          unlike completion, where the banner replaces the checklist
          entirely since there's nothing left to check off. -->
-    <OnboardingBanner v-if="showLandfallBanner" variant="landfall" />
-    <OnboardingBanner v-if="showCompletionBanner" variant="complete" @continue="onContinueToSettlement" />
+    <OnboardingBanner v-if="showLandfallBanner" v-phone-hidden="hudHidden" variant="landfall" />
+    <OnboardingBanner v-if="showCompletionBanner" v-phone-hidden="hudHidden" variant="complete" @continue="onContinueToSettlement" />
     <!-- Mobile tutorial focus (owner decision): on phones, the progress tray
          and the open ring menu would otherwise both fight for the same
          strip of screen near the bottom — the tray steps aside while the
@@ -1060,7 +1068,8 @@ watch(
     <!-- The stepper fades out when it goes; after the last step it stays a moment first so the finishing wave plays. -->
     <Transition :name="guidance.complete ? 'steps-done' : 'steps'">
       <OnboardingChecklist
-        v-if="!joinBlocked && !guidance.complete && !showReturningLoginGate && !(isCompactHudLanding && ringScreen)"
+        v-if="!joinBlocked && !guidance.complete && !showReturningLoginGate"
+        v-phone-hidden="hudHidden"
         :guidance="guidance"
         :can-focus="!!pointerTarget && mapDrawn"
         @focus="pointerNudge++"
@@ -1069,7 +1078,7 @@ watch(
 
     <template v-if="player.hasFoundedSettlement">
       <QueueDrawer v-if="isMobile" v-model:open="queueDrawerOpen" @select="onQueueSelect" />
-      <BuildQueuePanel v-else @select="onQueueSelect" />
+      <BuildQueuePanel v-else v-phone-hidden="hudHidden" @select="onQueueSelect" />
     </template>
     <RingMenuHost>
     <RingMenu

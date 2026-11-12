@@ -17,6 +17,7 @@ import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { useWorldStore } from '../../stores/world';
 import { builtBuildingLevels, ownBuildings } from '../../composables/useBuildRing';
 import { useIsMobile } from '../../composables/useIsMobile';
+import { useHiddenUnderPhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import {
   boxChangeFor,
   dialGoneAfterMs,
@@ -101,6 +102,7 @@ const auth = useAuthStore();
 const catalogue = useBuildingCatalogueStore();
 const prefs = useHudPrefsStore();
 const isMobile = useIsMobile();
+const hudHidden = useHiddenUnderPhoneLayer();
 const motion = useBuildingHudMotion();
 
 /** The markers are in the DOM: from the moment they are switched on until their hide animation has ended. */
@@ -535,7 +537,7 @@ function tick() {
     el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${zs.toFixed(3)})`;
     // A marker well off screen is not worth compositing.
     const reach = 320 * zs;
-    el.style.visibility = x < -reach || x > width + reach || y < -reach || y > height + reach ? 'hidden' : 'visible';
+    el.style.visibility = x < -reach || x > width + reach || y < -reach || y > height + reach ? 'hidden' : ''; // '' inherits, so a phone layer hiding the whole layer is not undone per marker
     placed.push({ key: marker.key, x, hovered: t > 0 });
   }
   if (tiersChanged) tiers.value = nextTiers;
@@ -718,7 +720,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="root" class="building-hud">
+  <div ref="root" v-phone-hidden="hudHidden" class="building-hud">
     <div class="building-hud__markers">
         <div v-for="m in markers" :key="m.key" :ref="(el) => setElement(m.key, el)" class="hud-marker" :data-coord="m.key" :data-tier="tierOf(m.key)">
           <div class="hud-marker__inner" :style="innerStyle" role="img" :aria-label="t('hud.buildingHud.markerLabel', { building: m.name, level: m.level })">

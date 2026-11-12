@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { defineComponent, effectScope, h, nextTick, ref, withDirectives } from 'vue';
+import { defineComponent, effectScope, h, nextTick, ref, withDirectives, type Ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -21,7 +21,7 @@ function stubMatchMedia(matches: boolean) {
 
 let mounted: ReturnType<typeof mount>[] = [];
 
-function mountLayer(open: ReturnType<typeof ref<boolean>>, id?: string) {
+function mountLayer(open: Ref<boolean>, id?: string) {
   let layer!: ReturnType<typeof usePhoneLayer>;
   const wrapper = mount(
     defineComponent({
@@ -180,7 +180,7 @@ describe('usePhoneLayer', () => {
 });
 
 describe('vPhoneHidden', () => {
-  function mountWith(hidden: ReturnType<typeof ref<boolean>>) {
+  function mountWith(hidden: Ref<boolean>) {
     const wrapper = mount(
       defineComponent({
         setup() {

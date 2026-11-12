@@ -77,6 +77,8 @@ export function useHiddenUnderPhoneLayer(): ComputedRef<boolean> {
 }
 
 function apply(el: HTMLElement, hidden: boolean | undefined) {
+  // A component root that renders nothing (v-if false) hands the directive a comment node.
+  if (!(el instanceof HTMLElement)) return;
   if (hidden) {
     el.style.visibility = 'hidden';
     el.inert = true;
