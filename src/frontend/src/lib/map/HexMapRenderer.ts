@@ -237,6 +237,9 @@ export const LABEL_STYLES = {
   badgeSuffix: new TextStyle({ fill: 0xb9c8d1, fontFamily: "'Barlow', sans-serif", fontWeight: '600', fontSize: 13 }),
 } as const;
 
+/** Frames a keyed label may stay unused before its Text is destroyed (see hideUnusedLabels). */
+const LABEL_POOL_IDLE_FRAMES = 600;
+
 const WORLD_PROTOTYPE_HEX_W = 40;
 const WAVE_SCALE = 168 / WORLD_PROTOTYPE_HEX_W;
 const WAVE_COLOR = 0xffffff;
@@ -2346,8 +2349,10 @@ export class HexMapRenderer {
   // World mode's camp paws (drawCampPaws): under both fog layers, like the terrain they mark, so the fog covers them
   // the way it covers the ground (markerLayer sits above the out-of-sight fog).
   private campPawLayer = new Graphics();
-  private labelPool: Text[] = [];
-  private labelsUsed = 0;
+  // Pooled labels keyed by what they show (`owner:<settlementId>`, `island:<islandId>`, ...), so a label that stays on
+  // screen keeps its Text (and its rasterised glyphs) while others come and go; see acquireLabel.
+  private labelPool = new Map<string, { text: Text; lastUsedFrame: number }>();
+  private labelFrame = 0;
   /**
    * World-space Y of each island's bottom edge, for placing its name label.
    * Measuring it walks the island's whole footprint, so it is done once per
@@ -5646,25 +5651,24 @@ export class HexMapRenderer {
     this.campPawLayer.clear();
     // markerLayer.clear() only wipes the Graphics geometry, not the pooled
     // Sprite/Text children parented to it — each pass counts what it used and
-    // hides the rest, same bookkeeping labels already do (labelsUsed).
+    // hides the rest, same bookkeeping labels do (hideUnusedLabels).
     this.iconsUsed = 0;
+    this.labelFrame++;
     if (this.options.mode === 'settlement') {
-      this.labelsUsed = 0;
       if (!this.options.hideSettlementBadge) this.rebuildSettlementLabels();
       this.pruneConstructionDials();
-      for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
+      this.hideUnusedLabels();
       this.drawArmyOverlay();
       this.hideUnusedIcons();
       return;
     }
     if (this.options.mode !== 'world') {
       this.hideUnusedIcons();
-      this.labelPool.forEach((l) => (l.visible = false));
+      this.hideUnusedLabels();
       return;
     }
     const { worldModel, playerId } = this.options;
     const fogActive = this.isFogActive();
-    this.labelsUsed = 0;
 
     for (const settlement of worldModel.listSettlements()) {
       // Don't reveal a settlement (yours or a rival's) over ground nobody
@@ -5677,7 +5681,7 @@ export class HexMapRenderer {
       // The settlement is marked by the shared realm pill alone (see
       // drawRealmPill; its diamond carries the realm colour), centred on the
       // settlement hex, so the name stays readable over water and terrain.
-      const ownerLabel = this.acquireLabel(LABEL_STYLES.ownerName);
+      const ownerLabel = this.acquireLabel(`owner:${settlement.id}`, LABEL_STYLES.ownerName);
       ownerLabel.text = settlement.ownerName;
       ownerLabel.anchor.set(0, 0.5);
       const pill = layoutRealmPill(REALM_PILL.owner, 1, [ownerLabel.width], center.x, center.y - REALM_PILL.owner.height / 2);
@@ -5714,7 +5718,7 @@ export class HexMapRenderer {
       // Reference styling: uppercase, letter-spaced small-caps label, muted
       // gray for other islands, gold + bold for the player's own (see
       // LABEL_STYLES.islandMine/islandOther).
-      const label = this.acquireLabel(mineIsland ? LABEL_STYLES.islandMine : LABEL_STYLES.islandOther);
+      const label = this.acquireLabel(`island:${island.id}`, mineIsland ? LABEL_STYLES.islandMine : LABEL_STYLES.islandOther);
       label.text = island.name.toUpperCase();
       // Reference places the name below the island's shape entirely, not
       // over its tiles or clipping its bottom edge. Islands are generated at
@@ -5765,7 +5769,7 @@ export class HexMapRenderer {
         .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
 
       const remainingMs = Math.max(0, cart.etaAt - now);
-      const label = this.acquireLabel(LABEL_STYLES.cart);
+      const label = this.acquireLabel(`cart:${cart.id}`, LABEL_STYLES.cart);
       label.text = `${Math.round(cart.cargoAmount)} ${cart.cargoResource} · ${formatEta(remainingMs)}`;
       label.anchor.set(0, 0);
       label.position.set(screen.x + 8, screen.y - 8);
@@ -5782,7 +5786,7 @@ export class HexMapRenderer {
     // hideUnusedIcons() moves to after this call instead of before it.
     this.drawArmyOverlay();
     this.hideUnusedIcons();
-    for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
+    this.hideUnusedLabels();
   }
 
   /**
@@ -5910,11 +5914,11 @@ export class HexMapRenderer {
       // glyphs (see LABEL_STYLES), while `scale` is a transform on the texture
       // already in hand — and `width` below still reports the scaled size, so
       // the pill measures the same either way.
-      const nameLabel = this.acquireLabel(LABEL_STYLES.badgeName, zoomScale);
+      const nameLabel = this.acquireLabel(`badgeName:${settlement.id}`, LABEL_STYLES.badgeName, zoomScale);
       nameLabel.text = settlement.name;
       nameLabel.anchor.set(0, 0.5);
 
-      const suffixLabel = this.acquireLabel(LABEL_STYLES.badgeSuffix, zoomScale);
+      const suffixLabel = this.acquireLabel(`badgeSuffix:${settlement.id}`, LABEL_STYLES.badgeSuffix, zoomScale);
       suffixLabel.text = settlementBadgeSuffix(settlement, mine, worldModel.isBeachCamp(settlement.id), buildingName('beachcamp'));
       suffixLabel.anchor.set(0, 0.5);
 
@@ -6041,28 +6045,40 @@ export class HexMapRenderer {
   }
 
   /**
-   * A pooled label, set to one of the shared styles (see LABEL_STYLES for why
+   * The pooled label for `key` (created on first use), set to one of the shared styles (see LABEL_STYLES for why
    * the style is assigned by reference rather than written property by
    * property).
    *
-   * `scale` and `alpha` are reset here because the pool is shared across every
-   * kind of label and across both modes: a slot last used for a zoomed
-   * settlement badge would otherwise hand its scale to the next owner name to
-   * land on it.
+   * The key is the label's identity, not its draw order: when the set of visible labels changes (island labels
+   * culled by the viewport while panning) every other label keeps its Text, so nothing is re-rasterised.
+   * `scale` and `alpha` are reset here because a label's scale changes with the zoom and the pool outlives a mode switch.
    */
-  private acquireLabel(style: TextStyle, scale = 1): Text {
-    let label = this.labelPool[this.labelsUsed];
-    if (!label) {
-      label = new Text({ text: '', style });
-      this.labelPool.push(label);
-      this.markerLayer.addChild(label);
+  private acquireLabel(key: string, style: TextStyle, scale = 1): Text {
+    let entry = this.labelPool.get(key);
+    if (!entry) {
+      entry = { text: new Text({ text: '', style }), lastUsedFrame: this.labelFrame };
+      this.labelPool.set(key, entry);
+      this.markerLayer.addChild(entry.text);
     }
+    entry.lastUsedFrame = this.labelFrame;
+    const label = entry.text;
     if (label.style !== style) label.style = style;
     label.scale.set(scale);
     label.alpha = 1;
     label.tint = 0xffffff;
-    this.labelsUsed++;
     return label;
+  }
+
+  /** Labels not acquired this frame are hidden; ones unused for LABEL_POOL_IDLE_FRAMES frames are destroyed. */
+  private hideUnusedLabels() {
+    for (const [key, entry] of this.labelPool) {
+      if (entry.lastUsedFrame === this.labelFrame) continue;
+      entry.text.visible = false;
+      if (this.labelFrame - entry.lastUsedFrame > LABEL_POOL_IDLE_FRAMES) {
+        entry.text.destroy();
+        this.labelPool.delete(key);
+      }
+    }
   }
 
   /**
