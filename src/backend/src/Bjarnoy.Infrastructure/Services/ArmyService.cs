@@ -1978,11 +1978,16 @@ public sealed class ArmyService(
         // Before the row goes: the rehome reads the camp and the owner's other spots.
         await RehomeArmiesAsync(campId, null, at, cancellationToken).ConfigureAwait(false);
 
-        var affected = await _dbContext.Armies
+        // Every row that still points at the camp, as stored or as changed in this request (the rehome above, the battle), must let
+        // go of it before the row is deleted: the foreign keys restrict.
+        var stored = await _dbContext.Armies
             .Include(a => a.Stacks)
             .Include(a => a.World)
             .Where(a => a.SettlementId == campId || a.TargetSettlementId == campId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var affected = stored
+            .Union(_dbContext.Armies.Local.Where(a => a.SettlementId == campId || a.TargetSettlementId == campId))
+            .ToList();
 
         foreach (var army in affected.Where(a => !IsGone(a)))
         {
@@ -2010,10 +2015,11 @@ public sealed class ArmyService(
             {
                 domain = domain.Location switch
                 {
-                    // A guest standing in the camp is sent home (or, with no way home, stays on the camp's hex).
+                    // A guest standing in the camp is sent home (or, with no way home, stays on the camp's hex); either way the camp is
+                    // no longer its target.
                     ArmyLocation.Supporting supporting =>
-                        await PlanRecallAsync(army, domain, armyAt, supporting.Spot, cancellationToken).ConfigureAwait(false)
-                            ?? domain.Strand(armyAt, supporting.Spot),
+                        (await PlanRecallAsync(army, domain, armyAt, supporting.Spot, cancellationToken).ConfigureAwait(false)
+                            ?? domain.Strand(armyAt, supporting.Spot)) with { TargetSettlementId = null, TargetBuildingCoord = null },
                     // On its way there: it goes on to the camp's hex and stays there, as after a move order.
                     ArmyLocation.InTransit { Movement: { IsReturning: false, IsStranded: false } } =>
                         domain with { Mission = ArmyMission.Move, TargetSettlementId = null, TargetBuildingCoord = null },

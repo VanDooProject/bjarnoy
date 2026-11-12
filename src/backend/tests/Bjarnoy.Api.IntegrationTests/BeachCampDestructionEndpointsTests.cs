@@ -499,4 +499,100 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
         Assert.Equal(3, standing.Stacks.Sum(s => s.Count));
         Assert.Single(await InDbAsync(db => db.BattleReports.Where(r => r.DefenderSettlementId == scene.CampId).ToListAsync(Ct)));
     }
+
+    [Fact]
+    public async Task Every_kind_of_army_around_a_falling_camp_lets_go_of_it_before_its_row_is_deleted()
+    {
+        // The camp's own army out south, rehomed to the home settlement.
+        var scene = await PlantAsync(campArmyProvisions: 100);
+        (int Q, int R)[] south = [.. Enumerable.Range(0, 11).Select(i => (0, i))];
+        (int Q, int R)[] east = [.. Enumerable.Range(2, 11).Select(i => (i, 0))];
+        Guid stranded, returning, grouped, supporting, enRoute, comingBack, foreignGroup, campGathering, foreignGathering;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var now = _factory.Time.GetUtcNow();
+
+            // The camp's own: one out of food (left without a home), one on its way back, one walking to a gathering of the camp,
+            // one supporting the home settlement.
+            var outOfFood = Army(scene.CampId, CampHex, south, [.. south.Reverse()], 15, [(UnitType.Spearman, 5)]);
+            var back = Army(scene.CampId, CampHex, [.. south.Reverse()], [.. south.Reverse()], 100, [(UnitType.Spearman, 5)]);
+            back.IsReturning = true;
+            back.TurnAroundAt = now;
+            var gathering = new GatheringEntity
+            {
+                SettlementId = scene.CampId,
+                HexQ = 0,
+                HexR = 8,
+                DepartAt = now + TimeSpan.FromHours(20),
+                Mission = (int)ArmyMission.Move,
+                Stops = [new HexPoint(0, 10)],
+                HomeSpotQ = CampHex.Q,
+                HomeSpotR = CampHex.R,
+            };
+            db.Gatherings.Add(gathering);
+            var group = Army(scene.CampId, CampHex, [.. south.Take(9)], [.. south.Take(9).Reverse()], 100, [(UnitType.Spearman, 5)]);
+            group.GatheringId = gathering.Id;
+            group.GatherDepartAt = gathering.DepartAt;
+            var guestAtHome = Army(scene.CampId, CampHex, [(HomeHex.Q, HomeHex.R)], [(HomeHex.Q, HomeHex.R)], 100, [(UnitType.Spearman, 5)]);
+            guestAtHome.Mission = (int)ArmyMission.Support;
+            guestAtHome.IsSupporting = true;
+            guestAtHome.TargetSettlementId = scene.HomeId;
+            guestAtHome.TargetBuildingQ = HomeHex.Q;
+            guestAtHome.TargetBuildingR = HomeHex.R;
+
+            // The attacker's: a second attack on its way, a raid on its way back from the camp, and a group of a gathering sent at it.
+            var second = Army(scene.AttackerSettlementId, AttackerHome, [.. Enumerable.Range(0, 9).Select(i => (8 - i, 0))], [(0, 0), (1, 0)], 1_000, [(UnitType.Axeman, 3)]);
+            second.Mission = (int)ArmyMission.Attack;
+            second.TargetSettlementId = scene.CampId;
+            var raidBack = Army(scene.AttackerSettlementId, AttackerHome, east, east, 1_000, [(UnitType.Axeman, 3)]);
+            raidBack.Mission = (int)ArmyMission.Raid;
+            raidBack.TargetSettlementId = scene.CampId;
+            raidBack.IsReturning = true;
+            raidBack.TurnAroundAt = now;
+            var sentAt = new GatheringEntity
+            {
+                SettlementId = scene.AttackerSettlementId,
+                HexQ = 14,
+                HexR = 0,
+                DepartAt = now + TimeSpan.FromHours(20),
+                Mission = (int)ArmyMission.Attack,
+                TargetSettlementId = scene.CampId,
+                HomeSpotQ = AttackerHome.Q,
+                HomeSpotR = AttackerHome.R,
+            };
+            db.Gatherings.Add(sentAt);
+            var foreign = Army(scene.AttackerSettlementId, AttackerHome, [.. Enumerable.Range(14, 7).Select(i => (34 - i, 0))], [(14, 0), (15, 0)], 1_000, [(UnitType.Axeman, 3)]);
+            foreign.GatheringId = sentAt.Id;
+            foreign.GatherDepartAt = sentAt.DepartAt;
+
+            db.AddArmyRows(outOfFood, back, group, guestAtHome, second, raidBack, foreign);
+            await db.SaveChangesAsync(Ct);
+            (stranded, returning, grouped, supporting, enRoute, comingBack, foreignGroup, campGathering, foreignGathering) =
+                (outOfFood.Id, back.Id, group.Id, guestAtHome.Id, second.Id, raidBack.Id, foreign.Id, gathering.Id, sentAt.Id);
+        }
+
+        // A guest of a third player stands in the camp and dies in the fight.
+        var guest = await PlantGuestAsync(scene, [(UnitType.Spearman, 1)]);
+
+        await LandTheAttackAsync(scene);
+
+        Assert.False(await InDbAsync(db => db.Settlements.AnyAsync(s => s.Id == scene.CampId, Ct)));
+        Assert.False(await InDbAsync(db => db.Armies.AnyAsync(a => a.SettlementId == scene.CampId || a.TargetSettlementId == scene.CampId, Ct)));
+        Assert.False(await InDbAsync(db => db.Gatherings.AnyAsync(g => g.SettlementId == scene.CampId || g.TargetSettlementId == scene.CampId, Ct)));
+        Assert.False(await InDbAsync(db => db.Armies.AnyAsync(a => a.Id == guest, Ct)));
+        Assert.False(await InDbAsync(db => db.Gatherings.AnyAsync(g => g.Id == campGathering, Ct)));
+
+        var armies = await InDbAsync(db => db.Armies.AsNoTracking().ToDictionaryAsync(a => a.Id, Ct));
+        Assert.Null(armies[stranded].SettlementId);
+        Assert.Equal(scene.HomeId, armies[returning].SettlementId);
+        Assert.Equal(scene.HomeId, armies[supporting].SettlementId);
+        Assert.Equal(scene.HomeId, armies[grouped].SettlementId);
+        Assert.Equal((int)ArmyMission.Move, armies[enRoute].Mission);
+        Assert.True(armies[comingBack].IsReturning);
+        Assert.Equal(foreignGathering, armies[foreignGroup].GatheringId);
+        Assert.Equal(
+            (int)ArmyMission.Move, await InDbAsync(db => db.Gatherings.Where(g => g.Id == foreignGathering).Select(g => g.Mission).SingleAsync(Ct)));
+    }
 }
