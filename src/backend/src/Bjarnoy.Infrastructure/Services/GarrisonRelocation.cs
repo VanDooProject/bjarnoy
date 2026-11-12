@@ -179,7 +179,8 @@ internal sealed class GarrisonRelocation(GameDbContext dbContext)
             var rehomed = Rehome(army, targets, army.NotBeforeItsOrder(now), routing);
             if (rehomed is not null)
             {
-                entity.ApplyDomain(rehomed);
+                // A gathering belongs to the settlement its groups set out from: one rehomed to another settlement leaves it.
+                entity.ApplyDomain(rehomed.SettlementId == settlementId ? rehomed : rehomed.LeaveGathering());
             }
         }
     }

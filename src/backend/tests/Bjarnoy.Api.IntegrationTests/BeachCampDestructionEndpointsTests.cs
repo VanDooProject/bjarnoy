@@ -589,6 +589,8 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
         Assert.Equal(scene.HomeId, armies[returning].SettlementId);
         Assert.Equal(scene.HomeId, armies[supporting].SettlementId);
         Assert.Equal(scene.HomeId, armies[grouped].SettlementId);
+        Assert.Null(armies[grouped].GatheringId);
+        Assert.Null(armies[grouped].GatherDepartAt);
         Assert.Equal((int)ArmyMission.Move, armies[enRoute].Mission);
         Assert.True(armies[comingBack].IsReturning);
         Assert.Equal(foreignGathering, armies[foreignGroup].GatheringId);
