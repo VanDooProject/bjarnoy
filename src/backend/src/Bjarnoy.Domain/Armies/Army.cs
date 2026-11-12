@@ -132,6 +132,19 @@ public sealed partial record Army
     public Guid? GatheringId { get; init; }
 
     /// <summary>
+    /// When the <see cref="Gathering"/> this army belongs to leaves (its fixed departure); set and cleared together with
+    /// <see cref="GatheringId"/> (<see cref="JoinGathering"/>, <see cref="LeaveGathering"/>). Until then the army stands on its meeting hex
+    /// and never turns around on its own (<see cref="SettleTo"/>).
+    /// </summary>
+    public DateTimeOffset? GatherDepartAt { get; init; }
+
+    /// <summary>This army as a group of the gathering <paramref name="gatheringId"/>, which leaves at <paramref name="departAt"/>.</summary>
+    public Army JoinGathering(Guid gatheringId, DateTimeOffset departAt) => this with { GatheringId = gatheringId, GatherDepartAt = departAt };
+
+    /// <summary>This army as no group of any gathering.</summary>
+    public Army LeaveGathering() => this with { GatheringId = null, GatherDepartAt = null };
+
+    /// <summary>
     /// True when any stack is a <see cref="UnitClass.Ship"/> (the rest are passengers, see this file's own class
     /// remarks). False for an empty army, same as every other <c>isFleet</c> check in this file.
     /// </summary>
@@ -1507,7 +1520,8 @@ public sealed partial record Army
 
         if (!movement.IsReturning)
         {
-            if (now < movement.TurnAroundAt)
+            // A group of a gathering stands on its meeting hex until the army leaves, whatever its own food would allow.
+            if (now < movement.TurnAroundAt || (GatheringId is not null && GatherDepartAt is { } departAt && now <= departAt))
             {
                 return new ArmySettleResult(this, Changed: false, ArrivedHome: false);
             }
@@ -1532,12 +1546,11 @@ public sealed partial record Army
                 RoutePlannedAt = movement.RoutePlannedAt,
             };
 
-            var turned = this with
+            var turned = (this with
             {
                 Location = new ArmyLocation.InTransit(returning),
                 Provisions = provisionsAtTurnAround,
-                GatheringId = null,
-            };
+            }).LeaveGathering();
 
             var outbound = new WalkedLeg(movement, movement.TurnAroundAt);
             return now >= returning.ArrivesAt
@@ -1645,7 +1658,7 @@ public sealed partial record Army
             RoutePlannedAt = now,
         };
 
-        return this with { Location = new ArmyLocation.InTransit(recallMovement), Provisions = provisionsNow, GatheringId = null };
+        return (this with { Location = new ArmyLocation.InTransit(recallMovement), Provisions = provisionsNow }).LeaveGathering();
     }
 
     /// <summary>
@@ -1688,7 +1701,7 @@ public sealed partial record Army
         {
             // No way home (a wall in the way): it stays where it fought, still protected from further fights, and starves
             // when the food runs out (docs/design/troop-movement-range.md §2a).
-            return (this with { GatheringId = null }).WithProvisionsAt(battleInstant, provisionsNow).Strand(battleInstant, fromHex, immuneUntil);
+            return LeaveGathering().WithProvisionsAt(battleInstant, provisionsNow).Strand(battleInstant, fromHex, immuneUntil);
         }
 
         var speed = TotalSpeed;
@@ -1711,7 +1724,7 @@ public sealed partial record Army
         };
 
         // The retreat departs at the battle instant, so the stored baseline is what the army carried then.
-        return (this with { Location = new ArmyLocation.InTransit(retreatMovement), GatheringId = null }).WithProvisionsAt(battleInstant, provisionsNow);
+        return (this with { Location = new ArmyLocation.InTransit(retreatMovement) }).LeaveGathering().WithProvisionsAt(battleInstant, provisionsNow);
     }
 
     /// <summary>
@@ -2158,18 +2171,17 @@ public sealed partial record Army
             departedAt, fullPath, cumulativeHours, edgeHours, returnPath, returnCumulativeHours, returnEdgeHours, provisionsAtDeparture, upkeepPerHour)
             with { RoutePlannedAt = arrived ? now : movement.RoutePlannedAt };
 
-        var ordered = leaving with
+        var ordered = (leaving with
         {
             Id = isSplit ? splitArmyId ?? Guid.CreateVersion7() : army.Id,
             Location = new ArmyLocation.InTransit(newMovement),
             Provisions = provisionsAtDeparture,
             Loot = isSplit ? default : army.Loot,
-            GatheringId = null,
             Mission = mission,
             TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             TargetBuildingCoord = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetBuildingCoord : null,
             TargetCampCoord = mission == ArmyMission.Hunt ? targetCampCoord : null,
-        };
+        }).LeaveGathering();
 
         return FieldOrderResult.Accept(ordered, remainder);
     }

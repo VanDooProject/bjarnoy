@@ -241,6 +241,9 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 case SettlementEntity settlement when entry.State == EntityState.Modified:
                     touched.Add(settlement.Id);
                     break;
+                case GatheringEntity when entry.State == EntityState.Modified:
+                    entry.Property(nameof(GatheringEntity.Version)).CurrentValue = Guid.NewGuid();
+                    break;
                 case TradeOfferEntity when entry.State == EntityState.Modified:
                     entry.Property(nameof(TradeOfferEntity.Version)).CurrentValue = Guid.NewGuid();
                     break;
@@ -587,6 +590,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .HasForeignKey(g => g.ParentGatheringId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            gathering.Property(g => g.Version).IsConcurrencyToken();
+
+            // The due gatherings of a world are found by departure (ArmyService.ResolveDueGatheringsAsync), through the settlement.
+            gathering.HasIndex(g => g.DepartAt);
             gathering.HasIndex(g => g.SettlementId);
             gathering.HasIndex(g => g.ParentGatheringId);
         });

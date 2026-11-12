@@ -50,6 +50,15 @@ public class GatheringEntity
     /// <summary>The sea meeting a boarded fleet joins when it leaves this gathering; null for every other gathering.</summary>
     public Guid? ParentGatheringId { get; set; }
 
+    /// <summary>Persisted mirror of <see cref="Gathering.IsFleet"/>.</summary>
+    public bool IsFleet { get; set; }
+
+    /// <summary>
+    /// Optimistic-concurrency token, the same pattern as <see cref="SettlementEntity.Version"/>: changed with every write, so a recall of a
+    /// group racing the merge of its gathering raises a concurrency exception and is retried instead of being lost.
+    /// </summary>
+    public Guid Version { get; set; } = Guid.NewGuid();
+
     public GatheringEntity? ParentGathering { get; set; }
 
     public Gathering ToDomain() => new()
@@ -59,6 +68,7 @@ public class GatheringEntity
         Hex = new HexCoord(HexQ, HexR),
         BoardingHex = BoardingQ is { } boardingQ ? new HexCoord(boardingQ, BoardingR!.Value) : null,
         DepartAt = DepartAt,
+        IsFleet = IsFleet,
         Mission = (ArmyMission)Mission,
         TargetSettlementId = TargetSettlementId,
         TargetBuildingCoord = TargetBuildingQ is { } bq ? new HexCoord(bq, TargetBuildingR!.Value) : null,
@@ -77,6 +87,7 @@ public class GatheringEntity
         BoardingQ = gathering.BoardingHex?.Q,
         BoardingR = gathering.BoardingHex?.R,
         DepartAt = gathering.DepartAt,
+        IsFleet = gathering.IsFleet,
         Mission = (int)gathering.Mission,
         TargetSettlementId = gathering.TargetSettlementId,
         TargetBuildingQ = gathering.TargetBuildingCoord?.Q,

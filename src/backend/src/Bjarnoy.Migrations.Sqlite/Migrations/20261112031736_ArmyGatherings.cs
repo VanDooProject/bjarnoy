@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace Bjarnoy.Migrations.PostgreSql.Migrations
+namespace Bjarnoy.Migrations.Sqlite.Migrations
 {
     /// <inheritdoc />
     public partial class ArmyGatherings : Migration
@@ -11,33 +11,41 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.AddColumn<DateTimeOffset>(
+                name: "GatherDepartAt",
+                table: "armies",
+                type: "TEXT",
+                nullable: true);
+
             migrationBuilder.AddColumn<Guid>(
                 name: "GatheringId",
                 table: "armies",
-                type: "uuid",
+                type: "TEXT",
                 nullable: true);
 
             migrationBuilder.CreateTable(
                 name: "gatherings",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    SettlementId = table.Column<Guid>(type: "uuid", nullable: false),
-                    HexQ = table.Column<int>(type: "integer", nullable: false),
-                    HexR = table.Column<int>(type: "integer", nullable: false),
-                    BoardingQ = table.Column<int>(type: "integer", nullable: true),
-                    BoardingR = table.Column<int>(type: "integer", nullable: true),
-                    DepartAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    Mission = table.Column<int>(type: "integer", nullable: false),
-                    TargetSettlementId = table.Column<Guid>(type: "uuid", nullable: true),
-                    TargetBuildingQ = table.Column<int>(type: "integer", nullable: true),
-                    TargetBuildingR = table.Column<int>(type: "integer", nullable: true),
-                    TargetCampQ = table.Column<int>(type: "integer", nullable: true),
-                    TargetCampR = table.Column<int>(type: "integer", nullable: true),
-                    Stops = table.Column<string>(type: "text", nullable: false),
-                    HomeSpotQ = table.Column<int>(type: "integer", nullable: false),
-                    HomeSpotR = table.Column<int>(type: "integer", nullable: false),
-                    ParentGatheringId = table.Column<Guid>(type: "uuid", nullable: true)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    SettlementId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    HexQ = table.Column<int>(type: "INTEGER", nullable: false),
+                    HexR = table.Column<int>(type: "INTEGER", nullable: false),
+                    BoardingQ = table.Column<int>(type: "INTEGER", nullable: true),
+                    BoardingR = table.Column<int>(type: "INTEGER", nullable: true),
+                    DepartAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
+                    Mission = table.Column<int>(type: "INTEGER", nullable: false),
+                    TargetSettlementId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    TargetBuildingQ = table.Column<int>(type: "INTEGER", nullable: true),
+                    TargetBuildingR = table.Column<int>(type: "INTEGER", nullable: true),
+                    TargetCampQ = table.Column<int>(type: "INTEGER", nullable: true),
+                    TargetCampR = table.Column<int>(type: "INTEGER", nullable: true),
+                    Stops = table.Column<string>(type: "TEXT", nullable: false),
+                    HomeSpotQ = table.Column<int>(type: "INTEGER", nullable: false),
+                    HomeSpotR = table.Column<int>(type: "INTEGER", nullable: false),
+                    ParentGatheringId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    IsFleet = table.Column<bool>(type: "INTEGER", nullable: false),
+                    Version = table.Column<Guid>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -60,6 +68,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                 name: "IX_armies_GatheringId",
                 table: "armies",
                 column: "GatheringId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_gatherings_DepartAt",
+                table: "gatherings",
+                column: "DepartAt");
 
             migrationBuilder.CreateIndex(
                 name: "IX_gatherings_ParentGatheringId",
@@ -92,6 +105,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
             migrationBuilder.DropIndex(
                 name: "IX_armies_GatheringId",
+                table: "armies");
+
+            migrationBuilder.DropColumn(
+                name: "GatherDepartAt",
                 table: "armies");
 
             migrationBuilder.DropColumn(

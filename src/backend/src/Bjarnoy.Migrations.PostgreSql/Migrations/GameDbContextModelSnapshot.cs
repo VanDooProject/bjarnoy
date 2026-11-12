@@ -312,6 +312,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<DateTimeOffset?>("FieldBattleImmuneUntil")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("GatherDepartAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid?>("GatheringId")
                         .HasColumnType("uuid");
 
@@ -992,6 +995,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("HomeSpotR")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("IsFleet")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("Mission")
                         .HasColumnType("integer");
 
@@ -1020,7 +1026,13 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid?>("TargetSettlementId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("DepartAt");
 
                     b.HasIndex("ParentGatheringId");
 

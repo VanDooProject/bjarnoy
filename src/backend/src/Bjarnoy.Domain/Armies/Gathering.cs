@@ -30,6 +30,12 @@ public sealed record Gathering
     public required HexCoord Hex { get; init; }
 
     /// <summary>
+    /// Whether this is a meeting of ships (a boarding or a sea meeting): it only merges when a ship group stands on the join hex, otherwise
+    /// every group goes home to its own spot.
+    /// </summary>
+    public bool IsFleet { get; init; }
+
+    /// <summary>
     /// The land hex next to <see cref="Hex"/> where land groups stand when <see cref="Hex"/> is a dock on the water (land troops cannot walk
     /// onto the water; they board from the shore); <see langword="null"/> when every group stands on <see cref="Hex"/> itself.
     /// </summary>
@@ -85,9 +91,23 @@ public sealed partial record Army
     private sealed class Router(
         Func<HexCoord, Terrain> terrainAt, double speedFactor, Func<HexCoord, bool>? isRiver, Func<HexCoord, bool>? isWideRiver, WallRules? walls)
     {
-        public (IReadOnlyList<HexCoord>? Path, DispatchRejection Rejection) Search(HexCoord from, HexCoord to, bool isLandUnit)
+        /// <param name="avoid">A hex no route may enter (the target when the groups only meet next to it, so no group walks through it).</param>
+        public (IReadOnlyList<HexCoord>? Path, DispatchRejection Rejection) Search(HexCoord from, HexCoord to, bool isLandUnit, HexCoord? avoid = null)
         {
-            var search = HexPathfinder.Search(from, to, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+            var blocked = walls?.Blocked;
+            var friendlyGate = walls?.FriendlyGate;
+            var halfOpen = walls?.HalfOpen;
+            if (avoid is { } closed)
+            {
+                var wallBlocked = blocked;
+                var wallGate = friendlyGate;
+                var wallHalfOpen = halfOpen;
+                blocked = hex => hex == closed || (wallBlocked?.Invoke(hex) ?? false);
+                friendlyGate = hex => hex != closed && (wallGate?.Invoke(hex) ?? false);
+                halfOpen = hex => hex != closed && (wallHalfOpen?.Invoke(hex) ?? false);
+            }
+
+            var search = HexPathfinder.Search(from, to, terrainAt, isLandUnit, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, walls?.BridgeCost);
             if (search.Path is { Count: > 0 } path)
             {
                 return (path, DispatchRejection.None);
@@ -117,6 +137,29 @@ public sealed partial record Army
             }
 
             return (full, DispatchRejection.None);
+        }
+
+        /// <summary>
+        /// The way on from <paramref name="join"/> through <paramref name="stops"/> and the way home from there: the way out walked backwards,
+        /// then from <paramref name="join"/> to <paramref name="home"/> (joint hex once), both timed at <paramref name="pace"/>.
+        /// </summary>
+        public (RouteTimes? Out, RouteTimes? Back, DispatchRejection Rejection) Round(
+            HexCoord join, IReadOnlyList<HexCoord> stops, HexCoord home, double pace, bool isLandUnit)
+        {
+            var (outbound, rejection) = Chain(join, stops, isLandUnit);
+            if (outbound is null)
+            {
+                return (null, null, rejection);
+            }
+
+            var (toHome, homeRejection) = Search(join, home, isLandUnit);
+            if (toHome is null)
+            {
+                return (null, null, homeRejection);
+            }
+
+            List<HexCoord> back = [.. Reversed(outbound), .. toHome.Skip(1)];
+            return (Times(outbound, pace, isLandUnit), Times(back, pace, isLandUnit), DispatchRejection.None);
         }
 
         public RouteTimes Times(IReadOnlyList<HexCoord> path, double pace, bool isLandUnit) => new(
@@ -174,6 +217,7 @@ public sealed partial record Army
 
         var anchorPath = routes[anchor].Path;
         var join = anchorPath.First(hex => routes.All(r => r.Path.Contains(hex)));
+        HexCoord? avoid = null;
         if (!hasWaypoints && join == routeDestination)
         {
             // No way point to meet on and the routes only share the target: the groups meet on the hex just before it.
@@ -183,13 +227,14 @@ public sealed partial record Army
             }
 
             join = anchorPath[^2];
+            avoid = routeDestination;
         }
 
         var walks = new List<RouteTimes>();
         var arrivals = new List<double>();
         for (var i = 0; i < walkers.Count; i++)
         {
-            var (walk, rejection) = router.Search(walkers[i].Spot, join, isLandUnit);
+            var (walk, rejection) = router.Search(walkers[i].Spot, join, isLandUnit, avoid);
             if (walk is null)
             {
                 return (null, rejection);
@@ -368,6 +413,26 @@ public sealed partial record Army
         var firstStop = waypoints.Count > 0 ? waypoints[0] : routeDestination;
         var hasWaypoints = waypoints.Count > 0;
 
+        Gathering OrderGathering(HexCoord hex, DateTimeOffset departAt, IReadOnlyList<HexCoord> stops, HexCoord home, HexCoord? boardingHex = null)
+        {
+            var hasTarget = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid;
+            return new Gathering
+            {
+                Id = newId(),
+                SettlementId = settlement.Id,
+                Hex = hex,
+                BoardingHex = boardingHex,
+                DepartAt = departAt,
+                IsFleet = isFleet,
+                Mission = mission,
+                TargetSettlementId = hasTarget ? targetSettlementId : null,
+                TargetBuildingCoord = hasTarget ? targetBuildingCoord : null,
+                TargetCampCoord = mission == ArmyMission.Hunt ? targetCampCoord : null,
+                Stops = stops,
+                HomeSpot = home,
+            };
+        }
+
         // Every group of the plan: its spot, units, walk, the gathering it joins and when that leaves.
         var members = new List<GroupWalk>();
         var gatherings = new List<Gathering>();
@@ -397,19 +462,7 @@ public sealed partial record Army
             }
 
             var departAt = now + TimeSpan.FromHours(meeting.Hours);
-            finalGathering = new Gathering
-            {
-                Id = newId(),
-                SettlementId = settlement.Id,
-                Hex = meeting.Join,
-                DepartAt = departAt,
-                Mission = mission,
-                TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
-                TargetBuildingCoord = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetBuildingCoord : null,
-                TargetCampCoord = mission == ArmyMission.Hunt ? targetCampCoord : null,
-                Stops = planned.Stops!,
-                HomeSpot = planned.Home,
-            };
+            finalGathering = OrderGathering(meeting.Join, departAt, planned.Stops!, planned.Home);
             gatherings.Add(finalGathering);
             for (var i = 0; i < spots.Count; i++)
             {
@@ -498,20 +551,7 @@ public sealed partial record Army
                     return GatheredDispatchDecision.Rejected(planned.Rejection);
                 }
 
-                finalGathering = new Gathering
-                {
-                    Id = newId(),
-                    SettlementId = settlement.Id,
-                    Hex = dock.Spot,
-                    DepartAt = boardingDepartAt,
-                    Mission = mission,
-                    TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
-                    TargetBuildingCoord = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetBuildingCoord : null,
-                    TargetCampCoord = mission == ArmyMission.Hunt ? targetCampCoord : null,
-                    BoardingHex = dockBoarding,
-                    Stops = planned.Stops!,
-                    HomeSpot = planned.Home,
-                };
+                finalGathering = OrderGathering(dock.Spot, boardingDepartAt, planned.Stops!, planned.Home, dockBoarding);
                 gatherings.Add(finalGathering);
                 finalWaitHours = boardingHours;
                 continuationHours = planned.ContinuationHours;
@@ -535,19 +575,7 @@ public sealed partial record Army
                     return GatheredDispatchDecision.Rejected(planned.Rejection);
                 }
 
-                finalGathering = new Gathering
-                {
-                    Id = newId(),
-                    SettlementId = settlement.Id,
-                    Hex = meeting.Join,
-                    DepartAt = now + TimeSpan.FromHours(meeting.Hours),
-                    Mission = mission,
-                    TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
-                    TargetBuildingCoord = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetBuildingCoord : null,
-                    TargetCampCoord = mission == ArmyMission.Hunt ? targetCampCoord : null,
-                    Stops = planned.Stops!,
-                    HomeSpot = planned.Home,
-                };
+                finalGathering = OrderGathering(meeting.Join, now + TimeSpan.FromHours(meeting.Hours), planned.Stops!, planned.Home);
 
                 var boarding = new Gathering
                 {
@@ -555,6 +583,7 @@ public sealed partial record Army
                     SettlementId = settlement.Id,
                     Hex = dock.Spot,
                     DepartAt = boardingDepartAt,
+                    IsFleet = true,
                     Mission = ArmyMission.Move,
                     BoardingHex = dockBoarding,
                     Stops = [meeting.Join],
@@ -596,6 +625,27 @@ public sealed partial record Army
         }
 
         var shares = SplitProvisions(provisions, members.Select(m => m.Stacks).ToList());
+
+        // Every gathering must also feed all its groups until the army finally leaves (a boarded fleet rides on to the sea meeting).
+        foreach (var gathering in gatherings)
+        {
+            var shareSum = 0d;
+            var needed = 0d;
+            for (var i = 0; i < members.Count; i++)
+            {
+                if (members[i].Gathering == gathering)
+                {
+                    shareSum += shares[i];
+                    needed += members[i].Stacks.Sum(s => UnitCatalogue.Get(s.Type).UpkeepPerHour * s.Count) * finalWaitHours;
+                }
+            }
+
+            if (shareSum < needed - 1e-9)
+            {
+                return GatheredDispatchDecision.Rejected(DispatchRejection.InsufficientProvisionsForRoundTrip);
+            }
+        }
+
         var armies = new List<Army>();
         for (var i = 0; i < members.Count; i++)
         {
@@ -612,24 +662,17 @@ public sealed partial record Army
             var created = Movement.Movement.Create(
                 now, member.Walk.Path, member.Walk.Cumulative, member.Walk.Edges, home.Path, home.Cumulative, home.Edges, shares[i], groupUpkeep);
 
-            // The group stands on its hex until the meeting leaves, whatever its own food would allow.
-            var movement = created with
-            {
-                TurnAroundAt = created.TurnAroundAt > member.Gathering.DepartAt ? created.TurnAroundAt : member.Gathering.DepartAt,
-            };
-
             armies.Add(new Army
             {
                 Id = newId(),
                 SettlementId = settlement.Id,
                 HomeSpot = member.Spot,
                 Stacks = member.Stacks,
-                Location = new ArmyLocation.InTransit(movement),
+                Location = new ArmyLocation.InTransit(created),
                 Provisions = shares[i],
                 Mission = ArmyMission.Move,
                 Loot = isCampMission && i == 0 ? BeachCamp.Cost : default,
-                GatheringId = member.Gathering.Id,
-            });
+            }.JoinGathering(member.Gathering.Id, member.Gathering.DepartAt));
         }
 
         var reported = armies
@@ -655,23 +698,12 @@ public sealed partial record Army
         Router router, Settlement settlement, IReadOnlyList<UnitStack> union, double pace, HexCoord join, IReadOnlyList<HexCoord> stops,
         bool land, HexCoord fallbackHome)
     {
-        var (outbound, rejection) = router.Chain(join, stops, land);
-        if (outbound is null)
-        {
-            return new ContinuationPlan(rejection, null, fallbackHome, 0, 0);
-        }
-
         // A fleet's home is a spot for its ships; the land troops aboard come off there (garrison.md).
         var home = settlement.NearestSpotFor(join, land ? union : ShipCargo.Ships(union))?.Coord ?? fallbackHome;
-        var (toHome, homeRejection) = router.Search(join, home, land);
-        if (toHome is null)
-        {
-            return new ContinuationPlan(homeRejection, null, home, 0, 0);
-        }
-
-        List<HexCoord> returnPath = [.. Reversed(outbound), .. toHome.Skip(1)];
-        return new ContinuationPlan(
-            DispatchRejection.None, stops, home, router.Times(outbound, pace, land).Hours, router.Times(returnPath, pace, land).Hours);
+        var (outbound, back, rejection) = router.Round(join, stops, home, pace, land);
+        return outbound is null || back is null
+            ? new ContinuationPlan(rejection, null, home, 0, 0)
+            : new ContinuationPlan(DispatchRejection.None, stops, home, outbound.Hours, back.Hours);
     }
 
     /// <summary>
@@ -680,9 +712,9 @@ public sealed partial record Army
     /// mission, targets and home. <see langword="null"/> when no route exists any more (a wall now closes the way); the caller then sends
     /// the army home.
     /// </summary>
-    /// <param name="turnAroundNotBefore">
-    /// The instant the gathering this army joins next leaves (a boarded fleet sailing to the sea meeting): it stands there at least until
-    /// then, whatever its own food would allow.
+    /// <param name="parentDepartAt">
+    /// The departure of the gathering this army joins next (a boarded fleet sailing to the sea meeting), or <see langword="null"/>: the merged
+    /// army is then a group of that gathering (<see cref="Gathering.ParentGatheringId"/>) and stands there until it leaves.
     /// </param>
     public static Army? PlanGatheringDeparture(
         Army merged,
@@ -693,34 +725,37 @@ public sealed partial record Army
         Func<HexCoord, bool>? isRiver = null,
         Func<HexCoord, bool>? isWideRiver = null,
         WallRules? walls = null,
-        DateTimeOffset? turnAroundNotBefore = null)
+        DateTimeOffset? parentDepartAt = null)
     {
         ArgumentNullException.ThrowIfNull(merged);
         ArgumentNullException.ThrowIfNull(gathering);
         ArgumentNullException.ThrowIfNull(terrainAt);
 
-        var land = !merged.IsFleet;
-        var router = new Router(terrainAt, speedFactor, isRiver, isWideRiver, walls);
-
-        var (outbound, _) = router.Chain(gathering.Hex, gathering.Stops, land);
-        var (toHome, _) = router.Search(gathering.Hex, gathering.HomeSpot, land);
-        if (outbound is null || toHome is null)
+        // The rules of the mission hold for the units that actually arrived: a founding convoy needs exactly its settlers, a camp army
+        // exactly its builders (the groups that carried them may be gone). Otherwise the army goes home.
+        if (gathering.Mission == ArmyMission.Found
+            && merged.Stacks.Where(s => s.Type == UnitType.Settler).Sum(s => s.Count) != Founding.RequiredSettlers)
         {
             return null;
         }
 
-        var pace = merged.TotalSpeed;
-        List<HexCoord> returnPath = [.. Reversed(outbound), .. toHome.Skip(1)];
-        var out1 = router.Times(outbound, pace, land);
-        var back = router.Times(returnPath, pace, land);
-        var movement = Movement.Movement.Create(
-            at, out1.Path, out1.Cumulative, out1.Edges, back.Path, back.Cumulative, back.Edges, merged.Provisions, merged.TotalUpkeepPerHour);
-        if (turnAroundNotBefore is { } floor && movement.TurnAroundAt < floor)
+        if (gathering.Mission == ArmyMission.SetUpCamp
+            && merged.Stacks.Where(s => s.Type == UnitType.CampBuilder).Sum(s => s.Count) != BeachCamp.RequiredBuilders)
         {
-            movement = movement with { TurnAroundAt = floor };
+            return null;
         }
 
-        return merged with
+        var land = !merged.IsFleet;
+        var router = new Router(terrainAt, speedFactor, isRiver, isWideRiver, walls);
+        var (outbound, back, _) = router.Round(gathering.Hex, gathering.Stops, gathering.HomeSpot, merged.TotalSpeed, land);
+        if (outbound is null || back is null)
+        {
+            return null;
+        }
+
+        var movement = Movement.Movement.Create(
+            at, outbound.Path, outbound.Cumulative, outbound.Edges, back.Path, back.Cumulative, back.Edges, merged.Provisions, merged.TotalUpkeepPerHour);
+        var departed = merged with
         {
             HomeSpot = gathering.HomeSpot,
             Location = new ArmyLocation.InTransit(movement),
@@ -728,8 +763,10 @@ public sealed partial record Army
             TargetSettlementId = gathering.TargetSettlementId,
             TargetBuildingCoord = gathering.TargetBuildingCoord,
             TargetCampCoord = gathering.TargetCampCoord,
-            GatheringId = gathering.ParentGatheringId,
         };
+        return gathering.ParentGatheringId is { } parent && parentDepartAt is { } parentAt
+            ? departed.JoinGathering(parent, parentAt)
+            : departed.LeaveGathering();
     }
 
     /// <summary>
@@ -749,6 +786,15 @@ public sealed partial record Army
         var provisions = members.Sum(m => m.ProvisionsAt(at));
         var loot = members.Aggregate(default(ResourceAmounts), (sum, m) => sum + m.Loot);
         var stacks = MergeStacksByType(members.SelectMany(m => m.Stacks).ToList(), []);
+
+        // The ships that arrived carry the passengers that arrived only as far as they have slots (the existing overflow rule).
+        var ships = ShipCargo.Ships(stacks);
+        if (ships.Count > 0)
+        {
+            var (kept, _) = ShipCargo.DropOverflow(ships, ShipCargo.Passengers(stacks));
+            stacks = [.. ships, .. kept];
+        }
+
         return members[0] with { Stacks = stacks, Provisions = provisions, Loot = loot };
     }
 }

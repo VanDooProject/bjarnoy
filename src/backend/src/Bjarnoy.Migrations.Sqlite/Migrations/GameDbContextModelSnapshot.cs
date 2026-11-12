@@ -307,6 +307,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<DateTimeOffset?>("FieldBattleImmuneUntil")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("GatherDepartAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("GatheringId")
                         .HasColumnType("TEXT");
 
@@ -987,6 +990,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("HomeSpotR")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsFleet")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Mission")
                         .HasColumnType("INTEGER");
 
@@ -1015,7 +1021,13 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid?>("TargetSettlementId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("DepartAt");
 
                     b.HasIndex("ParentGatheringId");
 
