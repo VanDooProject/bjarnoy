@@ -445,4 +445,54 @@ public class AttackResolverTests
 
         Assert.Equal(0, Attack([new(UnitType.Karve, 5)], provisions: 0).Refill);
     }
+
+    // ---- Siege: only a won Attack does land siege damage; a Raid only plunders (owner decision 2026-11-12)
+
+    public static TheoryData<BuildingType> SiegeTargetTypes => new()
+    {
+        BuildingType.Farm, BuildingType.Palisade, BuildingType.PalisadeGate, BuildingType.Tower, BuildingType.Bridge, BuildingType.Longhouse,
+    };
+
+    private static readonly UnitStack[] SiegeArmy =
+        [new(UnitType.Axeman, 30), new(UnitType.Catapult, 20), new(UnitType.Ram, 20)];
+
+    [Theory]
+    [MemberData(nameof(SiegeTargetTypes))]
+    public void A_won_raid_with_catapults_and_rams_takes_no_levels_off_the_target(BuildingType type)
+    {
+        var hex = type == BuildingType.Longhouse ? Centre : LandHex;
+        var buildings = type == BuildingType.Longhouse ? Buildings() : Buildings(new PlacedBuilding(hex, type, 4));
+
+        var plan = Attack(SiegeArmy, home: [new(UnitType.Spearman, 2)], buildings: buildings, target: hex, raid: true);
+
+        Assert.Equal(BattleWinner.Attacker, plan.Winner);
+        Assert.False(plan.LandSiege.Applied);
+        Assert.Equal(buildings, plan.Buildings);
+    }
+
+    [Theory]
+    [MemberData(nameof(SiegeTargetTypes))]
+    public void A_won_attack_with_the_same_army_still_damages_the_target(BuildingType type)
+    {
+        var hex = type == BuildingType.Longhouse ? Centre : LandHex;
+        var buildings = type == BuildingType.Longhouse ? Buildings() : Buildings(new PlacedBuilding(hex, type, 4));
+
+        var plan = Attack(SiegeArmy, home: [new(UnitType.Spearman, 2)], buildings: buildings, target: hex, raid: false);
+
+        Assert.True(plan.LandSiege.Applied);
+        Assert.NotEqual(buildings, plan.Buildings);
+    }
+
+    [Fact]
+    public void A_won_raid_from_a_fleet_with_siege_engines_on_board_takes_no_levels_off_a_beach_building()
+    {
+        var farm = new PlacedBuilding(LandHex, BuildingType.Farm, 4);
+        var buildings = Buildings(farm);
+
+        var plan = Attack(
+            [new(UnitType.Karve, 10), .. SiegeArmy], home: [new(UnitType.Spearman, 2)], buildings: buildings, target: LandHex, raid: true);
+
+        Assert.False(plan.LandSiege.Applied);
+        Assert.Equal(buildings, plan.Buildings);
+    }
 }
