@@ -223,4 +223,29 @@ public sealed class SimulatorEndpointsTests(SqliteApiFixture fixture) : IClassFi
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
+
+    [Theory]
+    [InlineData("attack", true)]
+    [InlineData("raid", false)]
+    public async Task Only_a_won_attack_reports_siege_damage_a_raid_with_catapults_and_rams_destroys_nothing(string mission, bool sieges)
+    {
+        using var client = _fixture.CreateClient();
+        var (accessToken, _) = await CreatePremiumUserAsync(client);
+        Authorize(client, accessToken);
+
+        var request = new SimulatorRequest(
+            AttackerStacks: [new UnitCountRequest("axeman", 40), new UnitCountRequest("catapult", 20), new UnitCountRequest("ram", 20)],
+            DefenderStacks: [new UnitCountRequest("spearman", 2)],
+            GuestDefenderStacks: null,
+            TowerLevel: 0,
+            Mission: mission,
+            Seed: 7);
+
+        var response = await client.PostJsonAsync("/api/v1/simulator", request, Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.ReadStrictAsync<SimulatorResponse>(Ct);
+
+        Assert.Equal("attacker", result.Winner);
+        Assert.Equal(sieges, result.Siege is not null);
+    }
 }

@@ -92,7 +92,7 @@ the ground + 3 like palisade ends. A breached wall hex (level 0) is passable.
 
 ### Breaching walls
 
-There is **no separate siege mission**. A wall is breached by an ordinary **Attack** (or Raid) with rams that
+There is **no separate siege mission**. A wall is breached by an ordinary **Attack** with rams that
 **names the wall hex** as its preferred target building (`TargetBuildingCoord`):
 
 - A **player's palisade** belongs to a settlement, so the Attack targets that settlement. The ring menu's
