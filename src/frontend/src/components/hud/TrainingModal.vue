@@ -310,7 +310,7 @@ async function train(type: string, count: number) {
   position: absolute;
   inset: 0;
   z-index: 40;
-  background: rgba(6, 12, 17, 0.86);
+  background: var(--layer-backdrop);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: center;

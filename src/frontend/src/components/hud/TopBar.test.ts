@@ -522,7 +522,7 @@ describe('TopBar', () => {
       await wrapper.vm.$nextTick();
 
       await wrapper.get('.hud-grip').trigger('click');
-      expect(wrapper.get('.hud-drawer-backdrop').attributes('style')).toContain('opacity: 0.6');
+      expect(wrapper.get('.hud-drawer-backdrop').attributes('style')).toContain('opacity: 1');
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
       await wrapper.vm.$nextTick();
       expect(wrapper.get('.hud-grip').attributes('aria-expanded')).toBe('false');

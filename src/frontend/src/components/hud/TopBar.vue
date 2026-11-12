@@ -468,11 +468,11 @@ const drawerStyle = computed(() => ({
 }));
 const backdropStyle = computed(() => {
   if (isRail.value) {
-    return { opacity: drawer.isOpen.value ? 0.6 : 0, pointerEvents: drawer.isOpen.value ? ('auto' as const) : ('none' as const) };
+    return { opacity: drawer.isOpen.value ? 1 : 0, pointerEvents: drawer.isOpen.value ? ('auto' as const) : ('none' as const) };
   }
   const openFraction = availableDrawerHeight.value > 0 ? Math.min(1, drawer.currentOffset() / availableDrawerHeight.value) : 0;
   return {
-    opacity: openFraction * 0.6,
+    opacity: openFraction,
     pointerEvents: openFraction > 0 ? ('auto' as const) : ('none' as const),
   };
 });
@@ -1296,7 +1296,7 @@ const backdropStyle = computed(() => {
      never actually both open at once in practice — this is the defense in
      depth for the transition frame where they briefly could be. */
   z-index: 39;
-  background: #000;
+  background: var(--layer-backdrop);
   transition: opacity 120ms ease;
 }
 
