@@ -4,7 +4,8 @@
 // says what is completed/claimed and `POST /settlements/{id}/quests/{id}/claim`
 // pays. Demo mode has no backend but does keep a local stock on `WorldModel`,
 // so it evaluates the same quests here and pays them locally. Keep this
-// list in step with `Bjarnoy.Domain.Settlers.Quests`.
+// list in step with `Bjarnoy.Domain.Settlers.Quests`, except the register quest (an account, so premium days instead
+// of a stock reward): demo mode has no accounts.
 import type { QuestResponse, ResourceLine } from '../api/types';
 import type { Resources } from './map/types';
 

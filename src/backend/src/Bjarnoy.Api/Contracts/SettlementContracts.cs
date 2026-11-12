@@ -277,7 +277,8 @@ public sealed record FeastOfferResponse(
 /// <param name="Claimed">Whether its reward was already claimed.</param>
 /// <param name="Reward">Wood, stone and food paid on claim (clamped to storage).</param>
 /// <param name="Progress">Where the settlement stands toward the goal, or null for a quest without a counted goal.</param>
-public sealed record QuestResponse(string Id, bool Completed, bool Claimed, ResourceLine Reward, QuestProgressResponse? Progress = null);
+public sealed record QuestResponse(
+    string Id, bool Completed, bool Claimed, ResourceLine Reward, QuestProgressResponse? Progress = null, int PremiumDays = 0);
 
 /// <summary>Counted progress toward a quest: <paramref name="Current"/> of <paramref name="Target"/> (never above the target).</summary>
 public sealed record QuestProgressResponse(int Current, int Target);
@@ -432,9 +433,10 @@ public sealed record SettlementResponse(
                     Feasts.RenownFor(domain.TownSquareLevel))
                 : null,
             // Quests are enabled on the player's first settlement only (economy.md section 7).
-            [.. Bjarnoy.Domain.Settlers.Quests.All.Where(_ => id == session.FirstSettlementId).Select(q => new QuestResponse(
+            [.. Bjarnoy.Domain.Settlers.Quests.For(domain).Where(_ => id == session.FirstSettlementId).Select(q => new QuestResponse(
                 q.Id, q.IsCompleted(domain), domain.HasClaimed(q), ResourceLine.From(q.Reward),
-                q.Progress?.Invoke(domain) is { } p ? new QuestProgressResponse(p.Current, p.Target) : null))],
+                q.Progress?.Invoke(domain) is { } p ? new QuestProgressResponse(p.Current, p.Target) : null,
+                q.PremiumDays))],
             WorldClockResponse.From(clock, gameNow),
             [.. store.Realm.SettlementIds
                 .OrderBy(other => other == entity.Id ? 0 : 1)

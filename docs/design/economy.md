@@ -620,10 +620,11 @@ their renown.
   | 3 | First Storage House | a standing Storage House | 200 / 200 / 200 |
   | 4 | 6 producers built | 6 standing resource producers | 200 / 150 / 100 |
   | 5 | Longhouse 3 | Longhouse level 3 or more | 400 / 300 / 200 |
-  | 6 | Tower 3 | your highest Tower at level 3 or more (what the Barracks needs) | 400 / 300 / 200 |
-  | 7 | Longhouse 5 | Longhouse level 5 or more | 800 / 600 / 400 |
-  | 8 | Train 5 spearmen | 5 fighting land units at home (any type), stored once reached: it stays completed after the troops leave or die | 500 / 400 / 300 |
-  | 9 | Hunt a camp | an army sent to hunt a wildlife camp; unlocks once troops were trained (5 fighting land units were ever at home when it was sent), no claim needed | 400 / 300 / 300 |
+  | 6 | Name your jarl (register) | the settlement's owner has a registered account (`register`, bit 9); pays **14 days of Premium** instead of resources | - |
+  | 7 | Tower 3 | your highest Tower at level 3 or more (what the Barracks needs) | 400 / 300 / 200 |
+  | 8 | Longhouse 5 | Longhouse level 5 or more | 800 / 600 / 400 |
+  | 9 | Train 5 spearmen | 5 fighting land units at home (any type), stored once reached: it stays completed after the troops leave or die | 500 / 400 / 300 |
+  | 10 | Hunt a camp | an army sent to hunt a wildlife camp; unlocks once troops were trained (5 fighting land units were ever at home when it was sent), no claim needed | 400 / 300 / 300 |
 
   Rules:
 
@@ -639,6 +640,10 @@ their renown.
     payment. Quests are enabled only on a player's first settlement in a world
     (the oldest by founding time): any later settlement lists none, and claiming one there gets a 409
     (`NotFirstSettlement`).
+  - **The register quest.** A player who registered during onboarding sees it first, claimable at once; a player who
+    has not keeps it in the list before the Tower quest until they register (`Quests.For`). Claiming it adds 14 days
+    to the account's `PremiumUntil` (from the later of now and the current expiry); the permanent `IsPremium` flag
+    set by an admin is separate, and an account is premium while either holds.
   - **Only standing buildings count.** Queued and under-construction orders do
     not; a producer is any building (other than the Longhouse) that yields
     wood, brick, food or iron of its own, so storage, towers and the

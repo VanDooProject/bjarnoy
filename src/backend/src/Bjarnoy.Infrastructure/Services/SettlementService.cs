@@ -1474,6 +1474,14 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, settled.ClaimQuest(decision.Quest!, now));
+        if (decision.Quest!.PremiumDays > 0 && session.Anchor.Owner is { } owner)
+        {
+            // Stacks on whatever premium is left; real time, since premium is not part of the game clock.
+            var realNow = _timeProvider.GetUtcNow();
+            var from = owner.PremiumUntil is { } current && current > realNow ? current : realNow;
+            owner.PremiumUntil = from.AddDays(decision.Quest.PremiumDays);
+        }
+
         await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
