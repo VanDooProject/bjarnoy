@@ -9,6 +9,7 @@ import { reactive, watch } from 'vue';
 import DebugPanel from './DebugPanel.vue';
 import {
   BOG_LAKE_FOAM_STYLES,
+  FOAM_WIDTH_RANGE,
   waterDebugFlags,
   waterDebugTuning,
   type WaterDebugToggle,
@@ -53,7 +54,6 @@ const LABELS: Record<WaterDebugToggle, string> = {
 
 // Brackets the shipped values on both sides, so "is this too wide / too still"
 // is answerable by eye on a live map instead of by rebuilding between guesses.
-const FOAM_WIDTH = { min: 0.1, max: 1.5, step: 0.05 };
 const FOAM_SURGE = { min: 0, max: 1, step: 0.05 };
 const WAVE_SPEED = { min: 0, max: 3, step: 0.1 };
 // Up to the mask's own far range: past 1.5 hexes the distance channel is
@@ -92,7 +92,7 @@ const SLIDERS: {
   range: { min: number; max: number; step: number };
   format: (v: number) => string;
 }[] = [
-  { key: 'foamWidthHexes', label: 'Foam width', needs: 'shorelineFoam', range: FOAM_WIDTH, format: (v) => `${v.toFixed(2)} hex` },
+  { key: 'foamWidthHexes', label: 'Foam width', needs: 'shorelineFoam', range: FOAM_WIDTH_RANGE, format: (v) => `${v.toFixed(2)} hex` },
   { key: 'foamSurge', label: 'Foam surge', needs: 'shorelineFoam', range: FOAM_SURGE, format: (v) => v.toFixed(2) },
   { key: 'causticCullHexes', label: 'Caustic keep-off', needs: 'midWaterWaves', range: CAUSTIC_CULL, format: (v) => `${v.toFixed(2)} hex` },
   { key: 'causticThickness', label: 'Coarse net: thickness', needs: 'coarseCaustics', range: CAUSTIC_THICKNESS, format: times },

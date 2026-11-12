@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { FOG_FRAGMENT } from "./fog/fogShader";
 import { WATER_FRAGMENT } from "./water/waterShader";
+import { RIVER_FRAGMENT } from "./water/riverShader";
 import { NOISE_LATTICE_GLSL } from "./shaderNoise";
 
 // Every map fragment shader belongs in this list. A new one must be added here.
 const MAP_FRAGMENT_SHADERS: Record<string, string> = {
   FOG_FRAGMENT,
   WATER_FRAGMENT,
+  RIVER_FRAGMENT,
 };
 
 const WHY =
