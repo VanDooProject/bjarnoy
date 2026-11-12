@@ -68,6 +68,7 @@ import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
 import { useHasActiveDraft } from '../composables/useHudPanelContent';
+import { useEscapeCancelsPlanning } from '../composables/useEscapeCancelsPlanning';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
 import { buildingStatsAt, buildingUpgradeCost, scaleOutput, upgradeRateGain } from '../lib/map/buildingEconomy';
@@ -855,6 +856,7 @@ watch(canvasInteractionLocked, (locked) => {
 // otherwise clash with it) hides, and the HUD pull-down drawer closes the
 // same way opening QueueDrawer already does above.
 const hasActiveDraft = useHasActiveDraft();
+useEscapeCancelsPlanning();
 watch(hasActiveDraft, (active) => {
   if (active) {
     queueDrawerOpen.value = false;
