@@ -64,6 +64,7 @@ import { WaterDryLayer, entriesWorldBounds, maskEntries, type DryEntry } from '.
 import { BogLakeLayer } from './water/BogLakeLayer';
 import { LAKE_FRAME_RE } from './water/dryMaskCore';
 import { RiverFlowLayer, type RiverFlowEntry } from './water/riverFlowLayer';
+import { applySpriteBox, type SpriteBox } from './spriteBox';
 import { createRiverFlowEntrySource } from './water/riverFlowEntries';
 import { waterDebugFlags, waterDebugTuning, waterPerfStats } from './water/waterDebug';
 import type { TerrainLookup, WaterMask } from './water/waterMask';
@@ -2410,6 +2411,8 @@ export class HexMapRenderer {
   private camera: Camera;
   private viewport = { width: 0, height: 0 };
   private lastBuiltCamera: Camera | null = null;
+  /** The box last written to each terrain sprite and anim overlay by `applySpriteBox`. */
+  private readonly appliedSpriteBox = new WeakMap<Sprite, SpriteBox>();
   private lastRebuildAtMs = 0;
   private cullQueued = false;
   private destroyed = false;
@@ -5120,9 +5123,10 @@ export class HexMapRenderer {
       // (a few field reads) even when no transition is pending, rather than
       // threading an extra "do we need this" branch through the update logic
       // that follows.
+      const inTransition = !!transition && transition.durationMs > 0;
       const prevTexture = sprite?.texture;
-      const prevBox = sprite ? { x: sprite.position.x, y: sprite.position.y, width: sprite.width, height: sprite.height, zIndex: sprite.zIndex } : undefined;
-      const prevOverlay = isTopLayer ? this.topAnimState.get(key)?.overlay : undefined;
+      const prevBox = sprite && inTransition ? { x: sprite.position.x, y: sprite.position.y, width: sprite.width, height: sprite.height, zIndex: sprite.zIndex } : undefined;
+      const prevOverlay = isTopLayer && inTransition ? this.topAnimState.get(key)?.overlay : undefined;
       const prevOverlayBox = prevOverlay
         ? { texture: prevOverlay.texture, x: prevOverlay.position.x, y: prevOverlay.position.y, width: prevOverlay.width, height: prevOverlay.height, zIndex: prevOverlay.zIndex }
         : undefined;
@@ -5137,12 +5141,16 @@ export class HexMapRenderer {
       } else {
         sprite.texture = texture;
       }
-      sprite.width = TILE_W;
-      sprite.height = crop ? (TILE_W * crop.nativeH) / TILE_ART_NATIVE_W : TILE_CANVAS_H;
       const grid = isoGridPosition(coord, TILE_W, TILE_H);
       const cropOffsetY = crop ? (TILE_W * crop.nativeY) / TILE_ART_NATIVE_W : 0;
-      sprite.position.set(grid.x, grid.y - TILE_TOPFACE_Y_OFFSET + cropOffsetY);
-      sprite.zIndex = isoDepthKey(coord);
+      applySpriteBox(this.appliedSpriteBox, sprite, {
+        texture: sprite.texture,
+        x: grid.x,
+        y: grid.y - TILE_TOPFACE_Y_OFFSET + cropOffsetY,
+        width: TILE_W,
+        height: crop ? (TILE_W * crop.nativeH) / TILE_ART_NATIVE_W : TILE_CANVAS_H,
+        zIndex: isoDepthKey(coord),
+      });
       if (isNew) layer.container.addChild(sprite);
 
       // An overlay clip's second sprite (see `TopAnimState.overlay`) rides
@@ -5155,10 +5163,8 @@ export class HexMapRenderer {
       if (isTopLayer) {
         overlay = this.topAnimState.get(key)?.overlay;
         if (overlay) {
-          overlay.width = sprite.width;
-          overlay.height = sprite.height;
-          overlay.position.copyFrom(sprite.position);
-          overlay.zIndex = sprite.zIndex + 0.5;
+          const box = this.appliedSpriteBox.get(sprite)!;
+          applySpriteBox(this.appliedSpriteBox, overlay, { ...box, texture: overlay.texture, zIndex: box.zIndex + 0.5 });
           if (!overlay.parent) layer.container.addChild(overlay);
         }
       }
@@ -5213,6 +5219,7 @@ export class HexMapRenderer {
       }
       layer.container.removeChild(sprite);
       layer.pool.push(sprite);
+      this.appliedSpriteBox.delete(sprite);
       layer.active.delete(key);
       this.fadeIns.delete(sprite);
       sprite.alpha = 1;
