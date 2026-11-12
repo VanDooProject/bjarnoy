@@ -649,6 +649,31 @@ is fully deleted, not before — a mid-cutover panel showing half-real,
 half-stale data is worse than the old one), but it's listed here as a
 concrete requirement so it doesn't fall through as "obviously implied."
 
+### 2.9 Shared field (one fog pass, two cheap quads)
+
+The two stage quads (dark fog under `markerLayer`, white mist over it) used to each run the whole fog shader (mask +
+cross-fade, army vision, edge noise, drift) over every screen pixel, every frame. Now the shader runs once, into a
+world-anchored render texture, and the quads only sample it.
+
+- **`FogField`** (`lib/map/fog/FogField.ts`, shader `FOG_FIELD_FRAGMENT`) writes `R` = out-of-sight tier alpha and
+  `G` = unknown tier alpha (both tiers' colours are constants, so alpha is all that varies). It is the only place with the
+  mask/noise/army math. `FogMaskLayer` is the composite quad (`FOG_COMPOSITE_FRAGMENT`): it maps its pixel to world space,
+  samples the field with linear filtering and outputs `tierColour * alpha`, premultiplied. Stage slots are unchanged.
+- **Anchoring and resolution** (`fogFieldPlan.ts`): the field covers the visible world rect plus a quarter viewport on each
+  side, at 2 screen pixels per texel at the zoom it was rendered at, capped at 2048 texels per side.
+- **Re-render triggers** (`fogFieldNeedsRender`, pure and unit-tested): the visible rect leaves the covered rect; zoom
+  changed by more than 20% since the render; mask texture, placement, army vision sources, debug switches or viewport
+  size changed; every frame while the reveal cross-fade runs; and at most every 125 ms (~8 fps) while drift is on
+  (`fogDebugFlags.drift` and fog motion allowed). Otherwise the previous texture is reused.
+- **Debug views**: `showRawMask` / `showEffectiveMask` are written into the field's RGB by the field pass and shown as-is by
+  the visible tier quads (field resolution, linear filtered); `warp` zeroes the noise amplitudes in the field pass.
+- **Unchanged**: the CPU-side lookups (`fogCoverage`, `pickerFogShare`, `fogPerfStats`) do not touch the field.
+
+Measured in a software renderer at 1280x800 (settlement view, fog quads hidden vs shown, median frame; the machine was
+shared, so numbers are +-100 ms): fog cost was ~190 ms/frame with drift on and ~320 ms with drift off on `main` (two
+full-screen shader quads); with the field it is ~60 ms with drift on (field re-rendered at ~8 fps plus two sampling quads)
+and ~40 ms at rest (sampling quads only).
+
 ## 3. Chunked mask delivery — adopted, not deferred
 
 The earliest version of this plan (now inlined as §2) shipped one
