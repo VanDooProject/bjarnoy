@@ -41,7 +41,7 @@ const LABELS: Record<WaterDebugToggle, string> = {
   causticShadows: 'Caustics: drifting dark blobs',
   shorelineFoam: 'Shoreline foam',
   seaBody: 'Sea body (world map; off = CSS gradient)',
-  legacyWaveSquiggles: 'World map: Graphics wave squiggles',
+  legacyWaveSquiggles: 'World map: wave squiggle sprites',
   showWaterMask: 'Debug: show the raw water mask',
   riverFlow: 'River ripples (settlement)',
   showRiverFlow: 'Debug: show river ripple phase',

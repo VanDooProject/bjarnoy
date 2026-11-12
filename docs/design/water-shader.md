@@ -30,7 +30,7 @@ Decisions taken up front (asked and answered before writing this):
 | Question | Decision |
 | --- | --- |
 | Where do the toggles live? | The `?debug=1` panel, same pattern as `FogDebugPanel`/`fogDebugFlags`. No player-facing settings menu exists today and this feature is not the place to invent one. |
-| World map sea | The shader draws **both** the sea body and the mid-water waves. The existing Graphics wave squiggles are **kept**, behind their own flag, so the new look can be A/B'd against the prototype rather than deleted sight-unseen. |
+| World map sea | The shader draws **both** the sea body and the mid-water waves. The existing wave squiggle sprites are **kept**, behind their own flag, so the new look can be A/B'd against the prototype rather than deleted sight-unseen. |
 | Settlement sea | The shader draws **over** the hand-painted water tile art (`watertile_*`, `coastalwatertile_*`), it does not replace it. Reaffirmed during implementation against reference art with a bright cyan sea: if the settlement's water should be cyan, that is new `watertile_*` art, not a shader tint. |
 | Surface pattern | **Two idioms, one per view**: caustic ribbons close up (settlement), the prototype's scattered wave arcs from orbit (world map). Decided during implementation, against reference art — §4.2b. The close-up idiom is three layers — a coarse net, a finer brighter one, and drifting shadow blobs under both — §4.2c. |
 
@@ -56,8 +56,10 @@ drives most of §3.
   (`HexMapRenderer.rebuildTerrainFlat`, `WORLD_TERRAIN_FILL`). Open sea is
   skipped outright: `if (tile.terrain === 'sea') continue;`
   (`HexMapRenderer.ts:1867`) — "open sea is just the background".
-- Waves are **Graphics squiggles**: `waveLayer`, placed by `rebuildWaves` and
-  re-stroked every frame by `drawWaves` (`HexMapRenderer.ts:1900`, `:1955`).
+- Waves are **squiggle sprites**: `waveLayer` holds pooled Sprites that all
+  share one baked squiggle texture (`bakeWaveTexture`); `rebuildWaves` picks the
+  wave points and `drawWaves` only repositions, sizes and fades the sprites each
+  frame (`HexMapRenderer.ts`).
   They are a port of the zip 7 prototype's `sea()` method
   (`prototypes/worldmap/Viking Realm.dc.html`, the look in
   `docs/design/img/worldmap.png`) — short scattered arcs that swell in place
@@ -92,7 +94,7 @@ Inside `world` (one camera-transformed container), in `addChild` order
 ```
 world
  ├─ terrainBase.container   sprites: ground art  (settlement only)
- ├─ waveLayer               Graphics squiggles   (world only)
+ ├─ waveLayer               pooled squiggle sprites, one shared texture (world only)
  ├─ terrainFlat             Graphics island hexes (world only)
  ├─ borderLayer
  ├─ hoverLayer
@@ -292,7 +294,7 @@ camera change — free — and it buys three things:
 world
  ├─ waterLayer.mesh   ← NEW: sea body + waves + foam
  ├─ terrainBase       (empty in world mode)
- ├─ waveLayer         Graphics squiggles, now behind a flag
+ ├─ waveLayer         pooled squiggle sprites, now behind a flag
  ├─ terrainFlat       island hexes — opaque, drawn over the water
  └─ ...
 ```
@@ -1340,7 +1342,7 @@ export interface WaterDebugFlags {
   shorelineFoam: boolean;       // default true
   /** Shader sea body under the world map (§4.1); off → the CSS gradient shows through. */
   seaBody: boolean;             // default true
-  /** The world map's Graphics wave squiggles (waveLayer) — its surface pattern of record. */
+  /** The world map's wave squiggle sprites (waveLayer) — its surface pattern of record. */
   legacyWaveSquiggles: boolean; // default true
   /** Debug: render the water mask's channels instead of water. */
   showWaterMask: boolean;       // default false; shows only over the hexes the mesh covers (§3.7), not over inland land
@@ -1412,7 +1414,7 @@ export interface WaterDebugTuning {
 ```
 
 `legacyWaveSquiggles` defaults **on**, and it is the world map's surface pattern:
-the squiggles are crisp Graphics strokes on their own layer, which
+the squiggles are sprites of one baked, crisp stroke texture on their own layer, which
 `worldLayerOrder` places *above* the water mesh, so they draw over the shader's
 sea body and foam rather than under them. The two wave systems never
 double-draw — with this on, `WaterLayer.tick` stops the shader drawing its own

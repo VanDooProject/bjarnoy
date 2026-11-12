@@ -22,3 +22,14 @@ Conventions every icon in this set follows, because
 - **No `currentColor`, no CSS, no external references** — these are rasterised
   by the browser as standalone images for `Assets.load`, with no document
   context to inherit from.
+
+## Icons whose anchor is not the centre
+
+Some markers stand on a point instead of floating over it, so the renderer anchors them at a point of their own and passes
+that anchor in `drawIcon`; the sprite is placed with that point on the hex (or army) position:
+
+- **`cart`** is a side view, shaft to the right (+x), the way it travels. Its wheels' ground line is at **y 50 of 64**, so
+  the renderer anchors it at `anchorY: 50 / 64` (`anchorX: 0.5`) and the cart stands on its hex. It is flipped
+  (`flipX`) when it rolls to the left (heading x < 0), like the flag and the ship.
+- **`flag`** (the army banner) stands on its pole's foot, at x 22.5 / y 60 of 64 (mirrored with `flipX`).
+- **`ship`** floats: its waterline is the sprite's vertical centre, so it keeps the centre anchor.
