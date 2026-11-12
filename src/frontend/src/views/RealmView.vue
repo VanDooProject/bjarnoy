@@ -111,6 +111,11 @@ const tocLinks = computed(() =>
       <h2>{{ $t('docs.realm.linked.heading') }}</h2>
       <p class="text">{{ $t('docs.realm.linked.body') }}</p>
     </section>
+
+    <section id="switching" class="block">
+      <h2>{{ $t('docs.realm.switching.heading') }}</h2>
+      <p class="text">{{ $t('docs.realm.switching.body') }}</p>
+    </section>
   </DocsPageLayout>
 </template>
 

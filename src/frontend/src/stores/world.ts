@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
-import { api, ApiError, isSettlementNotFound, isWorldNotFound } from '../api/client';
+import { api, ApiError, isSettlementNotFound, isTerrainChunkNotFound, isWorldNotFound } from '../api/client';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { i18n } from '../i18n';
 import type {
@@ -8,6 +8,7 @@ import type {
   BuildOrderResponse,
   GuestArmySummary,
   IslandResponse,
+  IslandTerrainResponse,
   PlacedBuildingResponse,
   RuneInstanceResponse,
   SettlementSummary,
@@ -210,6 +211,8 @@ export const useWorldStore = defineStore('world', {
     otherBuildOrders: [] as OwnBuildOrders[],
     /** `Date.now()` at which `otherBuildOrders` was read: the base its `completesInSeconds` are measured from. */
     otherBuildOrdersFetchedAt: 0,
+    /** Live mode: the player's settlements in this world (`GET /worlds/{id}/settlements/mine`), the header's realm switcher reads them. */
+    myRealms: [] as SettlementSummary[],
     // Set by WorldMapView (`setWorldMapActive`) so `refreshWorldSettlements`
     // knows it's safe to paint every rival's territory — the world map is
     // the one legitimate place that shows the whole world, unlike the
@@ -553,6 +556,15 @@ export const useWorldStore = defineStore('world', {
      */
     isRealmSettlement: (state) => (settlementId: string | null | undefined): boolean =>
       !!settlementId && (settlementId === state.selectedSettlementId || state.linkedMemberIds.includes(settlementId)),
+    /** The player's realms, one row per realm (a linked group is one realm, named and levelled by its oldest member). */
+    realmList: (state): { id: string; name: string; level: number; q: number; r: number; isBeachCamp: boolean }[] => {
+      const byRealm = new Map<string, SettlementSummary>();
+      for (const s of state.myRealms) {
+        const key = s.realmId ?? s.id;
+        if (!byRealm.has(key) || s.id === key) byRealm.set(key, s);
+      }
+      return [...byRealm.entries()].map(([id, s]) => ({ id, name: s.name, level: s.longhouseLevel, q: s.q, r: s.r, isBeachCamp: s.isBeachCamp }));
+    },
     /** The realm id (oldest linked member) of `settlementId` when it belongs to the local player, else null. */
     ownRealmOf: (state) => (settlementId: string | null | undefined): string | null => {
       if (!settlementId) return null;
@@ -682,8 +694,22 @@ export const useWorldStore = defineStore('world', {
       this.model = markRaw(new WorldModel(world.seed, world.generation));
       this.model.setWastedRevealed(world.endbossTriggered);
       this.model.setFrozenEnabled(world.frozenIslesEnabled);
+      let terrain: IslandTerrainResponse[];
       try {
-        this.islands = await api.getIslands(world.id, this.callerOwnerId());
+        // The river and bog tiles are big and only change on a reseed, so they come separately (cached, chunked), in parallel
+        // with the island list.
+        const loadIslandsAndTerrain = () =>
+          Promise.all([api.getIslands(world.id, this.callerOwnerId()), api.getTerrainChunks(world.id)]);
+        let loaded;
+        try {
+          loaded = await loadIslandsAndTerrain();
+        } catch (err) {
+          // The world was reseeded between the chunk manifest and a chunk: the island list read next to it is stale as well,
+          // so read both again (once; a second miss is a real failure).
+          if (!isTerrainChunkNotFound(err)) throw err;
+          loaded = await loadIslandsAndTerrain();
+        }
+        [this.islands, terrain] = loaded;
       } catch (err) {
         if (!isWorldNotFound(err)) throw err;
         // The world resolved a moment ago (getWorld/newestWorld, just above)
@@ -705,9 +731,10 @@ export const useWorldStore = defineStore('world', {
       this.model.setIslands(
         this.islands.map((island) => ({ id: island.id, name: island.name, q: island.q, r: island.r })),
       );
+      const terrainById = new Map(terrain.map((island) => [island.id, island]));
       this.model.setRiverTiles(
         this.islands.flatMap((island) =>
-          island.riverTiles.map((tile) => ({
+          (terrainById.get(island.id)?.riverTiles ?? []).map((tile) => ({
             q: tile.q,
             r: tile.r,
             shape: tile.shape,
@@ -718,11 +745,11 @@ export const useWorldStore = defineStore('world', {
           })),
         ),
       );
-      // Server-generated bogland (see `IslandResponse.bogTiles`): bog moss, lakes, shores, creeks. It is
+      // Server-generated bogland (see `IslandTerrainResponse.bogTiles`): bog moss, lakes, shores, creeks. It is
       // terrain the seed alone cannot give, so it goes in before anything that reads terrain (giants, camps).
       this.model.setBogTiles(
         this.islands.flatMap((island) =>
-          (island.bogTiles ?? []).map((tile) => ({
+          (terrainById.get(island.id)?.bogTiles ?? []).map((tile) => ({
             q: tile.q,
             r: tile.r,
             kind: tile.kind,
@@ -730,6 +757,13 @@ export const useWorldStore = defineStore('world', {
             outDirection: tile.outDirection as TileOrientation | null,
             waterEdges: tile.waterEdges as TileOrientation[],
           })),
+        ),
+      );
+      // Water an island encloses that the bog did not fill (`IslandTerrainResponse.inlandLakeTiles`): drawn like the sea, not land. The API
+      // only lists a wasted island once the endboss has triggered, so a hidden one's lakes never get here.
+      this.model.setInlandLakeTiles(
+        this.islands.flatMap((island) =>
+          (terrainById.get(island.id)?.inlandLakeTiles ?? []).map((tile) => ({ q: tile.q, r: tile.r })),
         ),
       );
       // Server-generated 7-hex giant features (see `IslandResponse.giants`)
@@ -1345,6 +1379,20 @@ export const useWorldStore = defineStore('world', {
       const player = usePlayerStore();
       player.switchSettlement(settlementId);
       await this.restoreLiveSettlement(player.id, settlementId);
+      await this.refreshMyRealms();
+    },
+    /**
+     * Live mode: reloads the player's realms for the header switcher. Best-effort: a failed read keeps the last list. The one
+     * gate for every caller: an anonymous visitor (landing, onboarding) must never even attempt the request, because it 401s and
+     * the logged error surfaces as a console error that the e2e suites reject.
+     */
+    async refreshMyRealms() {
+      if (DEMO_MODE || !useAuthStore().isAuthenticated || !this.worldId || !this.selectedSettlementId) return;
+      try {
+        this.myRealms = await api.listMySettlements(this.worldId);
+      } catch {
+        // The switcher then simply shows what it had.
+      }
     },
     /**
      * Live mode: rehydrates `selectedSettlementId`/`WorldModel` after a page
@@ -1478,6 +1526,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.queue = [];
       this.otherBuildOrders = [];
       this.otherBuildOrdersFetchedAt = 0;
+      this.myRealms = [];
       this.hud.garrison = [];
       this.hud.garrisonSpots = [];
       this.hud.trainingQueue = [];
@@ -1765,26 +1814,21 @@ export const useWorldStore = defineStore('world', {
      * them as sources), on the army poll. A realm whose read fails keeps its last snapshot; one that is gone drops out.
      */
     async refreshOtherRealms() {
-      // `listMySettlements` is an authorized endpoint: an anonymous player (who can own a settlement) must never attempt it, it 401s.
       if (DEMO_MODE || !useAuthStore().isAuthenticated || !this.worldId || !this.selectedSettlementId) return;
       const open = this.selectedSettlementId;
-      let mine: SettlementSummary[];
-      try {
-        mine = await api.listMySettlements(this.worldId);
-      } catch (err) {
-        console.warn('own settlements refresh failed', err);
-        return;
-      }
-      const realmIds = [...new Set(mine.map((s) => s.realmId))].filter((id) => id !== open);
+      // The one read of the player's settlements (gated like this one); a failed read keeps the last list.
+      await this.refreshMyRealms();
+      if (this.selectedSettlementId !== open) return;
+      const realms = this.realmList.filter((r) => r.id !== open);
       const owner = this.ownerId ?? undefined;
       const snapshots = await Promise.all(
-        realmIds.map(async (realmId): Promise<OtherRealmSnapshot | null> => {
+        realms.map(async ({ id: realmId, name }): Promise<OtherRealmSnapshot | null> => {
           try {
             const [settlement, summaries] = await Promise.all([api.getSettlement(realmId, owner), api.getSettlementArmies(realmId, owner)]);
             const armies = await Promise.all(summaries.map((s) => api.getArmy(s.id, owner)));
             return {
               realmId,
-              name: mine.find((s) => s.id === realmId)?.name ?? settlement.name,
+              name,
               garrison: settlement.garrison,
               garrisonSpots: settlement.garrisonSpots,
               buildings: settlement.buildings,
@@ -2293,11 +2337,6 @@ export const useWorldStore = defineStore('world', {
         return;
       }
       const groups = this.dispatchSpotGroups(draft);
-      // Gathering an army from several spots is not possible yet: the dispatch is not attempted.
-      if (groups.length > 1) {
-        draft.error = i18n.global.t('hud.garrisonSpots.severalSpots');
-        return;
-      }
       const from = toDispatchFrom(groups);
       const request =
         draft.mission === 'attack'

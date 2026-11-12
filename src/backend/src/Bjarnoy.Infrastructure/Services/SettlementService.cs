@@ -979,7 +979,8 @@ public sealed class SettlementService(
         var result = session.View(settlementId).PlaceBuilding(
             coord, type, level, sampler.TerrainAt(coord), sampler.IsCoastalWater(coord),
             session.Now, session.SpeedFactor, session.GuestStacksOf(settlementId), sampler.TerrainAt, placeGiants, bogKind,
-            realm: session.Store.Realm);
+            realm: session.Store.Realm,
+            isInlandLakeShore: sampler.IsInlandLakeShore(coord));
 
         if (!result.Accepted)
         {
@@ -1186,7 +1187,8 @@ public sealed class SettlementService(
             isWideRiverAt: bridgeSite.IsWide,
             onWastedIsland: bridgeSite.OnWastedIsland,
             realm: session.Store.Realm,
-            onRiverTile: onRiverTile);
+            onRiverTile: onRiverTile,
+            isInlandLakeShore: sampler.IsInlandLakeShore(coord));
 
         if (!decision.Accepted)
         {
@@ -1662,12 +1664,7 @@ public sealed class SettlementService(
             return (null, false, false);
         }
 
-        var islands = await _dbContext.Islands
-            .AsNoTracking()
-            .Where(i => i.WorldId == worldId)
-            .Select(i => new { i.IsWasted, i.RiverTiles })
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-        var wasted = islands.Any(i => i.IsWasted && i.RiverTiles.Any(t => t.Q == coord.Q && t.R == coord.R));
+        var wasted = await WorldRivers.IsOnWastedIslandAsync(_dbContext, worldId, coord, cancellationToken).ConfigureAwait(false);
         return (tile.Shape, rivers.IsWide(coord), wasted);
     }
 

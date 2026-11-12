@@ -10,6 +10,7 @@ using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -53,8 +54,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     {
         var world = await _factory.CreateWorldAsync(Unique("w"), seed, radius, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
@@ -121,8 +121,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         using var client = Client();
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
 
         var response = await client.PostJsonAsync(
@@ -140,8 +139,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         // there leaves every land dispatch without a way home, so the founding path filters them out.
         using var client = Client();
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 1);
         var onRiver = island.StartPositions[0];
         var dry = island.StartPositions[1];
@@ -174,8 +172,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         using var client = Client();
         var (worldId, settlement) = await FoundAsync(client);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         var island = islands!.First(i => i.Id == settlement.IslandId);
 
         var again = await client.PostJsonAsync(
@@ -197,8 +194,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         using var client = Client();
         var (worldId, settlement) = await FoundAsync(client);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         // A different island's start position: still a legal plot on its own,
         // so only the per-player rule (checked ahead of spacing) can refuse it.
         var island = islands!.First(i => i.Id != settlement.IslandId && i.StartPositions.Count > 0);
@@ -228,8 +224,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         using var client = Client();
         var (worldId, settlement) = await FoundAsync(client);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         // A different island entirely, so this can never collide with the
         // spacing rule — only the per-player uniqueness this test targets.
         var island = islands!.First(i => i.Id != settlement.IslandId && i.StartPositions.Count > 0);
@@ -261,8 +256,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         // start position that close to the first — the cross-island case below.
         var world = await _factory.CreateWorldAsync(Unique("w"), 31, 300, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
         // Two start positions on the very same island, closer together than
         // MinimumSpacing — with an island's start positions this dense
@@ -355,8 +349,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         using var client = Client();
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
         // Two start positions on the same island, far enough apart that the
         // cheap phase-1 filter (MinimumSpacing, longhouse-only) alone would
@@ -914,6 +907,8 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.False(Of("farm").NewPlacementDisabled);
         Assert.True(Of("palisade").AlsoOnCoastalWater);
         Assert.False(Of("palisadegate").AlsoOnCoastalWater);
+        Assert.True(Of("fishinghut").AlsoOnInlandLakeShore);
+        Assert.False(Of("farm").AlsoOnInlandLakeShore);
     }
 
     [Fact]
@@ -961,8 +956,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         // player would use, not hard-coded.
         var world = await _factory.CreateWorldAsync(Unique("w"), 1, 60, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
         TileCoordinate? start = null;
         HexCoord waterCoord = default;

@@ -6,6 +6,7 @@ using Aspire.Hosting.Testing;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.World;
 using Microsoft.Playwright;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.AppHost.Tests;
 
@@ -417,8 +418,7 @@ public static class LiveFrontendTestHelpers
             $"/api/v1/worlds/{worldId}/tiles?qMin={centre.Q - claimRadius}&qMax={centre.Q + claimRadius}"
             + $"&rMin={centre.R - claimRadius}&rMax={centre.R + claimRadius}",
             cancellationToken);
-        var islands = await apiClient.GetFromJsonAsync<IslandResponse[]>(
-            $"/api/v1/worlds/{worldId}/islands", cancellationToken);
+        var islands = await apiClient.GetFullIslandsAsync(worldId, cancellationToken);
         var island = islands!.Single(i => i.StartPositions.Any(p => p.Q == centre.Q && p.R == centre.R));
         var blocked = island.RiverTiles.Select(t => new HexCoord(t.Q, t.R))
             .Concat(island.Camps.Select(c => new HexCoord(c.Q, c.R)))

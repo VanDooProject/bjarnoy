@@ -4,6 +4,7 @@ using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
+using Bjarnoy.Api.Worlds;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
@@ -13,6 +14,8 @@ using Bjarnoy.Infrastructure.Services.PlotReservations;
 using Bjarnoy.Infrastructure.World;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Bjarnoy.Api.Endpoints;
 
@@ -52,8 +55,20 @@ public static class WorldEndpoints
 
         worlds.MapGet("/{worldId:guid}/islands", GetIslands)
             .WithName("GetWorldIslands")
-            .WithSummary("Lists the islands of a world, with their start positions; camps only for the islands the caller has seen part of.")
+            .WithSummary("Lists the islands of a world (labels, giants, camps, walls, towers) without their terrain tiles and start positions; camps only for the islands the caller has seen part of.")
             .RequireCallerRealm();
+
+        worlds.MapGet("/{worldId:guid}/terrain-chunks", GetTerrainChunkManifest)
+            .WithName("GetWorldTerrainChunks")
+            .WithSummary("How many chunks the river and bog tiles of the world's islands are cut into, with each chunk's ETag.");
+
+        worlds.MapGet("/{worldId:guid}/terrain-chunks/{chunk:int}", GetTerrainChunk)
+            .WithName("GetWorldTerrainChunk")
+            .WithSummary("The river and bog tiles of one chunk of the world's islands (gzip, cached, ETag).");
+
+        worlds.MapGet("/{worldId:guid}/start-positions", GetStartPositions)
+            .WithName("GetWorldStartPositions")
+            .WithSummary("The founding plots of every island of the world (gzip, cached, ETag).");
 
         worlds.MapGet("/{worldId:guid}/camps", GetCamps)
             .WithName("GetWorldCamps")
@@ -257,7 +272,7 @@ public static class WorldEndpoints
             return TypedResults.NotFound(WorldNotFoundProblem());
         }
 
-        var islands = await worlds.GetIslandsAsync(worldId, cancellationToken);
+        var islands = await worlds.GetIslandSummariesAsync(worldId, cancellationToken);
 
         // Wasted islands are hidden — as far as this player-facing endpoint
         // is concerned, sea — until the world's endboss has actually
@@ -273,6 +288,74 @@ public static class WorldEndpoints
         IReadOnlyList<IslandResponse> response = [.. islands.Select(i => IslandResponse.From(i, seen.Contains(i.Id)))];
 
         return TypedResults.Ok(response);
+    }
+
+    /// <summary>The manifest of <see cref="GetTerrainChunk"/>: the chunk count and each chunk's ETag.</summary>
+    private static async Task<Results<Ok<TerrainChunkManifestResponse>, NotFound<ProblemDetails>>> GetTerrainChunkManifest(
+        Guid worldId,
+        WorldService worlds,
+        DbContextOptions<GameDbContext> dbOptions,
+        IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions> json,
+        CancellationToken cancellationToken)
+    {
+        var world = await worlds.GetWorldAsync(worldId, cancellationToken);
+        if (world is null)
+        {
+            return TypedResults.NotFound(WorldNotFoundProblem());
+        }
+
+        var chunks = await IslandPayloads.TerrainAsync(dbOptions, json.Value.SerializerOptions, worldId, world.EndbossTriggeredAt is not null, cancellationToken);
+        return TypedResults.Ok(chunks.Manifest());
+    }
+
+    /// <summary>One terrain chunk, served from the in-memory gzip bytes (see <see cref="IslandPayloads"/>).</summary>
+    private static async Task<IResult> GetTerrainChunk(
+        Guid worldId,
+        int chunk,
+        HttpContext httpContext,
+        WorldService worlds,
+        DbContextOptions<GameDbContext> dbOptions,
+        IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions> json,
+        CancellationToken cancellationToken)
+    {
+        var world = await worlds.GetWorldAsync(worldId, cancellationToken);
+        if (world is null)
+        {
+            return TypedResults.NotFound(WorldNotFoundProblem());
+        }
+
+        var chunks = await IslandPayloads.TerrainAsync(dbOptions, json.Value.SerializerOptions, worldId, world.EndbossTriggeredAt is not null, cancellationToken);
+        if (chunk < 0 || chunk >= chunks.Chunks.Count)
+        {
+            var problem = new ProblemDetails
+            {
+                Title = "No such terrain chunk.",
+                Detail = $"The world's terrain has {chunks.Chunks.Count} chunk(s), numbered from 0.",
+                Status = StatusCodes.Status404NotFound,
+            };
+            problem.Extensions["error"] = "terrain_chunk_not_found";
+            return TypedResults.NotFound(problem);
+        }
+
+        return new GzipPayloadResult(chunks.Chunks[chunk]);
+    }
+
+    /// <summary>Every island's founding plots, served from the in-memory gzip bytes (see <see cref="IslandPayloads"/>).</summary>
+    private static async Task<IResult> GetStartPositions(
+        Guid worldId,
+        WorldService worlds,
+        DbContextOptions<GameDbContext> dbOptions,
+        IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions> json,
+        CancellationToken cancellationToken)
+    {
+        var world = await worlds.GetWorldAsync(worldId, cancellationToken);
+        if (world is null)
+        {
+            return TypedResults.NotFound(WorldNotFoundProblem());
+        }
+
+        var payload = await IslandPayloads.StartPositionsAsync(dbOptions, json.Value.SerializerOptions, worldId, world.EndbossTriggeredAt is not null, cancellationToken);
+        return new GzipPayloadResult(payload);
     }
 
     /// <summary>

@@ -240,7 +240,7 @@ jobs:
           # object file" while every test on a normal machine passed. A chunk
           # is only encoded when the player has something in reach of it, so
           # found a settlement first and ask for the chunk it stands in.
-          curl -fsS "http://localhost:8080/api/v1/worlds/$world_id/islands" -o /tmp/islands.json
+          curl -fsS --compressed "http://localhost:8080/api/v1/worlds/$world_id/start-positions" -o /tmp/islands.json
           python3 - "$world_id" <<'PY'
           import json, sys
           world_id = sys.argv[1]

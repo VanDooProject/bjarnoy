@@ -149,6 +149,17 @@ public static class ArmyEndpoints
             .WithSummary("Lists wildlife camp reports of a settlement, newest first.")
             .RequireSettlementOwner();
 
+        reports.MapGet("/army-reports/{reportId:guid}", GetArmyReport)
+            .WithName("GetArmyReport")
+            .WithSummary("Fetches one army report (army stuck, army starved) by id.")
+            // Only the player the report belongs to.
+            .RequireArmyReportOwner();
+
+        reports.MapGet("/worlds/{worldId:guid}/army-reports", ListArmyReportsForPlayer)
+            .WithName("ListWorldArmyReports")
+            .WithSummary("Lists the caller's own army reports in a world, newest first.")
+            .RequireCallerRealm();
+
         return app;
     }
 
@@ -207,13 +218,6 @@ public static class ArmyEndpoints
             return TypedResults.Conflict(Problem(DispatchRejection.NoUnitsRequested));
         }
 
-        if (bySpot.Count > 1)
-        {
-            return TypedResults.Conflict(Problem(DispatchRejection.UnitsAtSeveralSpots));
-        }
-
-        var (fromSpot, unitStacks) = bySpot[0];
-
         if (!TryParseMission(request.Mission, out var mission))
         {
             return TypedResults.BadRequest(new ProblemDetails
@@ -228,7 +232,7 @@ public static class ArmyEndpoints
         var destination = request.Destination?.ToHexCoord();
 
         var result = await armies.DispatchAsync(
-            settlementId, fromSpot, unitStacks, waypoints, destination, request.Provisions,
+            settlementId, [.. bySpot.Select(g => (g.Spot, (IReadOnlyList<UnitStack>)g.Stacks))], waypoints, destination, request.Provisions,
             mission, request.TargetSettlementId, request.TargetBuildingCoord?.ToHexCoord(), cancellationToken);
 
         if (result.WorldPaused)
@@ -418,7 +422,10 @@ public static class ArmyEndpoints
 
         var found = await armies.GetAsync(armyId, cancellationToken);
         var (entity, clock) = found!.Value;
-        return TypedResults.Ok(ArmyResponse.From(entity!, clock.ToGameTime(time.GetUtcNow())));
+
+        // An army recalled while it stands on its home spot (a group of a gathering that stands on its own spot) is home again at
+        // once and folded into the garrison by the read above: the answer is the army as it was recalled.
+        return TypedResults.Ok(ArmyResponse.From(entity ?? result.Army!, clock.ToGameTime(time.GetUtcNow())));
     }
 
     private static async Task<Results<Ok<ArmyResponse>, NotFound, Conflict<ProblemDetails>>> RetargetFounding(
@@ -664,6 +671,35 @@ public static class ArmyEndpoints
         return TypedResults.Ok(response);
     }
 
+    private static async Task<Results<Ok<ArmyReportResponse>, NotFound>> GetArmyReport(
+        Guid reportId,
+        ArmyReportService reports,
+        CancellationToken cancellationToken)
+    {
+        var report = await reports.GetAsync(reportId, cancellationToken);
+        return report is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(ArmyReportResponse.From(report));
+    }
+
+    private static async Task<Ok<IReadOnlyList<ArmyReportResponse>>> ListArmyReportsForPlayer(
+        Guid worldId,
+        HttpContext httpContext,
+        ArmyReportService reports,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<ArmyReportResponse>>([]);
+        }
+
+        var entities = await reports.GetForPlayerAsync(worldId, realm.OwnerId!, cancellationToken);
+        IReadOnlyList<ArmyReportResponse> response = [.. entities.Select(ArmyReportResponse.From)];
+        return TypedResults.Ok(response);
+    }
+
     /// <summary>Internal, not private: reused by <see cref="SimulatorEndpoints"/> to parse the simulator's own attack/raid mission field.</summary>
     internal static bool TryParseMission(string? value, out ArmyMission mission)
     {
@@ -740,7 +776,6 @@ public static class ArmyEndpoints
                 DispatchRejection.NoUnitsRequested => "At least one unit must be requested.",
                 DispatchRejection.InsufficientGarrison => "The garrison spot does not hold that many of one or more requested unit types.",
                 DispatchRejection.NotAGarrisonSpot => "The hex is not a garrison spot (longhouse, tower or dock) of the settlement.",
-                DispatchRejection.UnitsAtSeveralSpots => "Units at several garrison spots cannot be sent together yet; send from one spot.",
                 DispatchRejection.SupportSpotRequired => "A support mission must name a garrison spot of the target to join.",
                 DispatchRejection.SupportSpotCannotHold => "That hex is not a garrison spot of the target that can hold every unit of the army.",
                 DispatchRejection.ProvisionsExceedCarryCapacity => "The requested provisions exceed what these units can carry.",

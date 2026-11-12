@@ -371,6 +371,11 @@
         "lore": "Darunter ist es schlichtes Meer, dasselbe Gelände wie das offene Wasser dahinter – aber nah genug am Ufer für einen Steg.",
         "generation": "Ein Meeresfeld mit mindestens einem Nachbarn an Land: der Ring, der jede Insel umschließt."
       },
+      "inlandLake": {
+        "title": "Binnensee",
+        "lore": "Ein Binnensee ist Wasser, das eine Insel ganz umschließt. Er sieht aus wie das Meer, aber kein Schiff kommt hin. Am Ufer kannst du eine Fischerhütte darauf bauen – Werft und Flotten können ihn nicht nutzen.",
+        "generation": "Wasser, das eine Insel umschließt und das nicht mit dem offenen Meer verbunden ist, wenn das Moor daraus keinen Moorsee gemacht hat."
+      },
       "sand": {
         "title": "Sand",
         "lore": "Der Strand einer Insel: der Landring an ihrer Küste.",
@@ -790,7 +795,7 @@
       "boats": "Boote erscheinen auf einem See nur dort, wo eine Seefischerhütte oder eine Raseneisenerz-Grube am Ufer steht, und auch dann nicht bei jedem Gebäude: Jedes hat eine Chance von 50 %. Ein kleiner See trägt höchstens ein Boot, ein großer eines je zwölf Wasserfelder. Boote und Reusen halten drei Felder Abstand zueinander.",
       "landing": "Von jedem Landeplatz, der einem neuen Spieler angeboten wird, ist Moor in Reichweite, denn Ziegelei und Raseneisenerz-Grube brauchen es beide.",
       "river": "Durch den See fließt immer ein Fluss: Er kommt durch eine Bachmündung herein und verlässt den See durch eine andere. Manchmal mündet ein zweiter Fluss in den See, oder eine Bachquelle im Moor lässt einen eigenen Fluss entstehen.",
-      "inland": "Moor berührt nie das Meer oder den Strand. Wo eine Insel eine Meeresbucht umschließt, wird diese Bucht zu einem Moorsee mit einem Moorring, und die Flüsse in der Nähe münden in ihn."
+      "inland": "Moor grenzt nie ans Meer oder an den Strand."
     },
     "margins": {
       "heading": "Moorränder (nicht verwendet)",
@@ -1228,6 +1233,10 @@
     "linked": {
       "heading": "Verbundene Gebiete",
       "body": "Berühren sich die Gebiete zweier deiner Siedlungen auf einer Insel, verbinden sie sich zu einem Gebiet. Es trägt den Namen deiner ältesten Siedlung darin und hat einen gemeinsamen Vorrat: Alles, was du produzierst, fließt hinein, und alles, was du dort baust, ausbildest oder handelst, bezahlst du daraus. Seine Lagerkapazität ist die aller Siedlungen zusammen, ebenso seine Bauplätze, die sich alle Bauaufträge teilen. Du verwaltest das Gebiet von deiner ältesten Siedlung aus und kannst von dort auf jedem seiner Felder bauen. Deine übrigen Siedlungen darin tauchen in keiner Liste mehr auf, und Rivalen sehen auf jedem Langhaus den Namen der ältesten. Ein Überfall auf eines seiner Langhäuser kann den ganzen Vorrat plündern. Reißt die Verbindung ab, behält jede Siedlung ihren Anteil am Vorrat – im Verhältnis zu ihrer Lagerkapazität."
+    },
+    "switching": {
+      "heading": "Zwischen deinen Reichen wechseln",
+      "body": "Besitzt du mehrere Reiche, erscheint in der oberen Leiste ein Pfeil neben dem Namen deines Reichs. Er listet deine Reiche auf, und ein Tipp darauf wechselt dorthin. Du kannst auch auf der Karte ein anderes deiner Reiche antippen: Du wechselst dorthin und kannst gleich bauen. Schickst du Truppen los, kannst du die Garnison oder die Armeen jedes deiner Reiche wählen."
     }
   },
   "landMovement": {
@@ -1287,7 +1296,7 @@
     "pace": {
       "heading": "Wie schnell Armeen ziehen",
       "body": "Das Tempo wird in Feldern pro Stunde auf Gras angegeben. Eine Armee zieht so schnell wie ihre langsamste Einheit. Eine Flotte fährt so schnell wie ihr langsamstes Schiff; Truppen an Bord bremsen sie nicht.",
-      "start": "Deine Truppen ziehen aus dem Gebäude los, in dem sie ausgebildet wurden, und kehren dorthin zurück. Eine Armee aus mehreren Einheitentypen bricht vom Gebäude ihrer langsamsten Einheit auf.",
+      "start": "Deine Truppen stehen an Garnisonsorten: im Langhaus, in Wachtürmen und in Werften. Eine Armee kannst du aus mehreren Orten zusammenstellen. Jede Gruppe bricht sofort von ihrem Ort auf. Sie treffen sich auf dem ersten Feld, das ihre Wege gemeinsam haben. Teilen sie keines, treffen sie sich auf dem Feld direkt vor dem Ziel. Wer zuerst ankommt, wartet dort und isst. Danach zieht die Armee gemeinsam weiter, im Tempo ihrer langsamsten Einheit. Die Heimat der Armee ist der Ort, der dem Treffpunkt am nächsten liegt. Wird eine Gruppe vor dem Treffen zurückgerufen, bekommt sie einen anderen Befehl, wird sie abgespalten oder verliert sie einen Kampf, bleibt sie zurück, und die anderen ziehen weiter. Willst du die ganze Armee abbrechen, ruf jede Gruppe zurück. Passagiere einer Flotte, die an einem Ort ohne Schiffe stehen, laufen zu einer der Werften der Flotte und gehen dort an Bord.",
       "example": "Zum Beispiel braucht ein {unit} für ein Grasfeld {minutes}.",
       "columns": {
         "unit": "Einheit",
@@ -1301,6 +1310,7 @@
       "upkeep": "Eine Armee isst ab dem Aufbruch jede Stunde den Unterhalt ihrer Einheiten an Nahrung.",
       "carry": "Mehr Nahrung, als ihre Einheiten tragen, kann sie nicht mitnehmen. Den Proviant für den ganzen Weg lädst du also vor dem Aufbruch.",
       "turnBack": "Wird die Nahrung knapp, kehrt eine marschierende Armee um.",
+      "noWayHome": "Kommt eine Armee nicht mehr nach Hause, etwa weil eine Palisade den Weg versperrt, bleibt sie, wo sie ist. Geht ihr die Nahrung aus, verhungert die ganze Armee, und du bekommst einen Bericht.",
       "columns": {
         "upkeep": "Isst pro Stunde",
         "carries": "Trägt (Nahrung)"
@@ -1311,11 +1321,13 @@
       "camps": "Kommt eine Armee in die Reichweite eines starken Wildtierlagers, wird sie überfallen, außer das Lager ist ruhig. Ein starkes Lager bewacht {min} bis {max} Felder um sich (2 plus seine Stufe). Mehr dazu unter {link}.",
       "campsLink": "Wildtierlager",
       "enemies": "Feindliche Armeen, die sich auf der Straße treffen, kämpfen eine Feldschlacht. Armeen desselben Besitzers oder derselben Gilde kämpfen nie gegeneinander.",
+      "fleeing": "Nur eine Armee, die nach einer verlorenen Feldschlacht flieht, ist vor Feldschlachten und Überfällen aus Wildtierlagern sicher, höchstens 6 Stunden lang. Du kannst ihr Befehle geben wie jeder anderen Armee, doch mit dem ersten Befehl endet dieser Schutz.",
+      "newWalls": "Versperrt eine neue Palisade einer Armee den Weg, sucht sie sich einen anderen – auf dem Hinweg wie auf dem Heimweg. Findet sie keinen, bleibt sie auf dem letzten Feld vor der Palisade stehen, und du bekommst einen Bericht. Steckt sie auf dem Hinweg fest, gibt sie ihr Ziel auf und wartet dort.",
       "orders": "Jeder Befehl hat ein Ziel gratis. Wegpunkte unterwegs sind eine Premium-Funktion."
     },
     "sendOut": {
       "heading": "Eine Armee losschicken, die schon unterwegs ist",
-      "spots": "Deine Truppen stehen in deinem Langhaus, in deinen Wachtürmen und in deinen Werften. Schiffe liegen in den Werften, im Langhaus nur dann, wenn es am Meer auf Sand steht. Neue Einheiten ziehen an den nächstgelegenen Ort, der sie aufnehmen kann, und eine Armee kehrt dorthin zurück, wo sie losgezogen ist. Willst du Truppen in ein anderes deiner Reiche schicken, tippst du auf eines seiner Felder: Sie verstärken dort als Unterstützung die Besatzung, auf dem Feld, das du angetippt hast, oder im Langhaus.",
+      "spots": "Deine Truppen stehen in deinem Langhaus, in deinen Wachtürmen und in deinen Werften. Schiffe liegen in den Werften, im Langhaus nur dann, wenn es am Meer auf Sand steht. Neue Einheiten ziehen an den nächstgelegenen Ort, der sie aufnehmen kann, und eine Armee kehrt dorthin zurück, wo sie losgezogen ist. Hast du sie aus mehreren Orten zusammengestellt, kehrt sie an den Ort zurück, der dem Treffpunkt ihrer Gruppen am nächsten liegt. Willst du Truppen in ein anderes deiner Reiche schicken, tippst du auf eines seiner Felder: Sie verstärken dort als Unterstützung die Besatzung, auf dem Feld, das du angetippt hast, oder im Langhaus.",
       "orders": "Tippe auf einem Feld auf „Armee hierher entsenden“, „Angreifen“ oder „Jagen“ und wähle die Armee, die losziehen soll: die Garnison eines deiner Reiche oder eine Armee von dir, die schon draußen ist. Jede Zeile nennt das Reich und was seine Truppen dort tun würden: Auf einem Feld deines eigenen Reichs ziehen sie hin, Truppen deiner anderen Reiche unterstützen es. Eine stehende Armee kann ziehen, angreifen, unterstützen oder jagen. Eine marschierende Armee leitest du mit Premium um. Willst du lieber woandershin, tippst du währenddessen einfach auf ein anderes Feld. Greifst du eine Siedlung an, greifst du ein Gebäude in ihrem Reich an. Hat das Gebäude eine Besatzung, verteidigt sie es. Unterstützt du eine Siedlung, verstärkst du eine ihrer Besatzungen.",
       "split": "Von einer stehenden Armee kannst du nur einen Teil losschicken. Der Rest bleibt, wo er steht. Eine marschierende Armee zieht immer komplett los.",
       "reach": "Eine Armee zieht nur los, wenn sie das Ziel erreicht und danach noch genug Proviant für den Rückweg hat. Alle anderen siehst du ausgegraut in der Liste, zusammen mit dem Grund.",

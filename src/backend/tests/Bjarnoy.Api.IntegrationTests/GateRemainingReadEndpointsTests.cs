@@ -13,6 +13,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -531,8 +532,7 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         rivalClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", rivalToken);
 
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await mineClient.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await mineClient.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 1);
 
         // A JWT-authenticated founding still needs an OwnerId in the request

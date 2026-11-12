@@ -54,8 +54,8 @@ public sealed record DispatchSpotUnitsRequest(
 /// <param name="From">
 /// The units, split by the garrison spot each group leaves from (longhouse, tower or dock hex of the settlement); only units
 /// standing there can be sent, and the spot becomes the army's home spot. Entries with no units are ignored, the same spot
-/// listed twice is merged. Gathering from several spots on the way is not built yet: more than one spot is refused with
-/// <see cref="DispatchRejection.UnitsAtSeveralSpots"/>.
+/// listed twice is merged. With more than one spot, each group leaves its spot as an army of its own, they meet on the way and move on
+/// as one (<see cref="Bjarnoy.Domain.Armies.Gathering"/>); the response is the group that gets to the meeting first.
 /// </param>
 /// <param name="TargetBuildingCoord">
 /// <b>Required for <c>"support"</c></b>: the target settlement's garrison spot the guest joins (it must be able to hold every unit of
@@ -138,6 +138,15 @@ public sealed record HexPointResponse(int Q, int R)
 /// </param>
 /// <param name="ReturnCumulativeHours">The same per-hex schedule for <paramref name="ReturnPath"/>, measured from <paramref name="TurnAroundAt"/>.</param>
 /// <param name="ReturnEdgeHours">The same edge-crossing schedule for <paramref name="ReturnPath"/>, measured from <paramref name="TurnAroundAt"/>.</param>
+/// <param name="IsStranded">
+/// True when the army cannot get home and stays where it stops (<see cref="Movement.IsStranded"/>): the last hex of <paramref name="Path"/>
+/// (the path is that hex alone, or the walk there when a wall closed its way), and <see cref="ArmyResponse.StarvesAt"/> is when its food
+/// runs out and the whole army dies.
+/// </param>
+/// <param name="IsFleeing">
+/// True for an army fleeing after a lost field battle (<see cref="Movement.IsFleeing"/>), on its way home or stranded: it takes field orders
+/// from where it is like a standing army, and an order ends its flee protection.
+/// </param>
 public sealed record MovementResponse(
     DateTimeOffset DepartedAt,
     IReadOnlyList<HexPointResponse> Path,
@@ -149,7 +158,9 @@ public sealed record MovementResponse(
     IReadOnlyList<double> ReturnEdgeHours,
     DateTimeOffset TurnAroundAt,
     DateTimeOffset ReturnArrivesAt,
-    bool IsReturning)
+    bool IsReturning,
+    bool IsStranded,
+    bool IsFleeing)
 {
     public static MovementResponse From(Movement movement) => new(
         movement.DepartedAt,
@@ -162,7 +173,9 @@ public sealed record MovementResponse(
         [.. movement.ReturnEdgeHours],
         movement.TurnAroundAt,
         movement.ReturnArrivesAt,
-        movement.IsReturning);
+        movement.IsReturning,
+        movement.IsStranded,
+        movement.IsFleeing);
 }
 
 /// <param name="VisionRadius">
@@ -175,6 +188,9 @@ public sealed record MovementResponse(
 /// <paramref name="TargetSettlementId"/> (issue #40 phase 4) — mutually
 /// exclusive with <paramref name="AtHome"/>; <paramref name="Movement"/> is
 /// null here too, since a guest is not travelling.
+/// </param>
+/// <param name="StarvesAt">
+/// When the army's provisions run out and the whole army dies; only set while it cannot get home (<see cref="MovementResponse.IsStranded"/>).
 /// </param>
 /// <param name="Position">
 /// Current hex: the home settlement's centre while <paramref name="AtHome"/>,
@@ -194,7 +210,11 @@ public sealed record ArmyResponse(
     double TotalUpkeepPerHour,
     int VisionRadius,
     IReadOnlyList<ArmyUnitStackResponse> Stacks,
-    MovementResponse? Movement)
+    MovementResponse? Movement,
+    DateTimeOffset? StarvesAt,
+    Guid? GatheringId = null,
+    HexPointResponse? GatherHex = null,
+    DateTimeOffset? GatherDepartsAt = null)
 {
     public static ArmyResponse From(ArmyEntity entity, DateTimeOffset gameNow)
     {
@@ -206,6 +226,9 @@ public sealed record ArmyResponse(
         var atHome = domain.Location is ArmyLocation.AtHome;
         var supporting = domain.Location is ArmyLocation.Supporting;
         var movement = domain.Location is ArmyLocation.InTransit inTransit ? inTransit.Movement : null;
+
+        // The gathering the army is a group of (hex and departure, game time like every other instant here); only when it is loaded.
+        var gathering = entity.Gathering is { } loaded && loaded.Id == entity.GatheringId ? loaded.ToDomain() : null;
 
         var position = domain.Location switch
         {
@@ -227,7 +250,11 @@ public sealed record ArmyResponse(
             domain.TotalUpkeepPerHour,
             FogVisionRadii.ArmyVisionRadius(domain.Stacks, entity.Settlement.ToDomain().VisionBonusRings),
             [.. domain.Stacks.Select(s => new ArmyUnitStackResponse(s.Type.ToWireName(), s.Count))],
-            movement is null ? null : MovementResponse.From(movement));
+            movement is null ? null : MovementResponse.From(movement),
+            domain.StarvesAt,
+            domain.GatheringId,
+            gathering is null ? null : HexPointResponse.From(gathering.Hex),
+            gathering?.DepartAt);
     }
 }
 
@@ -546,4 +573,38 @@ public sealed record ForeignArmyResponse(
             [.. army.Stretch.CumulativeHours],
             [.. army.Stretch.EdgeHours],
             army.Stretch.ArrivesAt));
+}
+
+/// <summary>One unit type's count in an army report.</summary>
+public sealed record ArmyReportUnitLineResponse(string Type, int Count);
+
+/// <summary>
+/// An army report, as read from the player's inbox (it belongs to the player, not to a settlement).
+/// </summary>
+/// <param name="Kind"><c>"stuck"</c> or <c>"starved"</c>.</param>
+/// <param name="Hex">Where the army stood.</param>
+/// <param name="Mission">The army's mission when it happened, as the army responses name it.</param>
+/// <param name="Units">The troops lost for <c>"starved"</c>, the troops in the army for <c>"stuck"</c>.</param>
+public sealed record ArmyReportResponse(
+    Guid Id,
+    string Kind,
+    DateTimeOffset OccurredAt,
+    Guid ArmyId,
+    HexPointResponse Hex,
+    string Mission,
+    IReadOnlyList<ArmyReportUnitLineResponse> Units)
+{
+    public static ArmyReportResponse From(ArmyReportEntity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        return new ArmyReportResponse(
+            entity.Id,
+            ((ArmyReportKind)entity.Kind).ToString().ToLowerInvariant(),
+            entity.OccurredAt,
+            entity.ArmyId,
+            new HexPointResponse(entity.Q, entity.R),
+            ((ArmyMission)entity.Mission).ToString().ToLowerInvariant(),
+            [.. entity.UnitLines.OrderBy(l => l.UnitType).Select(l => new ArmyReportUnitLineResponse(l.UnitType.ToWireName(), l.Count))]);
+    }
 }

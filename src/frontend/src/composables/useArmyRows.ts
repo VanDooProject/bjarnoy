@@ -72,9 +72,17 @@ export function useArmyRows() {
             ? army.movement.returnArrivesAt
             : army.movement.arrivesAt
           : null;
-      const eta = etaIso ? formatEta(etaIso, now) : null;
-      const etaMs = etaIso ? Date.parse(etaIso) : null;
-      const canRecall = !army.atHome && (army.supporting || (army.movement !== null && !army.movement.isReturning));
+      // An army that cannot get home has no arrival to count down to, only the moment its food runs out.
+      const eta = army.starvesAt
+        ? t('hud.armyStatus.starvesIn', { eta: formatEta(army.starvesAt, now) })
+        : etaIso
+          ? formatEta(etaIso, now)
+          : null;
+      const etaMs = army.starvesAt ? Date.parse(army.starvesAt) : etaIso ? Date.parse(etaIso) : null;
+      // Nor any way home to recall it on.
+      const canRecall =
+        !army.atHome &&
+        (army.supporting || (army.movement !== null && !army.movement.isReturning && !army.movement.isStranded));
       // Issue #156 phase 1: "Move on" once standing, "Append goal" while still
       // travelling — see isFieldOrderMidMarch's own doc comment.
       const midMarch = isFieldOrderMidMarch(army, now);

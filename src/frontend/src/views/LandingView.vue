@@ -44,6 +44,7 @@ import { buildingStatsAt, scaleOutput } from '../lib/map/buildingEconomy';
 import {
   deriveOnboardingGuidance,
   guidedBuildTarget,
+  guidedTypesStarted,
   guidedRingStep,
   nextGuidedType,
   snapToOfferedPlot,
@@ -551,14 +552,25 @@ function withinBuildableRange(coord: AxialCoord): boolean {
 // here" / "One more — the {terrain}") aims at. `guidedBuildTarget`
 // (onboardingGuidance.ts) holds the rule; this supplies this settlement's
 // centre/claim radius, the real WorldModel and the realm check.
+
+// The pointer's progress: standing guided buildings plus queued ones (`guidedTypesStarted`), so it moves on at the
+// click, before the server has answered the order. The checklist above reads confirmed buildings only.
+const pointerStartedTypes = computed(() => guidedTypesStarted(world.hud.placedBuildingTypes, world.hud.queue));
+const pointerGuidedType = computed(() => nextGuidedType(pointerStartedTypes.value));
+
 const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
   if (!player.hasFoundedSettlement || !world.selectedSettlementId) return null;
   const settlement = world.model.getSettlement(world.selectedSettlementId);
   if (!settlement) return null;
-  const type = nextGuidedType(world.hud.placedBuildingTypes);
+  const type = pointerGuidedType.value;
   if (!type) return null;
-  return guidedBuildTarget(world.model, { q: settlement.q, r: settlement.r }, claimRadiusForLevel(settlement.level), type, (owner) =>
-    world.isRealmSettlement(owner),
+  return guidedBuildTarget(
+    world.model,
+    { q: settlement.q, r: settlement.r },
+    claimRadiusForLevel(settlement.level),
+    type,
+    (owner) => world.isRealmSettlement(owner),
+    world.hud.queue,
   );
 });
 
@@ -567,7 +579,7 @@ const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
 // the instant they do (the ring/note/pointer take over telling the story),
 // so it never overlaps the completion banner.
 const showLandfallBanner = computed(
-  () => player.hasFoundedSettlement && world.hud.placedBuildingTypes.length <= 1 && !ringScreen.value,
+  () => player.hasFoundedSettlement && pointerStartedTypes.value.length === 0 && !ringScreen.value,
 );
 
 // The single animated pointer: which hex (or, with the ring open, which
@@ -585,7 +597,7 @@ const mapDrawn = computed(() => (canvasRef.value?.loadState.phase ?? 'terrain') 
  * locked there (a guarded camp, a giant, an endgame site): the pointer then goes back to the guided hex.
  */
 function ringStepTarget(): { id: string; spot: { x: number; y: number }; label: string } | null {
-  const type = nextGuidedType(world.hud.placedBuildingTypes);
+  const type = pointerGuidedType.value;
   if (!type || buildAction.value?.disabled) return null;
   const step = guidedRingStep(type, ringCategories.value, ringLaneSpots.value);
   if (!step) return null;
@@ -640,8 +652,8 @@ const pointerTarget = computed(() => {
   // Right after founding (only the longhouse is down) vs. one guided
   // building already placed — matches the mockup's frame 2 vs. frame 4
   // copy/angle.
-  const oneDone = world.hud.placedBuildingTypes.length > 1;
-  const remainingType = nextGuidedType(world.hud.placedBuildingTypes);
+  const oneDone = pointerStartedTypes.value.length > 0;
+  const remainingType = pointerGuidedType.value;
   return {
     mode: 'hex' as const,
     coord: nextGuidedTargetCoord.value,
@@ -662,7 +674,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
     // back into a real one — the panel's own "Start a new realm instead"
     // button is the only way to fall through to founding here.
     if (showReturningLoginGate.value) return;
-    if (tile.terrain === 'sea' || tile.terrain === 'lake' || founding.value || joinBlocked.value) return;
+    if (tile.terrain === 'sea' || tile.terrain === 'lake' || tile.terrain === 'inlandlake' || founding.value || joinBlocked.value) return;
     // Live mode only founds on an exact, unclaimed start position (see
     // `startPositionAt`, issue #96) — a click elsewhere used to silently
     // found on the nearest one instead; that's gone (issue #96 covers why),

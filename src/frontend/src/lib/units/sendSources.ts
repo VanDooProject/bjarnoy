@@ -159,7 +159,7 @@ function sourcesOfRealm(realm: SendRealm, input: SendSourceInput): { home: SendS
       });
       if (target.mission === 'hunt' && !garrisonCanHunt(army.stacks, byType, target.campAtSea)) return blocked('wrongClass');
       if (army.supporting) return blocked('supporting');
-      if (army.movement?.isReturning) return blocked('returning');
+      if (army.movement?.isReturning && !army.movement.isFleeing) return blocked('returning');
       if (!canFieldOrderArmy(army)) return blocked('notOrderable');
       const verdict = fieldOrderFeasibility(army, where.coord, where.mission, env);
       // The premium gate wins over a route still being searched; the verdict only fills in the travel time.

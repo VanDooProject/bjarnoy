@@ -58,6 +58,14 @@ public class BogGenerationGoldenTests
                 $"{scenario.Name}: bog tile #{i} ({expected.Q},{expected.R}) differs - got {got.Kind} in [{string.Join(",", got.InDirections)}] out {got.OutDirection} water [{string.Join(",", got.WaterEdges)}].");
         }
 
+        Assert.Equal(scenario.InlandLakes.Count, actual.InlandLakes.Count);
+        for (var i = 0; i < scenario.InlandLakes.Count; i++)
+        {
+            Assert.True(
+                scenario.InlandLakes[i][0] == actual.InlandLakes[i].Q && scenario.InlandLakes[i][1] == actual.InlandLakes[i].R,
+                $"{scenario.Name}: inland lake #{i} differs - got ({actual.InlandLakes[i].Q},{actual.InlandLakes[i].R}).");
+        }
+
         // The frozen result is also a legal bog: the rules hold on it.
         Assert.Equal(0, BogRules.Check(actual.Bogs, actual.Rivers, sampler.TerrainAt).Total);
     }
@@ -94,6 +102,8 @@ public class BogGenerationGoldenTests
         public List<RiverDto> Rivers { get; set; } = [];
 
         public List<BogDto> Bogs { get; set; } = [];
+
+        public List<List<int>> InlandLakes { get; set; } = [];
 
         public override string ToString() => Name;
     }

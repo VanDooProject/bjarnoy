@@ -195,6 +195,25 @@ export interface CampReportResponse {
   towerBurned: boolean;
 }
 
+export interface ArmyReportUnitLine {
+  type: string;
+  count: number;
+}
+
+/**
+ * Mirrors `ArmyReportResponse` — an army report that belongs to the player, not to a settlement: `stuck` (a wall blocks the army's way)
+ * or `starved` (it could not get home and its food ran out). `units` are the troops lost (`starved`) or in the army (`stuck`).
+ */
+export interface ArmyReportResponse {
+  id: string;
+  kind: 'stuck' | 'starved';
+  occurredAt: string;
+  armyId: string;
+  hex: { q: number; r: number };
+  mission: string;
+  units: ArmyReportUnitLine[];
+}
+
 /**
  * Mirrors `UtgardWallResponse` — one hex of an Utgard wall ring (see `lib/map/endgamePlacement.ts` and `docs/design/endgame.md`).
  * `piece` is the wall piece (`straight180`, `bend60`, `bend120`, `gate180`, `end` or `end_coast` on a sea hex); the atlas family is
@@ -217,6 +236,10 @@ export interface JotunTowerResponse {
   orientation: string;
 }
 
+/**
+ * Mirrors `IslandResponse`: an island as `GET /worlds/{id}/islands` lists it. Its river and bog tiles come separately
+ * (`TerrainChunkResponse`, `GET /worlds/{id}/terrain-chunks`): they are big and only change when the world is reseeded.
+ */
 export interface IslandResponse {
   id: string;
   index: number;
@@ -224,18 +247,36 @@ export interface IslandResponse {
   q: number;
   r: number;
   tileCount: number;
-  startPositions: TileCoordinate[];
-  riverTiles: RiverTileResponse[];
   giants: GiantResponse[];
   camps: CampResponse[];
-  /** This island's bogland (empty when it has none). */
-  bogTiles: BogTileResponse[];
   /** The Utgard wall rings of a wasted island with Utgard (empty otherwise). */
   utgardWalls?: UtgardWallResponse[];
   /** The Jötun watchtowers of a wasted island with Utgard (empty otherwise). */
   jotunTowers?: JotunTowerResponse[];
   /** True for a wasted island — only ever present once the world's endboss has triggered (hidden before that). */
   wasted: boolean;
+}
+
+/** Mirrors `IslandTerrainResponse`: one island's river, bog and inland-lake tiles (empty lists when it has none). */
+export interface IslandTerrainResponse {
+  id: string;
+  riverTiles: RiverTileResponse[];
+  bogTiles: BogTileResponse[];
+  /** Water this island encloses that the bog did not fill (empty when it has none) — drawn like the sea, see `drawsAsSea`. */
+  inlandLakeTiles: TileCoordinate[];
+}
+
+/** Mirrors `TerrainChunkResponse`: the terrain of a fixed range of islands, in island index order. */
+export interface TerrainChunkResponse {
+  chunk: number;
+  islands: IslandTerrainResponse[];
+}
+
+/** Mirrors `TerrainChunkManifestResponse`: how many chunks the world's terrain is cut into. */
+export interface TerrainChunkManifestResponse {
+  chunkSize: number;
+  chunkCount: number;
+  chunks: { index: number; eTag: string }[];
 }
 
 /** Mirrors `PlotSuggestionResponse` — the plot this visitor is offered right now, pinned across reloads. */
@@ -1447,6 +1488,8 @@ export interface BuildingDefinitionResponse {
   requiresCoastalWater: boolean;
   /** Land terrain AND (as an exception) coastal water: the palisade's sea end. */
   alsoOnCoastalWater?: boolean;
+  /** Also stands on an inland-lake hex beside land (the fishing hut) — see BuildingDefinition.AlsoOnInlandLakeShore. */
+  alsoOnInlandLakeShore?: boolean;
   requiredLonghouseLevel: number;
   /** Construction slots one order for this building occupies while building — ignored when `occupiesMostSlots` is set. */
   slotCost: number;
@@ -1657,6 +1700,10 @@ export interface MovementResponse {
   turnAroundAt: string;
   returnArrivesAt: string;
   isReturning: boolean;
+  /** The army cannot get home and stays on the last hex of `path` (that hex alone, or the walk there when a wall closed its way); `ArmyResponse.starvesAt` is when its food runs out and the whole army dies. */
+  isStranded: boolean;
+  /** The army is fleeing after a lost field battle (on its way home or stranded): it takes field orders from where it is, and an order ends its flee protection. */
+  isFleeing: boolean;
 }
 
 /**
@@ -1707,6 +1754,14 @@ export interface ArmyResponse {
   visionRadius: number;
   stacks: ArmyUnitStackResponse[];
   movement: MovementResponse | null;
+  /** When the provisions of an army that cannot get home run out and the whole army dies; null for every other army. */
+  starvesAt: string | null;
+  /** Set while this army is one group of a gathering army from several garrison spots; all groups of one army share it. */
+  gatheringId?: string | null;
+  /** The hex the groups of a gathering army meet on. */
+  gatherHex?: HexPoint | null;
+  /** When this group leaves its spot for the meeting hex. */
+  gatherDepartsAt?: string | null;
 }
 
 export interface ArmyUnitStackResponse {

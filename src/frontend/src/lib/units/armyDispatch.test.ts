@@ -386,6 +386,12 @@ describe('armyStatusLabel', () => {
     expect(armyStatusLabel({ atHome: true, supporting: false, movement: null })).toBe('At home');
   });
 
+  it('labels an army that cannot get home, whatever its mission', () => {
+    expect(
+      armyStatusLabel({ atHome: false, supporting: false, mission: 'hunt', movement: { isReturning: false, isStranded: true } }),
+    ).toBe('Cannot get home');
+  });
+
   it('labels a supporting guest army with no settlement name given', () => {
     expect(armyStatusLabel({ atHome: false, supporting: true, movement: null })).toBe('Supporting');
   });
@@ -584,6 +590,15 @@ describe('canFieldOrderArmy', () => {
     }
   });
 
+  it('allows a fleeing or stranded army on any mission, even one fleeing home', () => {
+    for (const movement of [
+      { isReturning: true, isFleeing: true, isStranded: false },
+      { isReturning: false, isFleeing: false, isStranded: true },
+    ]) {
+      expect(canFieldOrderArmy({ atHome: false, supporting: false, mission: 'attack', movement })).toBe(true);
+    }
+  });
+
   it('allows a standing or marching move/found army', () => {
     for (const mission of ['move', 'found']) {
       expect(
@@ -709,7 +724,7 @@ describe('targetBuildingPickerMode', () => {
 
 describe('shoreBuildings', () => {
   // Land at q >= 0, sea at q < 0.
-  const coast = { isLand: (q: number) => q >= 0 };
+  const coast = { isLand: (q: number) => q >= 0, isSea: (q: number) => q < 0 };
 
   it('keeps only buildings on a shoreline hex or a sea hex', () => {
     const farm = { q: 3, r: 0, type: 'farm' };

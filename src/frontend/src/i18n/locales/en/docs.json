@@ -371,6 +371,11 @@
         "lore": "Still plain sea underneath — the same terrain as the open water beyond it — but close enough to the shore for a dock.",
         "generation": "A sea hex with at least one land neighbour: the ring hugging every island."
       },
+      "inlandLake": {
+        "title": "Inland lake",
+        "lore": "Water an island encloses on all sides. It looks like the sea, but no ship can get there. You can build a Fishing Hut on it next to the shore; Dockyards and fleets can't use it.",
+        "generation": "Water an island encloses, not connected to the open sea, that the bog did not turn into a bog lake."
+      },
       "sand": {
         "title": "Sand",
         "lore": "An island's beach: the ring of land along its coast.",
@@ -790,7 +795,7 @@
       "boats": "Boats appear on a lake only where a lake Fishing Hut or a bog-ore works stands beside it, and not for every building: each one has an even chance, a small lake holds one boat at most, a big lake one per twelve water tiles, and boats and weirs keep three tiles apart.",
       "landing": "Every landing spot offered to a new player has bog in reach, because the Clay Brickworks and the bog-ore works both need it.",
       "river": "A river always runs through the lake: it enters by one creek mouth and leaves by another. Now and then a second river is sunk into the lake, or a creek spring in the bog starts a river of its own.",
-      "inland": "Bog never touches the sea or the beach. Where an island wraps around a pocket of sea, that pocket becomes a bog lake with a ring of bog, and the rivers nearby run into it."
+      "inland": "Bog never touches the sea or the beach."
     },
     "margins": {
       "heading": "Bog margins (not used)",
@@ -1228,6 +1233,10 @@
     "linked": {
       "heading": "Linked realms",
       "body": "When the realms of two of your settlements on an island touch, they link into one realm. A linked realm has one name, that of your oldest settlement in it, and one stock: everything you produce goes into it, and everything you build, train or trade there is paid from it. Its storage is that of all its settlements added up, and so are its construction slots, which all its builds share. You run it from your oldest settlement and can build on any of its hexes from there. Your other settlements in it no longer show up in lists, and rivals see the oldest one's name on every longhouse. A raid on any of its longhouses can loot the whole stock. If the link breaks, each settlement keeps its share of the stock, in proportion to its storage."
+    },
+    "switching": {
+      "heading": "Switching between realms",
+      "body": "Once you own several realms, an arrow appears next to your realm's name in the top bar. It lists your realms, and picking one switches to it. You can also tap another of your realms on the map: the game switches to it, and you can build there right away. When you send troops, you can pick the garrison or the armies of any of your realms."
     }
   },
   "landMovement": {
@@ -1287,7 +1296,7 @@
     "pace": {
       "heading": "How fast armies move",
       "body": "Speed is counted in hexes per hour on grass. An army marches at the speed of its slowest unit. A fleet moves at the speed of its slowest ship; troops aboard do not slow it.",
-      "start": "Your troops set out from the building that trained them and return there. An army of several unit types leaves from the building of its slowest unit.",
+      "start": "Your troops stand at garrison spots: the Longhouse, towers and docks. You can put one army together from several spots. Each group leaves its own spot at once. They meet on the first hex their routes share, or on the hex just before the target if they share none. Whoever arrives first waits there and eats. Then the army moves on together at the pace of its slowest unit. The army's home is the spot nearest the meeting hex. A group that is recalled, gets another order, is split off or loses a fight before the meeting stays behind, and the others go on. To call off the whole army, recall every group. Fleet passengers at a spot without ships walk to one of the fleet's docks and board there.",
       "example": "Example: a {unit} crosses a grass hex in {minutes}.",
       "columns": {
         "unit": "Unit",
@@ -1301,6 +1310,7 @@
       "upkeep": "An army eats its units' upkeep in food every hour from the moment it sets out.",
       "carry": "It can carry only as much food as its units can, so you load the provisions for the whole trip before it leaves.",
       "turnBack": "An army on a move turns back when its food runs low.",
+      "noWayHome": "An army that cannot get home, for example because a wall blocks the way, stays where it is. When its food runs out, the whole army starves and you get a report.",
       "columns": {
         "upkeep": "Eats per hour",
         "carries": "Carries (food)"
@@ -1311,11 +1321,13 @@
       "camps": "An army that comes within reach of a strong wildlife camp is ambushed, unless the camp is calm. A strong camp guards {min} to {max} hexes around it (2 plus its level). See {link}.",
       "campsLink": "Wildlife camps",
       "enemies": "Hostile armies that meet on the road fight a field battle. Armies of the same owner or guild never fight each other.",
+      "fleeing": "Only an army fleeing from a lost field battle is safe from field battles and camp ambushes, for up to 6 hours. You can give it orders like any other army, but an order ends that protection.",
+      "newWalls": "If a new wall blocks an army's way, out or home, it looks for another route. If there is none, it stops on the last hex before the wall and you get a report. An army stuck on its way out drops its target and stands there.",
       "orders": "Every order has one destination for free. Waypoints along the way are a premium feature."
     },
     "sendOut": {
       "heading": "Sending an army that is already out",
-      "spots": "Your troops stand in your longhouse, your towers and your docks. Ships wait at docks, and at the longhouse too if it stands on sand by the sea. New units join the nearest place that can hold them, and an army comes back to the place it left from. To send troops to another realm of yours, tap one of its hexes: they join its garrison as support at the spot you tapped, or at its longhouse.",
+      "spots": "Your troops stand in your longhouse, your towers and your docks. Ships wait at docks, and at the longhouse too if it stands on sand by the sea. New units join the nearest place that can hold them, and an army comes back to the place it left from. An army put together from several spots comes back to the spot nearest the hex where its groups met. To send troops to another realm of yours, tap one of its hexes: they join its garrison as support at the spot you tapped, or at its longhouse.",
       "orders": "Tap Send army here, Attack or Hunt on a hex and pick the army to send: the garrison of any of your realms, or an army of yours that is already out. Each row names its realm and what its troops would do there: on a hex of your own realm they move there, troops of your other realms support it. A standing army can move, attack, support or hunt. An army still on the march can be redirected with Premium. While you pick, tap another hex to aim at that one instead. Attacking a settlement means attacking a building in its realm: a building with a garrison is defended by it. Supporting a settlement means joining one of its garrisons.",
       "split": "You can send only part of a standing army. The rest keeps standing where it is. An army on the march always goes whole.",
       "reach": "An army only goes if it can get there and still has the food for the way home. The ones that cannot stay in the list, greyed out, with the reason.",

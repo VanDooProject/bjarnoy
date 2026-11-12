@@ -5,7 +5,7 @@
     "goTo": "Go to {name}",
     "rename": "Rename…",
     "realms": "Your realms",
-    "current": "Current"
+    "longhouse": "Longhouse {level}"
   },
   "settlementRename": {
     "label": "Settlement name",
@@ -201,6 +201,7 @@
       "raze": "Tap {name} again to raze"
     },
     "errors": {
+      "couldNotSwitchRealm": "Could not switch to that realm.",
       "couldNotQueueBuild": "Could not queue that build.",
       "couldNotQueueUpgrade": "Could not queue that upgrade.",
       "couldNotQueueRaze": "Could not queue that raze."
@@ -390,6 +391,8 @@
     "returning": "Returning",
     "inTransit": "In transit",
     "hunting": "Hunting",
+    "cannotGetHome": "Cannot get home",
+    "starvesIn": "starves in {eta}",
     "buildingCamp": "Building the camp, ready at {time}"
   },
   "garrisonSpots": {
@@ -397,8 +400,7 @@
     "tower": "Tower",
     "dock": "Dock",
     "beachcamp": "Beach camp",
-    "from": "from {spots}",
-    "severalSpots": "These units stand at several spots. Sending from several spots at once is coming soon."
+    "from": "from {spots}"
   },
   "armyPanel": {
     "title": "Armies",

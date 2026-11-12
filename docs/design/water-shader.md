@@ -216,6 +216,8 @@ client-side with no round trip. So:
    request (`WorldModel.seaBogHexKeys`, `BakeRequest.landHexes`) and rebakes
    when the bog changes (`WorldModel.waterMaskRevision`).
 
+   An inland lake (enclosed water the bog did not take) is not land here: it is drawn like the sea, the shader and its foam included, and both bake paths see it as water (the seed calls it sea).
+
    This must be `isoPixelToAxial`, and **not** anything derived from sprite
    bounds. `isoPixelToAxial` is defined in terms of the `isoTopPoints`
    hexagon — the tile's flat top face, which "abuts its neighbours with no

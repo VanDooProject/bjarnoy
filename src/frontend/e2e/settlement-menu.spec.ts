@@ -9,7 +9,7 @@ import { SettlementPage } from './pages';
  * endpoint by `SettlementRenameEndpointsTests.cs`.
  */
 test.describe('settlement menu', { tag: '@g2' }, () => {
-  test('the settlement menu offers going home and renaming, and no realm list with one settlement', async ({ page }) => {
+  test('the settlement menu offers going home and renaming on the realm row, and no realm list with one settlement', async ({ page }) => {
     await SettlementPage.found(page);
 
     const toggle = page.locator('.titles .menu-trigger');
@@ -18,8 +18,10 @@ test.describe('settlement menu', { tag: '@g2' }, () => {
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 
     const menu = page.getByRole('menu');
-    await expect(menu.getByRole('menuitem')).toHaveCount(2);
-    await expect(menu.getByRole('menuitem').nth(1)).toHaveText('Rename…');
+    // One realm: just its row, with Go to and Rename on it.
+    await expect(menu.locator('.realm-line')).toHaveCount(1);
+    await expect(menu.getByRole('menuitem', { name: /^Go to / })).toHaveCount(1);
+    await expect(menu.getByRole('menuitem', { name: 'Rename…' })).toHaveCount(1);
     // DEMO_MODE has no account, so there is no list of realms to offer.
     await expect(menu.getByText('Your realms')).toHaveCount(0);
 

@@ -150,10 +150,8 @@ input[aria-invalid='true'] {
   border-radius: 50%;
   animation: login-spin 0.8s linear infinite;
 }
-@media (prefers-reduced-motion: reduce) {
-  .spinner {
-    animation: none;
-  }
+html[data-hud-motion='reduced'] .spinner {
+  animation: none;
 }
 @keyframes login-spin {
   to {

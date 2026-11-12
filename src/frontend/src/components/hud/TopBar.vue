@@ -78,7 +78,7 @@ onMounted(() => { isHudBarMounted.value = true; });
 onBeforeUnmount(() => { isHudBarMounted.value = false; });
 
 /** Only the real settlement's name takes you back to it; a page that names itself via `title` has nothing to go back to. */
-const emit = defineEmits<{ (e: 'focus-home'): void }>();
+const emit = defineEmits<{ (e: 'focus-home'): void; (e: 'focus-realm', at: { q: number; r: number }): void }>();
 const nameTappable = computed(() => !props.title && !!world.hud.settlementName);
 
 const settlementName = computed(() => props.title || world.hud.settlementName || null);
@@ -520,7 +520,13 @@ const backdropStyle = computed(() => {
         <div class="name-row">
           <button v-if="nameTappable" type="button" class="name name-btn" :title="t('hud.focusHome')" @click="emit('focus-home')">{{ settlementName }}</button>
           <span v-else class="name">{{ settlementName }}</span>
-          <SettlementMenu v-if="nameTappable" :name="settlementName" @focus-home="emit('focus-home')" @rename="rename.begin()" />
+          <SettlementMenu
+            v-if="nameTappable"
+            :name="settlementName"
+            @focus-home="emit('focus-home')"
+            @focus-realm="(at) => emit('focus-realm', at)"
+            @rename="rename.begin()"
+          />
         </div>
         <span v-if="caption" class="caption">{{ caption }}</span>
         <Transition :css="false" @enter="onRenameEnter" @leave="onRenameLeave">
@@ -638,7 +644,13 @@ const backdropStyle = computed(() => {
     <template v-else>
       <button type="button" class="bubble-name name-btn" :title="t('hud.focusHome')" @click="emit('focus-home')">{{ settlementName }}</button>
       <span class="bubble-meta">{{ selectedIsCamp ? buildingName('beachcamp') : t('hud.realmPanel.levelShort', { level: world.hud.level }) }}</span>
-      <SettlementMenu :name="settlementName ?? ''" touch @focus-home="emit('focus-home')" @rename="rename.begin()" />
+      <SettlementMenu
+        :name="settlementName ?? ''"
+        touch
+        @focus-home="emit('focus-home')"
+        @focus-realm="(at) => emit('focus-realm', at)"
+        @rename="rename.begin()"
+      />
     </template>
   </div>
   <div
