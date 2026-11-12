@@ -279,10 +279,10 @@ public sealed class GatheringEndpointsTests : IAsyncLifetime
 
             // One group walks into the winner on the meeting hex (5 spearmen against 10 axemen); the other is still far off and
             // reaches the meeting hex when the departure comes.
-            var loser = MakeArmy(loserSettlement.Id, loserHome, [(2, 0), (1, 0), (0, 0)], [(0, 0), (-1, 0), (-2, 0)], 100, 5, gathering.Id, outboundHours: 2);
+            var loser = MakeArmy(loserSettlement.Id, loserHome, [(2, 0), (1, 0), (0, 0)], [(0, 0), (-1, 0), (-2, 0)], 100, 5, gathering.Id, outboundHours: 2, gatherDepartAt: gathering.DepartAt);
             var staying = MakeArmy(
                 loserSettlement.Id, loserHome, [(0, -8), (0, -7), (0, -6), (0, -5), (0, -4), (0, -3), (0, -2), (0, -1), (0, 0)],
-                [(0, 0), (0, -1)], 100, 5, gathering.Id, outboundHours: 8);
+                [(0, 0), (0, -1)], 100, 5, gathering.Id, outboundHours: 8, gatherDepartAt: gathering.DepartAt);
             var winner = MakeArmy(
                 winnerSettlement.Id, new HexCoord(20, 0), [(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0), (3, 0), (4, 0)], [(4, 0), (3, 0)], 1_000, 10, null,
                 unit: UnitType.Axeman, outboundHours: 6);
@@ -314,9 +314,158 @@ public sealed class GatheringEndpointsTests : IAsyncLifetime
         Assert.Equal(0, await WithDbAsync(db => db.Gatherings.CountAsync(g => g.Id == gatheringId, Ct)));
     }
 
+    /// <summary>A planted gathering at (0,0) of a settlement far away, leaving <paramref name="departHours"/> from now, with two groups standing on the join hex.</summary>
+    private async Task<(string Owner, Guid SettlementId, Guid GroupA, Guid GroupB, DateTimeOffset DepartAt)> PlantGatheringAsync(
+        ArmyMission mission, bool fleet, UnitStack[] unitsA, UnitStack[] unitsB, double departHours = 4, double turnAroundHours = 4, Guid? ownerUser = null)
+    {
+        var owner = $"owner-{Guid.CreateVersion7():N}";
+        var home = new HexCoord(-20, 0);
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        var world = new WorldEntity { Name = $"w-{Guid.CreateVersion7():N}", MaxPlayers = 100 };
+        world.ApplyGenerationOptions(LandOptions);
+        db.Worlds.Add(world);
+        var island = new IslandEntity { WorldId = world.Id, Name = "Island", CentreQ = 0, CentreR = 0 };
+        db.Islands.Add(island);
+        var settlement = MakeSettlement(world.Id, island.Id, owner, SystemUserIds.Abandoned, home);
+        db.Settlements.Add(settlement);
+
+        var departAt = _factory.Time.GetUtcNow() + TimeSpan.FromHours(departHours);
+        var gathering = new GatheringEntity
+        {
+            SettlementId = settlement.Id,
+            HexQ = 0,
+            HexR = 0,
+            DepartAt = departAt,
+            IsFleet = fleet,
+            Mission = (int)mission,
+            Stops = [new HexPoint(0, 5)],
+            HomeSpotQ = home.Q,
+            HomeSpotR = home.R,
+        };
+        db.Gatherings.Add(gathering);
+
+        // Both stand on the join hex; their own food would have turned them around exactly at the departure (turnAroundHours).
+        ArmyEntity Group(UnitStack[] units, (int Q, int R)[] path, double hours)
+        {
+            var army = MakeArmy(settlement.Id, home, path, [(0, 0), (-1, 0)], 100, 1, gathering.Id, outboundHours: hours, gatherDepartAt: departAt, turnAroundHours: turnAroundHours);
+            army.Stacks = [.. units.Select(u => new ArmyUnitStackEntity { UnitType = u.Type, Count = u.Count })];
+            return army;
+        }
+
+        var a = Group(unitsA, [(-3, 0), (-2, 0), (-1, 0), (0, 0)], 2);
+        var b = Group(unitsB, [(0, 0)], 0);
+        db.Armies.AddRange(a, b);
+        await db.SaveChangesAsync(Ct);
+        return (owner, settlement.Id, a.Id, b.Id, departAt);
+    }
+
+    [Fact]
+    public async Task A_group_whose_own_food_would_turn_it_around_exactly_at_the_departure_still_merges()
+    {
+        var (owner, settlementId, groupA, groupB, departAt) = await PlantGatheringAsync(
+            ArmyMission.Move, fleet: false, [new UnitStack(UnitType.Spearman, 5)], [new UnitStack(UnitType.Spearman, 3)], turnAroundHours: 4);
+        using var client = ClientFor(owner);
+        _factory.Time.Advance(TimeSpan.FromHours(4.5));
+
+        // The group that was on the join hex first survives; the other has joined it.
+        var merged = (await client.GetFromJsonAsync<ArmyResponse>($"/api/v1/armies/{groupB}", SqliteApiFixture.StrictJson, Ct))!;
+
+        Assert.Null(merged.GatheringId);
+        Assert.False(merged.Movement!.IsReturning);
+        Assert.Equal(8, merged.Stacks.Sum(s => s.Count));
+        Assert.Equal(new HexPointResponse(0, 5), merged.Movement.Path[^1]);
+        Assert.Equal(departAt, merged.Movement.DepartedAt);
+        Assert.Equal([groupB], await WithDbAsync(db => db.Armies.Where(a => a.SettlementId == settlementId).Select(a => a.Id).ToListAsync(Ct)));
+        Assert.DoesNotContain(groupA, await WithDbAsync(db => db.Armies.Select(a => a.Id).ToListAsync(Ct)));
+    }
+
+    [Fact]
+    public async Task Another_army_settled_after_the_departure_finds_the_merged_army_and_not_the_stale_groups()
+    {
+        var (owner, settlementId, _, groupB, departAt) = await PlantGatheringAsync(
+            ArmyMission.Move, fleet: false, [new UnitStack(UnitType.Spearman, 5)], [new UnitStack(UnitType.Spearman, 3)]);
+        Guid hostileId;
+        string hostileOwner;
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var worldId = (await db.Settlements.SingleAsync(s => s.Id == settlementId, Ct)).WorldId;
+            var islandId = (await db.Islands.FirstAsync(i => i.WorldId == worldId, Ct)).Id;
+            hostileOwner = $"hostile-{Guid.CreateVersion7():N}";
+            var settlement = MakeSettlement(worldId, islandId, hostileOwner, SystemUserIds.Abandoned, new HexCoord(30, 0));
+            var hostile = MakeArmy(settlement.Id, new HexCoord(30, 0), [(30, 0), (29, 0)], [(29, 0), (30, 0)], 100, 3, null, outboundHours: 1, turnAroundHours: 100);
+            db.Settlements.Add(settlement);
+            db.Armies.Add(hostile);
+            await db.SaveChangesAsync(Ct);
+            hostileId = hostile.Id;
+        }
+
+        // Nobody touches the groups: the hostile army's own settle resolves the gathering that left in the meantime.
+        _factory.Time.Advance(TimeSpan.FromHours(4.5));
+        using var hostileClient = ClientFor(hostileOwner);
+        Assert.Equal(HttpStatusCode.OK, (await hostileClient.GetAsync($"/api/v1/armies/{hostileId}", Ct)).StatusCode);
+
+        var (armies, gatherings) = await WithDbAsync(async db =>
+            (await db.Armies.Where(a => a.SettlementId == settlementId).ToListAsync(Ct), await db.Gatherings.CountAsync(Ct)));
+        var merged = Assert.Single(armies);
+        Assert.Equal(groupB, merged.Id);
+        Assert.Null(merged.GatheringId);
+        Assert.Equal(departAt, merged.DepartedAt);
+        Assert.Equal(0, gatherings);
+    }
+
+    [Fact]
+    public async Task A_founding_gathering_whose_settlers_were_recalled_sends_the_escort_home_instead_of_founding()
+    {
+        // Both groups are escorts: the group that carried the settlers is no longer there when the army leaves.
+        var (owner, _, _, groupB, _) = await PlantGatheringAsync(
+            ArmyMission.Found, fleet: false, [new UnitStack(UnitType.Spearman, 5)], [new UnitStack(UnitType.Spearman, 3)]);
+        using var client = ClientFor(owner);
+        _factory.Time.Advance(TimeSpan.FromHours(4.5));
+
+        var army = (await client.GetFromJsonAsync<ArmyResponse>($"/api/v1/armies/{groupB}", SqliteApiFixture.StrictJson, Ct))!;
+
+        Assert.True(army.Movement!.IsReturning);
+        Assert.Null(army.GatheringId);
+        Assert.Equal(8, army.Stacks.Sum(s => s.Count));
+    }
+
+    [Fact]
+    public async Task A_camp_gathering_without_its_builders_sends_the_army_home()
+    {
+        var (owner, _, _, groupB, _) = await PlantGatheringAsync(
+            ArmyMission.SetUpCamp, fleet: false, [new UnitStack(UnitType.Spearman, 5)], [new UnitStack(UnitType.CampBuilder, 1)]);
+        using var client = ClientFor(owner);
+        _factory.Time.Advance(TimeSpan.FromHours(4.5));
+
+        var army = (await client.GetFromJsonAsync<ArmyResponse>($"/api/v1/armies/{groupB}", SqliteApiFixture.StrictJson, Ct))!;
+
+        Assert.True(army.Movement!.IsReturning);
+    }
+
+    [Fact]
+    public async Task A_meeting_of_ships_where_no_ship_stands_does_not_merge_and_every_group_goes_home()
+    {
+        var (owner, settlementId, groupA, groupB, _) = await PlantGatheringAsync(
+            ArmyMission.Move, fleet: true, [new UnitStack(UnitType.Spearman, 5)], [new UnitStack(UnitType.Spearman, 3)]);
+        using var client = ClientFor(owner);
+        _factory.Time.Advance(TimeSpan.FromHours(4.5));
+
+        var first = (await client.GetFromJsonAsync<ArmyResponse>($"/api/v1/armies/{groupA}", SqliteApiFixture.StrictJson, Ct))!;
+
+        Assert.Null(first.GatheringId);
+        Assert.True(first.Movement!.IsReturning);
+        Assert.Equal(5, first.Stacks.Sum(s => s.Count));
+        var second = await WithDbAsync(db => db.Armies.SingleAsync(a => a.Id == groupB, Ct));
+        Assert.Null(second.GatheringId);
+        Assert.Null(second.GatherDepartAt);
+        Assert.Equal(0, await WithDbAsync(db => db.Gatherings.CountAsync(g => g.SettlementId == settlementId, Ct)));
+    }
+
     private ArmyEntity MakeArmy(
         Guid settlementId, HexCoord home, (int Q, int R)[] path, (int Q, int R)[] returnPath, double provisions, int count, Guid? gatheringId,
-        UnitType unit = UnitType.Spearman, double outboundHours = 0)
+        UnitType unit = UnitType.Spearman, double outboundHours = 0, DateTimeOffset? gatherDepartAt = null, double? turnAroundHours = null)
     {
         var departedAt = _factory.Time.GetUtcNow();
         List<double> hours = [.. path.Select((_, i) => outboundHours * i / Math.Max(1, path.Length - 1))];
@@ -327,6 +476,7 @@ public sealed class GatheringEndpointsTests : IAsyncLifetime
             HomeSpotQ = home.Q,
             HomeSpotR = home.R,
             GatheringId = gatheringId,
+            GatherDepartAt = gatheringId is null ? null : gatherDepartAt,
             Mission = (int)ArmyMission.Move,
             AtHome = false,
             Provisions = provisions,
@@ -337,7 +487,7 @@ public sealed class GatheringEndpointsTests : IAsyncLifetime
             ReturnPath = [.. returnPath.Select(p => new HexPoint(p.Q, p.R))],
             ReturnCumulativeHours = returnHours,
             ReturnEdgeHours = returnHours,
-            TurnAroundAt = departedAt + TimeSpan.FromHours(gatheringId is null ? outboundHours : 100),
+            TurnAroundAt = departedAt + TimeSpan.FromHours(turnAroundHours ?? (gatheringId is null ? outboundHours : 100)),
             IsReturning = false,
             Stacks = [new ArmyUnitStackEntity { UnitType = unit, Count = count }],
         };

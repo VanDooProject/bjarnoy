@@ -142,7 +142,7 @@ public class ArmyGatheringTests
     }
 
     [Fact]
-    public void A_group_that_gets_there_first_stands_on_the_meeting_hex_until_the_army_leaves()
+    public void A_group_that_gets_there_first_stands_on_the_meeting_hex_until_the_army_leaves_whatever_its_food_would_allow()
     {
         var tower = new HexCoord(0, 8);
         var waypoint = new HexCoord(8, 0);
@@ -153,8 +153,67 @@ public class ArmyGatheringTests
         var decision = Send(settlement, 200, [waypoint], target, Grass, (Centre, Spearmen(10)), (tower, slow));
 
         var departAt = Assert.Single(decision.Gatherings!).DepartAt;
-        Assert.All(decision.Armies!, a => Assert.True(MovementOf(a).TurnAroundAt >= departAt, $"{a.HomeSpot} turns around before the army leaves"));
+        Assert.All(decision.Armies!, a => Assert.Equal(departAt, a.GatherDepartAt));
         Assert.True(MovementOf(GroupAt(decision, Centre)).ArrivesAt < departAt);
+
+        // Even with food that would turn it around long before, the early group stands until the departure and no longer after it.
+        var early = GroupAt(decision, Centre);
+        var hungry = early with
+        {
+            Location = new ArmyLocation.InTransit(MovementOf(early) with { TurnAroundAt = MovementOf(early).ArrivesAt }),
+        };
+        Assert.False(hungry.SettleTo(departAt).Changed);
+        var after = hungry.SettleTo(departAt.AddMinutes(1));
+        Assert.True(after.Changed);
+        Assert.Null(after.Army.GatheringId);
+        Assert.Null(after.Army.GatherDepartAt);
+    }
+
+    [Fact]
+    public void The_groups_meeting_just_before_the_target_never_walk_through_it()
+    {
+        var tower = new HexCoord(0, 10);
+        var target = new HexCoord(10, 0);
+        var settlement = WithUnits(Found((tower, BuildingType.Tower)), (Centre, Spearmen(10)), (tower, [new UnitStack(UnitType.Thrall, 10)]));
+
+        var decision = Send(settlement, 100, [], target, Grass, (Centre, Spearmen(10)), (tower, [new UnitStack(UnitType.Thrall, 10)]));
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        Assert.All(decision.Armies!, a => Assert.DoesNotContain(target, MovementOf(a).Path));
+    }
+
+    [Fact]
+    public void A_founding_army_without_its_settlers_does_not_go_on_and_neither_does_a_camp_army_without_its_builders()
+    {
+        var tower = new HexCoord(3, 0);
+        var target = new HexCoord(10, 0);
+        var settlement = WithUnits(Found((tower, BuildingType.Tower)), (Centre, Spearmen(10)), (tower, Spearmen(10)));
+        var decision = Send(settlement, 100, [], target, Grass, (Centre, Spearmen(10)), (tower, Spearmen(10)));
+        var gathering = Assert.Single(decision.Gatherings!);
+        var escort = Army.MergeGatheringMembers([GroupAt(decision, Centre), GroupAt(decision, tower)], gathering.DepartAt);
+
+        Assert.NotNull(Army.PlanGatheringDeparture(escort, gathering, gathering.DepartAt, Grass));
+        Assert.Null(Army.PlanGatheringDeparture(escort, gathering with { Mission = ArmyMission.Found }, gathering.DepartAt, Grass));
+        Assert.Null(Army.PlanGatheringDeparture(escort, gathering with { Mission = ArmyMission.SetUpCamp }, gathering.DepartAt, Grass));
+
+        var settlers = escort with { Stacks = [.. escort.Stacks, new UnitStack(UnitType.Settler, Bjarnoy.Domain.Settlers.Founding.RequiredSettlers)] };
+        Assert.NotNull(Army.PlanGatheringDeparture(settlers, gathering with { Mission = ArmyMission.Found }, gathering.DepartAt, Grass));
+    }
+
+    [Fact]
+    public void Merging_ships_with_more_passengers_than_slots_leaves_the_overflow_behind()
+    {
+        var dock = new HexCoord(3, 0);
+        UnitStack[] ships = [new UnitStack(UnitType.Karve, 1)];
+        var settlement = WithUnits(Found((dock, BuildingType.Dockyard)), (Centre, Spearmen(8)), (dock, ships));
+        var decision = Send(settlement, 100, [], new HexCoord(6, 0), Strait, (Centre, Spearmen(8)), (dock, ships));
+        var group = GroupAt(decision, Centre);
+        var crowded = group with { Stacks = [new UnitStack(UnitType.Spearman, 15)] };
+
+        var merged = Army.MergeGatheringMembers([crowded, GroupAt(decision, dock)], T0);
+
+        Assert.Equal(ShipCargo.SlotsOffered(merged.Stacks), ShipCargo.SlotsNeeded(ShipCargo.Passengers(merged.Stacks)));
+        Assert.Equal(10, merged.Stacks.Single(x => x.Type == UnitType.Spearman).Count);
     }
 
     [Fact]
@@ -433,6 +492,7 @@ public class ArmyGatheringTests
 
         Assert.NotNull(recalled);
         Assert.Null(recalled!.GatheringId);
+        Assert.Null(recalled.GatherDepartAt);
         Assert.Equal(Centre, MovementOf(recalled).Path[^1]);
     }
 
