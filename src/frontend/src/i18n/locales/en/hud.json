@@ -406,6 +406,7 @@
     "title": "Armies",
     "demoNote": "Dispatching armies requires the live backend and isn't wired up in demo mode yet.",
     "noArmies": "No armies on the road.",
+    "withoutHome": "Without home",
     "dispatchArmy": "Dispatch army",
     "premiumRedirectTitle": "Premium required to redirect an army that is still travelling",
     "appendGoal": "Append goal",

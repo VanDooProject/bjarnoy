@@ -1304,8 +1304,9 @@ export class WorldModel {
     return settlement.labelAt ?? { q: settlement.q, r: settlement.r };
   }
 
-  getSettlement(id: string): Settlement | undefined {
-    return this.settlements.get(id);
+  /** Undefined for an unknown id, and for none (an army without a home has no settlement). */
+  getSettlement(id: string | null): Settlement | undefined {
+    return id === null ? undefined : this.settlements.get(id);
   }
 
   /**

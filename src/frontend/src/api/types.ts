@@ -1196,7 +1196,8 @@ export interface AdminEditArmyRequest {
 export interface AdminArmyResponse {
   army: ArmyResponse;
   worldId: string;
-  settlementName: string;
+  /** Null for an army without a home. */
+  settlementName: string | null;
   ownerName: string;
   /** Loot the army carries home and has not deposited yet. */
   loot: ResourceLine;
@@ -1730,7 +1731,8 @@ export interface ForeignMovementResponse {
  */
 export interface ForeignArmyResponse {
   id: string;
-  settlementId: string;
+  /** Null for an army without a home. */
+  settlementId: string | null;
   isFleet: boolean;
   position: HexPoint;
   movement: ForeignMovementResponse;
@@ -1747,7 +1749,8 @@ export interface ForeignArmyResponse {
  */
 export interface ArmyResponse {
   id: string;
-  settlementId: string;
+  /** The army's home settlement; null for an army without a home (its beach camp was destroyed): it cannot be recalled, it still takes field orders. */
+  settlementId: string | null;
   mission: string;
   targetSettlementId: string | null;
   atHome: boolean;
@@ -1794,7 +1797,8 @@ export interface ArmySummary {
  */
 export interface GuestArmySummary {
   armyId: string;
-  ownerSettlementId: string;
+  /** Null for a guest without a home. */
+  ownerSettlementId: string | null;
   totalUpkeepPerHour: number;
   stacks: ArmyUnitStackResponse[];
 }

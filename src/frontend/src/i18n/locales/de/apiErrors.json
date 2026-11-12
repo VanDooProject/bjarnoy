@@ -52,6 +52,7 @@
     "NoSeaRoute": "Kein Seeweg: Dorthin kommen deine Schiffe übers Wasser nicht.",
     "RouteTooLong": "Die Reise ist zu weit. Wähle ein näheres Ziel.",
     "NothingToRecall": "Die Armee ist schon auf dem Heimweg.",
+    "NoHome": "Die Armee hat kein Zuhause mehr, in das sie zurückkehren kann. Schick sie stattdessen zu einem deiner Garnisonsorte.",
     "NoRouteHome": "Von ihrem jetzigen Standort aus findet die Armee keinen Weg nach Hause.",
     "RouteRateLimited": "Zu viele Marschbefehle auf einmal. Warte kurz und versuch es dann noch mal.",
     "TargetNotReachable": "Kein Landweg: Berge und breite Flüsse lassen sich nicht überqueren.",

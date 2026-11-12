@@ -8,7 +8,7 @@ import { createTestI18n } from '../test/i18n';
 import enHud from '../i18n/locales/en/hud.json';
 import enCatalogue from '../i18n/locales/en/catalogue.json';
 import type { ArmyResponse } from '../api/types';
-import { sortArmyRowsByEta, useArmyRows, type ArmyRow } from './useArmyRows';
+import { groupArmyRowsByHome, sortArmyRowsByEta, useArmyRows, type ArmyRow } from './useArmyRows';
 
 function army(overrides: Partial<ArmyResponse> = {}): ArmyResponse {
   return {
@@ -58,9 +58,31 @@ function row(overrides: Partial<ArmyRow> = {}): ArmyRow {
     fieldOrderLabel: 'Move on',
     selected: false,
     mission: null,
+    withoutHome: false,
     ...overrides,
   };
 }
+
+describe('groupArmyRowsByHome', () => {
+  it('puts the armies without a home under their own heading, after the realm\'s own armies, keeping the order', () => {
+    const own = row({ id: 'own' });
+    const lostA = row({ id: 'lost-a', withoutHome: true });
+    const lostB = row({ id: 'lost-b', withoutHome: true });
+
+    const groups = groupArmyRowsByHome([lostA, own, lostB], 'Without home');
+
+    expect(groups.map((g) => [g.key, g.heading, g.rows.map((r) => r.id)])).toEqual([
+      ['home', null, ['own']],
+      ['withoutHome', 'Without home', ['lost-a', 'lost-b']],
+    ]);
+  });
+
+  it('leaves out an empty group, so no heading shows without armies under it', () => {
+    expect(groupArmyRowsByHome([row({ id: 'own' })], 'Without home').map((g) => g.key)).toEqual(['home']);
+    expect(groupArmyRowsByHome([row({ id: 'lost', withoutHome: true })], 'Without home').map((g) => g.key)).toEqual(['withoutHome']);
+    expect(groupArmyRowsByHome([], 'Without home')).toEqual([]);
+  });
+});
 
 describe('sortArmyRowsByEta', () => {
   it('sorts soonest ETA first', () => {
@@ -151,6 +173,18 @@ describe('useArmyRows', () => {
     expect(r.canRecall).toBe(false);
     expect(r.canFieldOrder).toBe(true);
     expect(r.fieldOrderLabel).toBe('Move on');
+  });
+
+  it('marks an army without a home: no recall, but it still takes a field order', () => {
+    const world = useWorldStore();
+    world.armies = [army({ settlementId: null, starvesAt: '2026-01-01T04:30:00Z' })];
+
+    const r = mountArmyRows().value[0];
+
+    expect(r.withoutHome).toBe(true);
+    expect(r.canRecall).toBe(false);
+    expect(r.canFieldOrder).toBe(true);
+    expect(r.eta).toBe('starves in 3h 30m');
   });
 
   it('shows an arrived camp army as building the camp, counting down to arrival plus 10 minutes, and keeps Recall', () => {

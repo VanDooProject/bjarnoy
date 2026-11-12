@@ -1829,7 +1829,8 @@ export const useWorldStore = defineStore('world', {
         realms.map(async ({ id: realmId, name }): Promise<OtherRealmSnapshot | null> => {
           try {
             const [settlement, summaries] = await Promise.all([api.getSettlement(realmId, owner), api.getSettlementArmies(realmId, owner)]);
-            const armies = await Promise.all(summaries.map((s) => api.getArmy(s.id, owner)));
+            // The armies without a home are in every realm's list; the open realm's already carries them.
+            const armies = (await Promise.all(summaries.map((s) => api.getArmy(s.id, owner)))).filter((a) => a.settlementId !== null);
             return {
               realmId,
               name,
