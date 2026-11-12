@@ -109,7 +109,11 @@ watch(open, (isOpen) => {
   if (isOpen) {
     document.addEventListener('pointerdown', onOutsidePointerDown, true);
     document.addEventListener('keydown', onKeydown);
-    void nextTick(() => menuItems()[0]?.focus({ preventScroll: true }));
+    // Focus lands on the current realm's row (the standard menu behaviour), not on whichever row happens to be first.
+    void nextTick(() => {
+      const items = menuItems();
+      (items.find((el) => el.getAttribute('aria-current') === 'true') ?? items[0])?.focus({ preventScroll: true });
+    });
   } else {
     document.removeEventListener('pointerdown', onOutsidePointerDown, true);
     document.removeEventListener('keydown', onKeydown);
@@ -277,6 +281,17 @@ function onLeave(el: Element, done: () => void) {
 }
 .menu-trigger.open::before {
   content: '\25B4';
+}
+/* Desktop bar: the arrow is a larger box in its own column of the `.titles` grid, spanning the name and the caption rows, with
+   a gap to the text; the text rows truncate instead of pushing it. */
+.menu-trigger:not(.menu-trigger--touch) {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  width: 40px;
+  height: 40px;
+  margin-left: 16px;
+  font-size: 16px;
 }
 .menu-trigger:focus-visible {
   outline: 2px solid var(--gold);
