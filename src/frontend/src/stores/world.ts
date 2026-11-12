@@ -8,6 +8,7 @@ import type {
   BuildOrderResponse,
   GuestArmySummary,
   IslandResponse,
+  IslandTerrainResponse,
   PlacedBuildingResponse,
   RuneInstanceResponse,
   SettlementSummary,
@@ -693,8 +694,11 @@ export const useWorldStore = defineStore('world', {
       this.model = markRaw(new WorldModel(world.seed, world.generation));
       this.model.setWastedRevealed(world.endbossTriggered);
       this.model.setFrozenEnabled(world.frozenIslesEnabled);
+      let terrain: IslandTerrainResponse[];
       try {
         this.islands = await api.getIslands(world.id, this.callerOwnerId());
+        // The river and bog tiles are big and only change on a reseed, so they come separately (cached, chunked).
+        terrain = await api.getTerrainChunks(world.id);
       } catch (err) {
         if (!isWorldNotFound(err)) throw err;
         // The world resolved a moment ago (getWorld/newestWorld, just above)
@@ -716,9 +720,10 @@ export const useWorldStore = defineStore('world', {
       this.model.setIslands(
         this.islands.map((island) => ({ id: island.id, name: island.name, q: island.q, r: island.r })),
       );
+      const terrainById = new Map(terrain.map((island) => [island.id, island]));
       this.model.setRiverTiles(
         this.islands.flatMap((island) =>
-          island.riverTiles.map((tile) => ({
+          (terrainById.get(island.id)?.riverTiles ?? []).map((tile) => ({
             q: tile.q,
             r: tile.r,
             shape: tile.shape,
@@ -729,11 +734,11 @@ export const useWorldStore = defineStore('world', {
           })),
         ),
       );
-      // Server-generated bogland (see `IslandResponse.bogTiles`): bog moss, lakes, shores, creeks. It is
+      // Server-generated bogland (see `IslandTerrainResponse.bogTiles`): bog moss, lakes, shores, creeks. It is
       // terrain the seed alone cannot give, so it goes in before anything that reads terrain (giants, camps).
       this.model.setBogTiles(
         this.islands.flatMap((island) =>
-          (island.bogTiles ?? []).map((tile) => ({
+          (terrainById.get(island.id)?.bogTiles ?? []).map((tile) => ({
             q: tile.q,
             r: tile.r,
             kind: tile.kind,

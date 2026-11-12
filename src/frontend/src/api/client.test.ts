@@ -176,6 +176,36 @@ describe('camp reads identify the caller', () => {
   });
 });
 
+describe('terrain chunks', () => {
+  it('reads the manifest, then every chunk, and returns the islands in chunk order', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        jsonResponse({ chunkSize: 64, chunkCount: 2, chunks: [{ index: 0, eTag: '"a"' }, { index: 1, eTag: '"b"' }] }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ chunk: 0, islands: [{ id: 'i0', riverTiles: [], bogTiles: [] }] }))
+      .mockResolvedValueOnce(jsonResponse({ chunk: 1, islands: [{ id: 'i1', riverTiles: [], bogTiles: [] }] }));
+
+    const islands = await api.getTerrainChunks('w1');
+
+    expect(islands.map((i) => i.id)).toEqual(['i0', 'i1']);
+    const urls = vi.mocked(fetch).mock.calls.map(([url]) => String(url));
+    expect(urls[0]).toContain('/worlds/w1/terrain-chunks');
+    expect(urls[0]).not.toMatch(/terrain-chunks\/\d/);
+    expect(urls.slice(1).sort()).toEqual([expect.stringContaining('/terrain-chunks/0'), expect.stringContaining('/terrain-chunks/1')]);
+  });
+
+  it('fails with the ApiError of a chunk that cannot be read', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse({ chunkSize: 64, chunkCount: 1, chunks: [{ index: 0, eTag: '"a"' }] }))
+      .mockResolvedValueOnce(jsonResponse({ error: 'world_not_found' }, 404));
+
+    const err = await api.getTerrainChunks('w1').catch((e) => e);
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status: 404, path: '/worlds/w1/terrain-chunks/0' });
+  });
+});
+
 describe('ApiError request context', () => {
   it('records method and path on an HTTP failure', async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ detail: 'nope' }, 503));

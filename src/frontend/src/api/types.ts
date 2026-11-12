@@ -236,6 +236,10 @@ export interface JotunTowerResponse {
   orientation: string;
 }
 
+/**
+ * Mirrors `IslandResponse`: an island as `GET /worlds/{id}/islands` lists it. Its river and bog tiles come separately
+ * (`TerrainChunkResponse`, `GET /worlds/{id}/terrain-chunks`): they are big and only change when the world is reseeded.
+ */
 export interface IslandResponse {
   id: string;
   index: number;
@@ -243,18 +247,34 @@ export interface IslandResponse {
   q: number;
   r: number;
   tileCount: number;
-  startPositions: TileCoordinate[];
-  riverTiles: RiverTileResponse[];
   giants: GiantResponse[];
   camps: CampResponse[];
-  /** This island's bogland (empty when it has none). */
-  bogTiles: BogTileResponse[];
   /** The Utgard wall rings of a wasted island with Utgard (empty otherwise). */
   utgardWalls?: UtgardWallResponse[];
   /** The Jötun watchtowers of a wasted island with Utgard (empty otherwise). */
   jotunTowers?: JotunTowerResponse[];
   /** True for a wasted island — only ever present once the world's endboss has triggered (hidden before that). */
   wasted: boolean;
+}
+
+/** Mirrors `IslandTerrainResponse`: one island's river and bog tiles (empty lists when it has none). */
+export interface IslandTerrainResponse {
+  id: string;
+  riverTiles: RiverTileResponse[];
+  bogTiles: BogTileResponse[];
+}
+
+/** Mirrors `TerrainChunkResponse`: the terrain of a fixed range of islands, in island index order. */
+export interface TerrainChunkResponse {
+  chunk: number;
+  islands: IslandTerrainResponse[];
+}
+
+/** Mirrors `TerrainChunkManifestResponse`: how many chunks the world's terrain is cut into. */
+export interface TerrainChunkManifestResponse {
+  chunkSize: number;
+  chunkCount: number;
+  chunks: { index: number; eTag: string }[];
 }
 
 /** Mirrors `PlotSuggestionResponse` — the plot this visitor is offered right now, pinned across reloads. */
