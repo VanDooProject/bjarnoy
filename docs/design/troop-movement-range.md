@@ -233,7 +233,10 @@ Consequences:
   `WorldBridges.RouteIndexAsync`; `FindPath`/`CumulativeHours` take it as `bridgeCost`, a
   per-owner lookup carried in `WallRules.BridgeCost`). Only a standing bridge (level 1 or
   more) counts, and only on a wide river hex; streams keep their flat price and fleets
-  ignore bridges. The bridge's price replaces the impassable verdict, and every price stays
+  ignore bridges. A bridge counts from the instant its build order completes (at the level
+  that order reaches) and stops counting when a raze order to level 0 completes, whether or not
+  its owner's settlement was settled since (`WorldBridges.IndexAsync` takes the instant the
+  route is planned at, as `WorldPalisades.IndexAsync` does). The bridge's price replaces the impassable verdict, and every price stays
   at least 1.0 so the heuristic stays admissible:
 
   | Bridge level | Price of the hex |
