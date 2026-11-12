@@ -64,3 +64,10 @@ same live poll/action flow the rest of the HUD already relies on, not a stale lo
 - **Disabled + lock + explanation (chosen)** — visible, honest about the restriction before any wasted
   effort, consistent with the one place this was already done right (`HexTooltip.vue`'s premium-locked
   scouting stats).
+
+## Time-limited premium
+
+An account is premium while `IsPremium` (the permanent admin grant) is set or `PremiumUntil` lies in the future
+(`UserEntity.IsPremiumAt`). The register quest (`economy.md` section 7) extends `PremiumUntil` by 14 days. The live
+checks (`GetIsPremiumAsync`, the settlement's waiting-queue limit, training splits) all go through `IsPremiumAt`, so the
+grant and its expiry apply to the next request without a re-login.
