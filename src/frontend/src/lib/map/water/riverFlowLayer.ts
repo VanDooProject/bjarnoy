@@ -30,6 +30,8 @@ export interface RiverFlowEntry {
   fadeDirection?: TileOrientation;
   /** The river hex behind each in and out edge (its base art's frame name and sprite position), when there is one. */
   neighbours?: { direction: TileOrientation; name: string; x: number; y: number }[];
+  /** The entry of the river hex behind the out edge, drawn or not (see riverFlowEntries.ts); undefined when there is none. */
+  downstream?: () => RiverFlowEntry | undefined;
 }
 
 /**
@@ -255,16 +257,14 @@ export class RiverFlowLayer {
     const masks = this.masks;
     if (!masks) return this.target.texture;
     // Each cell's psi range in the stream function of the whole river: a cell feeding an arm of a confluence takes that arm's share of
-    // the confluence's own range, composed up the chain of drawn cells (a cell with no confluence downstream keeps [0, 1]).
-    const byPosition = new Map(entries.map((e) => [`${e.x},${e.y}`, e]));
+    // the confluence's own range, composed up the chain of cells downstream, drawn or not (a cell with no confluence downstream keeps [0, 1]).
     const ranges = new Map<RiverFlowEntry, readonly [number, number]>();
     const polygon = topFacePolygonTexels(0, 0);
     const rangeOf = (entry: RiverFlowEntry, depth = 0): readonly [number, number] => {
       const known = ranges.get(entry);
       if (known) return known;
       let range: readonly [number, number] = [0, 1];
-      const outNeighbour = entry.neighbours?.find((n) => n.direction === entry.outDirection);
-      const down = outNeighbour ? byPosition.get(`${outNeighbour.x},${outNeighbour.y}`) : undefined;
+      const down = entry.downstream?.();
       if (down && depth < 32) {
         const arm = confluenceArmRanges(polygon, topFaceEdgeIndex(down.outDirection), down.inDirections.map(topFaceEdgeIndex)).get((topFaceEdgeIndex(entry.outDirection) + 3) % 6);
         const [lo, hi] = rangeOf(down, depth + 1);

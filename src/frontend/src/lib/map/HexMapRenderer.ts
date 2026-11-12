@@ -40,7 +40,7 @@ import {
 } from './markerOcclusion';
 import { Application, Container, Graphics, GraphicsContext, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
-import { axialToOddQ, coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
+import { axialToOddQ, coordKey, hexesInRadius, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
 import { DIAL_FINISH_MS, DIAL_REJECT_MS, retainFinishingDials, rejectDialAt, type ConstructionDial } from './constructionDial';
@@ -49,7 +49,7 @@ import { atlasPageCount } from './atlasManifests';
 import { attachFramePacing } from './framePacing';
 import { insetBorderCorners, splitBorderEdges } from './realmBorderEdges';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
-import { TILE_ORIENTATIONS, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
+import { type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { buildingName } from '../../i18n/catalogueNames';
@@ -63,7 +63,8 @@ import { WaterLayer } from './water/WaterLayer';
 import { WaterDryLayer, entriesWorldBounds, maskEntries, type DryEntry } from './water/waterDryMask';
 import { BogLakeLayer } from './water/BogLakeLayer';
 import { LAKE_FRAME_RE } from './water/dryMaskCore';
-import { RiverFlowLayer, riverFlowOf, type RiverFlowEntry } from './water/riverFlowLayer';
+import { RiverFlowLayer, type RiverFlowEntry } from './water/riverFlowLayer';
+import { createRiverFlowEntrySource } from './water/riverFlowEntries';
 import { waterDebugFlags, waterDebugTuning, waterPerfStats } from './water/waterDebug';
 import type { TerrainLookup, WaterMask } from './water/waterMask';
 import { WaterMaskBaker } from './water/waterMaskBaker';
@@ -4593,6 +4594,53 @@ export class HexMapRenderer {
     return isPastTerrainCullOf(q, r, fogSources, this.options.worldModel.getFogCoverage(), this.armyCullSources);
   }
 
+  /** The base and top art of a river hex (see riverTexturesFor), resolved from the world alone. */
+  private riverTexturesAt(c: AxialCoord, river: RiverTile) {
+    const { worldModel } = this.options;
+    // Only a Mouth's orientation actually needs this (see
+    // riverTexturesFor/mouthOrientationOf) — skip the neighbour scan
+    // for every other shape.
+    const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
+    // Likewise, only a Spring's art actually branches on this.
+    const springShape = river.shape === 'spring' ? worldModel.springShapeAt(c) : undefined;
+    // Only straight/bend/bend60 (and never a wasted/lava tile — see
+    // riverTexturesFor) actually draw a variant.
+    const riverVariant = river.wasted ? 'plain' : worldModel.riverVariantAt(c, river.shape);
+    return riverTexturesFor(this.textures!, river, seaDirection, springShape, riverVariant);
+  }
+
+  /**
+   * The base art `rebuildTerrain` draws on a hex that can carry water flow (a river, a bog creek, or a camp, wall or building
+   * on one), from the world alone and so for a hex outside the viewport as well. The river flow's entries, neighbours and
+   * downstream chain all read it, which keeps a flow cell's key independent of what is in view. Follows the order of the
+   * branches in `rebuildTerrain`.
+   */
+  private flowBaseTextureOf(c: AxialCoord): Texture | undefined {
+    const { worldModel } = this.options;
+    const textures = this.textures!;
+    const tile = worldModel.getTile(c.q, c.r);
+    if (tile.giant) return undefined;
+    const river = worldModel.getRiverTile(c.q, c.r);
+    if (drawnCampOf(tile)) {
+      const campArt = campArtFor(textures, tile, river);
+      if (campArt) return baseTextureFor(textures, { ...tile, orientation: campArt.orientation }, campArt.riverArt);
+    }
+    const endgame = endgameDrawTile(tile);
+    if (endgame) return baseTextureFor(textures, endgame.tile, endgame.art);
+    if (tile.buildingType === 'palisade' || tile.buildingType === 'palisadegate') {
+      const wallArt = palisadeArtFor({
+        wallNeighbours: worldModel.wallNeighbourFlags(c),
+        coastalWater: tile.terrain === 'sea',
+        gate: tile.buildingType === 'palisadegate',
+      });
+      return baseTextureFor(textures, tile, wallArt);
+    }
+    const riverArt = river && tile.buildingType ? riverBuildingArtFor(tile.buildingType, river) : undefined;
+    if (riverArt) return baseTextureFor(textures, tile, riverArt);
+    if (river) return this.riverTexturesAt(c, river).base;
+    return baseTextureFor(textures, tile);
+  }
+
   private rebuildTerrain(coords: AxialCoord[], fogActive: boolean) {
     fogPerfStats.terrainDrawnCount = 0;
     fogPerfStats.terrainCulledCount = 0;
@@ -4743,16 +4791,7 @@ export class HexMapRenderer {
         continue;
       }
       if (river) {
-        // Only a Mouth's orientation actually needs this (see
-        // riverTexturesFor/mouthOrientationOf) — skip the neighbour scan
-        // for every other shape.
-        const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
-        // Likewise, only a Spring's art actually branches on this.
-        const springShape = river.shape === 'spring' ? worldModel.springShapeAt(c) : undefined;
-        // Only straight/bend/bend60 (and never a wasted/lava tile — see
-        // riverTexturesFor) actually draw a variant.
-        const riverVariant = river.wasted ? 'plain' : worldModel.riverVariantAt(c, river.shape);
-        const riverTextures = riverTexturesFor(textures, river, seaDirection, springShape, riverVariant);
+        const riverTextures = this.riverTexturesAt(c, river);
         baseEntries.set(key, { texture: riverTextures.base, coord: c });
         topEntries.set(key, { texture: riverTextures.top, coord: c });
         continue;
@@ -4789,31 +4828,19 @@ export class HexMapRenderer {
     };
     this.waterDryEntries = maskEntries(baseEntries.values(), (c) => worldModel.getTile(c.q, c.r).terrain === 'sea', artOrigin);
     this.bogLakeEntries = maskEntries(baseEntries.values(), (_c, texture) => LAKE_FRAME_RE.test(texture.label ?? ''), artOrigin);
+    // The flow cells drawn are the visible hexes'; their neighbours and downstream chain come from the same source whether in view or not.
+    const flowSource = createRiverFlowEntrySource(
+      { getRiverTile: (q, r) => worldModel.getRiverTile(q, r), getBog: (q, r) => worldModel.getTile(q, r).bog, seaFacingDirectionOf: (c, d) => worldModel.seaFacingDirectionOf(c, d) },
+      (c) => this.flowBaseTextureOf(c),
+      TILE_W,
+      TILE_H,
+      TILE_TOPFACE_Y_OFFSET,
+    );
     this.riverFlowEntries = [];
-    const flowCoords = new Map<string, RiverFlowEntry>();
-    const entryCoords: { entry: RiverFlowEntry; coord: AxialCoord }[] = [];
     for (const { texture, coord, crop } of baseEntries.values()) {
       if (!texture || crop) continue;
-      const river = worldModel.getRiverTile(coord.q, coord.r);
-      const seaDirection = river?.shape === 'mouth' ? worldModel.seaFacingDirectionOf(coord, river.inDirections[0]) : null;
-      const flow = riverFlowOf(river, worldModel.getTile(coord.q, coord.r).bog, seaDirection);
-      if (!flow) continue;
-      const grid = isoGridPosition(coord, TILE_W, TILE_H);
-      const entry = { texture, x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET, ...flow };
-      this.riverFlowEntries.push(entry);
-      flowCoords.set(coordKey(coord), entry);
-      entryCoords.push({ entry, coord });
-    }
-    // The neighbouring river hex behind each in and out edge, so a cell can measure the distance to the bank on both sides of a seam.
-    for (const { entry, coord } of entryCoords) {
-      const around = neighbors(coord);
-      const neighbours: NonNullable<RiverFlowEntry['neighbours']> = [];
-      for (const direction of new Set([entry.outDirection, ...entry.inDirections])) {
-        const next = around[TILE_ORIENTATIONS.indexOf(direction)];
-        const other = next ? flowCoords.get(coordKey(next)) : undefined;
-        if (other) neighbours.push({ direction, name: other.texture.label ?? '', x: other.x, y: other.y });
-      }
-      entry.neighbours = neighbours;
+      const entry = flowSource.entryAt(coord);
+      if (entry) this.riverFlowEntries.push(entry);
     }
     this.refreshWaterDry();
     this.refreshBogLake();
