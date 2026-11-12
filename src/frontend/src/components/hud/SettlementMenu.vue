@@ -10,6 +10,7 @@ import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
 import { buildingName } from '../../i18n/catalogueNames';
 import { fadePopover } from '../../lib/hud/chipMotion';
+import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{ name: string; /** The phone bubble's arrow: a 24px box with a 44px tap area. */ touch?: boolean }>();
@@ -32,6 +33,7 @@ interface RealmRow {
 }
 
 const open = ref(false);
+const layer = usePhoneLayer(open);
 const busy = ref(false);
 const rootEl = ref<HTMLElement | null>(null);
 const triggerEl = ref<HTMLButtonElement | null>(null);
@@ -187,6 +189,7 @@ function onLeave(el: Element, done: () => void) {
         <div
           v-if="open"
           ref="menuEl"
+          v-phone-hidden="layer.hidden.value"
           class="menu"
           :class="{ 'menu--touch': props.touch }"
           role="menu"

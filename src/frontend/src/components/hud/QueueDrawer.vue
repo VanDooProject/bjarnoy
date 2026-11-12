@@ -31,11 +31,14 @@ import swordIconUrl from '../../assets/icons/sword.svg?url';
 import flagIconUrl from '../../assets/icons/flag.svg?url';
 import { useArmyRowTap } from '../../composables/useArmyRowTap';
 import { useArmyRecall } from '../../composables/useArmyRecall';
+import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const open = defineModel<boolean>('open', { default: false });
+// A layer while open; closed, its handle and peek hide like HUD while any other layer is open.
+const layer = usePhoneLayer(open);
 const emit = defineEmits<{ select: [coord: { q: number; r: number }]; 'select-army': [armyId: string] }>();
 
 const buildOrders = useBuildOrders();
@@ -378,8 +381,8 @@ function onDrawerLeave(el: Element, done: () => void) {
 <template>
   <Transition :css="false" @enter="onDrawerEnter" @leave="onDrawerLeave">
   <div v-if="hasAnything">
-    <div v-if="open" class="queue-drawer-backdrop" @pointerdown.self="close" />
-    <div class="queue-drawer" :class="{ 'is-open': open, 'is-dragging': dragPx !== null }" :style="rootStyle">
+    <div v-if="open" v-phone-hidden="layer.hidden.value" class="queue-drawer-backdrop" @pointerdown.self="close" />
+    <div v-phone-hidden="layer.hidden.value" class="queue-drawer" :class="{ 'is-open': open, 'is-dragging': dragPx !== null }" :style="rootStyle">
       <div id="queue-drawer-body" class="queue-drawer-panel" :aria-hidden="!open" :inert="!open">
         <div class="queue-drawer-header">
           <span class="status-card-title">{{ t('hud.queueDrawer.title') }}</span>

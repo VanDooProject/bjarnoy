@@ -32,11 +32,15 @@ import DispatchTargetBuildingPicker from './DispatchTargetBuildingPicker.vue';
 import SendArmyPicker from './SendArmyPicker.vue';
 import { useDispatchTargetBuilding } from '../../composables/useDispatchTargetBuilding';
 import { useUnsavedInput } from '../../composables/useUnsavedInput';
+import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 
 const world = useWorldStore();
 const auth = useAuthStore();
 const catalogue = useUnitCatalogueStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+
+// A layer on the phone stack while mounted (MapView mounts it only while an order is being composed).
+const layer = usePhoneLayer();
 
 const draft = computed(() => world.dispatchDraft);
 const fieldDraft = computed(() => world.fieldOrderDraft);
@@ -206,7 +210,7 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
 </script>
 
 <template>
-  <div class="dispatch-sheet" :class="{ 'is-expanded': expanded }">
+  <div v-phone-hidden="layer.hidden.value" class="dispatch-sheet" :class="{ 'is-expanded': expanded }">
     <SendArmyPicker v-if="world.sendPicker" />
     <div v-else class="dispatch-sheet-collapsed">
       <div class="dispatch-sheet-row1">

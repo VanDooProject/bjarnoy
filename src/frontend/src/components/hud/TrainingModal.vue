@@ -5,6 +5,7 @@
 // units that building type trains, with a quantity picker per unit, rather
 // than BuildingModal's single-target cost/duration/action layout. With several
 // buildings of the type the order can also be distributed over all of them.
+import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
@@ -32,6 +33,9 @@ import { hasShorelineInTerritory } from '../../lib/map/shoreline';
 /** The building whose window this is: its type picks the units, its hex is where the order goes. */
 const props = defineProps<{ building: { type: string; q: number; r: number; level: number } }>();
 const emit = defineEmits<{ close: []; trained: [] }>();
+
+// A layer on the phone stack: shows alone while mounted, hides under a layer opened above it.
+const layer = usePhoneLayer();
 
 const world = useWorldStore();
 const auth = useAuthStore();
@@ -183,7 +187,7 @@ async function train(type: string, count: number) {
 </script>
 
 <template>
-  <div class="backdrop" @click.self="emit('close')">
+  <div v-phone-hidden="layer.hidden.value" class="backdrop" @click.self="emit('close')">
     <div class="modal panel">
       <div class="head">
         <div>

@@ -27,6 +27,7 @@ import { isHudBarAtBottom, isHudBarMounted, isHudRail, isSettlementBubbleShown }
 import { isHudDrawerPending } from '../../composables/hudDrawerPendingState';
 import { hudBarHeightPx, hudRailHeightPx, hudRailWidthPx, DEFAULT_HUD_BAR_HEIGHT } from '../../composables/hudBarHeight';
 import { useSettlementRename } from '../../composables/useSettlementRename';
+import { useHiddenUnderPhoneLayer, usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import { fadePopover } from '../../lib/hud/chipMotion';
 import { HUD_COMPACT_QUERY, HUD_RAIL_QUERY } from '../../lib/breakpoints';
 import { buildingName } from '../../i18n/catalogueNames';
@@ -193,7 +194,7 @@ const settlementBubbleEditTop = computed(() => (isRail.value ? settlementBubbleT
 const bubbleEditing = computed(() => rename.editing && showSettlementBubble.value);
 const railJoined = computed(() => isChipLayout.value && showSettlementBubble.value && !isHudDrawerOpen.value);
 // Finding #13: only counts as "shown" once it's actually visible on screen —
-// the drawer hides it (`v-show="!isHudDrawerOpen"` below) without unmounting
+// the drawer hides it (`v-phone-hidden="hudHidden"` below) without unmounting
 // it, so a plain `showSettlementBubble` alone would keep DemoModeBadge.vue
 // pinned below a bubble the player can't currently see.
 // The bubble hides behind an open drawer: a half-typed name would be edited out of sight.
@@ -367,6 +368,10 @@ const drawer = useHudDrawer(
 // comment. Only one TopBar with a drawer is ever mounted at a time in
 // practice, so there's nothing to arbitrate between multiple writers.
 setHudDrawerCloseFn(drawer.close);
+// The pull-down drawer is a layer on the phone stack: the bar, its backdrop and the drawer hide when another layer
+// covers them; the settlement bubble hides like any HUD element (the open drawer counts as a layer).
+const layer = usePhoneLayer(drawer.isOpen, 'hud-drawer');
+const hudHidden = useHiddenUnderPhoneLayer();
 onBeforeUnmount(() => setHudDrawerCloseFn(null));
 // Finding #19: the grip's `aria-controls` needs a real id to point at, and a
 // stable one — a fresh string every render would just churn the attribute
@@ -476,6 +481,7 @@ const backdropStyle = computed(() => {
 <template>
   <header
     ref="barRef"
+    v-phone-hidden="layer.hidden.value"
     class="hud-bar"
     :style="{ '--settlement-bubble-top': settlementBubbleTop }"
     :class="{
@@ -601,7 +607,7 @@ const backdropStyle = computed(() => {
       'settlement-bubble--editing': bubbleEditing,
     }"
     :style="{ top: bubbleEditing ? settlementBubbleEditTop : settlementBubbleTop, left: settlementBubbleLeft }"
-    v-show="!isHudDrawerOpen"
+    v-phone-hidden="hudHidden"
   >
     <button
       type="button"
@@ -655,6 +661,7 @@ const backdropStyle = computed(() => {
   </div>
   <div
     v-if="dragEnabled"
+    v-phone-hidden="layer.hidden.value"
     class="hud-drawer-backdrop"
     :class="{ 'hud-drawer-backdrop--bottom': barPosition === 'bottom' }"
     :style="backdropStyle"
@@ -664,6 +671,7 @@ const backdropStyle = computed(() => {
   <div
     v-if="dragEnabled"
     ref="drawerEl"
+    v-phone-hidden="layer.hidden.value"
     class="hud-drawer"
     :class="{
       'hud-drawer--bottom': barPosition === 'bottom',
