@@ -781,14 +781,30 @@ const backdropStyle = computed(() => {
 .titles {
   /* The settlement menu and the rename card hang from this box. */
   position: relative;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   line-height: 1.2;
 }
+/* Layout-neutral: the name sits in column 1 row 1, the caption below it, the menu arrow (SettlementMenu) in column 2 across both. */
 .name-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  display: contents;
+}
+.titles .name {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.titles .caption {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .logo-btn {
   appearance: none;
