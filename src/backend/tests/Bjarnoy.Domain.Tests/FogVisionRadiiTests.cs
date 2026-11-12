@@ -62,6 +62,20 @@ public class FogVisionRadiiTests
         Assert.Equal(FogVisionRadii.VisibleRadius(3), source.VisibleRadius);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(5)]
+    public void A_beach_camp_sees_like_a_level_1_longhouse_whatever_its_own_level(int longhouseLevel)
+    {
+        var camp = FogVisionRadii.ToVisionSource(HexCoord.Origin, longhouseLevel, isBeachCamp: true)!.Value;
+        var ravens = FogVisionRadii.ToVisionSource(HexCoord.Origin, longhouseLevel, bonusRings: 4, isBeachCamp: true)!.Value;
+
+        Assert.Equal(FogVisionRadii.ExploredRadius(1), camp.ExploredRadius);
+        Assert.Equal(FogVisionRadii.VisibleRadius(1), camp.VisibleRadius);
+        Assert.Equal(camp.ExploredRadius + 4, ravens.ExploredRadius);
+        Assert.Equal(camp.VisibleRadius + 4, ravens.VisibleRadius);
+    }
+
     [Fact]
     public void Odins_ravens_add_rings_to_the_settlements_and_a_towers_explored_and_visible_radii()
     {

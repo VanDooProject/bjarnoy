@@ -34,9 +34,11 @@ public sealed class LinkedGroupSession
         TerrainSampler sampler,
         GameClock clock,
         DateTimeOffset now,
-        IGiantIndex? giants)
+        IGiantIndex? giants,
+        Guid firstSettlementId)
     {
         _dbContext = dbContext;
+        FirstSettlementId = firstSettlementId;
         Anchor = anchor;
         Members = members;
         _entities = members.ToDictionary(m => m.Id);
@@ -47,6 +49,12 @@ public sealed class LinkedGroupSession
         Now = now;
         _giants = giants;
     }
+
+    /// <summary>
+    /// The owner's oldest settlement in this world (by founding time, then id), across every island: the only one whose onboarding
+    /// quests are enabled (economy.md section 7).
+    /// </summary>
+    public Guid FirstSettlementId { get; }
 
     /// <summary>The settlement the session was loaded for (tracked, with its world and owner).</summary>
     public SettlementEntity Anchor { get; }
@@ -163,7 +171,7 @@ public sealed class LinkedGroupSession
 
             relocation ??= new GarrisonRelocation(_dbContext);
             routing ??= await relocation.LoadRoutingAsync(
-                member.WorldId, SpeedFactor, TerrainAt, member.UserId, member.Id, cancellationToken).ConfigureAwait(false);
+                member.WorldId, SpeedFactor, TerrainAt, member.UserId, member.Id, Now, cancellationToken).ConfigureAwait(false);
 
             var known = Members.ToDictionary(m => m.Id, m => m.Id == member.Id ? taken : Store.Outcome(m.Id).Settlement);
             var candidates = await relocation.OwnerSpotsAsync(member.WorldId, member.OwnerId, TerrainAt, known, cancellationToken).ConfigureAwait(false);
@@ -259,6 +267,13 @@ public sealed class LinkedGroupLoader(GameDbContext dbContext, TimeProvider time
             .ToListAsync(ct).ConfigureAwait(false);
         var guestsByHost = guestArmies.ToLookup(a => a.TargetSettlementId!.Value);
 
+        // Ordered on the client: SQLite cannot ORDER BY a DateTimeOffset, and one player has few settlements per world.
+        var owned = await _dbContext.Settlements
+            .Where(s => s.UserId == anchor.UserId && s.WorldId == anchor.WorldId)
+            .Select(s => new { s.Id, s.FoundedAt })
+            .ToListAsync(ct).ConfigureAwait(false);
+        var firstSettlementId = owned.OrderBy(s => s.FoundedAt).ThenBy(s => s.Id).First().Id;
+
         var world = anchor.World;
         var clock = world.ToClock();
         var now = settleTo ?? clock.ToGameTime(_timeProvider.GetUtcNow());
@@ -273,7 +288,7 @@ public sealed class LinkedGroupLoader(GameDbContext dbContext, TimeProvider time
             world.SpeedFactor, sampler.TerrainAt, giants ?? GiantIndex.Empty);
         store.SettleTo(now);
 
-        var session = new LinkedGroupSession(_dbContext, anchor, members, guestArmies, store, sampler, clock, now, giants);
+        var session = new LinkedGroupSession(_dbContext, anchor, members, guestArmies, store, sampler, clock, now, giants, firstSettlementId);
         session.ApplyGuestDeaths();
 
         if (forceRealm

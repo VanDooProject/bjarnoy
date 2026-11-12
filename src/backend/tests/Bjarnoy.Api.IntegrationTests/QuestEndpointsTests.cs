@@ -2,7 +2,16 @@ using System.Net;
 using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
+using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Settlers;
+using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -31,8 +40,7 @@ public sealed class QuestEndpointsTests : IAsyncLifetime
     private async Task<SettlementResponse> FoundAsync(HttpClient client)
     {
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -75,6 +83,66 @@ public sealed class QuestEndpointsTests : IAsyncLifetime
         Assert.Equal(250, settlement.Quests.Single(q => q.Id == "longhouse2").Reward.Wood);
         Assert.Equal(new QuestProgressResponse(0, 3), settlement.Quests.Single(q => q.Id == "tower3").Progress);
         Assert.Null(settlement.Quests.Single(q => q.Id == "hunt1").Progress);
+    }
+
+    [Fact]
+    public async Task The_register_quest_waits_before_the_tower_quest_until_the_player_registers()
+    {
+        using var client = _factory.CreateClient();
+        var settlement = await FoundAsync(client);
+
+        var ids = settlement.Quests.Select(q => q.Id).ToList();
+        Assert.Equal(ids.IndexOf("tower3") - 1, ids.IndexOf("register"));
+        var register = settlement.Quests.Single(q => q.Id == "register");
+        Assert.False(register.Completed);
+        Assert.Equal(14, register.PremiumDays);
+
+        var refused = await client.PostAsync(ClaimUrl(settlement.Id, "register"), null, Ct);
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Contains("NotCompleted", await refused.Content.ReadAsStringAsync(Ct));
+    }
+
+    [Fact]
+    public async Task Registering_opens_the_register_quest_first_and_claiming_it_grants_two_weeks_of_premium_once()
+    {
+        using var client = _factory.CreateClient();
+        var settlement = await FoundAsync(client);
+
+        var userName = Unique("reg");
+        var registered = await client.PostJsonAsync(
+            "/api/v1/auth/register", new RegisterRequest(userName, "correct-horse-battery", OwnerId), Ct);
+        Assert.Equal(HttpStatusCode.OK, registered.StatusCode);
+        var auth = await registered.ReadStrictAsync<AuthResponse>(Ct);
+        Assert.False(auth.User.IsPremium);
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", auth.AccessToken);
+
+        var before = (await GetAsync(client, settlement.Id))!;
+        Assert.Equal("register", before.Quests[0].Id);
+        Assert.True(before.Quests[0].Completed);
+
+        var claim = await client.PostAsync(ClaimUrl(settlement.Id, "register"), null, Ct);
+        Assert.Equal(HttpStatusCode.OK, claim.StatusCode);
+        var after = await claim.Content.ReadFromJsonAsync<SettlementResponse>(SqliteApiFixture.StrictJson, Ct);
+        Assert.True(after!.Quests.Single(q => q.Id == "register").Claimed);
+        Assert.Equal(before.Resources.Stock.Wood, after.Resources.Stock.Wood, 1);
+
+        var now = _factory.Time.GetUtcNow();
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var user = await db.Users.AsNoTracking().SingleAsync(u => u.Id == auth.User.Id, Ct);
+            Assert.False(user.IsPremium);
+            Assert.Equal(now.AddDays(14), user.PremiumUntil);
+            Assert.True(user.IsPremiumAt(now));
+            Assert.False(user.IsPremiumAt(now.AddDays(14).AddSeconds(1)));
+        }
+
+        var me = await client.GetFromJsonAsync<UserResponse>("/api/v1/auth/me", SqliteApiFixture.StrictJson, Ct);
+        Assert.True(me!.IsPremium);
+
+        var again = await client.PostAsync(ClaimUrl(settlement.Id, "register"), null, Ct);
+        Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+        Assert.Contains("AlreadyClaimed", await again.Content.ReadAsStringAsync(Ct));
     }
 
     [Fact]
@@ -149,5 +217,51 @@ public sealed class QuestEndpointsTests : IAsyncLifetime
         client.DefaultRequestHeaders.Remove("X-Owner-Id");
         client.DefaultRequestHeaders.Add("X-Owner-Id", OwnerId);
         Assert.False((await GetAsync(client, settlement.Id))!.Quests.Single(q => q.Id == "longhouse2").Claimed);
+    }
+
+    [Fact]
+    public async Task Only_the_players_first_settlement_has_quests()
+    {
+        using var client = _factory.CreateClient();
+        var first = await FoundAsync(client);
+
+        Guid secondId;
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var entity = await db.Settlements.AsNoTracking().FirstAsync(s => s.Id == first.Id, Ct);
+            var centre = new HexCoord(first.Q + 40, first.R);
+            var second = new SettlementEntity
+            {
+                WorldId = entity.WorldId,
+                IslandId = entity.IslandId,
+                Name = "Lillestad",
+                OwnerName = entity.OwnerName,
+                OwnerId = entity.OwnerId,
+                UserId = entity.UserId,
+                FoundedAt = entity.FoundedAt.AddMinutes(10),
+            };
+            var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
+            second.ApplyDomain(new Settlement
+            {
+                Id = second.Id,
+                Name = "Lillestad",
+                Centre = centre,
+                Buildings = [new PlacedBuilding(centre, BuildingType.Longhouse, 1)],
+                Resources = ResourcePool.Create(BuildingCatalogue.FoundingStock, production, capacity, entity.SettledAt),
+            });
+            db.Settlements.Add(second);
+            await db.SaveChangesAsync(Ct);
+            secondId = second.Id;
+        }
+
+        var firstAgain = await GetAsync(client, first.Id);
+        var secondRead = await GetAsync(client, secondId);
+        Assert.Equal(Quests.All.Count, firstAgain!.Quests.Count);
+        Assert.Empty(secondRead!.Quests);
+
+        var refused = await client.PostAsync(ClaimUrl(secondId, "producers3"), null, Ct);
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Contains("NotFirstSettlement", await refused.Content.ReadAsStringAsync(Ct));
     }
 }

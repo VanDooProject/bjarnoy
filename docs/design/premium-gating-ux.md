@@ -35,8 +35,9 @@ This needs a client-side premium flag to gate on, which didn't exist before this
 | Fight simulator (`SimulatorView.vue`) | — (whole feature is premium) | Simulating at all | A "Premium feature" card is shown whenever `!auth.isPremium`, before any request — **advisory only**, the button itself stays clickable (see note below) |
 | Army field order, standing (`ArmyPanel.vue` "Move on") | One destination click, no extra stops | Plotting more than one stop | `stores/world.ts`'s `addFieldOrderWaypoint` refuses a second point for a non-premium account, with `fieldOrderDraft.error` explaining why, instead of only failing at Confirm; the drafting form also states the free/premium split upfront |
 | Army field order, mid-march (`ArmyPanel.vue` "Append goal") | — (redirecting a march in progress is always premium, per `Army.PlanFieldOrder`'s rule table) | Redirecting at all while still travelling | The row's field-order button is disabled (🔒, with a tooltip) for a non-premium account whenever the army hasn't arrived yet — `isFieldOrderMidMarch` in `lib/units/armyDispatch.ts` |
-| Send picker, marching army (`SendArmyPicker.vue`, the ring's Send army / Attack / Support / Hunt) | A standing army (any mission, split or whole) and the home garrison | Sending an army that is still marching | Its row is dimmed and cannot be selected (🔒, "Premium: redirect while marching") for a non-premium account — the verdict comes from `evaluateSendSources` (`lib/units/sendSources.ts`, via `isFieldOrderMidMarch`), which the army's map marker reads too, so a locked army is not tappable there either; the ring's bubbles are never locked, they only open the picker |
+| Send picker, marching army (`SendArmyPicker.vue`, the ring's Send army / Attack / Hunt) | A standing army (any mission, split or whole) and the home garrison of any of the player's realms | Sending an army that is still marching | Its row is dimmed and cannot be selected (🔒, "Premium: redirect while marching") for a non-premium account — the verdict comes from `evaluateSendSources` (`lib/units/sendSources.ts`, via `isFieldOrderMidMarch`), which the army's map marker reads too, so a locked army is not tappable there either; the ring's bubbles are never locked, they only open the picker |
 | Construction queue (`BuildingModal.vue`) | A free slot is open, or the account has a non-zero waiting queue | No free slot *and* `maxWaitingOrders === 0` (no waiting queue at all) | Build/Upgrade button disabled, with an inline note, whenever `noSlotNoQueue` is true |
+| Leaderboard week history (`LeaderboardView.vue`) | The current board only (for weekly boards: the latest closed week) | Stepping back through the last 4 closed weeks (admins: every week) | The ‹ arrow is disabled with a lock and "Premium: the last 4 weeks" for a non-premium account; the directory lists only the weeks the caller may open, and a board request for any other week answers 403 |
 
 ## The one exception: the simulator's flag can't be trusted enough to hard-block
 
@@ -64,3 +65,10 @@ same live poll/action flow the rest of the HUD already relies on, not a stale lo
 - **Disabled + lock + explanation (chosen)** — visible, honest about the restriction before any wasted
   effort, consistent with the one place this was already done right (`HexTooltip.vue`'s premium-locked
   scouting stats).
+
+## Time-limited premium
+
+An account is premium while `IsPremium` (the permanent admin grant) is set or `PremiumUntil` lies in the future
+(`UserEntity.IsPremiumAt`). The register quest (`economy.md` section 7) extends `PremiumUntil` by 14 days. The live
+checks (`GetIsPremiumAsync`, the settlement's waiting-queue limit, training splits) all go through `IsPremiumAt`, so the
+grant and its expiry apply to the next request without a re-login.

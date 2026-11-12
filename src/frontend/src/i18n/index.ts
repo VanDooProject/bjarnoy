@@ -46,6 +46,7 @@ import deAdminWorlds from './locales/de/adminWorlds.json';
 import enAdminActivityChart from './locales/en/adminActivityChart.json';
 import enAdminActivity from './locales/en/adminActivity.json';
 import enAdminEconomy from './locales/en/adminEconomy.json';
+import enAdminPacingBench from './locales/en/adminPacingBench.json';
 import enAdminIslandLab from './locales/en/adminIslandLab.json';
 import enAdminApiKeys from './locales/en/adminApiKeys.json';
 import enAdminLayout from './locales/en/adminLayout.json';
@@ -112,6 +113,7 @@ export const i18n = createI18n({
       adminActivityChart: enAdminActivityChart,
       adminActivity: enAdminActivity,
       adminEconomy: enAdminEconomy,
+      adminPacingBench: enAdminPacingBench,
       adminIslandLab: enAdminIslandLab,
       adminApiKeys: enAdminApiKeys,
       adminLayout: enAdminLayout,

@@ -339,14 +339,14 @@ public sealed class TradeService(
         return [.. offers.OrderByDescending(o => o.PostedAt)];
     }
 
-    /// <summary>Completed trade reports touching this settlement either way, most recently completed first.</summary>
-    public async Task<IReadOnlyList<TradeReportEntity>> ListReportsAsync(
-        Guid settlementId, CancellationToken cancellationToken = default)
+    /// <summary>Completed trade reports of this player in the world, as poster or acceptor, most recently completed first.</summary>
+    public async Task<IReadOnlyList<TradeReportEntity>> ListReportsForOwnerAsync(
+        Guid worldId, string ownerId, CancellationToken cancellationToken = default)
     {
         // Ordered client-side: SQLite's EF provider doesn't support
         // DateTimeOffset in ORDER BY — same workaround as ListMineAsync above.
         var reports = await _dbContext.TradeReports
-            .Where(r => r.PosterSettlementId == settlementId || r.AcceptorSettlementId == settlementId)
+            .Where(r => r.WorldId == worldId && (r.PosterOwnerId == ownerId || r.AcceptorOwnerId == ownerId))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         return [.. reports.OrderByDescending(r => r.CompletedAt)];
     }
@@ -476,8 +476,13 @@ public sealed class TradeService(
             Guid.CreateVersion7(), domainOffer, toAcceptor.ToDomain(), toPoster.ToDomain(),
             guildTrade: domainOffer.GuildOnly);
 
+        var posterOwner = await ReportOwners.OfAsync(_dbContext, report.PosterSettlementId, cancellationToken).ConfigureAwait(false);
+        var acceptorOwner = await ReportOwners.OfAsync(_dbContext, report.AcceptorSettlementId, cancellationToken).ConfigureAwait(false);
         _dbContext.TradeReports.Add(new TradeReportEntity
         {
+            WorldId = posterOwner.WorldId,
+            PosterOwnerId = posterOwner.OwnerId,
+            AcceptorOwnerId = acceptorOwner.OwnerId,
             Id = report.Id,
             OfferId = report.OfferId,
             CompletedAt = report.CompletedAt,

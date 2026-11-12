@@ -132,9 +132,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onOutsidePoint
     transform: rotate(360deg);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .spinner {
-    animation-duration: 2s;
-  }
+html[data-hud-motion='reduced'] .spinner {
+  animation-duration: 2s;
 }
 </style>

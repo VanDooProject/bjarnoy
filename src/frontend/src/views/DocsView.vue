@@ -238,16 +238,14 @@ function stillOf(art: string) {
     height: 220px;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .card,
-  .art {
-    transition: none;
-  }
-  .card:hover,
-  .card:focus-visible,
-  .card:hover .art,
-  .card:focus-visible .art {
-    transform: none;
-  }
+html[data-hud-motion='reduced'] .card,
+html[data-hud-motion='reduced'] .art {
+  transition: none;
+}
+html[data-hud-motion='reduced'] .card:hover,
+html[data-hud-motion='reduced'] .card:focus-visible,
+html[data-hud-motion='reduced'] .card:hover .art,
+html[data-hud-motion='reduced'] .card:focus-visible .art {
+  transform: none;
 }
 </style>

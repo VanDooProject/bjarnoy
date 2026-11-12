@@ -54,7 +54,7 @@ describe('MobileDispatchSheet', () => {
     expect(wrapper.get('button.grip').text()).toBe('Units (5)');
   });
 
-  it('names the spot each picked unit type is taken from, and hints when they stand at several spots', async () => {
+  it('names the spot each picked unit type is taken from, and stays sendable when they stand at several spots', async () => {
     const world = useWorldStore();
     world.hud.garrison = [{ unit: 'spearman', count: 10 }, { unit: 'catapult', count: 2 }];
     world.hud.garrisonSpots = [
@@ -68,13 +68,12 @@ describe('MobileDispatchSheet', () => {
     await wrapper.vm.$nextTick();
 
     expect(wrapper.findAll('[data-testid="unit-source"]').map((e) => e.text())).toEqual(['from Longhouse']);
-    expect(wrapper.find('[data-testid="several-spots"]').exists()).toBe(false);
 
     world.setDispatchUnitCount('catapult', 1);
     await wrapper.vm.$nextTick();
 
     expect(wrapper.findAll('[data-testid="unit-source"]').map((e) => e.text())).toEqual(['from Longhouse', 'from Tower']);
-    expect(wrapper.get('[data-testid="several-spots"]').text()).toContain('several spots');
+    expect(wrapper.find('[data-testid="several-spots"]').exists()).toBe(false);
   });
 
   it('disables Start with no units selected', async () => {

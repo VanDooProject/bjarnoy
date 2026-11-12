@@ -123,31 +123,42 @@ public static class ArmyEndpoints
             // Either party's settlement owner — see ReportOwnershipEndpointFilter.
             .RequireReportParty();
 
-        reports.MapGet("/settlements/{settlementId:guid}/reports", ListReportsForSettlement)
-            .WithName("ListSettlementBattleReports")
-            .WithSummary("Lists battle reports touching a settlement, as attacker or defender, newest first.")
-            .RequireSettlementOwner();
+        reports.MapGet("/worlds/{worldId:guid}/reports", ListReportsForOwner)
+            .WithName("ListBattleReports")
+            .WithSummary("Lists the caller's battle reports in a world, as attacker or defender, newest first — one inbox across all their settlements.")
+            .RequireCallerRealm();
 
         reports.MapGet("/field-reports/{reportId:guid}", GetFieldReport)
             .WithName("GetFieldBattleReport")
             .WithSummary("Fetches one in-flight field battle report by id (issue #206).")
             .RequireFieldReportParty();
 
-        reports.MapGet("/settlements/{settlementId:guid}/field-reports", ListFieldReportsForSettlement)
-            .WithName("ListSettlementFieldBattleReports")
-            .WithSummary("Lists field battle reports touching a settlement, either side, newest first (issue #206).")
-            .RequireSettlementOwner();
+        reports.MapGet("/worlds/{worldId:guid}/field-reports", ListFieldReportsForOwner)
+            .WithName("ListFieldBattleReports")
+            .WithSummary("Lists the caller's field battle reports in a world, either side, newest first (issue #206).")
+            .RequireCallerRealm();
 
         reports.MapGet("/camp-reports/{reportId:guid}", GetCampReport)
             .WithName("GetCampReport")
             .WithSummary("Fetches one wildlife camp report (hunt, ambush or tower) by id.")
-            // Only the player's settlement owner — a camp has no owner.
+            // Only the player the report belongs to — a camp has no owner.
             .RequireCampReportOwner();
 
-        reports.MapGet("/settlements/{settlementId:guid}/camp-reports", ListCampReportsForSettlement)
-            .WithName("ListSettlementCampReports")
-            .WithSummary("Lists wildlife camp reports of a settlement, newest first.")
-            .RequireSettlementOwner();
+        reports.MapGet("/worlds/{worldId:guid}/camp-reports", ListCampReportsForOwner)
+            .WithName("ListCampReports")
+            .WithSummary("Lists the caller's wildlife camp reports in a world, newest first.")
+            .RequireCallerRealm();
+
+        reports.MapGet("/army-reports/{reportId:guid}", GetArmyReport)
+            .WithName("GetArmyReport")
+            .WithSummary("Fetches one army report (army stuck, army starved) by id.")
+            // Only the player the report belongs to.
+            .RequireArmyReportOwner();
+
+        reports.MapGet("/worlds/{worldId:guid}/army-reports", ListArmyReportsForPlayer)
+            .WithName("ListWorldArmyReports")
+            .WithSummary("Lists the caller's own army reports in a world, newest first.")
+            .RequireCallerRealm();
 
         return app;
     }
@@ -207,19 +218,12 @@ public static class ArmyEndpoints
             return TypedResults.Conflict(Problem(DispatchRejection.NoUnitsRequested));
         }
 
-        if (bySpot.Count > 1)
-        {
-            return TypedResults.Conflict(Problem(DispatchRejection.UnitsAtSeveralSpots));
-        }
-
-        var (fromSpot, unitStacks) = bySpot[0];
-
         if (!TryParseMission(request.Mission, out var mission))
         {
             return TypedResults.BadRequest(new ProblemDetails
             {
                 Title = "Unknown mission.",
-                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid, found, hunt.",
+                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid, found, hunt, setupcamp.",
                 Status = StatusCodes.Status400BadRequest,
             });
         }
@@ -228,7 +232,7 @@ public static class ArmyEndpoints
         var destination = request.Destination?.ToHexCoord();
 
         var result = await armies.DispatchAsync(
-            settlementId, fromSpot, unitStacks, waypoints, destination, request.Provisions,
+            settlementId, [.. bySpot.Select(g => (g.Spot, (IReadOnlyList<UnitStack>)g.Stacks))], waypoints, destination, request.Provisions,
             mission, request.TargetSettlementId, request.TargetBuildingCoord?.ToHexCoord(), cancellationToken);
 
         if (result.WorldPaused)
@@ -418,7 +422,10 @@ public static class ArmyEndpoints
 
         var found = await armies.GetAsync(armyId, cancellationToken);
         var (entity, clock) = found!.Value;
-        return TypedResults.Ok(ArmyResponse.From(entity!, clock.ToGameTime(time.GetUtcNow())));
+
+        // An army recalled while it stands on its home spot (a group of a gathering that stands on its own spot) is home again at
+        // once and folded into the garrison by the read above: the answer is the army as it was recalled.
+        return TypedResults.Ok(ArmyResponse.From(entity ?? result.Army!, clock.ToGameTime(time.GetUtcNow())));
     }
 
     private static async Task<Results<Ok<ArmyResponse>, NotFound, Conflict<ProblemDetails>>> RetargetFounding(
@@ -601,45 +608,63 @@ public static class ArmyEndpoints
 
     private static async Task<Results<Ok<BattleReportResponse>, NotFound>> GetReport(
         Guid reportId,
+        HttpContext httpContext,
         BattleReportService reports,
+        RealmDirectory realms,
         CancellationToken cancellationToken)
     {
         var report = await reports.GetAsync(reportId, cancellationToken);
-        return report is null
-            ? TypedResults.NotFound()
-            : TypedResults.Ok(BattleReportResponse.From(report));
+        if (report is null) return TypedResults.NotFound();
+
+        var viewer = await ReportInbox.ViewerOwnerIdAsync(httpContext, report.WorldId, realms, cancellationToken);
+        return TypedResults.Ok(BattleReportResponse.From(report, viewer));
     }
 
-    private static async Task<Ok<IReadOnlyList<BattleReportResponse>>> ListReportsForSettlement(
-        Guid settlementId,
+    private static async Task<Results<Ok<IReadOnlyList<BattleReportResponse>>, BadRequest<ProblemDetails>, JsonHttpResult<AuthErrorResponse>>> ListReportsForOwner(
+        Guid worldId,
+        HttpContext httpContext,
         BattleReportService reports,
+        RealmDirectory realms,
         CancellationToken cancellationToken)
     {
-        var entities = await reports.GetForSettlementAsync(settlementId, cancellationToken);
-        IReadOnlyList<BattleReportResponse> response = [.. entities.Select(BattleReportResponse.From)];
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome == CallerRealmOutcome.MissingHeader) return ReportInbox.MissingOwnerId();
+        if (realm.Outcome == CallerRealmOutcome.Refused) return ReportInbox.NotOwner();
+
+        var entities = await reports.GetForOwnerAsync(worldId, realm.OwnerId!, cancellationToken);
+        IReadOnlyList<BattleReportResponse> response = [.. entities.Select(e => BattleReportResponse.From(e, realm.OwnerId))];
         return TypedResults.Ok(response);
     }
 
     private static async Task<Results<Ok<FieldBattleReportResponse>, NotFound>> GetFieldReport(
         Guid reportId,
+        HttpContext httpContext,
         FieldBattleReportService reports,
+        RealmDirectory realms,
         CancellationToken cancellationToken)
     {
         var report = await reports.GetAsync(reportId, cancellationToken);
         if (report is null) return TypedResults.NotFound();
 
         var names = await reports.GetSideNamesAsync([report], cancellationToken);
-        return TypedResults.Ok(FieldBattleReportResponse.From(report, names));
+        var viewer = await ReportInbox.ViewerOwnerIdAsync(httpContext, report.WorldId, realms, cancellationToken);
+        return TypedResults.Ok(FieldBattleReportResponse.From(report, names, viewer));
     }
 
-    private static async Task<Ok<IReadOnlyList<FieldBattleReportResponse>>> ListFieldReportsForSettlement(
-        Guid settlementId,
+    private static async Task<Results<Ok<IReadOnlyList<FieldBattleReportResponse>>, BadRequest<ProblemDetails>, JsonHttpResult<AuthErrorResponse>>> ListFieldReportsForOwner(
+        Guid worldId,
+        HttpContext httpContext,
         FieldBattleReportService reports,
+        RealmDirectory realms,
         CancellationToken cancellationToken)
     {
-        var entities = await reports.GetForSettlementAsync(settlementId, cancellationToken);
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome == CallerRealmOutcome.MissingHeader) return ReportInbox.MissingOwnerId();
+        if (realm.Outcome == CallerRealmOutcome.Refused) return ReportInbox.NotOwner();
+
+        var entities = await reports.GetForOwnerAsync(worldId, realm.OwnerId!, cancellationToken);
         var names = await reports.GetSideNamesAsync(entities, cancellationToken);
-        IReadOnlyList<FieldBattleReportResponse> response = [.. entities.Select(e => FieldBattleReportResponse.From(e, names))];
+        IReadOnlyList<FieldBattleReportResponse> response = [.. entities.Select(e => FieldBattleReportResponse.From(e, names, realm.OwnerId))];
         return TypedResults.Ok(response);
     }
 
@@ -654,13 +679,48 @@ public static class ArmyEndpoints
             : TypedResults.Ok(CampReportResponse.From(report));
     }
 
-    private static async Task<Ok<IReadOnlyList<CampReportResponse>>> ListCampReportsForSettlement(
-        Guid settlementId,
+    private static async Task<Results<Ok<IReadOnlyList<CampReportResponse>>, BadRequest<ProblemDetails>, JsonHttpResult<AuthErrorResponse>>> ListCampReportsForOwner(
+        Guid worldId,
+        HttpContext httpContext,
         CampReportService reports,
+        RealmDirectory realms,
         CancellationToken cancellationToken)
     {
-        var entities = await reports.GetForSettlementAsync(settlementId, cancellationToken);
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome == CallerRealmOutcome.MissingHeader) return ReportInbox.MissingOwnerId();
+        if (realm.Outcome == CallerRealmOutcome.Refused) return ReportInbox.NotOwner();
+
+        var entities = await reports.GetForOwnerAsync(worldId, realm.OwnerId!, cancellationToken);
         IReadOnlyList<CampReportResponse> response = [.. entities.Select(CampReportResponse.From)];
+        return TypedResults.Ok(response);
+    }
+
+    private static async Task<Results<Ok<ArmyReportResponse>, NotFound>> GetArmyReport(
+        Guid reportId,
+        ArmyReportService reports,
+        CancellationToken cancellationToken)
+    {
+        var report = await reports.GetAsync(reportId, cancellationToken);
+        return report is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(ArmyReportResponse.From(report));
+    }
+
+    private static async Task<Ok<IReadOnlyList<ArmyReportResponse>>> ListArmyReportsForPlayer(
+        Guid worldId,
+        HttpContext httpContext,
+        ArmyReportService reports,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<ArmyReportResponse>>([]);
+        }
+
+        var entities = await reports.GetForPlayerAsync(worldId, realm.OwnerId!, cancellationToken);
+        IReadOnlyList<ArmyReportResponse> response = [.. entities.Select(ArmyReportResponse.From)];
         return TypedResults.Ok(response);
     }
 
@@ -703,6 +763,12 @@ public static class ArmyEndpoints
             return true;
         }
 
+        if (string.Equals(value, "setupcamp", StringComparison.OrdinalIgnoreCase))
+        {
+            mission = ArmyMission.SetUpCamp;
+            return true;
+        }
+
         mission = default;
         return false;
     }
@@ -734,7 +800,6 @@ public static class ArmyEndpoints
                 DispatchRejection.NoUnitsRequested => "At least one unit must be requested.",
                 DispatchRejection.InsufficientGarrison => "The garrison spot does not hold that many of one or more requested unit types.",
                 DispatchRejection.NotAGarrisonSpot => "The hex is not a garrison spot (longhouse, tower or dock) of the settlement.",
-                DispatchRejection.UnitsAtSeveralSpots => "Units at several garrison spots cannot be sent together yet; send from one spot.",
                 DispatchRejection.SupportSpotRequired => "A support mission must name a garrison spot of the target to join.",
                 DispatchRejection.SupportSpotCannotHold => "That hex is not a garrison spot of the target that can hold every unit of the army.",
                 DispatchRejection.ProvisionsExceedCarryCapacity => "The requested provisions exceed what these units can carry.",
@@ -770,6 +835,11 @@ public static class ArmyEndpoints
                 DispatchRejection.NoCampAtDestination => "No wildlife camp stands on the destination hex.",
                 DispatchRejection.HuntRequiresLandUnits => "A fleet needs land troops aboard to hunt a camp on land.",
                 DispatchRejection.HuntRequiresFleet => "Only ships can hunt a camp at sea (the whale road); land units cannot reach it.",
+                DispatchRejection.WrongCampBuilderCount =>
+                    $"A beach camp mission requires exactly {BeachCamp.RequiredBuilders} camp builders, no more, no fewer.",
+                DispatchRejection.CampSiteNotSandShore => "A beach camp can only be set up on a sand hex on the shore.",
+                DispatchRejection.CampSiteNotFree =>
+                    "That hex is taken: a building, a settlement, a wildlife camp or a giant stands on it.",
                 _ => "Refused.",
             },
             Status = StatusCodes.Status409Conflict,

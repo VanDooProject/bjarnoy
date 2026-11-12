@@ -9,8 +9,8 @@ import { DOUBLE_TAP_SLOP_PX } from '../src/lib/map/doubleTap';
 /**
  * Issue: mobile army dispatch. Phones (<=768px) get no ArmyPanel — a 260px
  * status card is too much of a small screen — so dispatching/tracking
- * armies has to work entirely through the ring's "Send army here"/"Attack"/
- * "Support" bubble, the new `MobileDispatchSheet`, and QueueDrawer's Armies
+ * armies has to work entirely through the ring's "Send army here"/"Attack"
+ * bubble, the new `MobileDispatchSheet`, and QueueDrawer's Armies
  * section instead. Store state is seeded via `__demoWorld` the same way
  * army-overlay.spec.ts and queue-drawer.spec.ts do — demo mode has no
  * backend to dispatch against, so nothing overwrites what a test puts in.
@@ -82,7 +82,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
 
     await ring.action('Send army here').click();
     // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
-    await page.locator('.send-picker [data-source="home"] .send-row-head').click();
+    await page.locator('.send-picker [data-source^="home:"] .send-row-head').click();
 
     const sheet = page.locator('.dispatch-sheet');
     await expect(sheet).toBeVisible();
@@ -196,7 +196,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
 
     await ring.action('Attack').click();
     // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
-    await page.locator('.send-picker [data-source="home"] .send-row-head').click();
+    await page.locator('.send-picker [data-source^="home:"] .send-row-head').click();
 
     await expect(page.locator('.dispatch-sheet')).toBeVisible();
     const draft = await demoWorld(page).then((w) => w.dispatchDraft);
@@ -231,7 +231,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await settlement.clickHex(hex);
     await ring.action('Send army here').click();
     // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
-    await page.locator('.send-picker [data-source="home"] .send-row-head').click();
+    await page.locator('.send-picker [data-source^="home:"] .send-row-head').click();
 
     const sheet = page.locator('.dispatch-sheet');
     await expect(sheet).toBeVisible();

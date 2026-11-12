@@ -6,6 +6,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -103,8 +104,7 @@ public sealed class ProfileEndpointsTests(SqliteApiFixture fixture) : IClassFixt
         var worldResponse = await _fixture.Factory.CreateWorldAsync(
             UniqueName("world"), seed: 777, radius: 30, maxPlayers: 100, cancellationToken: Ct);
 
-        var islandsResponse = await client.GetAsync($"/api/v1/worlds/{worldResponse.Id}/islands", Ct);
-        var islands = await islandsResponse.ReadStrictAsync<List<IslandResponse>>(Ct);
+        var islands = await client.GetFullIslandsAsync(worldResponse.Id, Ct);
         var island = islands.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 

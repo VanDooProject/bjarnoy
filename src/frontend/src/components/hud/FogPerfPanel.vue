@@ -26,6 +26,7 @@
 // object like this without pulling Vue into the renderer.
 import { onMounted, onUnmounted, reactive, computed } from 'vue';
 import DebugPanel from './DebugPanel.vue';
+import DebugPanelLegend from './DebugPanelLegend.vue';
 import { fogPerfStats, type FogPerfStats } from '../../lib/map/HexMapRenderer';
 // Read-only here: where the last bake ran, so the row above can explain its own
 // zero (see waterMaskNote). WaterPerfPanel owns presenting the rest of these.
@@ -254,11 +255,11 @@ const openSeaSkipped = computed(() =>
         <span>{{ stats.maskVersion ?? '—' }}</span>
       </div>
     </div>
-    <div class="legend">
+    <DebugPanelLegend>
       Hatched sub-row bars are hex counts, not timings — they show a row's <em>share of the viewport</em>, not a
       slice of its ms. `shaderPassMs`/`cacheHitRate` (real §2.8 stats — the fog shader's own GPU cost, and the
       server-side compute cache's hit rate) aren't measurable yet and are left off rather than faked.
-    </div>
+    </DebugPanelLegend>
   </DebugPanel>
 </template>
 
@@ -373,11 +374,5 @@ const openSeaSkipped = computed(() =>
   font-size: 11px;
   color: var(--muted);
   padding: 2px 0;
-}
-.legend {
-  margin-top: 6px;
-  font-size: 10.5px;
-  line-height: 1.4;
-  color: var(--muted);
 }
 </style>

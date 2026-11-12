@@ -108,7 +108,7 @@ internal static partial class RiverGenerator
     }
 
     /// <summary>A green island's rivers together with the bogland (lakes, creeks, moss) placed among them.</summary>
-    internal sealed record Result(IReadOnlyList<RiverTile> Rivers, IReadOnlyList<BogTile> Bogs);
+    internal sealed record Result(IReadOnlyList<RiverTile> Rivers, IReadOnlyList<BogTile> Bogs, IReadOnlyList<HexCoord> InlandLakes);
 
     public static IReadOnlyList<RiverTile> Generate(
         IReadOnlyList<HexCoord> islandTiles,
@@ -158,7 +158,7 @@ internal static partial class RiverGenerator
 
         if (wasted || !allowConfluence)
         {
-            return new Result(GenerateLegacy(islandTiles, land, islandLand, depthAt, isLand, options, seed, wasted, allowConfluence), []);
+            return new Result(GenerateLegacy(islandTiles, land, islandLand, depthAt, isLand, options, seed, wasted, allowConfluence), [], []);
         }
 
         return GenerateGreen(islandTiles, land, islandLand, depthAt, isLand, options, seed, stats);
@@ -236,7 +236,7 @@ internal static partial class RiverGenerator
         if (guaranteeOnly && !bogs.GuaranteeApplies)
         {
             bogs.FillHoles(null);
-            return new Result([], bogs.Classify());
+            return new Result([], bogs.Classify(), bogs.InlandLakeTiles());
         }
 
         var drainage = new Drainage(islandTiles, land, riverLand, options, seed, bogs.PocketRing);
@@ -343,7 +343,7 @@ internal static partial class RiverGenerator
             stats);
         var nodes = BuildRiverTiles(bp);
         var rivers = AssignWidths(nodes, seed, stats, bp.RequireRiver);
-        return new Result(rivers, bogTiles);
+        return new Result(rivers, bogTiles, bogs.InlandLakeTiles());
     }
 
     /// <summary>What a legacy walk ended on.</summary>

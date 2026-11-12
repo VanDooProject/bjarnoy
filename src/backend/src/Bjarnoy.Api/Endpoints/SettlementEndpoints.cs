@@ -922,8 +922,8 @@ public static class SettlementEndpoints
         BuildRejection.RequiredBuildingTooLow => "A required building is not high enough level yet.",
         BuildRejection.TowerLimitReached =>
             "You already hold as many towers as your longhouse level allows. Upgrade the longhouse to raise the limit.",
-        BuildRejection.StorageHouseTooLow =>
-            "Raise your storage houses before building another: 1 at level 10, then 2 at 15, 3 at 20, 4 at 25.",
+        BuildRejection.GreatStorehouseNeedsStorageHouses =>
+            "Max out more storage houses first: each Great Storehouse needs one more Storage House at level 25 than you have Great Storehouses.",
         BuildRejection.ShrineGodAlreadyOnIsland => "That god already has a shrine on this island.",
         BuildRejection.SettlementAlreadyHasShrine => "This settlement already has a shrine.",
         BuildRejection.PalisadeWouldBranch =>
@@ -945,6 +945,7 @@ public static class SettlementEndpoints
         QuestRejection.UnknownQuest => "There is no such quest.",
         QuestRejection.AlreadyClaimed => "This quest's reward was already claimed.",
         QuestRejection.NotCompleted => "This quest is not completed yet.",
+        QuestRejection.NotFirstSettlement => "Quests are only available on your first settlement.",
         _ => "Refused.",
     };
 

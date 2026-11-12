@@ -62,7 +62,7 @@ public class EconomyDesignTests
         var covered = Ladder.Select(l => l.Type).ToHashSet();
 
         Assert.Equal(
-            BuildingCatalogue.AllTypes.Where(t => t != BuildingType.Longhouse).ToHashSet(),
+            BuildingCatalogue.AllTypes.Where(t => t is not (BuildingType.Longhouse or BuildingType.BeachCamp)).ToHashSet(),
             covered);
     }
 
@@ -94,12 +94,12 @@ public class EconomyDesignTests
     }
 
     [Fact]
-    public void A_buildings_level_can_never_exceed_the_longhouse_level_it_needs_except_for_storage_capped_producers()
+    public void A_buildings_level_can_never_exceed_the_longhouse_level_it_needs_except_for_storage_capped_producers_and_the_storage_house()
     {
         foreach (var type in BuildingCatalogue.AllTypes.Where(t => t != BuildingType.Longhouse))
         {
             var unlock = BuildingCatalogue.UnlockLevel(type);
-            var producer = BuildingCatalogue.StorageCappedProducers.Contains(type);
+            var producer = BuildingCatalogue.LonghouseUncappedTypes.Contains(type);
             for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
             {
                 Assert.Equal(
@@ -124,6 +124,18 @@ public class EconomyDesignTests
                 Assert.True(capacity.Covers(BuildingCatalogue.Get(type, level).Cost), $"{type} level {level} cannot be stored");
             }
         }
+    }
+
+    [Fact]
+    public void The_top_great_storehouse_level_fits_in_base_plus_a_maxed_longhouse_three_maxed_storage_houses_and_a_level_9_great_storehouse()
+    {
+        var storageHouse = BuildingCatalogue.Get(BuildingType.StorageHouse, BuildingCatalogue.MaxLevelFor(BuildingType.StorageHouse));
+        var longhouse = BuildingCatalogue.Get(BuildingType.Longhouse, BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse));
+        var top = BuildingCatalogue.MaxLevelFor(BuildingType.GreatStorehouse);
+        var capacity = BuildingCatalogue.BaseStorageCapacity + longhouse.StorageCapacity + 3 * storageHouse.StorageCapacity
+            + BuildingCatalogue.Get(BuildingType.GreatStorehouse, top - 1).StorageCapacity;
+
+        Assert.True(capacity.Covers(BuildingCatalogue.Get(BuildingType.GreatStorehouse, top).Cost), "the top Great Storehouse level cannot be stored");
     }
 
     [Fact]
@@ -185,7 +197,7 @@ public class EconomyDesignTests
     [InlineData(BuildingType.Sawmill, 20)]
     [InlineData(BuildingType.CropMill, 20)]
     [InlineData(BuildingType.Hammerschmiede, 20)]
-    [InlineData(BuildingType.Tower, 10)]
+    [InlineData(BuildingType.Tower, 5)]
     [InlineData(BuildingType.GreatStorehouse, 10)]
     [InlineData(BuildingType.ShrineOfThor, 5)]
     [InlineData(BuildingType.ShrineOfFreyja, 5)]
@@ -204,52 +216,296 @@ public class EconomyDesignTests
     [Fact]
     public void Producer_cost_output_and_time_follow_the_design_formulas()
     {
-        var one = BuildingCatalogue.Get(BuildingType.Lumberjack, 1);
-        var ten = BuildingCatalogue.Get(BuildingType.Lumberjack, 10);
+        // The Lumberjack is a start building (no brick before level 6); the Farm shows the plain producer cost from level 4 on
+        // (levels 1 to 3 are discounted, see The_first_three_producer_levels_cost_a_discounted_share_of_the_formula).
+        var one = BuildingCatalogue.Get(BuildingType.Farm, 1);
+        var ten = BuildingCatalogue.Get(BuildingType.Farm, 10);
 
-        Assert.Equal(new ResourceAmounts(50, 40, 15, 0), one.Cost);
-        Assert.Equal(40, one.ProductionPerHour.Wood, 6);
-        Assert.Equal(TimeSpan.FromMinutes(3), one.BuildDuration);
+        Assert.Equal(new ResourceAmounts(34, 17, 5, 0), one.Cost);
+        Assert.Equal(12, one.ProductionPerHour.Food, 6);
+        Assert.Equal(TimeSpan.FromMinutes(1), one.BuildDuration);
 
-        Assert.Equal(50 * Math.Pow(1.30, 9), ten.Cost.Wood, 6);
-        Assert.Equal(40 * Math.Pow(1.20, 9), ten.ProductionPerHour.Wood, 6);
-        Assert.Equal(TimeSpan.FromSeconds(Math.Round(180 * Math.Pow(1.33, 9))), ten.BuildDuration);
+        Assert.Equal(BuildingCatalogue.NiceRound(57 * Math.Pow(1.30, 9)), ten.Cost.Wood, 6);
+        Assert.Equal(BuildingCatalogue.NiceRound(29 * Math.Pow(1.30, 9)), ten.Cost.Stone, 6);
+        Assert.Equal(BuildingCatalogue.BuildTime(BuildingType.Farm, 10), ten.BuildDuration);
     }
 
     [Fact]
-    public void The_longhouse_costs_grow_faster_and_its_output_is_linear()
+    public void Producer_output_is_increment_geometric_each_level_adds_1_point_2_times_the_last_increment()
+    {
+        var wood = Enumerable.Range(1, 10).Select(l => BuildingCatalogue.Get(BuildingType.Lumberjack, l).ProductionPerHour.Wood).ToArray();
+
+        Assert.Equal(8, wood[0], 6);
+        for (var level = 2; level <= 10; level++)
+        {
+            Assert.Equal(8 * Math.Pow(1.20, level - 1), wood[level - 1] - wood[level - 2], 6);
+            Assert.Equal(8 * (Math.Pow(1.20, level) - 1) / 0.20, wood[level - 1], 6);
+        }
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Lumberjack, 8)]
+    [InlineData(BuildingType.Quarry, 8)]
+    [InlineData(BuildingType.ClayBrickworks, 8)]
+    [InlineData(BuildingType.ReindeerHerder, 8)]
+    [InlineData(BuildingType.Farm, 12)]
+    [InlineData(BuildingType.PumpkinFarm, 13)]
+    [InlineData(BuildingType.FishingHut, 16)]
+    [InlineData(BuildingType.BogOreWorks, 4)]
+    public void Each_producers_level_1_output_is_its_increment(BuildingType type, double increment)
+    {
+        Assert.Equal(increment, Sum(BuildingCatalogue.Get(type, 1).ProductionPerHour), 6);
+        Assert.Equal(increment * (Math.Pow(1.20, 6) - 1) / 0.20, Sum(BuildingCatalogue.Get(type, 6).ProductionPerHour), 6);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Longhouse)]
+    [InlineData(BuildingType.Tower)]
+    [InlineData(BuildingType.Lumberjack)]
+    [InlineData(BuildingType.ReindeerHerder)]
+    public void The_start_buildings_cost_no_brick_at_levels_1_to_5_and_the_normal_brick_from_level_6(BuildingType type)
+    {
+        for (var level = 1; level <= 5; level++)
+        {
+            var cost = BuildingCatalogue.Get(type, level).Cost;
+            Assert.Equal(0, cost.Stone);
+            Assert.True(cost.Wood > 0 || cost.Food > 0, $"{type} level {level} costs nothing at all");
+        }
+
+        // The Tower tops out at level 5, so it never pays brick at all.
+        if (BuildingCatalogue.MaxLevelFor(type) >= 6)
+        {
+            Assert.True(BuildingCatalogue.Get(type, 6).Cost.Stone > 0);
+        }
+    }
+
+    [Fact]
+    public void The_clay_brickworks_costs_no_brick_at_level_1_only()
+    {
+        Assert.Equal(0, BuildingCatalogue.Get(BuildingType.ClayBrickworks, 1).Cost.Stone);
+        Assert.Equal(BuildingCatalogue.NiceRound(10 * 1.30 * 0.75), BuildingCatalogue.Get(BuildingType.ClayBrickworks, 2).Cost.Stone);
+    }
+
+    [Fact]
+    public void The_start_buildings_keep_their_other_resources_at_the_brick_free_levels()
+    {
+        Assert.Equal(new ResourceAmounts(10, 0, 18, 0), BuildingCatalogue.Get(BuildingType.Lumberjack, 1).Cost);
+        Assert.Equal(new ResourceAmounts(120, 0, 60, 0), BuildingCatalogue.Get(BuildingType.Longhouse, 1).Cost);
+        Assert.Equal(new ResourceAmounts(140, 0, 30, 0), BuildingCatalogue.Get(BuildingType.Tower, 1).Cost);
+    }
+
+    [Fact]
+    public void The_longhouse_costs_grow_faster_and_its_output_is_linear_wood_and_food_only()
     {
         var one = BuildingCatalogue.Get(BuildingType.Longhouse, 1);
         var five = BuildingCatalogue.Get(BuildingType.Longhouse, 5);
+        var six = BuildingCatalogue.Get(BuildingType.Longhouse, 6);
 
-        Assert.Equal(new ResourceAmounts(120, 100, 60, 0), one.Cost);
-        Assert.Equal(120 * Math.Pow(1.34, 4), five.Cost.Wood, 6);
-        Assert.Equal(TimeSpan.FromSeconds(Math.Round(90 * Math.Pow(1.33, 4))), five.BuildDuration);
-        Assert.Equal(new ResourceAmounts(15 * 5, 12 * 5, 15 * 5, 2 * 5), five.ProductionPerHour);
+        Assert.Equal(new ResourceAmounts(120, 0, 60, 0), one.Cost);
+        Assert.Equal(BuildingCatalogue.NiceRound(120 * Math.Pow(1.34, 4)), five.Cost.Wood, 6);
+        Assert.Equal(BuildingCatalogue.NiceRound(100 * Math.Pow(1.34, 5)), six.Cost.Stone, 6);
+        Assert.Equal(TimeSpan.FromMinutes(32), five.BuildDuration);
+        Assert.Equal(new ResourceAmounts(15 * 5, 0, 15 * 5, 0), five.ProductionPerHour);
         Assert.Equal(ResourceAmounts.Uniform(250 * 5), five.StorageCapacity);
     }
 
     [Fact]
-    public void Longhouse_2_builds_in_about_two_minutes_so_the_tutorial_upgrade_is_quick()
+    public void The_longhouse_makes_no_brick_and_no_iron_at_any_level()
+    {
+        for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse); level++)
+        {
+            var production = BuildingCatalogue.Get(BuildingType.Longhouse, level).ProductionPerHour;
+            Assert.Equal(0, production.Stone);
+            Assert.Equal(0, production.Iron);
+        }
+    }
+
+    [Fact]
+    public void A_new_settlement_has_no_iron_income_before_a_bog_ore_works_stands()
+    {
+        Assert.Equal(0, BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]).ProductionPerHour.Iron);
+    }
+
+    [Fact]
+    public void The_tower_tops_out_at_level_5()
+    {
+        Assert.Equal(5, BuildingCatalogue.MaxLevelFor(BuildingType.Tower));
+        Assert.Null(BuildingCatalogue.TryGet(BuildingType.Tower, 6));
+    }
+
+    [Fact]
+    public void The_great_storehouse_costs_4500_wood_and_3000_brick_and_holds_a_geometric_50000()
+    {
+        Assert.Equal(new ResourceAmounts(4500, 3000, 0, 0), BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1).Cost);
+        Assert.Equal(ResourceAmounts.Uniform(50000), BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1).StorageCapacity);
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(48, 48)]
+    [InlineData(47.6, 48)]
+    [InlineData(99.4, 99)]
+    [InlineData(148, 150)]
+    [InlineData(144, 140)]
+    [InlineData(999, 1000)]
+    [InlineData(1458, 1450)]
+    [InlineData(1476, 1500)]
+    [InlineData(9990, 10000)]
+    [InlineData(12345, 12500)]
+    [InlineData(27140, 27000)]
+    [InlineData(123456, 125000)]
+    public void Nice_rounding_steps_by_the_number_of_digits(double value, double expected)
+    {
+        Assert.Equal(expected, BuildingCatalogue.NiceRound(value));
+    }
+
+    [Fact]
+    public void Every_building_cost_is_nice_rounded()
+    {
+        foreach (var type in BuildingCatalogue.AllTypes)
+        {
+            for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
+            {
+                var cost = BuildingCatalogue.Get(type, level).Cost;
+                foreach (var amount in new[] { cost.Wood, cost.Stone, cost.Food, cost.Iron })
+                {
+                    Assert.Equal(BuildingCatalogue.NiceRound(amount), amount);
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void Longhouse_2_builds_in_under_three_minutes_so_the_tutorial_upgrade_is_quick()
     {
         var two = BuildingCatalogue.Get(BuildingType.Longhouse, 2).BuildDuration;
 
-        Assert.InRange(two.TotalMinutes, 1.9, 2.1);
+        Assert.Equal(TimeSpan.FromSeconds(170), two);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Longhouse, 26)]
+    [InlineData(BuildingType.Lumberjack, 20)]
+    [InlineData(BuildingType.ReindeerHerder, 20)]
+    [InlineData(BuildingType.Farm, 22)]
+    [InlineData(BuildingType.Quarry, 22)]
+    [InlineData(BuildingType.BogOreWorks, 24)]
+    [InlineData(BuildingType.StorageHouse, 20)]
+    public void Early_curve_is_1_then_2_83_then_8_minutes_doubles_to_level_6_and_ends_at_the_top_hours(BuildingType type, double topHours)
+    {
+        Assert.Equal(TimeSpan.FromMinutes(1), BuildingCatalogue.Get(type, 1).BuildDuration);
+        Assert.Equal(TimeSpan.FromSeconds(170), BuildingCatalogue.Get(type, 2).BuildDuration);
+        Assert.Equal(TimeSpan.FromMinutes(8), BuildingCatalogue.Get(type, 3).BuildDuration);
+        Assert.Equal(TimeSpan.FromMinutes(16), BuildingCatalogue.Get(type, 4).BuildDuration);
+        Assert.Equal(TimeSpan.FromMinutes(32), BuildingCatalogue.Get(type, 5).BuildDuration);
+        Assert.Equal(TimeSpan.FromMinutes(64), BuildingCatalogue.Get(type, 6).BuildDuration);
+        Assert.Equal(TimeSpan.FromHours(topHours), BuildingCatalogue.Get(type, BuildingCatalogue.MaxLevelFor(type)).BuildDuration);
+    }
+
+    [Fact]
+    public void Early_curve_tail_is_log_like_each_step_adds_less_than_the_one_before()
+    {
+        foreach (var type in new[] { BuildingType.Longhouse, BuildingType.Farm, BuildingType.StorageHouse })
+        {
+            var max = BuildingCatalogue.MaxLevelFor(type);
+            var times = Enumerable.Range(6, max - 5).Select(l => BuildingCatalogue.Get(type, l).BuildDuration.TotalSeconds).ToArray();
+            for (var i = 2; i < times.Length; i++)
+            {
+                // Whole-second rounding can blur a step by a second at most.
+                Assert.True(times[i] - times[i - 1] < times[i - 1] - times[i - 2] + 1, $"{type} level {6 + i}");
+            }
+        }
+
+        var farm = (int)Math.Round(BuildingCatalogue.Get(BuildingType.Farm, 12).BuildDuration.TotalMinutes);
+        var expected = 64 + (22 * 60 - 64) * BuildingCatalogue.Bend(6 / 19.0, 3);
+        Assert.Equal((int)Math.Round(expected), farm);
+    }
+
+    [Fact]
+    public void Tech_curve_runs_straight_from_the_level_1_time_to_the_top_time()
+    {
+        Assert.Equal(TimeSpan.FromMinutes(10), BuildingCatalogue.Get(BuildingType.Tower, 1).BuildDuration);
+        Assert.Equal(TimeSpan.FromHours(12), BuildingCatalogue.Get(BuildingType.Tower, 5).BuildDuration);
+        Assert.Equal(TimeSpan.FromMinutes((10 + 12 * 60) / 2.0), BuildingCatalogue.Get(BuildingType.Tower, 3).BuildDuration);
+        Assert.Equal(TimeSpan.FromMinutes(30), BuildingCatalogue.Get(BuildingType.Bridge, 1).BuildDuration);
+        Assert.Equal(TimeSpan.FromHours(3), BuildingCatalogue.Get(BuildingType.Bridge, 4).BuildDuration);
+        Assert.Equal(TimeSpan.FromHours(2), BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1).BuildDuration);
+        Assert.Equal(TimeSpan.FromHours(30), BuildingCatalogue.Get(BuildingType.GreatStorehouse, 10).BuildDuration);
+        Assert.Equal(TimeSpan.FromHours(6), BuildingCatalogue.Get(BuildingType.ShrineOfThor, 1).BuildDuration);
+        Assert.Equal(TimeSpan.FromHours(24), BuildingCatalogue.Get(BuildingType.OdinStatue, 5).BuildDuration);
+        var mid = BuildingCatalogue.Get(BuildingType.Barracks, 10).BuildDuration.TotalMinutes;
+        Assert.Equal(15 + (22 * 60 - 15) * 9 / 19.0, mid, 0);
+    }
+
+    [Fact]
+    public void Every_building_has_a_build_time_curve_that_rises_with_the_level()
+    {
+        // The Beach Camp a sea landing sets up is never built: it has one level and stands at once.
+        foreach (var type in BuildingCatalogue.AllTypes.Where(t => t != BuildingType.BeachCamp))
+        {
+            var previous = TimeSpan.Zero;
+            for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
+            {
+                var duration = BuildingCatalogue.Get(type, level).BuildDuration;
+                Assert.True(duration > previous, $"{type} level {level}");
+                previous = duration;
+            }
+        }
     }
 
     [Fact]
     public void Storage_capacity_curves_are_the_geometric_series_totals()
     {
-        Assert.Equal(600, BuildingCatalogue.Get(BuildingType.StorageHouse, 1).StorageCapacity.Wood, 6);
+        Assert.Equal(300, BuildingCatalogue.Get(BuildingType.StorageHouse, 1).StorageCapacity.Wood, 6);
         Assert.Equal(
-            600 * (Math.Pow(1.22, 7) - 1) / 0.22,
+            300 * (Math.Pow(1.22, 7) - 1) / 0.22,
             BuildingCatalogue.Get(BuildingType.StorageHouse, 7).StorageCapacity.Stone,
             6);
-        Assert.Equal(2500, BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1).StorageCapacity.Food, 6);
+        Assert.Equal(50000, BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1).StorageCapacity.Food, 6);
         Assert.Equal(
-            2500 * (Math.Pow(1.30, 10) - 1) / 0.30,
+            50000 * (Math.Pow(1.25, 10) - 1) / 0.25,
             BuildingCatalogue.Get(BuildingType.GreatStorehouse, 10).StorageCapacity.Iron,
             6);
+    }
+
+    [Fact]
+    public void A_late_buildings_level_1_costs_between_10_and_40_percent_of_the_longhouse_upgrade_at_its_unlock_level()
+    {
+        // Excluded: Storage House, Tower, Palisade and Gate are cheap infrastructure that unlock early and is built in numbers,
+        // the Bridge has its own per-level cost table, the Great Storehouse is priced by its storage, not by this share, and the
+        // Beach Camp a sea landing sets up is never built and costs nothing.
+        BuildingType[] excluded =
+        [
+            BuildingType.StorageHouse, BuildingType.Tower, BuildingType.Palisade, BuildingType.PalisadeGate,
+            BuildingType.Bridge, BuildingType.GreatStorehouse, BuildingType.BeachCamp,
+        ];
+        var outside = new List<string>();
+        foreach (var type in BuildingCatalogue.AllTypes.Except(excluded).Except(Producers).Where(t => t != BuildingType.Longhouse))
+        {
+            var unlock = BuildingCatalogue.UnlockLevel(type);
+            var share = Sum(BuildingCatalogue.Get(type, 1).Cost) / Sum(BuildingCatalogue.Get(BuildingType.Longhouse, unlock).Cost);
+            if (share is < 0.10 or > 0.40)
+            {
+                outside.Add($"{type}: level 1 is {share:P0} of Longhouse {unlock}");
+            }
+        }
+
+        Assert.True(outside.Count == 0, string.Join("; ", outside));
+    }
+
+    [Fact]
+    public void Each_producers_own_resource_is_the_smallest_share_of_its_level_1_cost()
+    {
+        // The Bog-ore works produce iron, which no building costs, so there is no share to compare. Read at level 6: the start
+        // buildings and the Clay Brickworks hide their stone at level 1, and every level grows by the same factor.
+        foreach (var type in Producers.Where(t => t != BuildingType.BogOreWorks))
+        {
+            var produced = BuildingCatalogue.Get(type, 1).ProductionPerHour;
+            var cost = BuildingCatalogue.Get(type, 6).Cost;
+            var own = produced.Wood > 0 ? cost.Wood : produced.Stone > 0 ? cost.Stone : cost.Food;
+
+            Assert.True(own <= Math.Min(cost.Wood, Math.Min(cost.Stone, cost.Food)), $"{type}: own resource {own} is not the cheapest of {cost}");
+        }
     }
 
     [Fact]
@@ -271,22 +527,35 @@ public class EconomyDesignTests
     }
 
     [Fact]
-    public void Every_longhouse_level_can_be_afforded_from_the_storage_the_previous_level_gives_plus_two_max_storage_houses()
+    public void Every_longhouse_level_can_be_stored_with_at_most_15_maxed_storage_houses_and_as_many_maxed_great_storehouses()
     {
+        // The n-th Great Storehouse needs n maxed Storage Houses, so storage grows in pairs of the two.
         var longhouseMax = BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse);
         var storageMax = BuildingCatalogue.MaxLevelFor(BuildingType.StorageHouse);
+        var greatMax = BuildingCatalogue.MaxLevelFor(BuildingType.GreatStorehouse);
 
         for (var level = 2; level <= longhouseMax; level++)
         {
             var cost = BuildingCatalogue.Get(BuildingType.Longhouse, level).Cost;
-            var (_, capacity) = BuildingCatalogue.Totals(
-            [
-                (BuildingType.Longhouse, level - 1),
-                (BuildingType.StorageHouse, storageMax),
-                (BuildingType.StorageHouse, storageMax),
-            ]);
+            var pairs = 0;
+            while (pairs <= 15)
+            {
+                var standing = new List<(BuildingType, int)> { (BuildingType.Longhouse, level - 1) };
+                for (var i = 0; i < pairs; i++)
+                {
+                    standing.Add((BuildingType.StorageHouse, storageMax));
+                    standing.Add((BuildingType.GreatStorehouse, greatMax));
+                }
 
-            Assert.True(capacity.Covers(cost), $"Longhouse {level} ({cost}) does not fit in {capacity}");
+                if (BuildingCatalogue.Totals(standing).Capacity.Covers(cost))
+                {
+                    break;
+                }
+
+                pairs++;
+            }
+
+            Assert.True(pairs <= 15, $"Longhouse {level} ({cost}) needs more than 15 pairs of maxed storage buildings");
         }
     }
 
@@ -344,7 +613,7 @@ public class EconomyDesignTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = buildings,
-            Resources = ResourcePool.Create(ResourceAmounts.Uniform(1_000_000), production, capacity, T0),
+            Resources = ResourcePool.Create(ResourceAmounts.Uniform(1_000_000), production, capacity + ResourceAmounts.Uniform(1_000_000), T0),
         };
     }
 
@@ -361,7 +630,7 @@ public class EconomyDesignTests
 
         Assert.Equal(BuildRejection.NewPlacementDisabled, decision.Rejection);
         Assert.Null(decision.Order);
-        Assert.Equal([BuildingType.Quarry], BuildingCatalogue.NewPlacementDisabled);
+        Assert.Equal([BuildingType.Quarry, BuildingType.BeachCamp], BuildingCatalogue.NewPlacementDisabled.OrderBy(t => t == BuildingType.BeachCamp));
     }
 
     [Fact]
@@ -568,104 +837,118 @@ public class EconomyDesignTests
         Assert.Equal(10, SettlementWith(25, (BuildingType.OdinStatue, 5)).VisionBonusRings);
     }
 
+    /// <summary>Equal within the rounding of a displayed cost (3%).</summary>
+    private static void AssertClose(double expected, double actual) => Assert.InRange(actual, expected * 0.97, expected * 1.03);
+
+    private static BuildDecision PlanGreat(Settlement settlement, HexCoord coord) =>
+        settlement.PlanBuild(BuildingType.GreatStorehouse, coord, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 5);
+
     [Fact]
-    public void The_first_storage_house_is_never_refused_by_the_level_10_rule()
+    public void Any_number_of_storage_houses_can_be_placed_whatever_their_levels()
     {
-        Assert.True(PlanStorage(SettlementWith(1), new HexCoord(1, 0)).Accepted);
+        var settlement = SettlementWith(1,
+            (BuildingType.StorageHouse, 1), (BuildingType.StorageHouse, 1), (BuildingType.StorageHouse, 1),
+            (BuildingType.StorageHouse, 1), (BuildingType.StorageHouse, 1), (BuildingType.StorageHouse, 1));
+
+        var decision = PlanStorage(settlement, new HexCoord(1, 0));
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
 
     [Fact]
-    public void A_second_storage_house_is_refused_while_the_first_is_below_level_10()
+    public void A_storage_house_level_is_not_capped_by_the_longhouse()
     {
-        var settlement = SettlementWith(12, (BuildingType.StorageHouse, 9));
+        Assert.Equal(1, BuildingCatalogue.RequiredLonghouseLevelFor(BuildingType.StorageHouse, 25));
+        Assert.Equal(1, BuildingCatalogue.Get(BuildingType.StorageHouse, 25).RequiredLonghouseLevel);
 
-        Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(settlement, new HexCoord(1, 0)).Rejection);
+        var settlement = SettlementWith(1, (BuildingType.StorageHouse, 24));
+        var decision = PlanStorage(settlement, new HexCoord(2, 0));
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        // Non-uncapped buildings still follow the Longhouse level.
+        Assert.Equal(5, BuildingCatalogue.RequiredLonghouseLevelFor(BuildingType.Barracks, 5));
+        Assert.Equal(10, BuildingCatalogue.RequiredLonghouseLevelFor(BuildingType.Barracks, 10));
+        Assert.Equal(15, BuildingCatalogue.RequiredLonghouseLevelFor(BuildingType.GreatStorehouse, 3));
     }
 
     [Fact]
-    public void A_queued_first_storage_house_already_blocks_a_second()
+    public void The_first_great_storehouse_needs_a_level_25_storage_house()
     {
-        var settlement = SettlementWith(1);
-        var first = PlanStorage(settlement, new HexCoord(1, 0));
+        Assert.Equal(25, Assert.Single(BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1).Prerequisites).Level);
+
+        var low = SettlementWith(15, (BuildingType.StorageHouse, 24));
+        var high = SettlementWith(15, (BuildingType.StorageHouse, 25));
+
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, PlanGreat(low, new HexCoord(1, 0)).Rejection);
+        Assert.True(PlanGreat(high, new HexCoord(1, 0)).Accepted);
+    }
+
+    [Fact]
+    public void The_nth_great_storehouse_needs_n_storage_houses_at_level_25()
+    {
+        var oneMaxed = SettlementWith(15, (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 24), (BuildingType.GreatStorehouse, 1));
+        var twoMaxed = SettlementWith(15, (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.GreatStorehouse, 1));
+        var twoGreat = SettlementWith(15, (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.GreatStorehouse, 1), (BuildingType.GreatStorehouse, 1));
+
+        Assert.Equal(BuildRejection.GreatStorehouseNeedsStorageHouses, PlanGreat(oneMaxed, new HexCoord(1, 0)).Rejection);
+        Assert.True(PlanGreat(twoMaxed, new HexCoord(1, 0)).Accepted);
+        Assert.Equal(BuildRejection.GreatStorehouseNeedsStorageHouses, PlanGreat(twoGreat, new HexCoord(1, 0)).Rejection);
+    }
+
+    [Fact]
+    public void A_queued_great_storehouse_counts_toward_the_great_storehouses_held()
+    {
+        var settlement = SettlementWith(15, (BuildingType.StorageHouse, 25));
+        var first = PlanGreat(settlement, new HexCoord(1, 0));
         Assert.True(first.Accepted);
         var queued = settlement.Enqueue(first.Order!, T0);
 
-        Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(queued, new HexCoord(1, 1)).Rejection);
+        Assert.Equal(BuildRejection.GreatStorehouseNeedsStorageHouses, PlanGreat(queued, new HexCoord(1, 1)).Rejection);
     }
 
     [Fact]
-    public void A_second_storage_house_is_allowed_once_one_stands_at_level_10()
+    public void Upgrading_a_great_storehouse_is_never_refused_by_the_count_rule()
     {
-        var settlement = SettlementWith(12, (BuildingType.StorageHouse, 10));
+        var settlement = SettlementWith(15, (BuildingType.StorageHouse, 25), (BuildingType.GreatStorehouse, 1), (BuildingType.GreatStorehouse, 1));
 
-        Assert.True(PlanStorage(settlement, new HexCoord(1, 0)).Accepted);
+        var decision = PlanGreat(settlement, new HexCoord(-1, 0));
+
+        Assert.NotEqual(BuildRejection.GreatStorehouseNeedsStorageHouses, decision.Rejection);
     }
 
     [Theory]
-    [InlineData(0, 0, 0)]
-    [InlineData(1, 1, 10)]
-    [InlineData(2, 2, 15)]
-    [InlineData(3, 3, 20)]
-    [InlineData(4, 4, 25)]
-    [InlineData(5, 4, 25)]
-    [InlineData(9, 4, 25)]
-    public void The_additional_storage_house_requirement_rises_with_the_houses_held(int existing, int count, int level)
+    [InlineData(BuildingType.Lumberjack, 16, 1, 0.6)]
+    [InlineData(BuildingType.Lumberjack, 16, 2, 0.75)]
+    [InlineData(BuildingType.Lumberjack, 16, 3, 0.9)]
+    [InlineData(BuildingType.ReindeerHerder, 52, 2, 0.75)]
+    [InlineData(BuildingType.Farm, 57, 1, 0.6)]
+    public void The_first_three_producer_levels_cost_a_discounted_share_of_the_formula(BuildingType type, double baseWood, int level, double factor)
     {
-        Assert.Equal((count, level), BuildingCatalogue.AdditionalStorageHouseRequirement(existing));
+        Assert.Equal(BuildingCatalogue.NiceRound(baseWood * Math.Pow(1.30, level - 1) * factor), BuildingCatalogue.Get(type, level).Cost.Wood);
+        // From level 4 on the full formula applies.
+        Assert.Equal(BuildingCatalogue.NiceRound(baseWood * Math.Pow(1.30, 3)), BuildingCatalogue.Get(type, 4).Cost.Wood);
     }
 
     [Fact]
-    public void A_third_storage_house_needs_two_at_level_15()
+    public void The_longhouse_cost_grows_1_34_to_level_10_and_1_60_from_level_11()
     {
-        var oneHigh = SettlementWith(25, (BuildingType.StorageHouse, 15), (BuildingType.StorageHouse, 14));
-        var bothHigh = SettlementWith(25, (BuildingType.StorageHouse, 15), (BuildingType.StorageHouse, 20));
-
-        Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(oneHigh, new HexCoord(1, 0)).Rejection);
-        Assert.True(PlanStorage(bothHigh, new HexCoord(1, 0)).Accepted);
+        double Wood(int l) => BuildingCatalogue.Get(BuildingType.Longhouse, l).Cost.Wood;
+        AssertClose(Wood(9) * 1.34, Wood(10));
+        AssertClose(Wood(10) * 1.60, Wood(11));
+        AssertClose(Wood(20) * 1.60, Wood(21));
     }
 
     [Fact]
-    public void A_fourth_storage_house_needs_three_at_level_20()
+    public void Storage_house_costs_grow_by_1_20_and_hold_300_at_level_1()
     {
-        var two = SettlementWith(25, (BuildingType.StorageHouse, 20), (BuildingType.StorageHouse, 20), (BuildingType.StorageHouse, 19));
-        var three = SettlementWith(25, (BuildingType.StorageHouse, 20), (BuildingType.StorageHouse, 21), (BuildingType.StorageHouse, 25));
-
-        Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(two, new HexCoord(1, 0)).Rejection);
-        Assert.True(PlanStorage(three, new HexCoord(1, 0)).Accepted);
+        Assert.Equal(new ResourceAmounts(90, 50, 0, 0), BuildingCatalogue.Get(BuildingType.StorageHouse, 1).Cost);
+        AssertClose(90 * Math.Pow(1.20, 9), BuildingCatalogue.Get(BuildingType.StorageHouse, 10).Cost.Wood);
+        Assert.Equal(300, BuildingCatalogue.Get(BuildingType.StorageHouse, 1).StorageCapacity.Wood, 6);
     }
 
     [Fact]
-    public void A_fifth_storage_house_needs_four_at_level_25_and_then_they_are_unlimited()
+    public void Great_storehouse_costs_grow_by_1_23()
     {
-        var threeMaxed = SettlementWith(25, (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 24));
-        var fourMaxed = SettlementWith(25, (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25));
-        var sixHouses = SettlementWith(25, (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 25), (BuildingType.StorageHouse, 1));
-
-        Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(threeMaxed, new HexCoord(1, 0)).Rejection);
-        Assert.True(PlanStorage(fourMaxed, new HexCoord(1, 0)).Accepted);
-        Assert.True(PlanStorage(sixHouses, new HexCoord(1, 1)).Accepted);
-    }
-
-    [Fact]
-    public void A_queued_new_storage_house_counts_toward_the_houses_held()
-    {
-        // One standing L10 house plus one queued new house = 2 held, so the third needs two at L15.
-        var settlement = SettlementWith(25, (BuildingType.StorageHouse, 10));
-        var second = PlanStorage(settlement, new HexCoord(1, 0));
-        Assert.True(second.Accepted);
-        var queued = settlement.Enqueue(second.Order!, T0);
-
-        Assert.Equal(BuildRejection.StorageHouseTooLow, PlanStorage(queued, new HexCoord(1, 1)).Rejection);
-    }
-
-    [Fact]
-    public void Upgrading_a_storage_house_is_never_refused_by_the_level_10_rule()
-    {
-        var settlement = SettlementWith(5, (BuildingType.StorageHouse, 1), (BuildingType.StorageHouse, 2));
-
-        var decision = PlanStorage(settlement, new HexCoord(-1, 0));
-
-        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        AssertClose(4500 * Math.Pow(1.23, 4), BuildingCatalogue.Get(BuildingType.GreatStorehouse, 5).Cost.Wood);
     }
 
     [Fact]

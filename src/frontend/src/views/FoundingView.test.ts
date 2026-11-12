@@ -46,9 +46,9 @@ describe('FoundingView', () => {
     const wrapper = await mountPage();
 
     const row = (n: number) => wrapper.get(`[data-settlement="${n}"]`).findAll('th, td').map((c) => c.text());
-    expect(row(2)).toEqual(['Settlement no. 2', '55,000']);
-    expect(row(3)).toEqual(['Settlement no. 3', '110,000']);
-    expect(row(5)).toEqual(['Settlement no. 5', '440,000']);
+    expect(row(2)).toEqual(['Settlement no. 2', '80,000']);
+    expect(row(3)).toEqual(['Settlement no. 3', '160,000']);
+    expect(row(5)).toEqual(['Settlement no. 5', '640,000']);
     wrapper.unmount();
   });
 
@@ -99,6 +99,13 @@ describe('FoundingView', () => {
     expect(sea).toContain('Each settler takes 1 slot aboard');
     expect(sea).toContain('slowest ship');
     expect(wrapper.find('#sea a[href="/docs/ships"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('points the sea section at the beach camp page', async () => {
+    const wrapper = await mountPage();
+
+    expect(wrapper.find('#sea a[href="/docs/beach-camp"]').exists()).toBe(true);
     wrapper.unmount();
   });
 

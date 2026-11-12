@@ -8,6 +8,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -58,8 +59,7 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
     {
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -406,8 +406,7 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
     private async Task<AuthResponse> JoinWorldWithSettlementAsync(Guid worldId)
     {
         using var fresh = Client();
-        var islands = await fresh.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await fresh.GetFullIslandsAsync(worldId, Ct);
 
         List<(int Q, int R)> taken;
         await using (var scope = _factory.Services.CreateAsyncScope())

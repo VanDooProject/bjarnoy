@@ -151,6 +151,20 @@ describe('QuestTray', () => {
     expect(mountTray().find('[data-testid="quest-overflow-note"]').exists()).toBe(false);
   });
 
+  it('shows premium days instead of resources for the register quest, claimable at once', () => {
+    const world = useWorldStore();
+    world.hud.quests = [
+      quest('register', { completed: true, reward: { wood: 0, stone: 0, food: 0, iron: 0 }, premiumDays: 14 }),
+      quest('longhouse2'),
+    ];
+
+    const wrapper = mountTray();
+
+    expect(wrapper.get('[data-testid="quest-premium-reward"]').text()).toBe('14 days of Premium');
+    expect(wrapper.get('[data-testid="quest-reward"]').find('svg, img').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="quest-claim"]').exists()).toBe(true);
+  });
+
   it('shows the translated rejection when a claim fails', async () => {
     const world = useWorldStore();
     world.hud.quests = all({ producers3: { completed: true } });

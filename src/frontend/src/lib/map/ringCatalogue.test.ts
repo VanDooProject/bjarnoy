@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, hexOccupant, cropAllowedHere, formatBuildTime, formatMissingResources, scaledBuildSeconds, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
+import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, hexOccupant, cropAllowedHere, formatBuildTime, formatMissingResources, scaledBuildSeconds, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, greatStorehouseLock, towerLimitLock } from './ringCatalogue';
 
 describe('scaledBuildSeconds', () => {
   it('divides the catalogue time by the world speed factor and applies Odin\'s Wisdom', () => {
@@ -50,26 +50,17 @@ describe('longhouseLock', () => {
   });
 });
 
-describe('storageHouseLock', () => {
-  it('states the requirement: 1 at L10, 2 at L15, 3 at L20, 4 at L25', () => {
-    expect(storageHouseLock(1, [1])).toBe('Needs 1 Storehouse at level 10');
-    expect(storageHouseLock(2, [15, 14])).toBe('Needs 2 Storehouses at level 15');
-    expect(storageHouseLock(3, [20, 20, 19])).toBe('Needs 3 Storehouses at level 20');
-    expect(storageHouseLock(4, [25, 25, 25, 24])).toBe('Needs 4 Storehouses at level 25');
-    expect(storageHouseLock(7, [25, 25, 25, 24, 1, 1, 1])).toBe('Needs 4 Storehouses at level 25');
+describe('greatStorehouseLock', () => {
+  it('states the requirement: the n-th Great Storehouse needs n Storehouses at level 25', () => {
+    expect(greatStorehouseLock(0, [24])).toBe('Needs 1 Storehouse at level 25');
+    expect(greatStorehouseLock(1, [25, 24])).toBe('Needs 2 Storehouses at level 25');
+    expect(greatStorehouseLock(2, [25, 25, 1, 1])).toBe('Needs 3 Storehouses at level 25');
   });
 
-  it('never locks the first storage house, nor once the requirement is met', () => {
-    expect(storageHouseLock(0, [])).toBeUndefined();
-    expect(storageHouseLock(1, [10])).toBeUndefined();
-    expect(storageHouseLock(2, [15, 15])).toBeUndefined();
-    expect(storageHouseLock(3, [25, 20, 20])).toBeUndefined();
-    expect(storageHouseLock(5, [25, 25, 25, 25, 1])).toBeUndefined();
-  });
-
-  it('counts a queued (not yet standing) house as held but not as meeting the level', () => {
-    // two held (one standing L10, one queued): the third needs two at L15
-    expect(storageHouseLock(2, [10])).toBe('Needs 2 Storehouses at level 15');
+  it('is open once enough Storehouses stand at level 25', () => {
+    expect(greatStorehouseLock(0, [25])).toBeUndefined();
+    expect(greatStorehouseLock(1, [25, 25])).toBeUndefined();
+    expect(greatStorehouseLock(3, [25, 25, 25, 25, 1])).toBeUndefined();
   });
 });
 
@@ -271,6 +262,20 @@ describe('buildingAllowedOnHex', () => {
     }
     // A coastal hut on land is not a thing: grass is not water (the caller filters non-coastal terrain separately).
     expect(buildingAllowedOnHex('fishinghut', { terrain: 'grass' })).toBe(false);
+  });
+
+  it('only the Fishing Hut stands on an inland-lake hex, and only one beside land', () => {
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'inlandlake', isCoastalWater: true })).toBe(true);
+    for (const type of ['dockyard', 'shrineofnjord', 'palisade', 'palisadegate', 'farm', 'tower']) {
+      expect(buildingAllowedOnHex(type, { terrain: 'inlandlake', isCoastalWater: true }), type).toBe(false);
+    }
+    // An interior inland-lake hex takes nothing, the Fishing Hut included.
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'inlandlake' })).toBe(false);
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'inlandlake', isCoastalWater: false })).toBe(false);
+  });
+
+  it('is not buildable as an empty inland-lake hex', () => {
+    expect(tileIsBuildable({ terrain: 'inlandlake' })).toBe(false);
   });
 
   it('the other water buildings never stand on the bog', () => {

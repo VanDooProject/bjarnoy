@@ -85,9 +85,9 @@ describe('TopBar', () => {
     await wrapper.find('.brand .logo-btn').trigger('click');
     expect(wrapper.emitted('focus-home')).toHaveLength(1);
 
-    expect(wrapper.find('.titles [role="menu"]').exists()).toBe(false);
+    expect(document.body.querySelector('[role="menu"]')).toBeNull();
     await wrapper.find('.titles .menu-trigger').trigger('click');
-    expect(wrapper.find('.titles [role="menu"]').exists()).toBe(true);
+    expect(document.body.querySelector('[role="menu"]')).not.toBeNull();
     wrapper.unmount();
   });
 
@@ -98,7 +98,8 @@ describe('TopBar', () => {
     stubCompactMediaQuery(false);
     const wrapper = mountTopBar();
     await wrapper.find('.titles .menu-trigger').trigger('click');
-    await wrapper.findAll('[role="menuitem"]')[1]!.trigger('click');
+    [...document.body.querySelectorAll<HTMLElement>('[data-action="rename"]')].at(-1)!.click();
+    await wrapper.vm.$nextTick();
 
     const card = wrapper.find('.rename-card');
     expect(card.exists()).toBe(true);
@@ -124,7 +125,8 @@ describe('TopBar', () => {
     stubCompactMediaQuery(false);
     const wrapper = mountTopBar();
     await wrapper.find('.titles .menu-trigger').trigger('click');
-    await wrapper.findAll('[role="menuitem"]')[1]!.trigger('click');
+    [...document.body.querySelectorAll<HTMLElement>('[data-action="rename"]')].at(-1)!.click();
+    await wrapper.vm.$nextTick();
     await wrapper.find('.rename-card input').trigger('keydown', { key: 'Escape' });
     await vi.waitFor(() => expect(wrapper.find('.rename-card').exists()).toBe(false));
     expect(renameSettlement).not.toHaveBeenCalled();
@@ -153,8 +155,9 @@ describe('TopBar', () => {
 
     expect(bubble.find('.menu-trigger').classes()).toContain('menu-trigger--touch');
     await bubble.find('.menu-trigger').trigger('click');
-    expect(bubble.find('[role="menu"]').exists()).toBe(true);
-    await bubble.findAll('[role="menuitem"]')[1]!.trigger('click');
+    expect(document.body.querySelector('[role="menu"]')).not.toBeNull();
+    [...document.body.querySelectorAll<HTMLElement>('[data-action="rename"]')].at(-1)!.click();
+    await wrapper.vm.$nextTick();
 
     expect(bubble.classes()).toContain('settlement-bubble--editing');
     expect(bubble.find('.name-btn').exists()).toBe(false);
@@ -184,7 +187,8 @@ describe('TopBar', () => {
     const wrapper = mountTopBar();
     await wrapper.vm.$nextTick();
     await wrapper.find('.settlement-bubble .menu-trigger').trigger('click');
-    await wrapper.findAll('.settlement-bubble [role="menuitem"]')[1]!.trigger('click');
+    [...document.body.querySelectorAll<HTMLElement>('[data-action="rename"]')].at(-1)!.click();
+    await wrapper.vm.$nextTick();
     const cancel = wrapper.findAll('.settlement-bubble .bubble-action')[1]!;
     await cancel.trigger('click');
     expect(wrapper.find('.settlement-bubble--editing').exists()).toBe(false);
@@ -215,6 +219,19 @@ describe('TopBar', () => {
 
     expect(wrapper.get('.name').text()).toBe('Unnamed realm');
     expect(wrapper.get('.caption').text()).toBe('LONGHOUSE 4');
+    wrapper.unmount();
+  });
+
+  it('names a beach camp as what it is in the caption, not with a Longhouse level', () => {
+    const world = useWorldStore();
+    world.selectedSettlementId = 'camp-1';
+    world.hud.settlementName = 'Sandspit';
+    world.hud.level = 0;
+    vi.spyOn(world.model, 'isBeachCamp').mockReturnValue(true);
+
+    const wrapper = mountTopBar();
+
+    expect(wrapper.get('.caption').text()).toBe('BEACH CAMP');
     wrapper.unmount();
   });
 
@@ -505,7 +522,7 @@ describe('TopBar', () => {
       await wrapper.vm.$nextTick();
 
       await wrapper.get('.hud-grip').trigger('click');
-      expect(wrapper.get('.hud-drawer-backdrop').attributes('style')).toContain('opacity: 0.6');
+      expect(wrapper.get('.hud-drawer-backdrop').attributes('style')).toContain('opacity: 1');
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
       await wrapper.vm.$nextTick();
       expect(wrapper.get('.hud-grip').attributes('aria-expanded')).toBe('false');

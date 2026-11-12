@@ -8,6 +8,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
+import { topPhoneLayerId, useHiddenUnderPhoneLayer, vPhoneHidden } from '../composables/usePhoneLayer';
 import { useJoinBlockedLabel } from '../composables/useJoinBlockedLabel';
 import PlayIntroButton from '../intro/PlayIntroButton.vue';
 import FeatureList from '../intro/FeatureList.vue';
@@ -17,6 +18,8 @@ import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
 import { useIntroTilesSignal } from '../composables/useIntroTilesSignal';
 import { useLoadFlow } from '../composables/useLoadFlow';
+import { useLoginRestoreOverlay } from '../composables/useLoginRestoreOverlay';
+import { useLoginFlowStore } from '../stores/loginFlow';
 import TopBar from '../components/hud/TopBar.vue';
 import BuildingHudLayer from '../components/hud/BuildingHudLayer.vue';
 import HudNav from '../components/hud/HudNav.vue';
@@ -42,6 +45,7 @@ import { buildingStatsAt, scaleOutput } from '../lib/map/buildingEconomy';
 import {
   deriveOnboardingGuidance,
   guidedBuildTarget,
+  guidedTypesStarted,
   guidedRingStep,
   nextGuidedType,
   snapToOfferedPlot,
@@ -89,8 +93,16 @@ const router = useRouter();
 // `hasFoundedSettlement` still wins once true — an anonymous founding that
 // happened in the same tab (or session) before the visitor got around to
 // logging back in should keep going, not get interrupted by the gate.
+// The gate also stays up while the "no realm of yours in this world" notice is
+// showing after a finished restore. While the restore itself runs the gate is
+// already gone (`auth.isAuthenticated` flipped): its progress and errors show on
+// MapStatusOverlay, fed from the login flow store, not in the panel.
+const loginFlow = useLoginFlowStore();
+const loginOverlay = useLoginRestoreOverlay();
 const showReturningLoginGate = computed(
-  () => !!player.lastAccount && !auth.isAuthenticated && !player.hasFoundedSettlement,
+  () =>
+    (!!player.lastAccount && !auth.isAuthenticated && !player.hasFoundedSettlement) ||
+    (loginFlow.noRealm !== null && loginFlow.noRealm.worldId === world.worldId),
 );
 
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
@@ -286,6 +298,18 @@ const overlayError = computed(
 const landingCanvasShown = computed(
   () => !!(player.hasFoundedSettlement ? world.selectedSettlementId : previewCoord.value),
 );
+// What the overlay displays. While the login gate is up the map's own load
+// step/error stay hidden (they would cover the form, and the login's restore
+// re-bootstraps the world anyway); the restore's progress/error show instead.
+// `overlayStep`/`overlayError` themselves stay untouched for the intro signal.
+// While a login restore runs only its own step/error show, never the map's.
+const shownStep = computed(() =>
+  loginOverlay.active.value ? loginOverlay.step.value : showReturningLoginGate.value ? null : overlayStep.value,
+);
+const shownError = computed<unknown>(() =>
+  loginOverlay.active.value ? loginOverlay.error.value : showReturningLoginGate.value ? null : overlayError.value,
+);
+const shownErrorTitle = computed(() => (loginOverlay.active.value ? loginOverlay.errorTitle.value : undefined));
 useIntroTilesSignal({
   settled: loadSettled,
   error: overlayError,
@@ -294,10 +318,15 @@ useIntroTilesSignal({
   animLoad: computed(() => canvasRef.value?.animLoad),
 });
 function retryLoad() {
-  if (loadError.value) void loadLanding();
+  if (loginOverlay.active.value) loginOverlay.retry();
+  else if (loadError.value) void loadLanding();
   else void world.fetchFogMask();
 }
 onUnmounted(() => {
+  // Leaving with a failed restore would leave the flow busy for the next
+  // visit; the no-realm notice belongs to this screen only.
+  if (loginFlow.restoreError !== null) loginFlow.reset();
+  loginFlow.noRealm = null;
   world.stopHudSync();
   stopPreviewPoll();
   clearTimeout(invalidClickTimer);
@@ -387,6 +416,12 @@ const ringLaneSpots = computed(() =>
 );
 
 const isMobile = useIsMobile();
+// HUD overlays hide while a layer (modal, drawer, ring, ...) is open on a phone. The guidance arrow is the one
+// exception: in screen mode it points into the ring's own bubbles, so the ring does not hide it.
+const hudHidden = useHiddenUnderPhoneLayer();
+const guidanceHidden = computed(
+  () => hudHidden.value && !(pointerTarget.value?.mode === 'screen' && topPhoneLayerId.value === 'ring'),
+);
 const queueDrawerOpen = ref(false);
 
 // Finding #12: mirrors MapView.vue's own hudInset*Px exactly — this view's
@@ -524,14 +559,25 @@ function withinBuildableRange(coord: AxialCoord): boolean {
 // here" / "One more — the {terrain}") aims at. `guidedBuildTarget`
 // (onboardingGuidance.ts) holds the rule; this supplies this settlement's
 // centre/claim radius, the real WorldModel and the realm check.
+
+// The pointer's progress: standing guided buildings plus queued ones (`guidedTypesStarted`), so it moves on at the
+// click, before the server has answered the order. The checklist above reads confirmed buildings only.
+const pointerStartedTypes = computed(() => guidedTypesStarted(world.hud.placedBuildingTypes, world.hud.queue));
+const pointerGuidedType = computed(() => nextGuidedType(pointerStartedTypes.value));
+
 const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
   if (!player.hasFoundedSettlement || !world.selectedSettlementId) return null;
   const settlement = world.model.getSettlement(world.selectedSettlementId);
   if (!settlement) return null;
-  const type = nextGuidedType(world.hud.placedBuildingTypes);
+  const type = pointerGuidedType.value;
   if (!type) return null;
-  return guidedBuildTarget(world.model, { q: settlement.q, r: settlement.r }, claimRadiusForLevel(settlement.level), type, (owner) =>
-    world.isRealmSettlement(owner),
+  return guidedBuildTarget(
+    world.model,
+    { q: settlement.q, r: settlement.r },
+    claimRadiusForLevel(settlement.level),
+    type,
+    (owner) => world.isRealmSettlement(owner),
+    world.hud.queue,
   );
 });
 
@@ -540,7 +586,7 @@ const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
 // the instant they do (the ring/note/pointer take over telling the story),
 // so it never overlaps the completion banner.
 const showLandfallBanner = computed(
-  () => player.hasFoundedSettlement && world.hud.placedBuildingTypes.length <= 1 && !ringScreen.value,
+  () => player.hasFoundedSettlement && pointerStartedTypes.value.length === 0 && !ringScreen.value,
 );
 
 // The single animated pointer: which hex (or, with the ring open, which
@@ -558,7 +604,7 @@ const mapDrawn = computed(() => (canvasRef.value?.loadState.phase ?? 'terrain') 
  * locked there (a guarded camp, a giant, an endgame site): the pointer then goes back to the guided hex.
  */
 function ringStepTarget(): { id: string; spot: { x: number; y: number }; label: string } | null {
-  const type = nextGuidedType(world.hud.placedBuildingTypes);
+  const type = pointerGuidedType.value;
   if (!type || buildAction.value?.disabled) return null;
   const step = guidedRingStep(type, ringCategories.value, ringLaneSpots.value);
   if (!step) return null;
@@ -613,8 +659,8 @@ const pointerTarget = computed(() => {
   // Right after founding (only the longhouse is down) vs. one guided
   // building already placed — matches the mockup's frame 2 vs. frame 4
   // copy/angle.
-  const oneDone = world.hud.placedBuildingTypes.length > 1;
-  const remainingType = nextGuidedType(world.hud.placedBuildingTypes);
+  const oneDone = pointerStartedTypes.value.length > 0;
+  const remainingType = pointerGuidedType.value;
   return {
     mode: 'hex' as const,
     coord: nextGuidedTargetCoord.value,
@@ -635,7 +681,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
     // back into a real one — the panel's own "Start a new realm instead"
     // button is the only way to fall through to founding here.
     if (showReturningLoginGate.value) return;
-    if (tile.terrain === 'sea' || tile.terrain === 'lake' || founding.value || joinBlocked.value) return;
+    if (tile.terrain === 'sea' || tile.terrain === 'lake' || tile.terrain === 'inlandlake' || founding.value || joinBlocked.value) return;
     // Live mode only founds on an exact, unclaimed start position (see
     // `startPositionAt`, issue #96) — a click elsewhere used to silently
     // found on the nearest one instead; that's gone (issue #96 covers why),
@@ -912,7 +958,7 @@ watch(
   >
     <!-- Deliberately outside the SettlementCanvas v-if below: it has to show
          before the canvas exists (world/settlement/plot still loading). -->
-    <MapStatusOverlay :step="overlayStep" :error="overlayError" @retry="retryLoad" />
+    <MapStatusOverlay :step="shownStep" :error="shownError" :error-title="shownErrorTitle" @retry="retryLoad" />
     <SettlementCanvas
       v-if="landingCanvasShown"
       ref="canvasRef"
@@ -965,7 +1011,7 @@ watch(
     <!-- Before founding there is no header band: the floating group at the top right holds "How to play" and the
          returning-player menu (log in, other worlds, settings, start page). No `#drawer`, no HudNav: nothing here
          is a dead click for someone who has not founded anything (docs/design/zip-brainstorms.md:44). -->
-    <div v-if="!player.hasFoundedSettlement" class="topright">
+    <div v-if="!player.hasFoundedSettlement" v-phone-hidden="hudHidden" class="topright">
       <HudNavLink :href="docsHref" class="howto" data-testid="map-how-to-play" @navigate="router.push('/docs')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1z" />
@@ -987,8 +1033,8 @@ watch(
     <!-- Player logout/login gate: replaces the founding column entirely while
          this device remembers a real account that's currently logged out —
          see `showReturningLoginGate`'s own comment above. -->
-    <ReturningLoginPanel v-if="showReturningLoginGate" />
-    <div v-else-if="!player.hasFoundedSettlement" class="founding-col" :class="{ 'founding-col--blocked': joinBlocked }">
+    <ReturningLoginPanel v-if="showReturningLoginGate" v-phone-hidden="hudHidden" />
+    <div v-else-if="!player.hasFoundedSettlement" v-phone-hidden="hudHidden" class="founding-col" :class="{ 'founding-col--blocked': joinBlocked }">
       <h1 class="wordmark">{{ WORDMARK }}</h1>
       <template v-if="joinBlocked">
         <h2 class="heading">{{ t('landing.hero.notOpenTitle') }}</h2>
@@ -1001,10 +1047,11 @@ watch(
         <FeatureList class="features" :locale="introLocale" id-prefix="map" />
       </template>
     </div>
-    <ImpressumLink v-if="!player.hasFoundedSettlement" class="impressum" :locale="introLocale" testid="map-impressum" />
+    <ImpressumLink v-if="!player.hasFoundedSettlement" v-phone-hidden="hudHidden" class="impressum" :locale="introLocale" testid="map-impressum" />
 
     <GuidancePointer
       v-if="pointerTarget && mapDrawn"
+      v-phone-hidden="guidanceHidden"
       :coord="pointerTarget.mode === 'hex' ? pointerTarget.coord : undefined"
       :renderer="pointerTarget.mode === 'hex' ? canvasRef?.renderer : undefined"
       :screen="pointerTarget.mode === 'screen' ? pointerTarget.screen : undefined"
@@ -1023,8 +1070,8 @@ watch(
          checklist (still at the bottom) — the mockup shows both at once,
          unlike completion, where the banner replaces the checklist
          entirely since there's nothing left to check off. -->
-    <OnboardingBanner v-if="showLandfallBanner" variant="landfall" />
-    <OnboardingBanner v-if="showCompletionBanner" variant="complete" @continue="onContinueToSettlement" />
+    <OnboardingBanner v-if="showLandfallBanner" v-phone-hidden="hudHidden" variant="landfall" />
+    <OnboardingBanner v-if="showCompletionBanner" v-phone-hidden="hudHidden" variant="complete" @continue="onContinueToSettlement" />
     <!-- Mobile tutorial focus (owner decision): on phones, the progress tray
          and the open ring menu would otherwise both fight for the same
          strip of screen near the bottom — the tray steps aside while the
@@ -1033,7 +1080,8 @@ watch(
     <!-- The stepper fades out when it goes; after the last step it stays a moment first so the finishing wave plays. -->
     <Transition :name="guidance.complete ? 'steps-done' : 'steps'">
       <OnboardingChecklist
-        v-if="!joinBlocked && !guidance.complete && !showReturningLoginGate && !(isCompactHudLanding && ringScreen)"
+        v-if="!joinBlocked && !guidance.complete && !showReturningLoginGate"
+        v-phone-hidden="hudHidden"
         :guidance="guidance"
         :can-focus="!!pointerTarget && mapDrawn"
         @focus="pointerNudge++"
@@ -1042,7 +1090,7 @@ watch(
 
     <template v-if="player.hasFoundedSettlement">
       <QueueDrawer v-if="isMobile" v-model:open="queueDrawerOpen" @select="onQueueSelect" />
-      <BuildQueuePanel v-else @select="onQueueSelect" />
+      <BuildQueuePanel v-else v-phone-hidden="hudHidden" @select="onQueueSelect" />
     </template>
     <RingMenuHost>
     <RingMenu

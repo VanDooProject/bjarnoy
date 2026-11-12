@@ -27,6 +27,18 @@ public class BattleReportEntity
 
     public Guid DefenderSettlementId { get; set; }
 
+    /// <summary>The world the battle was fought in; scopes the per-player inbox.</summary>
+    public Guid WorldId { get; set; }
+
+    /// <summary>
+    /// The attacking player (<c>SettlementEntity.OwnerId</c> at battle time). A report belongs to the players, not to a
+    /// settlement: it stays when either settlement is deleted, and the inbox lists it by owner.
+    /// </summary>
+    public string AttackerOwnerId { get; set; } = string.Empty;
+
+    /// <summary>The defending player; see <see cref="AttackerOwnerId"/>.</summary>
+    public string DefenderOwnerId { get; set; } = string.Empty;
+
     public int Winner { get; set; }
 
     public double AttackPower { get; set; }

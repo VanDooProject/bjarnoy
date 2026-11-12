@@ -62,7 +62,10 @@ function army(id: string, overrides: Partial<ArmyResponse> = {}, arrivesAt = '20
       turnAroundAt: '2099-01-01T00:00:00Z',
       returnArrivesAt: '2099-01-02T00:00:00Z',
       isReturning: false,
+      isStranded: false,
+      isFleeing: false,
     },
+    starvesAt: null,
     ...overrides,
   };
 }
@@ -88,6 +91,8 @@ function setup(armies: ArmyResponse[], garrison = [{ unit: 'spearman', count: 8 
   useUnitCatalogueStore().definitions = unitSnapshot.data as UnitDefinitionResponse[];
   const auth = useAuthStore();
   auth.user = { id: 'u1', userName: 'ragnar', role: 'player', status: 'active', displayName: null, isPremium: premium, preferredLocale: null };
+  world.selectedSettlementId = 'home-1';
+  world.hud.settlementName = 'Bjarnoy';
   world.hud.garrison = garrison;
   world.armies = armies;
   world.openSendPicker({ q: 4, r: 0 });
@@ -109,12 +114,110 @@ describe('SendArmyPicker', () => {
     await routesArrive();
 
     const rows = wrapper.findAll('.send-row');
-    expect(rows.map((r) => r.attributes('data-source'))).toEqual(['home', 'stand', 'ret', 'sup']);
+    expect(rows.map((r) => r.attributes('data-source'))).toEqual(['home:home-1', 'stand', 'ret', 'sup']);
     expect(rows[1]!.classes()).not.toContain('is-off');
     expect(rows[2]!.classes()).toContain('is-off');
     expect(rows[2]!.text()).toContain('Returning home');
     expect(rows[3]!.text()).toContain('recall it first');
     expect((rows[3]!.get('.send-row-head').element as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('a row names its realm, what it is and the mission it flies, with the travel time under the mission', async () => {
+    setup([army('stand')]);
+
+    const wrapper = mountPicker();
+    await routesArrive();
+
+    const home = wrapper.get('[data-source="home:home-1"]');
+    expect(home.get('.send-row-title').text()).toBe('Bjarnoy');
+    expect(home.get('.send-row-sub').text()).toBe('Home · 8 units');
+    expect(home.get('.send-row-mission').text()).toBe('Move');
+    const field = wrapper.get('[data-source="stand"]');
+    expect(field.get('.send-row-title').text()).toBe('Bjarnoy');
+    expect(field.get('.send-row-sub').text()).toBe('Army · 10 units at (10, 0)');
+    expect(field.get('.send-row-mission').text()).toBe('Move');
+    expect(field.get('.send-row-eta').text()).toMatch(/\d+ (min|h)/);
+  });
+
+  it('an empty home stays listed, disabled, as "Home · no units"', async () => {
+    setup([], []);
+
+    const wrapper = mountPicker();
+    await routesArrive();
+
+    const home = wrapper.get('[data-source="home:home-1"]');
+    expect(home.get('.send-row-sub').text()).toBe('Home · no units');
+    expect(home.classes()).toContain('is-off');
+    expect((home.get('.send-row-head').element as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  describe('with several realms', () => {
+    function withOtherRealm() {
+      const world = setup([army('stand')]);
+      world.otherRealms = [
+        {
+          realmId: 'far-1',
+          name: 'Vik',
+          garrison: [{ unit: 'spearman', count: 3 }],
+          garrisonSpots: [],
+          buildings: [],
+          availableFood: 50,
+          armies: [army('far-army', { settlementId: 'far-1' })],
+        },
+      ];
+      return world;
+    }
+
+    it("lists the other realm's home and army after the open realm's rows, each under its realm's name", async () => {
+      withOtherRealm();
+
+      const wrapper = mountPicker();
+      await routesArrive();
+
+      const rows = wrapper.findAll('.send-row');
+      expect(rows.map((r) => r.attributes('data-source'))).toEqual(['home:home-1', 'stand', 'far-army', 'home:far-1']);
+      expect(rows.map((r) => r.get('.send-row-title').text())).toEqual(['Bjarnoy', 'Bjarnoy', 'Vik', 'Vik']);
+      expect(rows[3]!.get('.send-row-sub').text()).toBe('Home · 3 units');
+    });
+
+    it('the title names no mission on a hex of the player\'s own realm, where the rows mix Move and Support', async () => {
+      const world = withOtherRealm();
+      const wrapper = mountPicker();
+      expect(wrapper.get('.send-picker-title-text').text()).toBe('Move → Hex (4, 0)');
+
+      world.openSendPicker({ q: 4, r: 0 }, { targetRealmId: 'home-1', targetBuildingCoord: { q: 4, r: 0 } });
+      await nextTick();
+
+      expect(wrapper.get('.send-picker-title-text').text()).toBe('Send army → Hex (4, 0)');
+    });
+
+    it('on a hex of the open realm the other realm supports and the open realm moves', async () => {
+      const world = withOtherRealm();
+      world.openSendPicker({ q: 4, r: 0 }, { targetRealmId: 'home-1', targetBuildingCoord: { q: 4, r: 0 } });
+
+      const wrapper = mountPicker();
+      await routesArrive();
+
+      const missions = Object.fromEntries(wrapper.findAll('.send-row').map((r) => [r.attributes('data-source'), r.get('.send-row-mission')]));
+      expect(missions['home:home-1']!.text()).toBe('Move');
+      expect(missions['stand']!.text()).toBe('Move');
+      expect(missions['home:far-1']!.text()).toBe('Support');
+      expect(missions['home:far-1']!.attributes('data-mission')).toBe('support');
+      expect(missions['far-army']!.text()).toBe('Support');
+    });
+
+    it("picking the other realm's home hands over to its dispatch form and leaves the open realm open", async () => {
+      const world = withOtherRealm();
+      world.openSendPicker({ q: 4, r: 0 }, { targetRealmId: 'home-1', targetBuildingCoord: { q: 4, r: 0 } });
+
+      const wrapper = mountPicker();
+      await routesArrive();
+      await wrapper.get('[data-source="home:far-1"] .send-row-head').trigger('click');
+
+      expect(world.sendPicker).toBeNull();
+      expect(world.dispatchDraft).toMatchObject({ mission: 'support', targetSettlementId: 'home-1', sourceRealmId: 'far-1' });
+      expect(world.selectedSettlementId).toBe('home-1');
+    });
   });
 
   it('a marching army shows the premium lock and cannot be selected without premium', async () => {
@@ -212,7 +315,7 @@ describe('SendArmyPicker', () => {
 
     const wrapper = mountPicker();
     await routesArrive();
-    await wrapper.get('[data-source="home"] .send-row-head').trigger('click');
+    await wrapper.get('[data-source="home:home-1"] .send-row-head').trigger('click');
 
     expect(world.sendPicker).toBeNull();
     expect(world.dispatchDraft?.route).toEqual([{ q: 4, r: 0 }]);

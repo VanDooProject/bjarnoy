@@ -6,7 +6,8 @@
   "spots": {
     "longhouse": "Longhouse",
     "tower": "Tower",
-    "dock": "Dock"
+    "dock": "Dock",
+    "beachcamp": "Beach camp"
   },
   "count": "Count",
   "working": "Working…",

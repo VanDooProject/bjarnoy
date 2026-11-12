@@ -81,23 +81,61 @@ public sealed record Movement
     public bool IsReturning { get; init; }
 
     /// <summary>
-    /// True only for the two immune-to-interception return legs (issue #206
-    /// §5): the existing natural provisions-driven turnaround
-    /// (<c>Army.SettleTo</c>'s turn-around branch) and a battle-forced retreat
-    /// (<c>Army.SettleArrival</c>'s post-battle survivor return, and the new
-    /// field-battle loser's direct-path-home march). Both are immune because
-    /// neither is something a player can trigger on demand at will.
+    /// Until when an army fleeing after a <em>lost field battle</em> is protected from field battles and camp ambushes
+    /// (<c>docs/design/troop-movement-range.md</c> §2a): the battle instant plus <see cref="FleeProtection"/>. <see langword="null"/> for every
+    /// other movement. Only <c>Army.ForceFieldRetreat</c> sets it; an order (recall, field order, retarget) builds a fresh movement without it,
+    /// which is what ends the protection early. A meeting or an ambush entry is ruled out only while it lies before this instant.
     /// </summary>
-    /// <remarks>
-    /// Deliberately distinct from <see cref="IsReturning"/>: a voluntary
-    /// <c>Army.Recall</c> also sets <see cref="IsReturning"/> but must remain
-    /// fully interceptable (issue #206 §5) — recalling the instant a player
-    /// spots an incoming interception would otherwise trivially dodge every
-    /// fight. Only <see cref="IsReturning"/> &amp;&amp; <see cref="RetreatImmune"/>
-    /// together mean "immune"; <see cref="IsReturning"/> alone (a plain
-    /// Recall) does not.
-    /// </remarks>
-    public bool RetreatImmune { get; init; }
+    public DateTimeOffset? FieldBattleImmuneUntil { get; init; }
+
+    /// <summary>
+    /// The instant this movement's routes (<see cref="Path"/> and <see cref="ReturnPath"/>) were planned, with the walls standing then. It is
+    /// not <see cref="DepartedAt"/> for a way home planned at dispatch: a turn-around or a post-battle return walks the stored way home
+    /// and keeps the instant it was planned at. A wall that changed after it may block the route (<c>WallTimeline.MayBlock</c>);
+    /// <see langword="null"/> when not known (a movement stored before the instant was recorded), see <see cref="PlannedAt"/>.
+    /// </summary>
+    public DateTimeOffset? RoutePlannedAt { get; init; }
+
+    /// <summary><see cref="RoutePlannedAt"/>, or <see cref="DateTimeOffset.MinValue"/> when it is not known: every wall then counts as new.</summary>
+    public DateTimeOffset PlannedAt => RoutePlannedAt ?? DateTimeOffset.MinValue;
+
+    /// <summary>How long a fleeing army is protected after the battle it lost.</summary>
+    public static readonly TimeSpan FleeProtection = TimeSpan.FromHours(6);
+
+    /// <summary>
+    /// True for an army fleeing after a lost field battle (<see cref="FieldBattleImmuneUntil"/> set), on its way home or stranded. It takes
+    /// field orders from where it is like a standing army (<c>docs/design/troop-movement-range.md</c> §2a); the order's fresh movement ends
+    /// the flight and its protection.
+    /// </summary>
+    public bool IsFleeing => FieldBattleImmuneUntil is not null;
+
+    /// <summary>Whether a field battle or camp ambush at <paramref name="at"/> is ruled out by the flee protection.</summary>
+    public bool IsFieldBattleImmuneAt(DateTimeOffset at) => FieldBattleImmuneUntil is { } until && at < until;
+
+    /// <summary>
+    /// True for an army that cannot get home and so stays where it is (<see cref="Stranded"/>): its path ends on the hex it stays on (the path is
+    /// that hex alone, or, when a wall closed its way, the walk there, <c>Army.RerouteAroundWall</c>), it never turns around, and when its provisions run out the whole army starves (<c>docs/design/troop-movement-range.md</c> §2a).
+    /// </summary>
+    public bool IsStranded { get; init; }
+
+    /// <summary>
+    /// A stranded stand on <paramref name="hex"/> from <paramref name="at"/>. <see cref="TurnAroundAt"/> is set to <paramref name="at"/> here;
+    /// <c>Army.Strand</c> replaces it with the instant the army starves.
+    /// </summary>
+    public static Movement Stranded(DateTimeOffset at, HexCoord hex) => new()
+    {
+        DepartedAt = at,
+        Path = [hex],
+        CumulativeHours = [0],
+        EdgeHours = [0],
+        ReturnPath = [hex],
+        ReturnCumulativeHours = [0],
+        ReturnEdgeHours = [0],
+        TurnAroundAt = at,
+        IsReturning = false,
+        IsStranded = true,
+        RoutePlannedAt = at,
+    };
 
     /// <summary>When this leg's <see cref="Path"/> is fully travelled.</summary>
     public DateTimeOffset ArrivesAt => DepartedAt + TimeSpan.FromHours(CumulativeHours[^1]);
@@ -158,6 +196,7 @@ public sealed record Movement
             ReturnEdgeHours = returnEdgeHours,
             TurnAroundAt = arrivesAt + TimeSpan.FromHours(standingHours),
             IsReturning = false,
+            RoutePlannedAt = departedAt,
         };
     }
 

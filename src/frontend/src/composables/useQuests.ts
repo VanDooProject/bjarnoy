@@ -16,6 +16,8 @@ export function useQuests() {
   const known = computed(() => world.hud.quests.filter((q) => te(`quests.items.${q.id}.title`)));
   const unclaimed = computed(() => known.value.filter((q) => !q.claimed));
   const current = computed<QuestResponse | undefined>(() => unclaimed.value[0]);
+  // Every quest whose reward can be claimed right now: the current one if it is done, plus the other done ones.
+  const claimable = computed(() => unclaimed.value.filter((q) => q.completed));
   const alsoReady = computed(() => unclaimed.value.slice(1).filter((q) => q.completed));
   // The first quest still to be fulfilled, when the current one is already claimable: otherwise a tray full of ready
   // quests shows nothing left to work on. When the current quest is itself unfinished it is the one to work on.
@@ -34,5 +36,5 @@ export function useQuests() {
   const { hasUnseen, markSeen } = useQuestSeen(computed(() => world.selectedSettlementId));
   const hasNew = computed(() => hasUnseen(noticeKeys.value));
 
-  return { known, unclaimed, current, alsoReady, nextUp, noticeKeys, hasNew, markSeen };
+  return { known, unclaimed, current, alsoReady, claimable, nextUp, noticeKeys, hasNew, markSeen };
 }

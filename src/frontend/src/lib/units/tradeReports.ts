@@ -4,16 +4,6 @@
 import type { TradeReportResponse } from '../../api/types';
 import { i18n } from '../../i18n';
 
-/** Which side `settlementId` traded on in this report — `null` if it was neither (shouldn't happen for reports fetched for that settlement). */
-export function tradeSideFor(
-  report: { posterSettlementId: string; acceptorSettlementId: string },
-  settlementId: string,
-): 'poster' | 'acceptor' | null {
-  if (report.posterSettlementId === settlementId) return 'poster';
-  if (report.acceptorSettlementId === settlementId) return 'acceptor';
-  return null;
-}
-
 /**
  * A one-line summary for a report-inbox row, from `viewerSide`'s point of
  * view — the poster gave the offered goods and received the requested

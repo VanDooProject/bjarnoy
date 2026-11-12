@@ -69,7 +69,7 @@ public sealed record SimulatorRequest(
 /// <param name="Mission"><c>"attack"</c> or <c>"raid"</c> — which the request asked for.</param>
 /// <param name="Siege">
 /// Present only when the attacker's stacks included a
-/// <see cref="UnitType.Catapult"/> and the attacker won. Since the simulator
+/// <see cref="UnitType.Catapult"/> and the attacker won an attack (never a raid, which does no siege). Since the simulator
 /// models no real settlement, the siege is resolved against one nominal
 /// level-1 Longhouse — see <c>SimulatorEndpoints</c>'s remarks — so this
 /// previews the levels-destroyed math, not a real building's fate.

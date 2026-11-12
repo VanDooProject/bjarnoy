@@ -227,6 +227,13 @@ export const router = createRouter({
       beforeEnter: () => awaitShowcaseManifests(),
     },
     {
+      path: '/docs/beach-camp',
+      name: 'beach-camp-docs',
+      component: () => import('../views/BeachCampView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
       path: '/docs/realm',
       name: 'realm-docs',
       component: () => import('../views/RealmView.vue'),
@@ -306,6 +313,12 @@ export const router = createRouter({
           path: 'economy',
           name: 'admin-economy',
           component: () => import('../views/admin/AdminEconomyView.vue'),
+        },
+        {
+          // The knob-driven pacing simulator: milestones and charts per player profile against a pinned reference.
+          path: 'pacing-bench',
+          name: 'admin-pacing-bench',
+          component: () => import('../views/admin/AdminPacingBenchView.vue'),
         },
         {
           // A live, backend-free playground for the island-shape generation

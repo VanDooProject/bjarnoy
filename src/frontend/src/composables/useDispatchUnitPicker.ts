@@ -1,6 +1,7 @@
 // The unit rows of a dispatch draft, shared by ArmyPanel.vue and MobileDispatchSheet.vue so both surfaces gate the same way:
 // a selection with ships is a fleet and may carry land units as passengers up to the ships' slots (`exceedsShipCapacity`);
 // a founding convoy is its five settlers (that row stays locked) plus any ships and land escorts, picked like in a move;
+// a camp army is its two camp builders (locked likewise) plus ships and escorts;
 // a hunt takes land units against a land camp, against a camp at sea (the whale road) a fleet, and against a sand camp (a
 // haul-out) land units, which a fleet may carry: its ships take no part, so it needs land troops aboard.
 import { computed, type ComputedRef } from 'vue';
@@ -19,6 +20,7 @@ export function useDispatchUnitPicker(garrisonRows: ComputedRef<ReadonlyArray<{ 
   const unitCounts = computed(() => draft.value?.unitCounts ?? {});
   const isHunt = computed(() => draft.value?.mission === 'hunt');
   const isFound = computed(() => draft.value?.mission === 'found');
+  const isCamp = computed(() => draft.value?.mission === 'setupcamp');
 
   // The hunt target is a camp on the sea (the whale road): a fleet goes.
   const huntCamp = computed(() => {
@@ -33,6 +35,7 @@ export function useDispatchUnitPicker(garrisonRows: ComputedRef<ReadonlyArray<{ 
 
   function isRowSelectable(unit: string): boolean {
     if (isFound.value && unit === 'settler') return false;
+    if (isCamp.value && unit === 'campbuilder') return false;
     return !isHunt.value || isHuntUnit(unit, catalogue.byType, huntAtSea.value, huntOnSand.value);
   }
   // Ships sit greyed out in the list of a hunt on land: only then is there anything to explain.
@@ -40,8 +43,6 @@ export function useDispatchUnitPicker(garrisonRows: ComputedRef<ReadonlyArray<{ 
   const overCapacity = computed(() => exceedsShipCapacity(unitCounts.value, catalogue.byType));
   // Where the picked units are taken from: each unit type from the garrison spot nearest the target first (one rule, the store's).
   const spotGroups = computed(() => (draft.value ? world.dispatchSpotGroups(draft.value) : []));
-  // Gathering an army from several spots is not possible yet: the dispatch waits.
-  const severalSpots = computed(() => spotGroups.value.length > 1);
   /** "from Tower" / "from Longhouse and Dock": the spots the picked units of this type are taken from; empty while none is picked. */
   function unitSourceText(unit: string): string {
     const kinds = spotKindsForUnit(spotGroups.value, unit);
@@ -58,13 +59,13 @@ export function useDispatchUnitPicker(garrisonRows: ComputedRef<ReadonlyArray<{ 
   const selectionSendable = computed(
     () =>
       !overCapacity.value &&
-      !severalSpots.value &&
       !sandHuntLacksTroops.value &&
       !(isHunt.value && huntAtSea.value && selectionKind.value !== 'fleet'),
   );
 
   return {
     isFound,
+    isCamp,
     huntAtSea,
     huntOnSand,
     selectionKind,
@@ -73,7 +74,6 @@ export function useDispatchUnitPicker(garrisonRows: ComputedRef<ReadonlyArray<{ 
     sandHuntLacksTroops,
     overCapacity,
     selectionSendable,
-    severalSpots,
     unitSourceText,
   };
 }

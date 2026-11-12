@@ -38,8 +38,9 @@ describe('checkBogRules: what each map rule flags', () => {
   it('flags bog beside sand or the sea (R7) but not beside other bog', () => {
     const sandy = (c: AxialCoord): Terrain => (c.q === 1 && c.r === 0 ? 'sand' : 'grass');
     expect(checkBogRules([bog(0, 0, 'bog')], [], sandy).R7).toBeGreaterThan(0);
-    // The same sand hex turned into bog (an enclosed pocket's ring) is fine.
-    expect(checkBogRules([bog(0, 0, 'bog'), bog(1, 0, 'bog')], [], sandy).R7).toBe(0);
+    // A bog with a sand neighbour breaks R7 even inside a pocket (a pocket bog may stand on what was beach).
+    const pocket = (c: AxialCoord): Terrain => (c.q === -1 && c.r === 0 ? 'sea' : sandy(c));
+    expect(checkBogRules([bog(0, 0, 'bog'), bog(-1, 0, 'lake')], [], pocket).R7).toBeGreaterThan(0);
     const sea = (c: AxialCoord): Terrain => (c.q === 0 && c.r === 1 ? 'sea' : 'grass');
     expect(checkBogRules([bog(0, 0, 'bog')], [], sea).R7).toBeGreaterThan(0);
   });

@@ -133,10 +133,8 @@ const related = () => props.page.related.map((r) => ({ ...r, target: docsPageByI
     grid-column: 1;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .related-card,
-  .box {
-    transition: none;
-  }
+html[data-hud-motion='reduced'] .related-card,
+html[data-hud-motion='reduced'] .box {
+  transition: none;
 }
 </style>

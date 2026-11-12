@@ -54,7 +54,7 @@ export interface WaterDebugFlags {
   /** Shader sea body under the world map (§4.1); off lets WorldMapCanvas's CSS gradient show through. Never drawn in settlement mode — the painted water tiles are the sea body there. */
   seaBody: boolean;
   /**
-   * The Graphics wave squiggles (HexMapRenderer's waveLayer) — world map only,
+   * The wave squiggle sprites (HexMapRenderer's waveLayer) — world map only,
    * and **on**: they are the world map's surface pattern of record. They live on
    * their own layer above the water mesh, so they draw over the shader's sea
    * body and foam rather than under them.
@@ -313,6 +313,9 @@ export interface WaterPerfStats {
    */
   bakedOnWorker: boolean;
 }
+
+/** The foam width slider's range (hexes). WaterDebugPanel draws it and waterCoverage's ring rule is sized against its max. */
+export const FOAM_WIDTH_RANGE = { min: 0.1, max: 1.5, step: 0.05 };
 
 export const waterPerfStats: WaterPerfStats = {
   bakeMs: 0,

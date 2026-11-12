@@ -1337,6 +1337,8 @@ export function generateRivers(
 export interface RiversAndBogs {
   rivers: RiverTile[];
   bogs: BogTile[];
+  /** Enclosed water the bog did not fill, sorted by (q, r). */
+  inlandLakes: AxialCoord[];
 }
 
 /**
@@ -1376,7 +1378,7 @@ export function generateRiversWithBogs(
     }
 
     const survivors = resolveCollisions(paths, allowConfluence);
-    return { rivers: buildNodes(survivors).map((n) => nodeToTile(n, 'river', wasted)), bogs: [] };
+    return { rivers: buildNodes(survivors).map((n) => nodeToTile(n, 'river', wasted)), bogs: [], inlandLakes: [] };
   }
 
   // Enclosed sea pockets become bog lakes with a bog ring before any river is traced: the drainage
@@ -1392,7 +1394,7 @@ export function generateRiversWithBogs(
   const guaranteeOnly = candidates.length === 0;
   if (guaranteeOnly && !bogs.guaranteeApplies) {
     bogs.fillHoles(null);
-    return { rivers: [], bogs: bogs.classify() };
+    return { rivers: [], bogs: bogs.classify(), inlandLakes: bogs.inlandLakeTiles() };
   }
 
   const drainage = new Drainage(islandTiles, terrainOf, riverLand, seed, bogs.pocketRing);
@@ -1460,7 +1462,7 @@ export function generateRiversWithBogs(
     stats,
   );
   const nodes = buildNodes(bp.paths, bp.forcedOut, bp.bogIn);
-  return { rivers: assignWidths(nodes, seed, stats, bp.requireRiver), bogs: bogTiles };
+  return { rivers: assignWidths(nodes, seed, stats, bp.requireRiver), bogs: bogTiles, inlandLakes: bogs.inlandLakeTiles() };
 }
 
 /**

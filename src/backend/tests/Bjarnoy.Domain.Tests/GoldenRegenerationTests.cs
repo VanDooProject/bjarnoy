@@ -457,12 +457,14 @@ public class GoldenRegenerationTests
             ("green_island_guarantee_spawn", Smallest("guarantee spawn", c => c.Island.BogTiles.Any(t => t.Kind == BogTileKind.CreekSpring && FeedsLake(c.Island, t)))),
             ("green_island_enclosed_pocket", Smallest("pocket", c => IsPocket(c, SamplerOf(c.Seed)))),
             ("green_island_two_lakes", Smallest("two lakes", c => Outflows(c.Island) >= 2)),
+            ("green_island_inland_lake", Smallest("inland lake", c => EnclosedWater.Pockets(c.Island.Tiles, SamplerOf(c.Seed).IsLand)
+                .Any(p => p.Count >= TestWorlds.Options(c.Seed).BogPocketMinTiles && p.All(c.Island.InlandLakeTiles.Contains)))),
         };
 
         var options = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
         var sb = new StringBuilder();
         sb.Append("{\n  \"_comment\": ").Append(JsonSerializer.Serialize(
-            "Cross-language parity fixture for bog generation (RiverGenerator.GenerateWithBogs backend / generateRiversWithBogs frontend, BogGenerator inside the drainage pipeline): given a real green island's tiles (with seed terrain), a world seed and an island index, both sides must trace the same rivers and place the same bogland (lakes, shores, mouths, creeks, moss, in the same order). Covers: the smallest island with one plain through-river lake, one where a second river sinks into the lake, one where a bog spawns a river (a creek spring), one where the bog guarantee's spawn bog feeds a lake from a creek spring (the river through the lake is the spawned one), one with an enclosed sea pocket turned into a lake with a bog ring, and one with two lakes (the smallest island with one plain lake is a guaranteed bog on a relaxed through-river site). Every scenario is a real island of a real WorldGenerator.Generate() run at radius 1000 (the smallest of seeds 1-40 with the wanted feature), so terrain, depth-field noise and the trace all agree byte-for-byte with what that seed really produces. Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). BogGenerationGoldenTests.cs (backend) and bogGenerator.golden.test.ts (frontend) each compute against this fixture with their own production implementation, then assert the frozen `rivers` and `bogs` lists (order matters: sorted by (q, r)).",
+            "Cross-language parity fixture for bog generation (RiverGenerator.GenerateWithBogs backend / generateRiversWithBogs frontend, BogGenerator inside the drainage pipeline): given a real green island's tiles (with seed terrain), a world seed and an island index, both sides must trace the same rivers and place the same bogland (lakes, shores, mouths, creeks, moss, in the same order). Covers: the smallest island with one plain through-river lake, one where a second river sinks into the lake, one where a bog spawns a river (a creek spring), one where the bog guarantee's spawn bog feeds a lake from a creek spring (the river through the lake is the spawned one), one with an enclosed sea pocket turned into a lake with a bog ring, one with an inland lake (enclosed water the bog did not fill; every scenario also freezes its `inlandLakes`), and one with two lakes (the smallest island with one plain lake is a guaranteed bog on a relaxed through-river site). Every scenario is a real island of a real WorldGenerator.Generate() run at radius 1000 (the smallest of seeds 1-40 with the wanted feature), so terrain, depth-field noise and the trace all agree byte-for-byte with what that seed really produces. Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). BogGenerationGoldenTests.cs (backend) and bogGenerator.golden.test.ts (frontend) each compute against this fixture with their own production implementation, then assert the frozen `rivers`, `bogs` and `inlandLakes` lists (order matters: sorted by (q, r)).",
             options)).Append(",\n  \"scenarios\": [\n");
 
         for (var s = 0; s < scenarios.Length; s++)
@@ -485,7 +487,9 @@ public class GoldenRegenerationTests
                 + string.Join(", ", t.InDirections.Select(d => $"\"{d.ToWireName()}\"")) + "], \"outDirection\": "
                 + (t.OutDirection is { } o ? $"\"{o.ToWireName()}\"" : "null") + ", \"waterEdges\": ["
                 + string.Join(", ", t.WaterEdges.Select(d => $"\"{d.ToWireName()}\"")) + "]}")));
-            sb.Append("\n      ]\n    }").Append(s < scenarios.Length - 1 ? ",\n" : "\n");
+            sb.Append("\n      ],\n      \"inlandLakes\": [");
+            sb.Append(string.Join(", ", island.InlandLakeTiles.Select(t => $"[{t.Q}, {t.R}]")));
+            sb.Append("]\n    }").Append(s < scenarios.Length - 1 ? ",\n" : "\n");
         }
 
         sb.Append("  ]\n}\n");

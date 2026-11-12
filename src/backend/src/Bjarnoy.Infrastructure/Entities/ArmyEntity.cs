@@ -37,6 +37,14 @@ public class ArmyEntity
 
     public int Mission { get; set; }
 
+    /// <summary>The gathering this army is a group of until it merges or leaves it — <see cref="Army.GatheringId"/>.</summary>
+    public Guid? GatheringId { get; set; }
+
+    public GatheringEntity? Gathering { get; set; }
+
+    /// <summary>When that gathering leaves — <see cref="Army.GatherDepartAt"/>; set and cleared together with <see cref="GatheringId"/>.</summary>
+    public DateTimeOffset? GatherDepartAt { get; set; }
+
     /// <summary>
     /// The settlement an <see cref="ArmyMission.Attack"/> army is headed to
     /// fight, or an <see cref="ArmyMission.Support"/> army is headed to (and,
@@ -121,8 +129,14 @@ public class ArmyEntity
 
     public bool IsReturning { get; set; }
 
-    /// <summary>Persisted mirror of <see cref="Movement.RetreatImmune"/> (issue #206 §5).</summary>
-    public bool RetreatImmune { get; set; }
+    /// <summary>Persisted mirror of <see cref="Movement.FieldBattleImmuneUntil"/>; <see langword="null"/> unless the army is fleeing a lost field battle.</summary>
+    public DateTimeOffset? FieldBattleImmuneUntil { get; set; }
+
+    /// <summary>Persisted mirror of <see cref="Movement.IsStranded"/>: the army cannot get home and starves when its food runs out.</summary>
+    public bool IsStranded { get; set; }
+
+    /// <summary>Persisted mirror of <see cref="Movement.RoutePlannedAt"/>; <see langword="null"/> for a row stored before it was recorded.</summary>
+    public DateTimeOffset? RoutePlannedAt { get; set; }
 
     /// <summary>Rebuilds the domain aggregate from the stored columns.</summary>
     public Army ToDomain()
@@ -142,7 +156,9 @@ public class ArmyEntity
                     ReturnEdgeHours = ReturnEdgeHours,
                     TurnAroundAt = TurnAroundAt,
                     IsReturning = IsReturning,
-                    RetreatImmune = RetreatImmune,
+                    FieldBattleImmuneUntil = FieldBattleImmuneUntil,
+                    IsStranded = IsStranded,
+                    RoutePlannedAt = RoutePlannedAt,
                 });
 
         return new Army
@@ -154,6 +170,8 @@ public class ArmyEntity
             Location = location,
             Provisions = Provisions,
             Mission = (ArmyMission)Mission,
+            GatheringId = GatheringId,
+            GatherDepartAt = GatherDepartAt,
             TargetSettlementId = TargetSettlementId,
             TargetBuildingCoord = TargetBuildingQ is { } q ? new HexCoord(q, TargetBuildingR!.Value) : null,
             TargetCampCoord = TargetCampQ is { } cq ? new HexCoord(cq, TargetCampR!.Value) : null,
@@ -198,6 +216,8 @@ public class ArmyEntity
         HomeSpotQ = army.HomeSpot.Q;
         HomeSpotR = army.HomeSpot.R;
         Mission = (int)army.Mission;
+        GatheringId = army.GatheringId;
+        GatherDepartAt = army.GatherDepartAt;
         TargetSettlementId = army.TargetSettlementId;
         TargetBuildingQ = army.TargetBuildingCoord?.Q;
         TargetBuildingR = army.TargetBuildingCoord?.R;
@@ -238,7 +258,9 @@ public class ArmyEntity
                 ReturnEdgeHours = [];
                 TurnAroundAt = default;
                 IsReturning = false;
-                RetreatImmune = false;
+                FieldBattleImmuneUntil = null;
+                IsStranded = false;
+                RoutePlannedAt = null;
                 break;
 
             case ArmyLocation.Supporting supporting:
@@ -256,7 +278,9 @@ public class ArmyEntity
                 ReturnEdgeHours = [];
                 TurnAroundAt = default;
                 IsReturning = false;
-                RetreatImmune = false;
+                FieldBattleImmuneUntil = null;
+                IsStranded = false;
+                RoutePlannedAt = null;
                 break;
 
             case ArmyLocation.InTransit inTransit:
@@ -272,7 +296,9 @@ public class ArmyEntity
                 ReturnEdgeHours = [.. movement.ReturnEdgeHours];
                 TurnAroundAt = movement.TurnAroundAt;
                 IsReturning = movement.IsReturning;
-                RetreatImmune = movement.RetreatImmune;
+                FieldBattleImmuneUntil = movement.FieldBattleImmuneUntil;
+                IsStranded = movement.IsStranded;
+                RoutePlannedAt = movement.RoutePlannedAt;
                 break;
         }
     }

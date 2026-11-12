@@ -18,6 +18,7 @@ import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { useAuthStore } from '../../stores/auth';
 import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
+import CampInstructions from './CampInstructions.vue';
 import HuntTargetSummary from './HuntTargetSummary.vue';
 import DispatchSlots from './DispatchSlots.vue';
 import { useDispatchUnitPicker } from '../../composables/useDispatchUnitPicker';
@@ -31,11 +32,15 @@ import DispatchTargetBuildingPicker from './DispatchTargetBuildingPicker.vue';
 import SendArmyPicker from './SendArmyPicker.vue';
 import { useDispatchTargetBuilding } from '../../composables/useDispatchTargetBuilding';
 import { useUnsavedInput } from '../../composables/useUnsavedInput';
+import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 
 const world = useWorldStore();
 const auth = useAuthStore();
 const catalogue = useUnitCatalogueStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+
+// A layer on the phone stack while mounted (MapView mounts it only while an order is being composed).
+const layer = usePhoneLayer();
 
 const draft = computed(() => world.dispatchDraft);
 const fieldDraft = computed(() => world.fieldOrderDraft);
@@ -62,7 +67,7 @@ function toggleExpanded() {
 }
 
 const garrisonRows = computed(() =>
-  world.hud.garrison
+  (world.dispatchSource?.garrison ?? world.hud.garrison)
     .filter((g) => g.count > 0)
     .map((g) => ({ unit: g.unit, label: unitName(g.unit), available: g.count })),
 );
@@ -80,7 +85,7 @@ function applyQuantity(unit: string, value: number, max: number) {
   // sensible default (the player can still edit it after).
   if (draft.value) {
     world.setDispatchProvisions(
-      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.hud.available.food),
+      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.dispatchSource?.availableFood ?? world.hud.available.food),
     );
   }
 }
@@ -205,7 +210,7 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
 </script>
 
 <template>
-  <div class="dispatch-sheet" :class="{ 'is-expanded': expanded }">
+  <div v-phone-hidden="layer.hidden.value" class="dispatch-sheet" :class="{ 'is-expanded': expanded }">
     <SendArmyPicker v-if="world.sendPicker" />
     <div v-else class="dispatch-sheet-collapsed">
       <div class="dispatch-sheet-row1">
@@ -246,12 +251,16 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
           <button v-if="draft.mission === 'found'" type="button" class="mission-tab active">
             {{ missionName('found') }}
           </button>
+          <button v-if="draft.mission === 'setupcamp'" type="button" class="mission-tab active">
+            {{ missionName('setupcamp') }}
+          </button>
         </div>
 
         <HuntTargetSummary v-if="draft.mission === 'hunt'" :target="draft.targetCamp" :unit-counts="draft.unitCounts" />
         <p v-else-if="draft.mission === 'found'" class="status-subtext instructions">
           {{ t('hud.armyPanel.foundInstructions') }}
         </p>
+        <CampInstructions v-else-if="draft.mission === 'setupcamp'" />
         <template v-else-if="draft.mission !== 'move'">
           <div v-if="selectedTarget" class="target-selected">
             <span>{{ t('hud.armyPanel.target') }} <strong>{{ selectedTarget.name }}</strong> ({{ selectedTarget.ownerName }})</span>
@@ -302,7 +311,6 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
           </div>
           <div v-if="!garrisonRows.length" class="status-subtext">{{ t('hud.armyPanel.noUnitsAvailable') }}</div>
         </div>
-        <p v-if="picker.severalSpots.value" class="status-subtext error-note" data-testid="several-spots">{{ t('hud.garrisonSpots.severalSpots') }}</p>
 
         <DispatchSlots :unit-counts="draft.unitCounts" />
 

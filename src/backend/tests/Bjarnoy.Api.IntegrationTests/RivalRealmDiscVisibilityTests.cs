@@ -7,6 +7,7 @@ using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -40,8 +41,7 @@ public sealed class RivalRealmDiscVisibilityTests : IAsyncLifetime
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 80, cancellationToken: Ct);
         var owner = Unique("owner");
         client.DefaultRequestHeaders.Add("X-Owner-Id", owner);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
         var response = await client.PostJsonAsync(
@@ -96,19 +96,19 @@ public sealed class RivalRealmDiscVisibilityTests : IAsyncLifetime
     {
         var (worldId, own, _, client) = await SetUpAsync();
         using var _ = client;
-        // Nothing of the rival's centre or tower hex is in the visible area (+19 and +22 are past +16). Its Longhouse claim (radius 3 at
-        // level 2) and the tower's (level 6) reach +16, and one palisade stands on a visible hex.
+        // Nothing of the rival's centre or tower hex is in the visible area (+19 and +21 are past +16). Its Longhouse claim (radius 3 at
+        // level 2) and the tower's (level 5, the Tower's top level) reach +16, and one palisade stands on a visible hex.
         var longhouse = At(own, 19);
-        var tower = At(own, 22);
+        var tower = At(own, 21);
         var wall = At(own, 15, 1);
         var rivalId = await PlantAsync(
             worldId, own.IslandId, longhouse, 2,
-            (tower, BuildingType.Tower, 6), (wall, BuildingType.Palisade, 1), (At(own, 20), BuildingType.Farm, 1));
+            (tower, BuildingType.Tower, 5), (wall, BuildingType.Palisade, 1), (At(own, 20), BuildingType.Farm, 1));
 
         var buildings = await BuildingsAsync(client, worldId);
 
         Assert.Equivalent(
-            new[] { (longhouse, "longhouse", 2), (tower, "tower", 6), (wall, "palisade", 1) },
+            new[] { (longhouse, "longhouse", 2), (tower, "tower", 5), (wall, "palisade", 1) },
             buildings!.Select(b => (new HexCoord(b.Q, b.R), b.Type, b.Level)).ToArray());
         Assert.All(buildings!, b => Assert.Equal(rivalId, b.SettlementId));
 
@@ -129,7 +129,7 @@ public sealed class RivalRealmDiscVisibilityTests : IAsyncLifetime
         var (worldId, own, _, client) = await SetUpAsync();
         using var _ = client;
         var rivalId = await PlantAsync(
-            worldId, own.IslandId, At(own, 19), 2, (At(own, 22), BuildingType.Tower, 6), (At(own, 20), BuildingType.Farm, 1));
+            worldId, own.IslandId, At(own, 19), 2, (At(own, 21), BuildingType.Tower, 5), (At(own, 20), BuildingType.Farm, 1));
 
         var view = await client.GetFromJsonAsync<SettlementViewResponse>(
             $"/api/v1/settlements/{rivalId}/view", SqliteApiFixture.StrictJson, Ct);

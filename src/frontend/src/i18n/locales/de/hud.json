@@ -5,7 +5,7 @@
     "goTo": "Zu {name}",
     "rename": "Umbenennen …",
     "realms": "Deine Reiche",
-    "current": "Aktuell"
+    "longhouse": "Langhaus {level}"
   },
   "settlementRename": {
     "label": "Name der Siedlung",
@@ -109,7 +109,7 @@
   },
   "ringMenu": {
     "shrineLimitLock": "Dein Gebiet hat bereits einen Schrein",
-    "storageHouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
+    "greatStorehouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
     "occupiedLock": {
       "giant": "Von einem Riesenwahrzeichen belegt",
       "camp": "Hier hausen wilde Tiere – räum erst ihr Lager",
@@ -150,9 +150,10 @@
       "foundNeedsSettlers": "{have} / {need} Siedler daheim",
       "foundNeedsRenown": "Ruhm {total} / {required}",
       "foundRenownUnknown": "Dein Ruhm wird geprüft …",
+      "setUpCamp": "Strandlager errichten",
+      "campNeedsBuilders": "{have} / {need} Lagerbauer daheim",
       "sendArmyHere": "Armee hierher entsenden",
       "attack": "Angreifen",
-      "support": "Unterstützen",
       "upgrade": "Ausbauen",
       "notEnough": "Benötigt {resources}",
       "raze": "Abreißen",
@@ -179,6 +180,7 @@
       "upgradeSub": "{building} · Stufe {from} → {to}",
       "givesTotal": "gesamt {amount}",
       "needResources": "Es fehlen {resources}",
+      "needResourcesIn": "Es fehlen {resources} · reicht in {time}",
       "needSlots": "Braucht {needed} Bauplatz · {free} von {total} frei | Braucht {needed} Bauplätze · {free} von {total} frei",
       "needSlotsNext": "Braucht {needed} Bauplatz · {free} von {total} frei · nächster frei in {time} | Braucht {needed} Bauplätze · {free} von {total} frei · nächster frei in {time}",
       "willQueue": "Wird hinter den laufenden Bauten eingereiht ({waiting} von {max} wartend)",
@@ -189,7 +191,10 @@
       "razeTitle": "Abriss auf Stufe {level}",
       "razeTitleRemove": "Abreißen",
       "razeSubRemove": "{building} · Stufe 1 → weg",
-      "razeBadge": "ABRISS MÖGLICH"
+      "razeBadge": "ABRISS MÖGLICH",
+      "campTitle": "Strandlager errichten",
+      "campSub": "Zwei Lagerbauer bauen es auf",
+      "campBadge": "HIER MÖGLICH"
     },
     "tap": {
       "build": "{name} noch einmal antippen, um zu bauen",
@@ -197,6 +202,7 @@
       "raze": "{name} noch einmal antippen, um abzureißen"
     },
     "errors": {
+      "couldNotSwitchRealm": "Der Wechsel in dieses Reich ist fehlgeschlagen.",
       "couldNotQueueBuild": "Der Bau konnte nicht eingereiht werden.",
       "couldNotQueueUpgrade": "Der Ausbau konnte nicht eingereiht werden.",
       "couldNotQueueRaze": "Der Abriss konnte nicht eingereiht werden."
@@ -385,14 +391,17 @@
     "supporting": "Unterstützt",
     "returning": "Kehrt zurück",
     "inTransit": "Unterwegs",
-    "hunting": "Auf der Jagd"
+    "hunting": "Auf der Jagd",
+    "cannotGetHome": "Kein Weg nach Hause",
+    "starvesIn": "verhungert in {eta}",
+    "buildingCamp": "Baut das Strandlager, fertig um {time} Uhr"
   },
   "garrisonSpots": {
     "longhouse": "Langhaus",
     "tower": "Wachturm",
     "dock": "Werft",
-    "from": "aus: {spots}",
-    "severalSpots": "Diese Einheiten stehen an mehreren Orten. Von mehreren Orten gleichzeitig loszuschicken, ist bald möglich."
+    "beachcamp": "Strandlager",
+    "from": "aus: {spots}"
   },
   "armyPanel": {
     "title": "Armeen",
@@ -418,6 +427,7 @@
     "cancel": "Abbrechen",
     "sending": "Wird gesendet…",
     "confirmOrder": "Auftrag bestätigen",
+    "campInstructions": "Am letzten Feld der Route errichtest du das Strandlager. Zwei Lagerbauer ziehen los, Schiffe und Begleitschutz kannst du dazunehmen. Es kostet {cost} und ist {time} nach der Ankunft der Armee fertig.",
     "foundInstructions": "Am letzten Feld der Route gründest du die Siedlung. Fünf Siedler ziehen los, Schiffe und Begleitschutz kannst du dazunehmen. Mit Schiffen segelt der Zug und landet am letzten Feld.",
     "dispatchInstructions": "Klicke auf Hexfelder, um eine Route zu planen — der letzte Klick ist das Ziel. {count} {hexWord} geplant.",
     "targetInstructions": "Wähle eine Siedlung zum {mission}, dann optional Hexfelder auf der Karte klicken, um eine Route dorthin zu planen. {count} {waypointWord} geplant.",
@@ -464,13 +474,14 @@
   },
   "sendPicker": {
     "title": "{mission} → {target}",
+    "titleOwnRealm": "Armee entsenden → {target}",
     "close": "Schließen",
     "hex": "Feld ({q}, {r})",
-    "home": "Zu Hause",
-    "garrison": "Garnison",
     "units": "{count} Einheit | {count} Einheiten",
-    "standingAt": "Steht bei ({q}, {r})",
-    "marchingTo": "Marschiert nach ({q}, {r})",
+    "homeUnits": "Zu Hause · {count} Einheit | Zu Hause · {count} Einheiten",
+    "homeEmpty": "Zu Hause · keine Einheiten",
+    "armyStandingAt": "Armee · {count} Einheit bei ({q}, {r}) | Armee · {count} Einheiten bei ({q}, {r})",
+    "armyMarchingTo": "Armee · {count} Einheit auf dem Weg nach ({q}, {r}) | Armee · {count} Einheiten auf dem Weg nach ({q}, {r})",
     "etaMinutes": "{minutes} Min.",
     "etaHours": "{hours} Std. {minutes} Min.",
     "wholeArmy": "Die ganze Armee zieht los.",
@@ -593,6 +604,8 @@
   },
   "panelColumn": {
     "toggle": "{panel} ein- oder ausblenden",
+    "constructionEmpty": "Gerade wird nichts gebaut",
+    "withCount": "{panel} ({count})",
     "collapse": "{panel} einklappen",
     "expand": "{panel} ausklappen"
   }

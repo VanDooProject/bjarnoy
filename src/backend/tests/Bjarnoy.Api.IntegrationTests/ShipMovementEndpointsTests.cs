@@ -480,12 +480,13 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         var targetCentre = new HexCoord(-60, -38);
         var shoreBuilding = new HexCoord(-60, -40);
         var inlandBuilding = new HexCoord(-60, -37);
-        Guid attackerId, targetId;
+        Guid worldId, attackerId, targetId;
 
         await using (var scope = _factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-            var (worldId, islandId) = await AddWorldAsync(db, SmallIslandOptions);
+            var (newWorldId, islandId) = await AddWorldAsync(db, SmallIslandOptions);
+            worldId = newWorldId;
             var attacker = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, attackerOwner, attackerCentre.Q, attackerCentre.R);
             attacker.Buildings.Add(new PlacedBuildingEntity { SettlementId = attacker.Id, Q = dock.Q, R = dock.R, Type = BuildingType.Dockyard, Level = 1 });
             attacker.Garrison.Add(new UnitStackEntity { SettlementId = attacker.Id, SpotQ = dock.Q, SpotR = dock.R, UnitType = UnitType.Karve, Count = 3 });
@@ -535,7 +536,7 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         client.DefaultRequestHeaders.Remove("X-Owner-Id");
         client.DefaultRequestHeaders.Add("X-Owner-Id", targetOwner);
         var reports = await client.GetFromJsonAsync<List<BattleReportResponse>>(
-            $"/api/v1/settlements/{targetId}/reports", SqliteApiFixture.StrictJson, Ct);
+            $"/api/v1/worlds/{worldId}/reports", SqliteApiFixture.StrictJson, Ct);
         var report = Assert.Single(reports!);
         Assert.Equal("attacker", report.Winner);
         Assert.NotNull(report.Siege);

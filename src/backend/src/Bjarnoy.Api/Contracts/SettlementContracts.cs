@@ -277,7 +277,8 @@ public sealed record FeastOfferResponse(
 /// <param name="Claimed">Whether its reward was already claimed.</param>
 /// <param name="Reward">Wood, stone and food paid on claim (clamped to storage).</param>
 /// <param name="Progress">Where the settlement stands toward the goal, or null for a quest without a counted goal.</param>
-public sealed record QuestResponse(string Id, bool Completed, bool Claimed, ResourceLine Reward, QuestProgressResponse? Progress = null);
+public sealed record QuestResponse(
+    string Id, bool Completed, bool Claimed, ResourceLine Reward, QuestProgressResponse? Progress = null, int PremiumDays = 0);
 
 /// <summary>Counted progress toward a quest: <paramref name="Current"/> of <paramref name="Target"/> (never above the target).</summary>
 public sealed record QuestProgressResponse(int Current, int Target);
@@ -358,7 +359,7 @@ public sealed record SettlementResponse(
         var members = shown.Select(m => (Entity: session.EntityOf(m), Domain: store.Outcome(m).Settlement)).ToList();
 
         var speedFactor = session.SpeedFactor;
-        var maxWaitingOrders = session.Anchor.Owner?.IsPremium ?? false ? Settlement.MaxWaitingOrders : 0;
+        var maxWaitingOrders = session.Anchor.Owner?.IsPremiumAt(TimeProvider.System.GetUtcNow()) ?? false ? Settlement.MaxWaitingOrders : 0;
 
         // Only a fishing hut needs its own orientation (see PlacedBuildingResponse), read off its own member's shore.
         string? OrientationFor(SettlementEntity member, BuildingType type, HexCoord coord) =>
@@ -431,9 +432,11 @@ public sealed record SettlementResponse(
                     Feasts.Duration.TotalSeconds / speedFactor,
                     Feasts.RenownFor(domain.TownSquareLevel))
                 : null,
-            [.. Bjarnoy.Domain.Settlers.Quests.All.Select(q => new QuestResponse(
+            // Quests are enabled on the player's first settlement only (economy.md section 7).
+            [.. Bjarnoy.Domain.Settlers.Quests.For(domain).Where(_ => id == session.FirstSettlementId).Select(q => new QuestResponse(
                 q.Id, q.IsCompleted(domain), domain.HasClaimed(q), ResourceLine.From(q.Reward),
-                q.Progress?.Invoke(domain) is { } p ? new QuestProgressResponse(p.Current, p.Target) : null))],
+                q.Progress?.Invoke(domain) is { } p ? new QuestProgressResponse(p.Current, p.Target) : null,
+                q.PremiumDays))],
             WorldClockResponse.From(clock, gameNow),
             [.. store.Realm.SettlementIds
                 .OrderBy(other => other == entity.Id ? 0 : 1)
@@ -491,6 +494,9 @@ public sealed record BuildingPrerequisiteResponse(string Type, int Level);
 /// The building stands on land (<paramref name="AllowedTerrain"/>) <em>and</em>, as an exception, on a coastal-water hex: the palisade's
 /// sea end. Unlike <paramref name="RequiresCoastalWater"/> it does not replace the land terrain.
 /// </param>
+/// <param name="AlsoOnInlandLakeShore">
+/// The building also stands on an inland-lake hex that has land beside it (the Fishing Hut); nothing else stands on an inland lake.
+/// </param>
 /// <param name="RingCategory">
 /// The build ring's group this building is listed under (<c>resource</c>, <c>military</c>, <c>logistics</c>, <c>defense</c>, <c>religion</c>,
 /// <c>water</c>), or null when the ring never lists it (the Longhouse); the client builds its ring from this, so no client table repeats it.
@@ -519,6 +525,7 @@ public sealed record BuildingDefinitionResponse(
     IReadOnlyList<string> AllowedTerrain,
     bool RequiresCoastalWater,
     bool AlsoOnCoastalWater,
+    bool AlsoOnInlandLakeShore,
     int RequiredLonghouseLevel,
     int SlotCost,
     bool OccupiesMostSlots,
@@ -547,6 +554,7 @@ public sealed record BuildingDefinitionResponse(
             [.. definition.AllowedTerrain.Select(t => t.ToWireName()).Order(StringComparer.Ordinal)],
             definition.RequiresCoastalWater,
             definition.AlsoOnCoastalWater,
+            definition.AlsoOnInlandLakeShore,
             definition.RequiredLonghouseLevel,
             definition.SlotCost,
             definition.OccupiesMostSlots,
@@ -574,9 +582,10 @@ public sealed record BuildingDefinitionResponse(
 /// <param name="Relation">How the owner stands to the caller, which picks the realm colour: <c>mine</c>, <c>guild</c> (same guild), <c>treaty</c> (guild with an active peace treaty) or <c>rival</c>.</param>
 /// <param name="LabelQ">Axial q of the hex the client puts the settlement's label on, decided here: the centre for the caller's own settlements and for a rival whose centre is visible, else the visible hex (a standing building's or one inside its claim) of a rival closest to its centre.</param>
 /// <param name="LabelR">Axial r of the label hex, see <paramref name="LabelQ"/>.</param>
+/// <param name="IsBeachCamp">Whether the settlement is a beach camp (<see cref="Settlement.IsBeachCamp"/>): a one-hex settlement with no Longhouse.</param>
 public sealed record SettlementSummary(
     Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine, Guid RealmId, string Relation,
-    int LabelQ, int LabelR)
+    int LabelQ, int LabelR, bool IsBeachCamp = false)
 {
     public static SettlementSummary From(SettlementEntity s, bool mine, RealmLabel realm, string relation, HexCoord label)
     {
@@ -585,7 +594,8 @@ public sealed record SettlementSummary(
         return new SettlementSummary(
             s.Id, realm.Name, s.OwnerName, s.CentreQ, s.CentreR,
             s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
-            s.IslandId, mine, realm.RealmId, relation, label.Q, label.R);
+            s.IslandId, mine, realm.RealmId, relation, label.Q, label.R,
+            Settlement.HasBeachCampAt([.. s.Buildings.Select(b => b.ToPlacedBuilding())], new HexCoord(s.CentreQ, s.CentreR)));
     }
 }
 

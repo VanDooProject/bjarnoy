@@ -56,6 +56,12 @@ public enum UnitType
     /// <c>docs/design/economy.md</c>, "Fire Ship"); requires Karve to be trainable first.
     /// </summary>
     FireShip = 11,
+
+    /// <summary>
+    /// Civilian that sets up a beach camp (<see cref="Bjarnoy.Domain.Settlers.BeachCamp"/>): two of them, landed on a free sand
+    /// shore, build it and are used up doing so. See <c>docs/design/skirmish/beach-camp.md</c>.
+    /// </summary>
+    CampBuilder = 12,
 }
 
 public static class UnitTypeExtensions
@@ -74,6 +80,7 @@ public static class UnitTypeExtensions
         UnitType.Settler => "settler",
         UnitType.Ram => "ram",
         UnitType.FireShip => "fireship",
+        UnitType.CampBuilder => "campbuilder",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown unit type"),
     };
 }

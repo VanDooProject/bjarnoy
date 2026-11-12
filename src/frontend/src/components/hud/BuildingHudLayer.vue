@@ -17,6 +17,7 @@ import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { useWorldStore } from '../../stores/world';
 import { builtBuildingLevels, ownBuildings } from '../../composables/useBuildRing';
 import { useIsMobile } from '../../composables/useIsMobile';
+import { useHiddenUnderPhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import {
   boxChangeFor,
   dialGoneAfterMs,
@@ -101,6 +102,7 @@ const auth = useAuthStore();
 const catalogue = useBuildingCatalogueStore();
 const prefs = useHudPrefsStore();
 const isMobile = useIsMobile();
+const hudHidden = useHiddenUnderPhoneLayer();
 const motion = useBuildingHudMotion();
 
 /** The markers are in the DOM: from the moment they are switched on until their hide animation has ended. */
@@ -371,6 +373,13 @@ function directHit(mouse: { x: number; y: number } | null, candidates: { key: st
 const root = ref<HTMLElement | null>(null);
 const elements = new Map<string, HTMLElement>();
 const lastZ = new Map<string, number>();
+/** The transform / visibility string last written per marker, so the frame loop only touches the style when one changed. */
+const lastTransform = new Map<string, string>();
+const lastVisibility = new Map<string, string>();
+
+// The layer's size, kept up to date by the same ResizeObserver as the boxes' sizes (ensureBoxObserver) so the frame loop never reads the layout for it. Until the first
+// observation it is read once from the element and then cached the same way.
+let rootSize: { w: number; h: number } | null = null;
 
 /** Ring-menu fade per marker (`markerFadeStep`); absent = fully visible. */
 const visibility = new Map<string, number>();
@@ -387,16 +396,21 @@ const boxSizes = new Map<string, { w: number; h: number }>();
 const observedBoxes = new Map<string, HTMLElement>();
 let boxObserver: ResizeObserver | null = null;
 
-function ensureBoxObserver(): ResizeObserver | null {
-  if (boxObserver || typeof ResizeObserver === 'undefined') return boxObserver;
+function ensureBoxObserver(): ResizeObserver {
+  if (boxObserver) return boxObserver;
   boxObserver = new ResizeObserver((entries) => {
     for (const entry of entries) {
       const el = entry.target as HTMLElement;
+      // The border box (the near / mid padding change a marker's box); where the entry has no border-box size, the layout size.
+      const size = entry.borderBoxSize?.[0];
+      const measured = size ? { w: size.inlineSize, h: size.blockSize } : { w: el.offsetWidth, h: el.offsetHeight };
+      if (el === root.value) {
+        rootSize = measured;
+        continue;
+      }
       const key = keyOf(el);
       if (!key || observedBoxes.get(key) !== el) continue;
-      // The border box: the near / mid padding change resizes it too. Where the entry has no border-box size, the layout size.
-      const size = entry.borderBoxSize?.[0];
-      boxSizes.set(key, size ? { w: size.inlineSize, h: size.blockSize } : { w: el.offsetWidth, h: el.offsetHeight });
+      boxSizes.set(key, measured);
     }
   });
   return boxObserver;
@@ -408,7 +422,7 @@ function setBox(key: string, el: unknown) {
     if (previous === el) return;
     if (previous) boxObserver?.unobserve(previous);
     observedBoxes.set(key, el);
-    ensureBoxObserver()?.observe(el, { box: 'border-box' });
+    ensureBoxObserver().observe(el, { box: 'border-box' });
     return;
   }
   if (previous) boxObserver?.unobserve(previous);
@@ -422,6 +436,8 @@ function setElement(key: string, el: unknown) {
   else {
     elements.delete(key);
     lastZ.delete(key);
+    lastTransform.delete(key);
+    lastVisibility.delete(key);
     dialDiscs.delete(key);
     boxRects.delete(key);
     hoverT.delete(key);
@@ -468,8 +484,9 @@ function tick() {
     return;
   }
   const mapScale = renderer.dialMapScale;
-  const width = root.value?.offsetWidth ?? window.innerWidth;
-  const height = root.value?.offsetHeight ?? window.innerHeight;
+  if (!rootSize && root.value) rootSize = { w: root.value.offsetWidth, h: root.value.offsetHeight };
+  const width = rootSize?.w ?? window.innerWidth;
+  const height = rootSize?.h ?? window.innerHeight;
   const circle = renderer.markerOcclusionCircle;
   const placed: { key: string; x: number; hovered: boolean }[] = [];
   const mouse = renderer.mousePoint;
@@ -532,10 +549,21 @@ function tick() {
     else dialDiscs.set(marker.key, { key: marker.hexKey, cx: x, cy: y, r: dialRadiusPx(zs) });
     if (boxSize) boxRects.set(marker.key, markerBoxRect(x, y, boxSize, zs));
     else boxRects.delete(marker.key);
-    el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${zs.toFixed(3)})`;
+    const transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${zs.toFixed(3)})`;
+    if (lastTransform.get(marker.key) !== transform) {
+      lastTransform.set(marker.key, transform);
+      el.style.transform = transform;
+    }
     // A marker well off screen is not worth compositing.
     const reach = 320 * zs;
-    el.style.visibility = x < -reach || x > width + reach || y < -reach || y > height + reach ? 'hidden' : 'visible';
+    // Never an explicit 'visible': it would override a phone layer hiding the whole layer (usePhoneLayer's vPhoneHidden).
+    // `data-placed` lifts the CSS default hidden state until the first placement.
+    if (el.dataset.placed === undefined) el.dataset.placed = '';
+    const shown = x < -reach || x > width + reach || y < -reach || y > height + reach ? 'hidden' : '';
+    if (lastVisibility.get(marker.key) !== shown) {
+      lastVisibility.set(marker.key, shown);
+      el.style.visibility = shown;
+    }
     placed.push({ key: marker.key, x, hovered: t > 0 });
   }
   if (tiersChanged) tiers.value = nextTiers;
@@ -689,6 +717,7 @@ function onKeyDown(e: KeyboardEvent) {
 }
 
 onMounted(() => {
+  if (root.value) ensureBoxObserver().observe(root.value, { box: 'border-box' });
   window.addEventListener('keydown', onKeyDown);
   props.renderer?.setTapObserver(onMapTap);
   props.renderer?.setFrameObserver(tick);
@@ -709,6 +738,7 @@ onUnmounted(() => {
   motion.dispose();
   boxObserver?.disconnect();
   boxObserver = null;
+  rootSize = null;
   observedBoxes.clear();
   boxSizes.clear();
   window.removeEventListener('keydown', onKeyDown);
@@ -718,7 +748,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="root" class="building-hud">
+  <div ref="root" v-phone-hidden="hudHidden" class="building-hud">
     <div class="building-hud__markers">
         <div v-for="m in markers" :key="m.key" :ref="(el) => setElement(m.key, el)" class="hud-marker" :data-coord="m.key" :data-tier="tierOf(m.key)">
           <div class="hud-marker__inner" :style="innerStyle" role="img" :aria-label="t('hud.buildingHud.markerLabel', { building: m.name, level: m.level })">
@@ -792,6 +822,9 @@ onUnmounted(() => {
   width: 0;
   height: 0;
   will-change: transform;
+}
+/* Hidden until the layer has placed it (data-placed), so a marker never flashes at the origin. */
+.hud-marker:not([data-placed]) {
   visibility: hidden;
 }
 .hud-marker__inner {

@@ -39,8 +39,8 @@ public enum ArmyMission
     /// phase 7, design doc §4): both sides' loss fraction is scaled down and
     /// capped rather than the loser losing everything, since a raider
     /// prioritises loot over annihilation. Dispatch validation, target-
-    /// building support, food-range rules, and siege behavior on a win are
-    /// all identical to <see cref="Attack"/> — the only difference is the
+    /// building support and food-range rules are identical to <see cref="Attack"/>, but a
+    /// raid only plunders: it does no land siege, its catapults and rams destroy nothing. The other difference is the
     /// <c>raid: true</c> flag threaded into <see cref="Combat.BattleResolver.Resolve"/>
     /// by <see cref="SettleArrival"/>. See <see cref="Combat.BattleResolver.Resolve"/>'s
     /// remarks for the exact loss-fraction math.
@@ -71,7 +71,21 @@ public enum ArmyMission
     /// see <see cref="Army.SettleHuntArrival"/>.
     /// </summary>
     Hunt = 5,
+
+    /// <summary>
+    /// Travel to a free sand shore hex and, once the army has stood there for <see cref="BeachCamp.BuildDuration"/>, set up a
+    /// beach camp: a one-hex settlement (<c>ArmyService.ResolveCampAsync</c>, <see cref="Army.PlanCampBuild"/>). The two camp
+    /// builders are used up. The camp's cost rides in <see cref="Army.Loot"/> until then, so a recall or an invalid site brings
+    /// it home with the army. See <c>docs/design/skirmish/beach-camp.md</c>.
+    /// </summary>
+    SetUpCamp = 6,
 }
+
+/// <summary>
+/// The outcome of <see cref="Army.RerouteAroundWall"/>: the army afterwards, and the hex it stopped on when it found no way past the wall
+/// (<see langword="null"/> when it found another route or turned home).
+/// </summary>
+public sealed record WallRerouteResult(Army Army, HexCoord? StuckAt);
 
 /// <summary>
 /// A body of units in the field: dispatched from a settlement's
@@ -95,7 +109,7 @@ public enum ArmyMission
 /// terrain as impassable either way.
 /// </para>
 /// </remarks>
-public sealed record Army
+public sealed partial record Army
 {
     public required Guid Id { get; init; }
 
@@ -109,6 +123,26 @@ public sealed record Army
     public required HexCoord HomeSpot { get; init; }
 
     public IReadOnlyList<UnitStack> Stacks { get; init; } = [];
+
+    /// <summary>
+    /// The <see cref="Gathering"/> this army is walking to or waiting at (a group of an army sent from several garrison spots), or
+    /// <see langword="null"/> for an army that is not part of one. Recalling, a field order, a split, a lost fight and a turn-around
+    /// all clear it.
+    /// </summary>
+    public Guid? GatheringId { get; init; }
+
+    /// <summary>
+    /// When the <see cref="Gathering"/> this army belongs to leaves (its fixed departure); set and cleared together with
+    /// <see cref="GatheringId"/> (<see cref="JoinGathering"/>, <see cref="LeaveGathering"/>). Until then the army stands on its meeting hex
+    /// and never turns around on its own (<see cref="SettleTo"/>).
+    /// </summary>
+    public DateTimeOffset? GatherDepartAt { get; init; }
+
+    /// <summary>This army as a group of the gathering <paramref name="gatheringId"/>, which leaves at <paramref name="departAt"/>.</summary>
+    public Army JoinGathering(Guid gatheringId, DateTimeOffset departAt) => this with { GatheringId = gatheringId, GatherDepartAt = departAt };
+
+    /// <summary>This army as no group of any gathering.</summary>
+    public Army LeaveGathering() => this with { GatheringId = null, GatherDepartAt = null };
 
     /// <summary>
     /// True when any stack is a <see cref="UnitClass.Ship"/> (the rest are passengers, see this file's own class
@@ -201,6 +235,43 @@ public sealed record Army
         return this with { Provisions = Math.Max(0, provisionsAtThen) + burnedSinceDeparture };
     }
 
+    /// <summary>
+    /// True while this army cannot get home and so stands where it is, burning provisions until it starves
+    /// (<c>docs/design/troop-movement-range.md</c> §2a). The single place that decides it.
+    /// </summary>
+    public bool CannotGetHome => Location is ArmyLocation.InTransit { Movement.IsStranded: true };
+
+    /// <summary>
+    /// The instant a stranded army's provisions hit zero and the whole army dies (<see cref="ProvisionsAt"/> reaches 0);
+    /// <see langword="null"/> when the army is not stranded or burns nothing.
+    /// </summary>
+    public DateTimeOffset? StarvesAt =>
+        CannotGetHome && TotalUpkeepPerHour > 0 && Location is ArmyLocation.InTransit { Movement: var movement }
+            ? movement.DepartedAt + TimeSpan.FromHours(Provisions / TotalUpkeepPerHour)
+            : null;
+
+    /// <summary>
+    /// This army left standing on <paramref name="hex"/> from <paramref name="at"/> because it has no way home: the provisions it carried at
+    /// <paramref name="at"/> are kept and burn from there, and <see cref="Movement.TurnAroundAt"/> is the instant it starves, so the
+    /// "standing" checks of orders and camp aggression keep working until then. Any later order builds a normal movement.
+    /// </summary>
+    public Army Strand(DateTimeOffset at, HexCoord hex, DateTimeOffset? fieldBattleImmuneUntil = null)
+    {
+        // The flee protection of the movement it leaves is kept (a stranded army that is stranded again stays protected).
+        var immuneUntil = fieldBattleImmuneUntil
+            ?? (Location is ArmyLocation.InTransit { Movement.FieldBattleImmuneUntil: { } carried } ? carried : null);
+        var stranded = this with
+        {
+            Provisions = ProvisionsAt(at),
+            Location = new ArmyLocation.InTransit(Movement.Movement.Stranded(at, hex) with { FieldBattleImmuneUntil = immuneUntil }),
+        };
+        var turnAround = stranded.StarvesAt ?? at.AddYears(100);
+        return stranded with
+        {
+            Location = new ArmyLocation.InTransit(((ArmyLocation.InTransit)stranded.Location).Movement with { TurnAroundAt = turnAround }),
+        };
+    }
+
     /// <summary>Current hex: <paramref name="home"/> while <see cref="ArmyLocation.AtHome"/>, else the active leg's position.</summary>
     public HexCoord PositionAt(HexCoord home, DateTimeOffset now) => Location switch
     {
@@ -260,6 +331,11 @@ public sealed record Army
     /// #55 §6: a convoy already travelling is never invalidated later by a
     /// renown or slot rule that changes after it left).
     /// </param>
+    /// <param name="isCampSiteOccupied">
+    /// Only consulted for <see cref="ArmyMission.SetUpCamp"/>: whether <paramref name="destination"/> holds a building of any
+    /// player, a settlement centre or a wildlife camp (see <see cref="BeachCamp.CheckSite"/>). The caller has the database, so it
+    /// supplies this; <see langword="null"/> means nothing stands there.
+    /// </param>
     /// <param name="speedFactor">
     /// The world's speed multiplier, mirroring how build/training durations
     /// are scaled in <see cref="Buildings.Settlement.PlanBuild"/>. Defaults to
@@ -305,7 +381,8 @@ public sealed record Army
         HexCoord? targetCampCoord = null,
         bool targetCampIsWater = false,
         bool targetCampIsSand = false,
-        IReadOnlyList<GarrisonSpot>? targetSpots = null)
+        IReadOnlyList<GarrisonSpot>? targetSpots = null,
+        Func<HexCoord, bool>? isCampSiteOccupied = null)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
@@ -317,46 +394,37 @@ public sealed record Army
         // Any request with at least one ship is a fleet, for every mission; the non-ship stacks in it are its
         // passengers (docs/design/economy.md, "Troops on ships"). Whether a requested unit type even exists is
         // Settlement.PlanDispatch's job below.
-        var isFoundingConvoy = mission == ArmyMission.Found;
         var isFleet = normalisedRequest.Any(s => UnitCatalogue.Get(s.Type).Class == UnitClass.Ship);
 
-        // Ship slots, hunt camp, target settlement, target building and fleet shore rules: shared with
-        // PlanFieldOrder, which holds a field order to exactly the same targets.
-        var target = ValidateMissionTarget(
-            mission, normalisedRequest, settlement.Id, targetSettlementId, targetBuildingCoord, targetClaimDiscs,
-            destination, targetCampCoord, targetCampIsWater, targetCampIsSand, terrainAt, giants, targetSpots);
-        if (target.Rejection != DispatchRejection.None)
+        var check = ValidateDispatchRequest(
+            mission, normalisedRequest, settlement.Id, targetSettlementId, targetBuildingCoord, targetClaimDiscs, destination,
+            targetCampCoord, targetCampIsWater, targetCampIsSand, terrainAt, giants, targetSpots, isHexFoundable,
+            renownAndSlotAllowed, isCampSiteOccupied);
+        if (check.Rejection != DispatchRejection.None)
         {
-            return DispatchDecision.Rejected(target.Rejection);
+            return DispatchDecision.Rejected(check.Rejection);
         }
 
-        var routeDestination = target.RouteDestination;
-
-        if (isFoundingConvoy)
-        {
-            var settlerCount = normalisedRequest
-                .Where(s => s.Type == UnitType.Settler)
-                .Sum(s => s.Count);
-            if (settlerCount != Founding.RequiredSettlers)
-            {
-                return DispatchDecision.Rejected(DispatchRejection.WrongSettlerCount);
-            }
-
-            if (!renownAndSlotAllowed)
-            {
-                return DispatchDecision.Rejected(DispatchRejection.RenownOrSettlementSlotRequirementNotMet);
-            }
-
-            if (isHexFoundable is not null && !isHexFoundable(destination))
-            {
-                return DispatchDecision.Rejected(DispatchRejection.TargetHexNotFoundable);
-            }
-        }
+        var routeDestination = check.RouteDestination;
+        var isCampMission = mission == ArmyMission.SetUpCamp;
 
         var settlementDecision = settlement.PlanDispatch(fromSpot, requestedUnits, provisions, now);
         if (!settlementDecision.Accepted)
         {
             return DispatchDecision.Rejected(settlementDecision.Rejection);
+        }
+
+        // The camp's cost leaves the stock now, like the provisions (and not out of what the build queue has reserved), and
+        // rides in the army's Loot.
+        var dispatchedFrom = settlementDecision.Settlement!;
+        if (isCampMission)
+        {
+            if (!dispatchedFrom.TrySpendAvailable(BeachCamp.Cost, now, out var paidForCamp))
+            {
+                return DispatchDecision.Rejected(DispatchRejection.InsufficientResources);
+            }
+
+            dispatchedFrom = dispatchedFrom with { Resources = paidForCamp };
         }
 
         // A fleet needs every hex of its route to be open sea; a land army
@@ -365,67 +433,34 @@ public sealed record Army
         // every HexPathfinder call for this dispatch.
         var isLandUnit = !isFleet;
 
-        // A land army's Attack/Support destination is always a real settlement's own centre — inherently land — so
-        // this check applies to it exactly as before fleets existed. A fleet's Attack/Raid destination is the shore
-        // building it was sent at (a shoreline land hex or a sea hex), and its Support destination is the settlement
-        // centre, which is land; landing on land is exactly the point for a fleet (see FindPath's isLandUnit remarks
-        // on the beaching/harbor exemption it applies at both route endpoints), so this generic sea-only check is
-        // skipped for those missions. The real fleet-reachability gate for Attack/Raid is the shore-building check
-        // above, not this one. A sea Found convoy's destination is, by definition, the land hex it means to land
-        // settlers on (issue #55 §2) — same beaching exemption, no separate shoreline check needed:
-        // HexPathfinder can only ever reach that land hex by sea if it is adjacent to reachable open water, which is
-        // exactly what "shoreline" means (see Shoreline.IsShoreline); any other land hex fails as UnreachableLeg below.
-        if (!SkipsDestinationTerrainCheck(isFleet, mission, targetCampIsSand) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
+        var endpointRejection = ValidateEndpoints(isFleet, mission, targetCampIsSand, routeDestination, waypoints, terrainAt);
+        if (endpointRejection != DispatchRejection.None)
         {
-            return DispatchDecision.Rejected(isFleet
-                ? DispatchRejection.DestinationNotSea
-                : DispatchRejection.DestinationNotLand);
-        }
-
-        foreach (var waypoint in waypoints)
-        {
-            if (!terrainAt(waypoint).IsTraversable(isLandUnit))
-            {
-                return DispatchDecision.Rejected(isFleet
-                    ? DispatchRejection.WaypointNotSea
-                    : DispatchRejection.WaypointNotLand);
-            }
+            return DispatchDecision.Rejected(endpointRejection);
         }
 
         // The army leaves from (and returns to) the garrison spot its units stood at.
-        var origin = fromSpot;
-        List<HexCoord> stops = [origin, .. waypoints, routeDestination];
-        List<HexCoord> fullPath = [origin];
-
-        for (var i = 0; i < stops.Count - 1; i++)
+        var router = new Router(terrainAt, speedFactor, isRiver, isWideRiver, walls);
+        var (fullPath, routeRejection) = router.Chain(fromSpot, [.. waypoints, routeDestination], isLandUnit);
+        if (fullPath is null)
         {
-            var search = HexPathfinder.Search(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
-            if (search.Path is not { Count: > 0 } leg)
-            {
-                return DispatchDecision.Rejected(
-                    search.LimitReached ? DispatchRejection.RouteTooLong
-                    : isFleet ? DispatchRejection.NoSeaRoute
-                    : DispatchRejection.UnreachableLeg);
-            }
-
-            // Drop the joint hex: leg[0] is stops[i], already the last entry added.
-            fullPath.AddRange(leg.Skip(1));
+            return DispatchDecision.Rejected(routeRejection);
         }
 
         var stacks = settlementDecision.Stacks!;
         var speed = ShipCargo.Pace(stacks);
         var upkeepPerHour = stacks.Sum(s => UnitCatalogue.Get(s.Type).UpkeepPerHour * s.Count);
 
-        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
-        var edgeHours = HexPathfinder.EdgeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var outbound = router.Times(fullPath, speed, isLandUnit);
+        var cumulativeHours = outbound.Cumulative;
+        var edgeHours = outbound.Edges;
 
         // The way home is the way out walked backwards: a second search from the destination would be a fresh
         // search with its own node budget and could give up on a trip the outbound search just planned.
-        List<HexCoord> returnPath = [.. fullPath];
-        returnPath.Reverse();
-
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
-        var returnEdgeHours = HexPathfinder.EdgeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnPath = Reversed(fullPath);
+        var homeWay = router.Times(returnPath, speed, isLandUnit);
+        var returnCumulativeHours = homeWay.Cumulative;
+        var returnEdgeHours = homeWay.Edges;
 
         // Every mission, Support included, needs the full round trip: a guest
         // does not burn its own provisions while hosted (Settlement.SettleTo
@@ -433,7 +468,9 @@ public sealed record Army
         // carrying, with nobody feeding it on the way — so the same
         // "can it get back" check that gates Move/Attack/Raid has to gate
         // Support too, or a recalled guest starves on the road home.
-        var totalFoodNeeded = (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
+        // A camp army also stands on the site while the camp is built, and must not be due to turn around before it is up.
+        var standingHours = isCampMission ? BeachCamp.ScaledBuildDuration(speedFactor).TotalHours : 0;
+        var totalFoodNeeded = (cumulativeHours[^1] + standingHours + returnCumulativeHours[^1]) * upkeepPerHour;
 
         if (provisions < totalFoodNeeded)
         {
@@ -455,9 +492,115 @@ public sealed record Army
             TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             TargetBuildingCoord = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetBuildingCoord : null,
             TargetCampCoord = mission == ArmyMission.Hunt ? targetCampCoord : null,
+            Loot = isCampMission ? BeachCamp.Cost : default,
         };
 
-        return DispatchDecision.Accept(settlementDecision.Settlement!, army);
+        return DispatchDecision.Accept(dispatchedFrom, army);
+    }
+
+    /// <summary>
+    /// The rules a dispatch holds its request to before any unit leaves the garrison, in one place for a dispatch from one spot
+    /// (<see cref="PlanDispatch"/>) and one from several (<see cref="PlanGatheredDispatch"/>): the mission and target rules
+    /// (<see cref="ValidateMissionTarget"/>), the settler count, renown and free site of a <see cref="ArmyMission.Found"/> convoy, and the
+    /// builder count and site of a <see cref="ArmyMission.SetUpCamp"/> army. <paramref name="units"/> are all the units that travel.
+    /// </summary>
+    private static (DispatchRejection Rejection, HexCoord RouteDestination) ValidateDispatchRequest(
+        ArmyMission mission,
+        IReadOnlyList<UnitStack> units,
+        Guid homeSettlementId,
+        Guid? targetSettlementId,
+        HexCoord? targetBuildingCoord,
+        IReadOnlyList<(HexCoord Centre, int Radius)>? targetClaimDiscs,
+        HexCoord destination,
+        HexCoord? targetCampCoord,
+        bool targetCampIsWater,
+        bool targetCampIsSand,
+        Func<HexCoord, Terrain> terrainAt,
+        IGiantIndex? giants,
+        IReadOnlyList<GarrisonSpot>? targetSpots,
+        Func<HexCoord, bool>? isHexFoundable,
+        bool renownAndSlotAllowed,
+        Func<HexCoord, bool>? isCampSiteOccupied)
+    {
+        // Ship slots, hunt camp, target settlement, target building and fleet shore rules: shared with
+        // PlanFieldOrder, which holds a field order to exactly the same targets.
+        var target = ValidateMissionTarget(
+            mission, units, homeSettlementId, targetSettlementId, targetBuildingCoord, targetClaimDiscs,
+            destination, targetCampCoord, targetCampIsWater, targetCampIsSand, terrainAt, giants, targetSpots);
+        if (target.Rejection != DispatchRejection.None)
+        {
+            return target;
+        }
+
+        if (mission == ArmyMission.Found)
+        {
+            var settlerCount = units
+                .Where(s => s.Type == UnitType.Settler)
+                .Sum(s => s.Count);
+            if (settlerCount != Founding.RequiredSettlers)
+            {
+                return (DispatchRejection.WrongSettlerCount, destination);
+            }
+
+            if (!renownAndSlotAllowed)
+            {
+                return (DispatchRejection.RenownOrSettlementSlotRequirementNotMet, destination);
+            }
+
+            if (isHexFoundable is not null && !isHexFoundable(destination))
+            {
+                return (DispatchRejection.TargetHexNotFoundable, destination);
+            }
+        }
+
+        if (mission == ArmyMission.SetUpCamp)
+        {
+            var builderCount = units
+                .Where(s => s.Type == UnitType.CampBuilder)
+                .Sum(s => s.Count);
+            if (builderCount != BeachCamp.RequiredBuilders)
+            {
+                return (DispatchRejection.WrongCampBuilderCount, destination);
+            }
+
+            var siteRejection = BeachCamp.CheckSite(destination, terrainAt, giants, isCampSiteOccupied);
+            if (siteRejection != DispatchRejection.None)
+            {
+                return (siteRejection, destination);
+            }
+        }
+
+        return target;
+    }
+
+    /// <summary>
+    /// The terrain rules for the hexes a dispatch names, shared by both dispatch planners: the route's end and every waypoint must be
+    /// traversable for the unit kind, except where a fleet lands (see <see cref="SkipsDestinationTerrainCheck"/>).
+    /// </summary>
+    private static DispatchRejection ValidateEndpoints(
+        bool isFleet, ArmyMission mission, bool targetCampIsSand, HexCoord routeDestination, IReadOnlyList<HexCoord> waypoints,
+        Func<HexCoord, Terrain> terrainAt)
+    {
+        var isLandUnit = !isFleet;
+
+        // A land army's Attack/Support destination is always a real settlement's own centre — inherently land. A fleet's
+        // Attack/Raid destination is the shore building it was sent at and its Support destination is the settlement centre; landing
+        // on land is exactly the point for a fleet (see HexPathfinder.FindPath's beaching exemption at both route endpoints), so the
+        // generic sea-only check is skipped for those missions, and for a sea Found convoy's landing hex (issue #55 §2).
+        if (!SkipsDestinationTerrainCheck(isFleet, mission, targetCampIsSand) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
+        {
+            return isFleet ? DispatchRejection.DestinationNotSea : DispatchRejection.DestinationNotLand;
+        }
+
+        foreach (var waypoint in waypoints)
+        {
+            if (!terrainAt(waypoint).IsTraversable(isLandUnit))
+            {
+                return isFleet ? DispatchRejection.WaypointNotSea : DispatchRejection.WaypointNotLand;
+            }
+        }
+
+        return DispatchRejection.None;
     }
 
     /// <summary>
@@ -547,9 +690,7 @@ public sealed record Army
         // (see TargetBuildingCoord's remarks), since the layout can change
         // before the army arrives. All this rejects is "a target building was
         // named for a mission that has no battle to apply it in". Raid mirrors
-        // Attack here — a raid can carry catapults just as an attack can (the
-        // design doc places no restriction on this), even though it usually
-        // wouldn't.
+        // Attack here (a fleet raid needs its shore building to land at), though a raid does no siege damage to it.
         if (targetBuildingCoord is not null && mission is not (ArmyMission.Attack or ArmyMission.Raid or ArmyMission.Support))
         {
             return (DispatchRejection.TargetBuildingRequiresAttackMission, destination);
@@ -610,6 +751,7 @@ public sealed record Army
     /// </summary>
     private static bool SkipsDestinationTerrainCheck(bool isFleet, ArmyMission mission, bool targetCampIsSand) =>
         isFleet && (mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid or ArmyMission.Found
+            or ArmyMission.SetUpCamp
             || (mission == ArmyMission.Hunt && targetCampIsSand));
 
     /// <summary>
@@ -622,7 +764,7 @@ public sealed record Army
     /// <see cref="ArmyMission.Raid"/> army fights through
     /// <see cref="BattleResolver.Resolve"/>'s <c>raid: true</c> path (reduced,
     /// capped losses on both sides — issue #40 phase 7); everything else
-    /// (guest combining, loot, siege) is identical to <see cref="ArmyMission.Attack"/>.
+    /// (guest combining, loot) is identical to <see cref="ArmyMission.Attack"/>; only a won Attack does siege damage.
     /// Otherwise (mid-journey, already on the return leg, or a
     /// <see cref="Move"/>/<see cref="Support"/>-mission army) this is a no-op:
     /// <see cref="ArmyArrivalResult.Fought"/> is <see langword="false"/> and
@@ -789,10 +931,7 @@ public sealed record Army
             ReturnEdgeHours = movement.ReturnEdgeHours,
             TurnAroundAt = battleInstant,
             IsReturning = true,
-            // A battle-forced retreat is immune to further interception
-            // (issue #206 §5) — not something a player triggers on demand,
-            // unlike a voluntary Recall.
-            RetreatImmune = true,
+            RoutePlannedAt = movement.RoutePlannedAt,
         };
 
         // Provisions are rebased to what the army carried at the battle instant, plus what the win refilled (same trick
@@ -843,7 +982,7 @@ public sealed record Army
             ReturnEdgeHours = movement.ReturnEdgeHours,
             TurnAroundAt = battleInstant,
             IsReturning = true,
-            RetreatImmune = true,
+            RoutePlannedAt = movement.RoutePlannedAt,
         };
 
         // What the army carried at the battle instant, plus the food the win took from the camp to refill it.
@@ -933,6 +1072,7 @@ public sealed record Army
             ReturnEdgeHours = edgeHours,
             TurnAroundAt = now,
             IsReturning = true,
+            RoutePlannedAt = now,
         };
 
         var army = new Army
@@ -1026,9 +1166,10 @@ public sealed record Army
 
         var returnCumulative = HexPathfinder.CumulativeHours(back, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         var returnEdge = HexPathfinder.EdgeHours(back, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        // The route out keeps the instant it was planned at (the earlier of the two).
         var rebuilt = Movement.Movement.Create(
             movement.DepartedAt, movement.Path, movement.CumulativeHours, movement.EdgeHours, back, returnCumulative, returnEdge,
-            Provisions, TotalUpkeepPerHour);
+            Provisions, TotalUpkeepPerHour) with { RoutePlannedAt = movement.RoutePlannedAt };
         return this with { Location = new ArmyLocation.InTransit(rebuilt), HomeSpot = newHome };
     }
 
@@ -1205,6 +1346,42 @@ public sealed record Army
     }
 
     /// <summary>
+    /// Decides whether an <see cref="ArmyMission.SetUpCamp"/> army has stood on its site long enough
+    /// (<see cref="Movement.ArrivesAt"/> plus <see cref="BeachCamp.ScaledBuildDuration"/>) for the camp to be up, and if so
+    /// whether the site is still free. A pure decision; creating the settlement is <c>ArmyService.ResolveCampAsync</c>'s job.
+    /// A recalled army (<see cref="Movement.IsReturning"/>) is never due: recalling during the build cancels the camp.
+    /// When the site is no longer free the caller settles the army the ordinary way: it stands, auto-returns and can be
+    /// recalled, and its <see cref="Loot"/> (the camp's cost) comes home with it.
+    /// </summary>
+    /// <param name="siteStillFree">The site rule (<see cref="BeachCamp.CheckSite"/>) re-checked as of the completion instant.</param>
+    public static CampBuildResult PlanCampBuild(Army army, DateTimeOffset now, double speedFactor, bool siteStillFree)
+    {
+        ArgumentNullException.ThrowIfNull(army);
+
+        if (army.Mission != ArmyMission.SetUpCamp
+            || army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit)
+        {
+            return new CampBuildResult(false, false, default, default, [], 0);
+        }
+
+        var completesAt = inTransit.Movement.ArrivesAt + BeachCamp.ScaledBuildDuration(speedFactor);
+        var site = inTransit.Movement.Path[^1];
+        if (now < completesAt)
+        {
+            return new CampBuildResult(false, false, site, completesAt, [], 0);
+        }
+
+        if (!siteStillFree)
+        {
+            return new CampBuildResult(true, false, site, completesAt, [], 0);
+        }
+
+        // The camp builders are used up; whatever else travelled along (troops, the ships that carried them) garrisons the camp.
+        var garrison = army.Stacks.Where(s => s.Type != UnitType.CampBuilder).ToList();
+        return new CampBuildResult(true, true, site, completesAt, garrison, army.ProvisionsAt(completesAt));
+    }
+
+    /// <summary>
     /// Redirects an <see cref="ArmyMission.Found"/> convoy to a different
     /// target hex — issue #55 §6's "retargetable" edge case, for when the
     /// original target was claimed by someone else mid-transit (see
@@ -1330,9 +1507,19 @@ public sealed record Army
 
         var movement = inTransit.Movement;
 
+        if (movement.IsStranded)
+        {
+            // Never turns around: it waits for the food to run out, then the whole army is gone.
+            return StarvesAt is { } starvesAt && now >= starvesAt
+                ? new ArmySettleResult(
+                    this with { Provisions = 0 }, Changed: true, ArrivedHome: false, [new WalkedLeg(movement, starvesAt)], Starved: true)
+                : new ArmySettleResult(this, Changed: false, ArrivedHome: false);
+        }
+
         if (!movement.IsReturning)
         {
-            if (now < movement.TurnAroundAt)
+            // A group of a gathering stands on its meeting hex until the army leaves, whatever its own food would allow.
+            if (now < movement.TurnAroundAt || (GatheringId is not null && GatherDepartAt is { } departAt && now <= departAt))
             {
                 return new ArmySettleResult(this, Changed: false, ArrivedHome: false);
             }
@@ -1354,17 +1541,14 @@ public sealed record Army
                 ReturnEdgeHours = movement.ReturnEdgeHours,
                 TurnAroundAt = movement.TurnAroundAt,
                 IsReturning = true,
-                // Natural provisions-driven turnaround is immune to
-                // interception (issue #206 §5) — not something a player
-                // triggers on demand.
-                RetreatImmune = true,
+                RoutePlannedAt = movement.RoutePlannedAt,
             };
 
-            var turned = this with
+            var turned = (this with
             {
                 Location = new ArmyLocation.InTransit(returning),
                 Provisions = provisionsAtTurnAround,
-            };
+            }).LeaveGathering();
 
             var outbound = new WalkedLeg(movement, movement.TurnAroundAt);
             return now >= returning.ArrivesAt
@@ -1469,9 +1653,10 @@ public sealed record Army
             ReturnEdgeHours = edgeHours,
             TurnAroundAt = now,
             IsReturning = true,
+            RoutePlannedAt = now,
         };
 
-        return this with { Location = new ArmyLocation.InTransit(recallMovement), Provisions = provisionsNow };
+        return (this with { Location = new ArmyLocation.InTransit(recallMovement), Provisions = provisionsNow }).LeaveGathering();
     }
 
     /// <summary>
@@ -1479,41 +1664,43 @@ public sealed record Army
     /// march (issue #206 §5) — the mechanical consequence of losing (or
     /// tying) a <see cref="FieldBattleResolver"/> interception. Deliberately
     /// not built through <see cref="Recall"/>: the resulting <see cref="Movement"/>
-    /// carries <see cref="Movement.RetreatImmune"/> so it cannot itself be
-    /// intercepted again (unlike a voluntary Recall), and this army cannot
-    /// take a fresh <see cref="Recall"/>/<see cref="PlanFieldOrder"/> while it
-    /// holds — both require <see cref="Movement.IsReturning"/> to be
-    /// <see langword="false"/>, which a forced retreat never is again once
-    /// applied.
+    /// carries <see cref="Movement.FieldBattleImmuneUntil"/> (the battle instant plus
+    /// <see cref="Movement.FleeProtection"/>), so for those hours it can be neither intercepted again nor ambushed by a camp,
+    /// unlike a voluntary Recall. Any order built afterwards (<see cref="Recall"/>, <see cref="PlanFieldOrder"/>,
+    /// <see cref="RetargetFounding"/>) is a fresh movement and so ends that protection.
     /// </summary>
     /// <param name="battleInstant">
     /// When the fight happened — the new leg's <see cref="Movement.DepartedAt"/>,
     /// exactly like <see cref="Army.SettleArrival"/>'s own post-battle return.
     /// </param>
     /// <param name="fromHex">Where the fight happened — always a hex this army's original route actually passed through.</param>
+    /// <param name="provisionsAtBattle">
+    /// What the army carried at <paramref name="battleInstant"/>, when the caller has already swapped in the survivors (whose smaller upkeep would
+    /// understate the burn so far). Defaults to <see cref="ProvisionsAt"/> of this army.
+    /// </param>
     /// <returns>
-    /// <see langword="null"/> only if no route home exists at all — should
-    /// not happen in practice for an army that was already mid-journey
-    /// (it came from home over land it was allowed to walk, and the same
-    /// rules price the way back), but handled defensively rather than throwing.
+    /// The army on its way home. When no route home exists (a wall now closes the way) it is instead left standing where it
+    /// fought (<see cref="Strand"/>) and starves when its food runs out.
     /// </returns>
     public Army ForceFieldRetreat(
         DateTimeOffset battleInstant, HexCoord fromHex, HexCoord home, Func<HexCoord, Terrain> terrainAt,
         double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null,
         Func<HexCoord, bool>? isWideRiver = null,
-        WallRules? walls = null)
+        WallRules? walls = null,
+        double? provisionsAtBattle = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
         var isLandUnit = !IsFleet;
+        var provisionsNow = provisionsAtBattle ?? ProvisionsAt(battleInstant);
+        var immuneUntil = battleInstant + Movement.Movement.FleeProtection;
 
-        // No route home is not expected in practice (this army's original
-        // route already crossed fromHex), but rather than throw, it is left
-        // standing exactly where it fought — still immune, just going
-        // nowhere — a safe degenerate case rather than a crash.
-        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost) is { Count: > 0 } found
-            ? found
-            : (List<HexCoord>)[fromHex];
+        if (HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost) is not { Count: > 0 } path)
+        {
+            // No way home (a wall in the way): it stays where it fought, still protected from further fights, and starves
+            // when the food runs out (docs/design/troop-movement-range.md §2a).
+            return LeaveGathering().WithProvisionsAt(battleInstant, provisionsNow).Strand(battleInstant, fromHex, immuneUntil);
+        }
 
         var speed = TotalSpeed;
         var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
@@ -1530,10 +1717,168 @@ public sealed record Army
             ReturnEdgeHours = edgeHours,
             TurnAroundAt = battleInstant,
             IsReturning = true,
-            RetreatImmune = true,
+            FieldBattleImmuneUntil = immuneUntil,
+            RoutePlannedAt = battleInstant,
         };
 
-        return this with { Location = new ArmyLocation.InTransit(retreatMovement) };
+        // The retreat departs at the battle instant, so the stored baseline is what the army carried then.
+        return (this with { Location = new ArmyLocation.InTransit(retreatMovement) }).LeaveGathering().WithProvisionsAt(battleInstant, provisionsNow);
+    }
+
+    /// <summary>
+    /// What a marching army does when a wall built after it set out blocks its way (<paramref name="encounter"/>, on its active leg;
+    /// <c>docs/design/troop-movement-range.md</c> §5): it looks for a new route from the hex it has reached at <c>encounter.At</c>, and only
+    /// when there is none stops at the last hex before the wall. The army must be settled to <c>encounter.At</c> already.
+    /// </summary>
+    /// <remarks>
+    /// <list type="bullet">
+    /// <item>Outbound, with a way on to its destination and back home from there: a fresh outbound leg from where it is, its turn-around
+    /// recomputed from the food it carries then. When that food no longer covers the longer round trip it turns home at once.</item>
+    /// <item>Outbound, with no way on: it walks its old route to the last hex before the wall and drops its target (mission
+    /// <see cref="ArmyMission.Move"/>). With a way home from there it stands and turns home when its food demands it, like after a move
+    /// order; without one it is stranded there.</item>
+    /// <item>On its way home, or stranded and still walking to the hex it stops on: a fresh way home from where it is (a fleeing army keeps
+    /// its flee protection); with none it walks to the last hex before the wall and is stranded there.</item>
+    /// </list>
+    /// <paramref name="walls"/> are the route rules of the army's owner at <c>encounter.At</c>.
+    /// </remarks>
+    /// <returns>The army afterwards, and the hex it stopped on when it found no way past the wall (the "army stuck" report's hex).</returns>
+    public WallRerouteResult RerouteAroundWall(
+        WallEncounter encounter, HexCoord home, Func<HexCoord, Terrain> terrainAt, double speedFactor = 1.0,
+        Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null, WallRules? walls = null)
+    {
+        ArgumentNullException.ThrowIfNull(terrainAt);
+        if (Location is not ArmyLocation.InTransit { Movement: var movement }
+            || encounter.OnReturnLeg != movement.IsReturning || encounter.BlockedIndex < 1 || encounter.BlockedIndex >= movement.Path.Count)
+        {
+            return new WallRerouteResult(this, null);
+        }
+
+        var at = encounter.At;
+        var from = movement.PositionAt(at);
+        var isLandUnit = !IsFleet;
+        var speed = TotalSpeed;
+        var upkeep = TotalUpkeepPerHour;
+
+        IReadOnlyList<HexCoord>? Route(HexCoord a, HexCoord b) =>
+            HexPathfinder.FindPath(a, b, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost)
+                is { Count: > 0 } path ? path : null;
+        IReadOnlyList<double> Hours(IReadOnlyList<HexCoord> path) =>
+            HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        IReadOnlyList<double> Edges(IReadOnlyList<HexCoord> path) =>
+            HexPathfinder.EdgeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+
+        var provisionsNow = ProvisionsAt(at);
+        if (!movement.IsReturning && !movement.IsStranded)
+        {
+            var target = movement.Path[^1];
+            if (Route(from, target) is { } onward && Route(target, home) is { } back)
+            {
+                var onwardHours = Hours(onward);
+                var backHours = Hours(back);
+                if (provisionsNow >= (onwardHours[^1] + backHours[^1]) * upkeep)
+                {
+                    var rerouted = Movement.Movement.Create(
+                        at, onward, onwardHours, Edges(onward), back, backHours, Edges(back), provisionsNow, upkeep);
+                    return new WallRerouteResult(this with { Location = new ArmyLocation.InTransit(rerouted), Provisions = provisionsNow }, null);
+                }
+
+                // The detour costs more food than it carries: it turns home at once.
+                if (Recall(at, home, terrainAt, null, speedFactor, isRiver, isWideRiver, walls) is { } recalled)
+                {
+                    return new WallRerouteResult(recalled, null);
+                }
+            }
+        }
+        else if (Route(from, home) is { } wayHome)
+        {
+            var hours = Hours(wayHome);
+            var edges = Edges(wayHome);
+            var returning = new Movement.Movement
+            {
+                DepartedAt = at,
+                Path = wayHome,
+                CumulativeHours = hours,
+                EdgeHours = edges,
+                ReturnPath = wayHome,
+                ReturnCumulativeHours = hours,
+                ReturnEdgeHours = edges,
+                TurnAroundAt = at,
+                IsReturning = true,
+                FieldBattleImmuneUntil = movement.FieldBattleImmuneUntil,
+                RoutePlannedAt = at,
+            };
+            return new WallRerouteResult(this with { Location = new ArmyLocation.InTransit(returning), Provisions = provisionsNow }, null);
+        }
+
+        return StopBeforeWall(movement, encounter, at, home, Route, Hours, Edges);
+    }
+
+    /// <summary>
+    /// <see cref="RerouteAroundWall"/>'s last resort: the army keeps walking <paramref name="movement"/> as planned, but only up to the last hex
+    /// before the wall, where it stops. An outbound army drops its target and, with a way home from there, stands until its food sends it
+    /// home; otherwise (and on the way home) it is stranded there, its stranded movement being that walk.
+    /// </summary>
+    private WallRerouteResult StopBeforeWall(
+        Movement.Movement movement, WallEncounter encounter, DateTimeOffset at, HexCoord home,
+        Func<HexCoord, HexCoord, IReadOnlyList<HexCoord>?> route,
+        Func<IReadOnlyList<HexCoord>, IReadOnlyList<double>> hours,
+        Func<IReadOnlyList<HexCoord>, IReadOnlyList<double>> edges)
+    {
+        var stopIndex = encounter.BlockedIndex - 1;
+        var stop = movement.Path[stopIndex];
+        IReadOnlyList<HexCoord> walk = [.. movement.Path.Take(stopIndex + 1)];
+        IReadOnlyList<double> walkHours = [.. movement.CumulativeHours.Take(stopIndex + 1)];
+        IReadOnlyList<double> walkEdges = [.. movement.EdgeHours.Take(stopIndex + 1)];
+
+        var army = movement.IsReturning || movement.IsStranded
+            ? this
+            : this with { Mission = ArmyMission.Move, TargetSettlementId = null, TargetBuildingCoord = null, TargetCampCoord = null };
+
+        if (!movement.IsReturning && !movement.IsStranded && route(stop, home) is { } back)
+        {
+            // The walk keeps its departure, so the stored provisions stay the leg's baseline. It turns around no earlier than now.
+            var backHours = hours(back);
+            var standing = Movement.Movement.Create(
+                movement.DepartedAt, walk, walkHours, walkEdges, back, backHours, edges(back), Provisions, TotalUpkeepPerHour);
+            // The walk was checked against the walls up to now and the way home is planned now.
+            standing = standing with { RoutePlannedAt = at };
+            if (standing.TurnAroundAt < at)
+            {
+                standing = standing with { TurnAroundAt = at };
+            }
+
+            return new WallRerouteResult(army with { Location = new ArmyLocation.InTransit(standing) }, stop);
+        }
+
+        var stranded = (army with
+        {
+            Location = new ArmyLocation.InTransit(new Movement.Movement
+            {
+                DepartedAt = movement.DepartedAt,
+                Path = walk,
+                CumulativeHours = walkHours,
+                EdgeHours = walkEdges,
+                ReturnPath = [stop],
+                ReturnCumulativeHours = [0],
+                ReturnEdgeHours = [0],
+                TurnAroundAt = at,
+                IsReturning = false,
+                IsStranded = true,
+                FieldBattleImmuneUntil = movement.FieldBattleImmuneUntil,
+                RoutePlannedAt = at,
+            }),
+        }).WithProvisionsAt(at, ProvisionsAt(at));
+
+        // Rebased to the food it carries when it is stranded, so an army whose food ran out on the way starves then, never earlier.
+        var starvesAt = stranded.StarvesAt is { } starves ? (starves > at ? starves : at) : at.AddYears(100);
+
+        return new WallRerouteResult(
+            stranded with
+            {
+                Location = new ArmyLocation.InTransit(((ArmyLocation.InTransit)stranded.Location).Movement with { TurnAroundAt = starvesAt }),
+            },
+            stop);
     }
 
     private static FieldOrderRejection NoRouteRejection(PathSearch search, bool isLandUnit) =>
@@ -1648,18 +1993,30 @@ public sealed record Army
         ArgumentNullException.ThrowIfNull(waypoints);
         ArgumentNullException.ThrowIfNull(terrainAt);
 
-        if (army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit)
+        // A fleeing army (after a lost field battle) takes orders from where it is even on its way home
+        // (docs/design/troop-movement-range.md §2a); every other returning army has nothing left to extend.
+        if (army.Location is not ArmyLocation.InTransit inTransit
+            || (inTransit.Movement.IsReturning && !inTransit.Movement.IsFleeing))
         {
             return FieldOrderResult.Rejected(FieldOrderRejection.NoActiveJourney);
         }
 
-        if (mission == ArmyMission.Found)
+        if (mission is ArmyMission.Found or ArmyMission.SetUpCamp)
         {
             return FieldOrderResult.Rejected(FieldOrderRejection.MissionNotAllowed);
         }
 
         var movement = inTransit.Movement;
-        var arrived = now >= movement.ArrivesAt;
+
+        // A fleeing army on its way home is ordered like a standing one: a fresh leg from the hex it has reached. It still marches, so it
+        // moves whole.
+        var fleeingHome = movement.IsReturning;
+        if (fleeingHome && requestedUnits is not null && SelectUnits(army.Stacks, requestedUnits) is { Remaining.Count: > 0 })
+        {
+            return FieldOrderResult.Rejected(FieldOrderRejection.SplitRequiresStandingArmy);
+        }
+
+        var arrived = fleeingHome || now >= movement.ArrivesAt;
 
         // Which units leave: everything, or the named part (a split).
         IReadOnlyList<UnitStack> leavingStacks = army.Stacks;
@@ -1806,10 +2163,13 @@ public sealed record Army
             return FieldOrderResult.Rejected(FieldOrderRejection.InsufficientProvisionsForRoundTrip);
         }
 
+        // A route planned now is checked against the walls from now on. An army still marching keeps its old hexes, so it keeps
+        // the older planning instant too: an earlier instant only means more wall checks, never a missed one.
         var newMovement = Movement.Movement.Create(
-            departedAt, fullPath, cumulativeHours, edgeHours, returnPath, returnCumulativeHours, returnEdgeHours, provisionsAtDeparture, upkeepPerHour);
+            departedAt, fullPath, cumulativeHours, edgeHours, returnPath, returnCumulativeHours, returnEdgeHours, provisionsAtDeparture, upkeepPerHour)
+            with { RoutePlannedAt = arrived ? now : movement.RoutePlannedAt };
 
-        var ordered = leaving with
+        var ordered = (leaving with
         {
             Id = isSplit ? splitArmyId ?? Guid.CreateVersion7() : army.Id,
             Location = new ArmyLocation.InTransit(newMovement),
@@ -1819,7 +2179,7 @@ public sealed record Army
             TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             TargetBuildingCoord = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetBuildingCoord : null,
             TargetCampCoord = mission == ArmyMission.Hunt ? targetCampCoord : null,
-        };
+        }).LeaveGathering();
 
         return FieldOrderResult.Accept(ordered, remainder);
     }
@@ -1907,6 +2267,11 @@ public sealed record Army
         {
             remainder = staying with { Provisions = army.Provisions * (1 - leavingShare) };
         }
+        else if (movement.IsStranded)
+        {
+            // A stranded remainder stays stranded; only its food (and so the instant it starves) changes.
+            remainder = staying.WithProvisionsAt(now, stayingFood).Strand(now, movement.Path[^1]);
+        }
         else
         {
             var stayingUpkeep = staying.TotalUpkeepPerHour;
@@ -1914,7 +2279,8 @@ public sealed record Army
             var storedFood = stayingFood + (stayingUpkeep * hoursSinceDeparture);
             var rebuilt = Movement.Movement.Create(
                 movement.DepartedAt, movement.Path, movement.CumulativeHours, movement.EdgeHours,
-                movement.ReturnPath, movement.ReturnCumulativeHours, movement.ReturnEdgeHours, storedFood, stayingUpkeep);
+                movement.ReturnPath, movement.ReturnCumulativeHours, movement.ReturnEdgeHours, storedFood, stayingUpkeep)
+                with { RoutePlannedAt = movement.RoutePlannedAt };
             remainder = staying with { Provisions = storedFood, Location = new ArmyLocation.InTransit(rebuilt) };
         }
 
@@ -1976,6 +2342,8 @@ public sealed record Army
             {
                 DepartedAt = movement.DepartedAt + shift,
                 TurnAroundAt = movement.TurnAroundAt + shift,
+                FieldBattleImmuneUntil = movement.FieldBattleImmuneUntil + shift,
+                RoutePlannedAt = movement.RoutePlannedAt + shift,
             }),
         };
     }
@@ -2061,7 +2429,8 @@ public sealed record Army
 /// <see cref="Movement.Movement"/> no longer shows once the result is stored (the outbound leg when it turned around,
 /// and the return leg too when the same call also brought it home). Empty when nothing changed.
 /// </param>
-public sealed record ArmySettleResult(Army Army, bool Changed, bool ArrivedHome, IReadOnlyList<WalkedLeg>? Walked = null)
+public sealed record ArmySettleResult(
+    Army Army, bool Changed, bool ArrivedHome, IReadOnlyList<WalkedLeg>? Walked = null, bool Starved = false)
 {
     public IReadOnlyList<WalkedLeg> Walked { get; init; } = Walked ?? [];
 }
@@ -2173,6 +2542,21 @@ public sealed record ArmySupportArrivalResult(Army Army, bool Arrived);
 /// <param name="FoundedAt">The target hex — meaningless unless <paramref name="ShouldFound"/>.</param>
 public sealed record FoundingArrivalResult(
     bool Arrived, bool ShouldFound, Army? Army, IReadOnlyList<UnitStack> GarrisonForNewSettlement, HexCoord FoundedAt);
+
+/// <summary>
+/// What <see cref="Army.PlanCampBuild"/> decided about an <see cref="ArmyMission.SetUpCamp"/> army.
+/// </summary>
+/// <param name="Due">
+/// Whether the army has stood on its site for the whole build time (<see cref="BeachCamp.ScaledBuildDuration"/>). When
+/// <see langword="false"/> nothing is decided yet and the caller settles the army the ordinary way.
+/// </param>
+/// <param name="ShouldBuild">Due and the site is still free: the camp is set up and the army row goes.</param>
+/// <param name="Site">The camp's hex.</param>
+/// <param name="CompletesAt">When the camp was finished: arrival plus build time.</param>
+/// <param name="GarrisonForCamp">Every stack but the used-up camp builders (troops and ships that came along).</param>
+/// <param name="FoodForCamp">The army's leftover provisions at <paramref name="CompletesAt"/>, for the camp's food pile.</param>
+public sealed record CampBuildResult(
+    bool Due, bool ShouldBuild, HexCoord Site, DateTimeOffset CompletesAt, IReadOnlyList<UnitStack> GarrisonForCamp, double FoodForCamp);
 
 /// <summary>Why <see cref="Army.RetargetFounding"/> was refused.</summary>
 public enum RetargetFoundingRejection
@@ -2401,6 +2785,15 @@ public enum DispatchRejection
     /// <summary>The route search hit its node cap before reaching the destination: the trip is too long to plan.</summary>
     RouteTooLong,
 
+    /// <summary>An <see cref="ArmyMission.SetUpCamp"/> dispatch did not name exactly <see cref="BeachCamp.RequiredBuilders"/> camp builders.</summary>
+    WrongCampBuilderCount,
+
+    /// <summary>An <see cref="ArmyMission.SetUpCamp"/> dispatch's target hex is not a sand hex on the shoreline.</summary>
+    CampSiteNotSandShore,
+
+    /// <summary>An <see cref="ArmyMission.SetUpCamp"/> dispatch's target hex holds a building, a settlement centre, a wildlife camp or a giant.</summary>
+    CampSiteNotFree,
+
     /// <summary>The dispatch's <c>FromSpot</c> is not a garrison spot (longhouse, tower or dock) of the settlement.</summary>
     NotAGarrisonSpot,
 
@@ -2409,9 +2802,6 @@ public enum DispatchRejection
 
     /// <summary>The garrison spot a <see cref="ArmyMission.Support"/> dispatch named is none of the target's, or cannot hold the army's units.</summary>
     SupportSpotCannotHold,
-
-    /// <summary>A dispatch listed units at more than one garrison spot; gathering from several spots on the way is not built yet.</summary>
-    UnitsAtSeveralSpots,
 }
 
 /// <summary>The outcome of asking to dispatch an army — mirrors <see cref="BuildDecision"/>.</summary>
@@ -2441,6 +2831,22 @@ public sealed record SettlementDispatchDecision(
 
     public static SettlementDispatchDecision Accept(Settlement settlement, IReadOnlyList<UnitStack> stacks) =>
         new(DispatchRejection.None, settlement, stacks);
+}
+
+/// <summary>
+/// The settlement-only half of dispatching an army from several garrison spots (<see cref="Settlement.PlanDispatch(IReadOnlyList{ValueTuple{HexCoord, IReadOnlyList{UnitStack}}}, double, DateTimeOffset)"/>):
+/// the settlement with every group's units and the food removed, and each group's normalised stacks.
+/// </summary>
+public sealed record GatheredSettlementDispatchDecision(
+    DispatchRejection Rejection, Settlement? Settlement = null, IReadOnlyList<(HexCoord Spot, IReadOnlyList<UnitStack> Units)>? GroupStacks = null)
+{
+    public bool Accepted => Rejection == DispatchRejection.None && Settlement is not null && GroupStacks is not null;
+
+    public static GatheredSettlementDispatchDecision Rejected(DispatchRejection reason) => new(reason);
+
+    public static GatheredSettlementDispatchDecision Accept(
+        Settlement settlement, IReadOnlyList<(HexCoord Spot, IReadOnlyList<UnitStack> Units)> groupStacks) =>
+        new(DispatchRejection.None, settlement, groupStacks);
 }
 
 /// <summary>A march to a garrison spot (<see cref="Army.PlanSpotMarch"/>): the army (no provisions yet) and the food its walk burns.</summary>

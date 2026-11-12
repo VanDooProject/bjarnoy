@@ -7,7 +7,6 @@ import {
   outcomeLabel,
   reportSummaryLine,
   siegeSummaryLine,
-  sideFor,
   totalLoot,
   unreadCount,
 } from './battleReports';
@@ -96,18 +95,6 @@ describe('reportSummaryLine for a fleet', () => {
 
   it('reads as before when the report has no ship fight', () => {
     expect(reportSummaryLine({ ...baseReport, shipFight: null, drowned: [], fireShipsBurned: 0 }, 'attacker')).toBe('5 lost, 10 survived, 70 looted');
-  });
-});
-
-describe('sideFor', () => {
-  it('identifies the attacker side', () => {
-    expect(sideFor(baseReport, 'atk')).toBe('attacker');
-  });
-  it('identifies the defender side', () => {
-    expect(sideFor(baseReport, 'def')).toBe('defender');
-  });
-  it('returns null for an unrelated settlement', () => {
-    expect(sideFor(baseReport, 'someone-else')).toBeNull();
   });
 });
 
