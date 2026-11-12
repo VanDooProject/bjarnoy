@@ -135,9 +135,10 @@ test.describe('phone layout', { tag: '@g1' }, () => {
 
   test('the leaderboards modal keeps a side gutter instead of running its heading into the screen edge', async ({ page }) => {
     await page.goto('/leaderboards');
-    const heading = page.getByRole('heading', { level: 1 });
-    await expect(heading).toBeVisible();
-    expect((await heading.boundingBox())!.x).toBeGreaterThanOrEqual(12);
+    // On a phone the dialog title is the shared header bar's text, next to the back chevron.
+    const title = page.getByRole('dialog').locator('.mobile-title');
+    await expect(title).toBeVisible();
+    expect((await title.boundingBox())!.x).toBeGreaterThanOrEqual(12);
   });
 
   test('the compact landing column leaves the plot chip and demo badge uncovered', async ({ page }) => {
@@ -296,12 +297,12 @@ test.describe('mobile tutorial focus', { tag: '@g1' }, () => {
       await expectNoOverlap(settlement.banner, badge, 'demo badge covers the landfall banner');
     }
 
-    // Opening the ring on a guided hex hides the progress checklist so it
-    // doesn't fight the ring for the same strip of screen.
+    // Opening the ring on a guided hex hides the progress checklist (the phone layer stack: a layer shows alone over the
+    // map) so it doesn't fight the ring for the same strip of screen.
     const target = await settlement.findHex({ terrain: 'grass' });
     await settlement.clickHex(target);
     await settlement.ring.waitForOpen();
-    await expect(settlement.checklist).toHaveCount(0);
+    await expect(settlement.checklist).toBeHidden();
 
     // Closing the ring (Escape) brings the checklist straight back.
     await page.keyboard.press('Escape');
@@ -412,7 +413,7 @@ test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, ()
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('heading', { name: 'Leaderboards' })).toBeVisible();
+    await expect(dialog.locator('.mobile-title')).toHaveText('Leaderboards');
     // The map underneath is still there, not unmounted/remounted.
     await expect(page.locator('canvas')).toBeVisible();
 
@@ -445,6 +446,6 @@ test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, ()
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('heading', { name: 'Leaderboards' })).toBeVisible();
+    await expect(dialog.locator('.mobile-title')).toHaveText('Leaderboards');
   });
 });

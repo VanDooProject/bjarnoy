@@ -38,9 +38,10 @@ public sealed record UserResponse(
     bool IsPremium,
     string? PreferredLocale)
 {
-    public static UserResponse From(UserEntity user)
+    public static UserResponse From(UserEntity user, TimeProvider time)
     {
         ArgumentNullException.ThrowIfNull(user);
+        ArgumentNullException.ThrowIfNull(time);
 
         return new UserResponse(
             user.Id,
@@ -48,7 +49,7 @@ public sealed record UserResponse(
             user.Role.ToString().ToLowerInvariant(),
             user.Status.ToString().ToLowerInvariant(),
             user.DisplayName,
-            user.IsPremium,
+            user.IsPremiumAt(time.GetUtcNow()),
             user.PreferredLocale);
     }
 }

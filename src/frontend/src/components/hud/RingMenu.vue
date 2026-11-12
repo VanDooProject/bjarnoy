@@ -39,6 +39,7 @@ import { isActionable, type RingAvailability, type RingAvailabilityState } from 
 import { tapArm, type RingDock } from '../../lib/map/ringDock';
 import { ringFootprint } from '../../lib/map/markerOcclusion';
 import { motionEnabled, supportsWaapi } from '../../lib/motion';
+import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import * as ringMotion from '../../lib/map/ringMotion';
 import {
   BUB1,
@@ -188,6 +189,9 @@ const props = withDefaults(
 );
 
 const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+
+// A layer on the phone stack while mounted (GuidancePointer reads the 'ring' id to keep pointing into the bubbles).
+const layer = usePhoneLayer(true, 'ring');
 
 const emit = defineEmits<{
   select: [id: string];
@@ -886,7 +890,7 @@ function onBackdropPointerDown(e: PointerEvent) {
 <template>
   <!-- `data-swapping`: a layer change is mid-flight (old layer leaving, new one arriving), so the bubbles on screen
        are not yet the final set. -->
-  <div ref="rootEl" class="ring-backdrop" :style="{ '--ring-scale': scale }" :data-swapping="swapping || undefined" @pointerdown.self="onBackdropPointerDown" @contextmenu.prevent="emit('close')">
+  <div ref="rootEl" v-phone-hidden="layer.hidden.value" class="ring-backdrop" :style="{ '--ring-scale': scale }" :data-swapping="swapping || undefined" @pointerdown.self="onBackdropPointerDown" @contextmenu.prevent="emit('close')">
     <div
       v-if="layout.showLane1Track"
       class="ring-track"

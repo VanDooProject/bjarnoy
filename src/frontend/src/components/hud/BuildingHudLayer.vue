@@ -17,6 +17,7 @@ import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { useWorldStore } from '../../stores/world';
 import { builtBuildingLevels, ownBuildings } from '../../composables/useBuildRing';
 import { useIsMobile } from '../../composables/useIsMobile';
+import { useHiddenUnderPhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import {
   boxChangeFor,
   dialGoneAfterMs,
@@ -101,6 +102,7 @@ const auth = useAuthStore();
 const catalogue = useBuildingCatalogueStore();
 const prefs = useHudPrefsStore();
 const isMobile = useIsMobile();
+const hudHidden = useHiddenUnderPhoneLayer();
 const motion = useBuildingHudMotion();
 
 /** The markers are in the DOM: from the moment they are switched on until their hide animation has ended. */
@@ -553,7 +555,10 @@ function tick() {
     }
     // A marker well off screen is not worth compositing.
     const reach = 320 * zs;
-    const shown = x < -reach || x > width + reach || y < -reach || y > height + reach ? 'hidden' : 'visible';
+    // Never an explicit 'visible': it would override a phone layer hiding the whole layer (usePhoneLayer's vPhoneHidden).
+    // `data-placed` lifts the CSS default hidden state until the first placement.
+    if (el.dataset.placed === undefined) el.dataset.placed = '';
+    const shown = x < -reach || x > width + reach || y < -reach || y > height + reach ? 'hidden' : '';
     if (lastVisibility.get(marker.key) !== shown) {
       lastVisibility.set(marker.key, shown);
       el.style.visibility = shown;
@@ -742,7 +747,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="root" class="building-hud">
+  <div ref="root" v-phone-hidden="hudHidden" class="building-hud">
     <div class="building-hud__markers">
         <div v-for="m in markers" :key="m.key" :ref="(el) => setElement(m.key, el)" class="hud-marker" :data-coord="m.key" :data-tier="tierOf(m.key)">
           <div class="hud-marker__inner" :style="innerStyle" role="img" :aria-label="t('hud.buildingHud.markerLabel', { building: m.name, level: m.level })">
@@ -816,6 +821,9 @@ onUnmounted(() => {
   width: 0;
   height: 0;
   will-change: transform;
+}
+/* Hidden until the layer has placed it (data-placed), so a marker never flashes at the origin. */
+.hud-marker:not([data-placed]) {
   visibility: hidden;
 }
 .hud-marker__inner {

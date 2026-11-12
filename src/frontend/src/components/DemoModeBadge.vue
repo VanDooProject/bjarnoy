@@ -10,7 +10,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { DEMO_MODE } from '../config';
 import { useMediaQuery } from '../composables/useMediaQuery';
-import { isHudDrawerOpen } from '../composables/hudDrawerOpenState';
+import { useHiddenUnderPhoneLayer, vPhoneHidden } from '../composables/usePhoneLayer';
 import { isHudBarAtBottom, isHudBarMounted } from '../composables/hudSettlementBubbleState';
 import { hudBarHeightPx } from '../composables/hudBarHeight';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
@@ -23,12 +23,14 @@ const badgeStyle = computed(() => {
   const barBelow = isHudBarMounted.value && isHudBarAtBottom.value ? hudBarHeightPx.value : 0;
   return { bottom: `calc(${barBelow + 2}px + env(safe-area-inset-bottom, 0px))` };
 });
-const showBadge = computed(() => DEMO_MODE && !(isCompact.value && isHudDrawerOpen.value));
+const hudHidden = useHiddenUnderPhoneLayer();
+const showBadge = DEMO_MODE;
 </script>
 
 <template>
   <div
     v-if="showBadge"
+    v-phone-hidden="hudHidden"
     class="demo-badge"
     :style="badgeStyle"
     :title="t('demoModeBadge.title')"

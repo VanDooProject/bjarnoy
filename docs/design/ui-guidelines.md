@@ -81,11 +81,21 @@ For the words in the UI, see [copy-guidelines.md](copy-guidelines.md).
   lane, on every tile. All other actions follow clockwise at even spacing and never take that spot. The map moves so
   the full circle fits around the tile.
 
+## 10. On phones, one layer at a time
+
+- On a phone (the compact HUD: width ≤ 768px or height ≤ 500px), a layer (modal, drawer, sheet, menu, ring) shows
+  alone over the plain map: every HUD element and every layer beneath it is hidden while it is open and comes back,
+  with its state, when it closes. Only the status banners (connection, account restricted) stay.
+- This holds for the ring menu and the army dispatch sheet too, although the map stays tappable under them.
+- Layers register through the shared phone layer stack (`usePhoneLayer`); HUD elements hide through it. No view keeps
+  its own "hide X while Y is open" check.
+
 ## Checklist for a UI PR
 
 - [ ] No button left that can only fail; moved actions removed from their old place (handler, i18n, tests).
 - [ ] Nav entries match the player's state; the rule lives in one place.
 - [ ] No chrome without information on phones; reserved space for removed chrome is gone.
+- [ ] On phones, an open layer shows alone over the map; HUD and lower layers come back when it closes.
 - [ ] 16px HUD gutter from every viewport edge (top included); popovers fully on-screen at 360×740 and 390×844.
 - [ ] Every enter has a leave, including data-driven unmounts; motion goes through the motion setting.
 - [ ] Shared components share their mount/animation/gesture code across views.

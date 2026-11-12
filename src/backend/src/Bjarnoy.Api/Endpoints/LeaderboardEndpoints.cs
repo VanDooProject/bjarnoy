@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Infrastructure.Entities;
@@ -56,8 +57,10 @@ public static class LeaderboardEndpoints
 
     private static async Task<Results<Ok<LeaderboardDirectoryResponse>, NotFound>> GetDirectory(
         Guid worldId,
+        ClaimsPrincipal principal,
         LeaderboardService leaderboards,
         WorldService worlds,
+        AuthService auth,
         CancellationToken cancellationToken)
     {
         if (await worlds.GetWorldAsync(worldId, cancellationToken) is null)
@@ -65,23 +68,28 @@ public static class LeaderboardEndpoints
             return TypedResults.NotFound();
         }
 
-        var boards = await leaderboards.GetDirectoryAsync(worldId, cancellationToken);
-        var windows = await leaderboards.GetClosedWindowsAsync(worldId, cancellationToken);
+        var callerId = CallerId(principal);
+        var boards = await leaderboards.GetDirectoryAsync(worldId, callerId, cancellationToken);
+        var (isPremium, isAdmin) = await CallerTierAsync(principal, callerId, auth, cancellationToken);
+        var windows = LeaderboardService.OpenableWindows(
+            await leaderboards.GetClosedWindowsAsync(worldId, cancellationToken), isPremium, isAdmin);
 
         return TypedResults.Ok(new LeaderboardDirectoryResponse(
             [.. boards.Select(LeaderboardBoardInfoResponse.From)],
             [.. windows.Select(w => new WeeklyWindowResponse(w.PeriodStart, w.PeriodEnd))]));
     }
 
-    private static async Task<Results<Ok<LeaderboardBoardResponse>, NotFound, BadRequest<ProblemDetails>>> GetBoard(
+    private static async Task<Results<Ok<LeaderboardBoardResponse>, NotFound, BadRequest<ProblemDetails>, JsonHttpResult<AuthErrorResponse>>> GetBoard(
         Guid worldId,
         string scope,
         string category,
         DateTimeOffset? periodStart,
         int? afterRank,
         int? pageSize,
+        ClaimsPrincipal principal,
         LeaderboardService leaderboards,
         WorldService worlds,
+        AuthService auth,
         CancellationToken cancellationToken)
     {
         if (!TryParseScope(scope, out var parsedScope) || !TryParseCategory(category, out var parsedCategory))
@@ -92,6 +100,27 @@ public static class LeaderboardEndpoints
         if (await worlds.GetWorldAsync(worldId, cancellationToken) is null)
         {
             return TypedResults.NotFound();
+        }
+
+        // The current board is public; a named past window is week history, which is gated the same way as the
+        // directory's window list (anonymous 401, free 403, premium only the newest windows, admin all).
+        if (periodStart is { } requested)
+        {
+            var callerId = CallerId(principal);
+            if (callerId is null)
+            {
+                return TypedResults.Json(
+                    new AuthErrorResponse("authentication_required"), statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            var (isPremium, isAdmin) = await CallerTierAsync(principal, callerId, auth, cancellationToken);
+            var openable = LeaderboardService.OpenableWindows(
+                await leaderboards.GetClosedWindowsAsync(worldId, cancellationToken), isPremium, isAdmin);
+            if (!isAdmin && !openable.Any(w => w.PeriodStart == requested))
+            {
+                return TypedResults.Json(
+                    new AuthErrorResponse("premium_required"), statusCode: StatusCodes.Status403Forbidden);
+            }
         }
 
         var page = await leaderboards.GetBoardPageAsync(
@@ -170,6 +199,28 @@ public static class LeaderboardEndpoints
         return result is null
             ? TypedResults.NotFound()
             : TypedResults.Ok(LeaderboardMeResponse.From(result));
+    }
+
+    /// <summary>The caller's user id; <see langword="null"/> for anonymous play, which is an ordinary caller here.</summary>
+    private static Guid? CallerId(ClaimsPrincipal principal)
+    {
+        var idClaim = principal.Identity?.IsAuthenticated == true
+            ? principal.FindFirstValue(ClaimTypes.NameIdentifier)
+            : null;
+        return Guid.TryParse(idClaim, out var id) ? id : null;
+    }
+
+    /// <summary>Premium is a live database read (like <see cref="PremiumUserEndpointFilter"/>); admin comes from the role claim.</summary>
+    private static async Task<(bool IsPremium, bool IsAdmin)> CallerTierAsync(
+        ClaimsPrincipal principal, Guid? callerId, AuthService auth, CancellationToken cancellationToken)
+    {
+        if (callerId is not { } id)
+        {
+            return (false, false);
+        }
+
+        var isPremium = await auth.GetIsPremiumAsync(id, cancellationToken) == true;
+        return (isPremium, principal.IsInRole(nameof(UserRole.Admin)));
     }
 
     private static ProblemDetails UnknownBoardProblem() => new()

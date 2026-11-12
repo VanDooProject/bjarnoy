@@ -95,6 +95,7 @@ import { isGarrisonSpotTile } from '../lib/units/garrisonSpots';
 import { isHomeSourceId } from '../lib/units/sendSources';
 import { useSendBlockText, useSendPickerRows, useSendSources } from '../composables/useSendSources';
 import { motionEnabled } from '../lib/motion';
+import { useHiddenUnderPhoneLayer, vPhoneHidden } from '../composables/usePhoneLayer';
 import MobileDispatchSheet from '../components/hud/MobileDispatchSheet.vue';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -162,6 +163,8 @@ const debugStackRef = ref<HTMLElement | null>(null);
 const debugStackDrag = useDraggablePosition('debugStack', debugStackRef);
 const debugStackStyle = debugStackDrag.style;
 const isMobile = useIsMobile();
+// HUD overlays hide while a layer (modal, drawer, ring, ...) is open on a phone.
+const hudHidden = useHiddenUnderPhoneLayer();
 const queueDrawerOpen = ref(false);
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
 
@@ -1625,7 +1628,7 @@ async function upgrade() {
          the camera starts — this scrim (matching Viking Realm.dc.html's own
          top-bar gradient) keeps the logo/resources/nav readable regardless
          of what's under them. -->
-    <div class="hud-scrim" :class="{ 'hud-scrim--bottom': hudBarAtBottom }" />
+    <div v-phone-hidden="hudHidden" class="hud-scrim" :class="{ 'hud-scrim--bottom': hudBarAtBottom }" />
     <TopBar @focus-home="onFocusHome" @focus-realm="onFocusRealm">
       <ResourceBar :ring-open="ringOpen" />
       <HudNav has-resource-bar />
@@ -1641,11 +1644,11 @@ async function upgrade() {
       </template>
       <template v-else>
         <!-- Desktop: the four panels dock to the map's corners; their icons sit in the column at the bottom left. -->
-        <HudPanelColumn />
-        <HudPanelDock @select="onQueueSelect" @focus-army="onArmySelect" />
+        <HudPanelColumn v-phone-hidden="hudHidden" />
+        <HudPanelDock v-phone-hidden="hudHidden" @select="onQueueSelect" @focus-army="onArmySelect" />
       </template>
       <QuestTray v-if="isMobile && !hasActiveDraft" />
-      <HexTooltip v-if="hoverInfo && !hudHovering" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
+      <HexTooltip v-if="hoverInfo && !hudHovering" v-phone-hidden="hudHidden" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
       <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu
           v-if="selectedTile && ringScreen"
@@ -1692,7 +1695,7 @@ async function upgrade() {
            queue drawer (mobile fleets need to be tracked here too) are
            mode-agnostic. -->
       <QueueDrawer v-if="isMobile && !hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
-      <ArmyPanel v-if="!isMobile" @focus-army="onArmySelect" />
+      <ArmyPanel v-if="!isMobile" v-phone-hidden="hudHidden" @focus-army="onArmySelect" />
       <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu
           v-if="selectedTile && ringScreen"
@@ -1717,12 +1720,14 @@ async function upgrade() {
     </template>
     <BuildRefusalChip
       v-if="buildRefusal"
+      v-phone-hidden="hudHidden"
       :renderer="canvasRef?.renderer"
       :coord="buildRefusal.coord"
       :message="buildRefusal.message"
     />
     <div
       v-if="armyHint"
+      v-phone-hidden="hudHidden"
       class="army-hint"
       role="status"
       :style="{ left: armyHint.x + 'px', top: armyHint.y + 'px' }"

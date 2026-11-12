@@ -8,6 +8,7 @@
   "ready": "Bereit zum Abholen",
   "alsoReady": "Ebenfalls bereit",
   "rewardLabel": "Belohnung",
+  "premiumReward": "{n} Tage Premium",
   "overflowNote": "Ein Teil dieser Belohnung passt nicht mehr ins Lager.",
   "claimError": "Die Belohnung konnte nicht abgeholt werden. Versuch es erneut.",
   "more": "Mehr",
@@ -37,6 +38,10 @@
     "longhouse3": {
       "title": "Baue dein Langhaus auf Stufe 3 aus",
       "hint": "Öffne das Langhaus und wähle erneut „Ausbauen“."
+    },
+    "register": {
+      "title": "Benenne deinen Jarl",
+      "hint": "Leg oben mit dem Namen deines Jarls einen Account an. So folgt dir deine Insel auf jedes Gerät."
     },
     "tower3": {
       "title": "Baue einen Turm auf Stufe 3",

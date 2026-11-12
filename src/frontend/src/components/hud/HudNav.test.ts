@@ -42,7 +42,7 @@ async function mountHudNav(path = '/') {
   await router.push(path);
   await router.isReady();
   return mount(HudNav, {
-    global: { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })], stubs: { WorldList: true } },
+    global: { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })], stubs: { WorldList: true, teleport: true } },
   });
 }
 
@@ -53,7 +53,7 @@ async function mountHudNavWithRouter(path = '/settlement') {
   await router.push(path);
   await router.isReady();
   const wrapper = mount(HudNav, {
-    global: { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })], stubs: { WorldList: true } },
+    global: { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })], stubs: { WorldList: true, teleport: true } },
   });
   return { wrapper, router };
 }
@@ -194,7 +194,7 @@ describe('HudNav "Name your jarl" trigger', () => {
     await router.isReady();
     return mount(HudNav, {
       props,
-      global: { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })] },
+      global: { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })], stubs: { teleport: true } },
     });
   }
 

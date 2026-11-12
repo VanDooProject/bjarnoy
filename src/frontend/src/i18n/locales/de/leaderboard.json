@@ -1,14 +1,12 @@
 {
   "title": "Ranglisten",
   "noWorld": "Keine aktive Welt, für die Ranglisten angezeigt werden können.",
-  "jumpToMyRank": "Zu meinem Rang springen",
+  "jumpToMyRank": "Zu meinem Platz",
   "current": "Aktuell",
   "weekOf": "Woche vom {date}",
   "noEntries": "Noch keine Einträge.",
   "table": {
     "rank": "Rang",
-    "name": "Name",
-    "value": "Wert",
     "change": "Änderung"
   },
   "badge": {
@@ -37,5 +35,36 @@
     "noWeeklyWindowsYet": "Wird freigeschaltet, sobald wöchentliche Zeiträume erfasst werden.",
     "notComputedYet": "Noch nicht berechnet — schau später wieder vorbei.",
     "unknownBoard": "Diese Rangliste gibt es nicht."
-  }
+  },
+  "railLabel": "Ranglistenauswahl",
+  "rankShort": "#{rank}",
+  "thisWeek": "Diese Woche",
+  "ofEntries": "von {count}",
+  "boardTitle": "{scope} · {category}",
+  "notAvailable": "Noch nicht verfügbar",
+  "updated": "Aktualisiert {time}",
+  "own": {
+    "user": "{name} · du",
+    "settlement": "{name} · deine",
+    "guild": "{name} · deine Gilde"
+  },
+  "nameHeads": {
+    "user": "Spieler",
+    "settlement": "Siedlung",
+    "guild": "Gilde"
+  },
+  "valueHeads": {
+    "score": "Punkte",
+    "biggestSettlement": "Punkte",
+    "weeklyScoreGained": "Punkte",
+    "weeklyFightsWon": "Gewonnen",
+    "weeklyFightsLost": "Verloren",
+    "weeklyResourcesLooted": "Beute",
+    "biggestArmy": "Armeestärke"
+  },
+  "weekLabel": "Woche",
+  "earlierWeek": "Frühere Woche",
+  "laterWeek": "Spätere Woche",
+  "final": "Abgeschlossen",
+  "premiumWeeks": "Premium: die letzten 4 Wochen"
 }
