@@ -464,6 +464,8 @@ export interface QuestResponse {
   reward: ResourceLine;
   /** Counted progress toward the goal; null/absent for a quest without one. */
   progress?: { current: number; target: number } | null;
+  /** Days of premium the claim grants instead of resources (the register quest); 0/absent for a resource quest. */
+  premiumDays?: number;
 }
 
 /** One connected claim disc of a realm, exactly as the server resolves it. */

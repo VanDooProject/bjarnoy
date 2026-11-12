@@ -1139,8 +1139,12 @@ export const useWorldStore = defineStore('world', {
     async claimQuest(questId: string) {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
       if (!DEMO_MODE) {
+        const premiumDays = this.hud.quests.find((q) => q.id === questId)?.premiumDays ?? 0;
         await api.claimQuest(this.selectedSettlementId, questId, this.ownerId ?? undefined);
         await this.refreshLiveSettlement();
+        // The server just extended the account's premium; show it now instead of at the next /auth/me.
+        const auth = useAuthStore();
+        if (premiumDays > 0 && auth.user) auth.user.isPremium = true;
         return;
       }
       this.syncHud();

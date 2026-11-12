@@ -2322,6 +2322,22 @@ describe('useWorldStore claimQuest (onboarding quests)', () => {
     expect(store.hud.resources.wood).toBe(500);
   });
 
+  it('live: claiming a premium quest marks the signed-in account premium', async () => {
+    claimQuest.mockReset().mockResolvedValue(undefined);
+    getSettlement.mockReset().mockResolvedValue(settlementResponse([], 100));
+    const store = await loadStoreModule(false);
+    register(store);
+    store.ownerId = 'player-1';
+    store.hud.quests = [{ ...quest('register', true), premiumDays: 14 }];
+    const { useAuthStore } = await import('./auth');
+    const auth = useAuthStore();
+    auth.user = { id: 'u1', userName: 'astrid', role: 'player', status: 'active', displayName: null, isPremium: false, preferredLocale: null };
+
+    await store.claimQuest('register');
+
+    expect(auth.isPremium).toBe(true);
+  });
+
   it('live: a rejected claim propagates and does not refresh', async () => {
     const store = await loadStoreModule(false);
     const { ApiError: MockedApiError } = await import('../api/client');
