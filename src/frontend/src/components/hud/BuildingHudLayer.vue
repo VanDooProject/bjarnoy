@@ -537,7 +537,10 @@ function tick() {
     el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${zs.toFixed(3)})`;
     // A marker well off screen is not worth compositing.
     const reach = 320 * zs;
-    el.style.visibility = x < -reach || x > width + reach || y < -reach || y > height + reach ? 'hidden' : ''; // '' inherits, so a phone layer hiding the whole layer is not undone per marker
+    // Never an explicit 'visible': it would override a phone layer hiding the whole layer (usePhoneLayer's vPhoneHidden).
+    // `data-placed` lifts the CSS default hidden state until the first placement.
+    el.dataset.placed = '';
+    el.style.visibility = x < -reach || x > width + reach || y < -reach || y > height + reach ? 'hidden' : '';
     placed.push({ key: marker.key, x, hovered: t > 0 });
   }
   if (tiersChanged) tiers.value = nextTiers;
@@ -794,6 +797,9 @@ onUnmounted(() => {
   width: 0;
   height: 0;
   will-change: transform;
+}
+/* Hidden until the layer has placed it (data-placed), so a marker never flashes at the origin. */
+.hud-marker:not([data-placed]) {
   visibility: hidden;
 }
 .hud-marker__inner {
