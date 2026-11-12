@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
@@ -79,18 +80,24 @@ public sealed record SiegeOutcome(
 public static class SiegeResolver
 {
     /// <summary>
-    /// Whether a beach camp falls without any siege engine: <paramref name="target"/> is a beach camp
-    /// (<see cref="Settlement.IsBeachCamp"/>) and no unit, land or ship, is left in it after the fight
-    /// (<paramref name="defendersAfterFight"/>: its garrison and the guests that fought with it). A camp that still has defenders
-    /// does not fall this way, and neither does any other settlement. A pure helper for attack resolution; destroying the camp
-    /// itself is the caller's job. See <c>docs/design/skirmish/beach-camp.md</c>.
+    /// Whether a beach camp falls to this fight (<c>docs/design/skirmish/beach-camp.md</c>): <paramref name="target"/> is a beach camp
+    /// (<see cref="Settlement.IsBeachCamp"/>), the army came to <see cref="ArmyMission.Attack"/> (a raid only plunders it), it still
+    /// has troops left (<paramref name="attackerSurvivors"/>; a mutual wipe leaves the camp standing), and no unit, land or ship, is
+    /// left in the camp (<paramref name="defendersAfterFight"/>: its garrison and the guests that fought with it). It needs no siege
+    /// engine for that, and siege engines alone never bring it down (<see cref="CanDamage"/>). No other settlement falls this way.
+    /// A pure helper for attack resolution; destroying the camp itself is the caller's job.
     /// </summary>
-    public static bool EmptyCampFalls(Settlement target, IReadOnlyList<UnitStack> defendersAfterFight)
+    public static bool CampFalls(
+        Settlement target, ArmyMission mission, IReadOnlyList<UnitStack> attackerSurvivors, IReadOnlyList<UnitStack> defendersAfterFight)
     {
         ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(attackerSurvivors);
         ArgumentNullException.ThrowIfNull(defendersAfterFight);
 
-        return target.IsBeachCamp && defendersAfterFight.All(s => s.Count <= 0);
+        return target.IsBeachCamp
+            && mission == ArmyMission.Attack
+            && attackerSurvivors.Any(s => s.Count > 0)
+            && defendersAfterFight.All(s => s.Count <= 0);
     }
 
     /// <summary>
@@ -128,7 +135,11 @@ public static class SiegeResolver
     public static bool CanDamage(UnitDefinition unit, BuildingType type)
     {
         ArgumentNullException.ThrowIfNull(unit);
-        return unit.SiegePower > 0 && (unit.SiegeTargets & KindOf(type)) != 0;
+
+        // A beach camp falls only to an attack that empties it (CampFalls); while troops guard it nothing destroys it, and an
+        // unguarded one falls to the attack anyway, so siege engines never take levels off it.
+        return type != BuildingType.BeachCamp
+            && unit.SiegePower > 0 && (unit.SiegeTargets & KindOf(type)) != 0;
     }
 
     /// <summary>The siege power of the <paramref name="stacks"/> that can damage a <paramref name="type"/> building.</summary>
@@ -253,7 +264,9 @@ public static class SiegeResolver
 
         var buildings = defenderBuildings.ToList();
         var index = buildings.FindIndex(b => b.Coord == coord);
-        if (index < 0)
+
+        // Fire ships do not bring a beach camp down either (see CanDamage).
+        if (index < 0 || buildings[index].Type == BuildingType.BeachCamp)
         {
             return (SiegeOutcome.None, 0);
         }

@@ -1852,7 +1852,6 @@ public sealed class ArmyService(
         var shipAttackBonusPercent = attackerSettlement?.AttackBonusPercent(UnitClass.Ship) ?? 0;
 
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, armyEntity.World!, cancellationToken).ConfigureAwait(false);
-        var targetWasCamp = session.View(targetId).IsBeachCamp;
 
         var seed = Random.Shared.Next();
         var arrival = Army.SettleArrival(
@@ -1886,13 +1885,12 @@ public sealed class ArmyService(
         // The settle that follows eats with the guests the battle left, not the ones it started with.
         session.Store.SetGuests(targetId, session.GuestStacksOf(targetId));
 
-        // A beach camp falls (docs/design/skirmish/beach-camp.md): an attack that leaves no troops in it destroys it without siege
-        // engines, and so does damage that takes its camp building down, the same way destroying a Longhouse ends a realm.
-        var campFalls = targetWasCamp
-            && (!arrival.DefenderSettlement.IsBeachCamp
-                || (domain.Mission == ArmyMission.Attack
-                    && SiegeResolver.EmptyCampFalls(
-                        arrival.DefenderSettlement, [.. arrival.DefenderSettlement.Garrison, .. session.GuestStacksOf(targetId)])));
+        // A beach camp falls (docs/design/skirmish/beach-camp.md) only to an attack that leaves no troops in it, ships and guests
+        // included, while the attacker still has troops left, the same way destroying a Longhouse ends a realm. Siege engines and
+        // fire ships never bring it down (SiegeResolver.CanDamage), and a raid only plunders it.
+        var campFalls = SiegeResolver.CampFalls(
+            arrival.DefenderSettlement, domain.Mission, arrival.Army?.Stacks ?? [],
+            [.. arrival.DefenderSettlement.Garrison, .. session.GuestStacksOf(targetId)]);
 
         // The loot left the pool at the battle instant; settle the group on from there to now and write every member back. A camp
         // that fell is taken out of its group first: it is not written back, its own piles are lost.

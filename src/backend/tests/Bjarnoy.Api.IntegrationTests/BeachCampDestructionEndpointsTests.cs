@@ -70,10 +70,15 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
 
     /// <summary>
     /// Plants the scene. <paramref name="campArmyProvisions"/>: the camp's own army (5 spearmen, 1.25 food an hour) marching south
-    /// from the camp, ten hexes in ten hours, with that much food at the start; null for none. <paramref name="raidWithCatapults"/>: the
-    /// attacker raids with catapults instead of attacking with axemen.
+    /// from the camp, ten hexes in ten hours, with that much food at the start; null for none. <paramref name="mission"/> and
+    /// <paramref name="attackUnits"/>: what the attacker comes to do and with what (10 axemen by default).
+    /// <paramref name="campGarrison"/>: the camp's own garrison, land troops and ships alike.
     /// </summary>
-    private async Task<Scene> PlantAsync(double? campArmyProvisions, bool raidWithCatapults = false, int campGarrison = 0)
+    private async Task<Scene> PlantAsync(
+        double? campArmyProvisions,
+        ArmyMission mission = ArmyMission.Attack,
+        (UnitType Unit, int Count)[]? attackUnits = null,
+        (UnitType Unit, int Count)[]? campGarrison = null)
     {
         using var client = _factory.CreateClient();
         var userName = $"jarl{Guid.CreateVersion7():N}"[..20];
@@ -95,9 +100,9 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
         camp.Name = "Strandlager";
         camp.CapacityFood = BuildingCatalogue.BeachCampStorage;
         camp.Buildings.Add(new PlacedBuildingEntity { Q = CampHex.Q, R = CampHex.R, Type = BuildingType.BeachCamp, Level = 1 });
-        if (campGarrison > 0)
+        foreach (var (unit, count) in campGarrison ?? [])
         {
-            camp.Garrison.Add(new UnitStackEntity { SettlementId = camp.Id, UnitType = UnitType.Spearman, Count = campGarrison, SpotQ = CampHex.Q, SpotR = CampHex.R });
+            camp.Garrison.Add(new UnitStackEntity { SettlementId = camp.Id, UnitType = unit, Count = count, SpotQ = CampHex.Q, SpotR = CampHex.R });
         }
 
         var attacker = Settlement(world.Id, island.Id, AttackerOwner, SystemUserIds.Abandoned, AttackerHome, now - TimeSpan.FromDays(1));
@@ -106,8 +111,8 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
         // Lands on the camp four hours in.
         var attack = Army(
             attacker.Id, AttackerHome, [(4, 0), (3, 0), (2, 0), (1, 0), (0, 0)], [(0, 0), (1, 0), (2, 0), (3, 0), (4, 0)], 1_000,
-            raidWithCatapults ? [(UnitType.Axeman, 10), (UnitType.Catapult, 4)] : [(UnitType.Axeman, 10)]);
-        attack.Mission = (int)(raidWithCatapults ? ArmyMission.Raid : ArmyMission.Attack);
+            attackUnits ?? [(UnitType.Axeman, 10)]);
+        attack.Mission = (int)mission;
         attack.TargetSettlementId = camp.Id;
         db.AddArmyRows(attack);
 
@@ -240,7 +245,7 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
     public async Task An_attack_that_leaves_troops_in_the_camp_does_not_destroy_it()
     {
         // 50 spearmen hold against 10 axemen.
-        var scene = await PlantAsync(campArmyProvisions: null, campGarrison: 50);
+        var scene = await PlantAsync(campArmyProvisions: null, campGarrison: [(UnitType.Spearman, 50)]);
 
         await LandTheAttackAsync(scene);
 
@@ -250,16 +255,95 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_raid_whose_catapults_raze_the_camp_building_destroys_the_camp()
+    public async Task A_mutual_wipe_leaves_the_camp_standing()
     {
-        var scene = await PlantAsync(campArmyProvisions: null, raidWithCatapults: true);
+        // One axeman (40) beats one spearman (35) and loses (35/40)^1.5 = 82 % of itself: nobody is left on either side.
+        var scene = await PlantAsync(
+            campArmyProvisions: null, attackUnits: [(UnitType.Axeman, 1)], campGarrison: [(UnitType.Spearman, 1)]);
 
         await LandTheAttackAsync(scene);
 
-        Assert.False(await InDbAsync(db => db.Settlements.AnyAsync(s => s.Id == scene.CampId, Ct)));
+        Assert.False(await InDbAsync(db => db.Armies.AnyAsync(a => a.Id == scene.AttackerArmyId, Ct)));
+        Assert.True(await InDbAsync(db => db.Settlements.AnyAsync(s => s.Id == scene.CampId, Ct)));
+        Assert.False(await InDbAsync(db => db.UnitStacks.AnyAsync(g => g.SettlementId == scene.CampId && g.Count > 0, Ct)));
+    }
+
+    [Fact]
+    public async Task A_raid_that_leaves_nobody_in_the_camp_only_plunders_it_and_its_catapults_do_no_damage()
+    {
+        var scene = await PlantAsync(
+            campArmyProvisions: null, mission: ArmyMission.Raid, attackUnits: [(UnitType.Axeman, 10), (UnitType.Catapult, 4)]);
+
+        await LandTheAttackAsync(scene);
+
+        Assert.True(await InDbAsync(db => db.Settlements.AnyAsync(s => s.Id == scene.CampId, Ct)));
+        Assert.Equal(1, await InDbAsync(db => db.PlacedBuildings.Where(b => b.SettlementId == scene.CampId && b.Type == BuildingType.BeachCamp)
+            .Select(b => b.Level).SingleAsync(Ct)));
         var report = await InDbAsync(db => db.BattleReports.SingleAsync(r => r.DefenderSettlementId == scene.CampId, Ct));
         Assert.True(report.WasRaid);
-        Assert.Equal(0, report.SiegeLevelAfter);
+        Assert.Null(report.SiegeLevelAfter);
+    }
+
+    [Fact]
+    public async Task Catapults_against_a_camp_guarded_only_by_a_guest_fleet_neither_destroy_it_nor_lower_it()
+    {
+        var scene = await PlantAsync(
+            campArmyProvisions: null, attackUnits: [(UnitType.Axeman, 10), (UnitType.Catapult, 10)]);
+        await PlantGuestAsync(scene, [(UnitType.Longship, 3)]);
+
+        await LandTheAttackAsync(scene);
+
+        Assert.True(await InDbAsync(db => db.Settlements.AnyAsync(s => s.Id == scene.CampId, Ct)));
+        Assert.Equal(1, await InDbAsync(db => db.PlacedBuildings.Where(b => b.SettlementId == scene.CampId && b.Type == BuildingType.BeachCamp)
+            .Select(b => b.Level).SingleAsync(Ct)));
+        var report = await InDbAsync(db => db.BattleReports.SingleAsync(r => r.DefenderSettlementId == scene.CampId, Ct));
+        Assert.Null(report.SiegeLevelAfter);
+    }
+
+    [Fact]
+    public async Task A_land_attack_that_kills_every_land_troop_while_the_camps_own_fleet_survives_does_not_destroy_it()
+    {
+        var scene = await PlantAsync(
+            campArmyProvisions: null, campGarrison: [(UnitType.Spearman, 2), (UnitType.Longship, 2)]);
+
+        await LandTheAttackAsync(scene);
+
+        Assert.True(await InDbAsync(db => db.Settlements.AnyAsync(s => s.Id == scene.CampId, Ct)));
+        var garrison = await InDbAsync(db => db.UnitStacks.Where(g => g.SettlementId == scene.CampId && g.Count > 0).ToListAsync(Ct));
+        Assert.Equal([UnitType.Longship], garrison.Select(g => g.UnitType).Distinct());
+    }
+
+    /// <summary>Plants an army of the attacker's rival (the camp owner's home settlement) supporting the camp.</summary>
+    private async Task<Guid> PlantGuestAsync(Scene scene, (UnitType Unit, int Count)[] units)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        var guestHome = Settlement(scene.WorldId, await db.Settlements.Where(s => s.Id == scene.HomeId).Select(s => s.IslandId).SingleAsync(Ct),
+            "camp-friend", SystemUserIds.Abandoned, new HexCoord(-12, 0), _factory.Time.GetUtcNow() - TimeSpan.FromDays(1));
+        db.Settlements.Add(guestHome);
+        var now = _factory.Time.GetUtcNow();
+        var guest = new ArmyEntity
+        {
+            SettlementId = guestHome.Id,
+            HomeSpotQ = guestHome.CentreQ,
+            HomeSpotR = guestHome.CentreR,
+            Mission = (int)ArmyMission.Support,
+            AtHome = false,
+            IsSupporting = true,
+            TargetSettlementId = scene.CampId,
+            TargetBuildingQ = CampHex.Q,
+            TargetBuildingR = CampHex.R,
+            Provisions = 100,
+            DepartedAt = now,
+            Path = [new HexPoint(CampHex.Q, CampHex.R)],
+            CumulativeHours = [0],
+            EdgeHours = [0],
+            IsReturning = false,
+            Stacks = [.. units.Select(u => new ArmyUnitStackEntity { UnitType = u.Unit, Count = u.Count })],
+        };
+        db.AddArmyRows(guest);
+        await db.SaveChangesAsync(Ct);
+        return guest.Id;
     }
 
     [Fact]
