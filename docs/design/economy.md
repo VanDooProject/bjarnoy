@@ -697,7 +697,9 @@ their renown.
   - **Manual claim.** A completed quest pays nothing until the player presses
     Claim in the quest tray (`POST /settlements/{id}/quests/{questId}/claim`).
     The tray shows the first unclaimed quest, plus any other completed one so
-    it can be claimed; quests can be claimed in any order. Claims are optional
+    it can be claimed, plus (when the first one is already claimable) the first
+    unfinished quest as "Up next" so there is always something to work on;
+    quests can be claimed in any order. Claims are optional
     and never gate anything (not even "Hunt a camp"), so a player may hold
     rewards back: unclaimed quest loot works as a hidden storage buffer.
   - **Exactly once per settlement.** Each quest has a bit in the settlement's
