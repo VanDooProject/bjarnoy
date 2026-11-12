@@ -237,6 +237,12 @@ public sealed record Settlement
     public int ClaimedQuests { get; init; }
 
     /// <summary>
+    /// Whether the owner is a registered account rather than anonymous play (not persisted; set when the settlement is loaded).
+    /// Completes the register quest (<see cref="Quests"/>).
+    /// </summary>
+    public bool OwnerRegistered { get; init; }
+
+    /// <summary>
     /// Whether this settlement has ever dispatched an army with
     /// <see cref="ArmyMission.Hunt"/> (starting the attack counts; winning is not
     /// required). An event rather than state derivable from the settlement, so it

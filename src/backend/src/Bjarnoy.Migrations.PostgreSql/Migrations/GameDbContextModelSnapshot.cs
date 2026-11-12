@@ -1925,6 +1925,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
 
+                    b.Property<DateTimeOffset?>("PremiumUntil")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset>("RenownSettledAt")
                         .HasColumnType("timestamp with time zone");
 

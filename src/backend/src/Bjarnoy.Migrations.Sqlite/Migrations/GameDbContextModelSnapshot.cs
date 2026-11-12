@@ -1920,6 +1920,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("PremiumUntil")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset>("RenownSettledAt")
                         .HasColumnType("TEXT");
 
