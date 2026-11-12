@@ -127,6 +127,8 @@
   --rival: #e2705f;
   --shell: #0b1116;
   --panel-bg: rgba(10, 20, 27, 0.92);
+  /* Dims the map behind a layer (HUD drawer, building and training windows): the map stays readable behind it. */
+  --layer-backdrop: rgba(0, 0, 0, 0.6);
   --panel-border: rgba(255, 255, 255, 0.12);
   --text: #e8f0f5;
   --muted: #8fa3af;

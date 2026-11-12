@@ -2,6 +2,8 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { defineComponent, h, ref } from 'vue';
+import { usePhoneLayer } from '../composables/usePhoneLayer';
 import DemoModeBadge from './DemoModeBadge.vue';
 import { isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { isHudBarAtBottom, isHudBarMounted } from '../composables/hudSettlementBubbleState';
@@ -85,27 +87,32 @@ describe('DemoModeBadge', () => {
     wrapper.unmount();
   });
 
-  it('hides entirely while the mobile pull-down drawer is open', async () => {
+  it('hides while a layer is open on a phone and returns when it closes', async () => {
     stubCompactMediaQuery(true);
     const wrapper = mountBadge();
+    const layerOpen = ref(false);
+    const layer = mount(defineComponent({ setup: () => { usePhoneLayer(layerOpen); return () => h('div'); } }));
     await wrapper.vm.$nextTick();
-    expect(wrapper.find('.demo-badge').exists()).toBe(true);
+    const badge = () => wrapper.get('.demo-badge').element as HTMLElement;
+    expect(badge().style.visibility).toBe('');
 
-    isHudDrawerOpen.value = true;
+    layerOpen.value = true;
     await wrapper.vm.$nextTick();
-    expect(wrapper.find('.demo-badge').exists()).toBe(false);
+    expect(badge().style.visibility).toBe('hidden');
 
-    isHudDrawerOpen.value = false;
+    layerOpen.value = false;
     await wrapper.vm.$nextTick();
-    expect(wrapper.find('.demo-badge').exists()).toBe(true);
+    expect(badge().style.visibility).toBe('');
+    layer.unmount();
     wrapper.unmount();
   });
 
-  it('ignores the drawer-open flag on desktop, where there is no drawer', async () => {
-    isHudDrawerOpen.value = true; // stray state from a previous mobile view, say
+  it('stays visible on desktop while a layer is open', async () => {
     const wrapper = mountBadge();
+    const layer = mount(defineComponent({ setup: () => { usePhoneLayer(true); return () => h('div'); } }));
     await wrapper.vm.$nextTick();
-    expect(wrapper.find('.demo-badge').exists()).toBe(true);
+    expect((wrapper.get('.demo-badge').element as HTMLElement).style.visibility).toBe('');
+    layer.unmount();
     wrapper.unmount();
   });
 

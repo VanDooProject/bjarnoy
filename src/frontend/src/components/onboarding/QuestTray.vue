@@ -17,6 +17,7 @@ import { questProgressKind, rewardOverflows } from '../../lib/quests';
 import { useQuests } from '../../composables/useQuests';
 import QuestIcon from './QuestIcon.vue';
 import QuestProgress from './QuestProgress.vue';
+import { useHiddenUnderPhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
 import type { QuestResponse } from '../../api/types';
@@ -34,6 +35,7 @@ const claimedCount = computed(() => known.value.length - unclaimed.value.length)
 // something the player has not seen in the opened card yet: a quest that became
 // current, or one that became claimable.
 const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
+const hudHidden = useHiddenUnderPhoneLayer();
 const expanded = ref(false);
 const collapsed = computed(() => isCompact.value && !expanded.value);
 
@@ -98,6 +100,7 @@ async function claim(q: QuestResponse) {
   <button
     v-if="current && collapsed"
     key="strip"
+    v-phone-hidden="hudHidden"
     type="button"
     class="quest-toggle"
     data-testid="quest-toggle"
@@ -114,7 +117,7 @@ async function claim(q: QuestResponse) {
     </span>
     <span class="strip-chevron" aria-hidden="true" />
   </button>
-  <aside v-else-if="current" key="card" class="quest-tray" data-testid="quest-tray" :aria-label="t('quests.title')">
+  <aside v-else-if="current" key="card" v-phone-hidden="hudHidden" class="quest-tray" data-testid="quest-tray" :aria-label="t('quests.title')">
     <div class="quest-header" data-dock-handle>
       <span class="quest-heading">{{ t('quests.title') }}</span>
       <span class="quest-progress" data-testid="quest-progress">
