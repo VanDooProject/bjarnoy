@@ -264,8 +264,11 @@ public sealed record ArmyResponse(
     }
 }
 
-/// <summary>An army as it appears in a settlement's army list.</summary>
-public sealed record ArmySummary(Guid Id, string Mission, bool AtHome, bool Supporting, HexPointResponse Position)
+/// <summary>
+/// An army as it appears in a settlement's army list. <paramref name="SettlementId"/> is its home settlement: null for an army
+/// without a home, which every realm of its owner lists.
+/// </summary>
+public sealed record ArmySummary(Guid Id, Guid? SettlementId, string Mission, bool AtHome, bool Supporting, HexPointResponse Position)
 {
     public static ArmySummary From(ArmyEntity entity, DateTimeOffset gameNow)
     {
@@ -284,7 +287,7 @@ public sealed record ArmySummary(Guid Id, string Mission, bool AtHome, bool Supp
         };
 
         return new ArmySummary(
-            entity.Id, domain.Mission.ToString().ToLowerInvariant(), atHome, supporting,
+            entity.Id, entity.SettlementId, domain.Mission.ToString().ToLowerInvariant(), atHome, supporting,
             HexPointResponse.From(position));
     }
 }

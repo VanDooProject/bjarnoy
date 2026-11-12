@@ -1781,6 +1781,8 @@ export interface ArmyUnitStackResponse {
 /** An army as it appears in a settlement's army list — lighter than `ArmyResponse`. */
 export interface ArmySummary {
   id: string;
+  /** The army's home settlement; null for an army without a home, which every realm of its owner lists. */
+  settlementId: string | null;
   mission: string;
   atHome: boolean;
   supporting: boolean;

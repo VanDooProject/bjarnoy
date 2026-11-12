@@ -372,7 +372,7 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
         {
             var listed = await owner.GetFromJsonAsync<List<ArmySummary>>(
                 $"/api/v1/settlements/{scene.HomeId}/armies", SqliteApiFixture.StrictJson, Ct);
-            Assert.Contains(listed!, a => a.Id == scene.CampArmyId);
+            Assert.Null(Assert.Single(listed!, a => a.Id == scene.CampArmyId).SettlementId);
 
             var army = await owner.GetFromJsonAsync<ArmyResponse>($"/api/v1/armies/{scene.CampArmyId}", SqliteApiFixture.StrictJson, Ct);
             Assert.Null(army!.SettlementId);
