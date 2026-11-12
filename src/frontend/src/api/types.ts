@@ -1733,6 +1733,8 @@ export interface ForeignArmyResponse {
   id: string;
   /** Null for an army without a home. */
   settlementId: string | null;
+  /** The owner's id, as on their settlements: an army without a home wears its owner's realm colour. */
+  ownerId: string;
   isFleet: boolean;
   position: HexPoint;
   movement: ForeignMovementResponse;

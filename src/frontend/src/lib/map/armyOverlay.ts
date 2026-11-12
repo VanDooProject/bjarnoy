@@ -27,7 +27,7 @@ export function armyOverlayMovement(m: {
 
 /**
  * The marker of another player's army marching inside our sight (docs/design/map-fog-v2.md §1g): in its owner's realm colour (guild, treaty
- * or rival, like the realm borders; `owner` is that army's settlement, unknown reads as rival), never selected, and flagged `foreign` so the
+ * or rival, like the realm borders; `owner` is `foreignArmyOwner`'s settlement, unknown reads as rival), never selected, and flagged `foreign` so the
  * renderer gives it no fog vision.
  */
 export function foreignArmyMarker(
@@ -47,6 +47,19 @@ export function foreignArmyMarker(
     foreign: true,
     color: realmColor(owner, playerId),
   };
+}
+
+/**
+ * The settlement whose realm colour another player's army wears: its home, or, for an army without a home, any settlement of the same
+ * owner on the map (the colour is the owner's, guild, treaty or rival). Undefined when none is known, which reads as rival.
+ */
+export function foreignArmyOwner(
+  army: ForeignArmyResponse,
+  settlements: { getSettlement(id: string | null): Settlement | undefined; listSettlements(): Settlement[] },
+): Settlement | undefined {
+  return settlements.getSettlement(army.settlementId) ?? (army.settlementId === null
+    ? settlements.listSettlements().find((s) => s.ownerId === army.ownerId)
+    : undefined);
 }
 
 /**

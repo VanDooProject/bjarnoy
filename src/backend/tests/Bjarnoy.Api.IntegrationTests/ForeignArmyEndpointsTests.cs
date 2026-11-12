@@ -32,7 +32,7 @@ public sealed class ForeignArmyEndpointsTests : IAsyncLifetime
 
     private static string Unique(string prefix) => $"{prefix}-{Guid.CreateVersion7():N}"[..20];
 
-    private sealed record Scene(Guid WorldId, SettlementResponse Viewer, string ViewerOwnerId, Guid RivalSettlementId, Guid RivalArmyId, Guid ViewerArmyId);
+    private sealed record Scene(Guid WorldId, SettlementResponse Viewer, string ViewerOwnerId, Guid RivalSettlementId, string RivalOwnerId, Guid RivalArmyId, Guid ViewerArmyId);
 
     /// <summary>
     /// A viewer settlement and a rival one far away; the rival's army marches west to east along the viewer's row, one hex per hour
@@ -81,7 +81,7 @@ public sealed class ForeignArmyEndpointsTests : IAsyncLifetime
         db.AddArmyRows(rivalArmy, viewerArmy);
         await db.SaveChangesAsync(Ct);
 
-        return new Scene(world.Id, viewer, viewerOwnerId, rival.Id, rivalArmy.Id, viewerArmy.Id);
+        return new Scene(world.Id, viewer, viewerOwnerId, rival.Id, rival.OwnerId, rivalArmy.Id, viewerArmy.Id);
     }
 
     private ArmyEntity Army(Guid settlementId, List<HexPoint> path, double elapsedHours, ArmyMission mission, Guid? target)
@@ -128,6 +128,7 @@ public sealed class ForeignArmyEndpointsTests : IAsyncLifetime
         var army = Assert.Single(armies);
         Assert.Equal(scene.RivalArmyId, army.Id);
         Assert.Equal(scene.RivalSettlementId, army.SettlementId);
+        Assert.Equal(scene.RivalOwnerId, army.OwnerId);
         Assert.False(army.IsFleet);
         Assert.Equal(new HexPointResponse(scene.Viewer.Q + 3, scene.Viewer.R), army.Position);
         // Two hexes ahead at most, all of them in sight here; nothing of the nine-hex route behind it.

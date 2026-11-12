@@ -50,7 +50,7 @@ import { useAuthStore } from '../stores/auth';
 import { realmToSwitchTo } from '../lib/realmTap';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
-import { armyOverlayMovement, campArmyMarkers, campFleetLiveCoord, foreignArmyMarker } from '../lib/map/armyOverlay';
+import { armyOverlayMovement, campArmyMarkers, campFleetLiveCoord, foreignArmyMarker, foreignArmyOwner } from '../lib/map/armyOverlay';
 import { useGuildStore } from '../stores/guild';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
@@ -475,7 +475,7 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
   // docs/design/map-fog-v2.md §1g: other players' troops marching inside our sight, in their owner's colour (guild/treaty/rival like
   // the realm borders). Never selected, never returning-grey, and the renderer gives them no vision of their own.
   for (const a of world.foreignArmies) {
-    armies.push(foreignArmyMarker(a, world.model.getSettlement(a.settlementId), player.id));
+    armies.push(foreignArmyMarker(a, foreignArmyOwner(a, world.model), player.id));
   }
   const selected = world.armies.find((a) => a.id === world.selectedArmyId);
   // While the send picker is open the route drawn is the preview of the order: from where the selected army will stand to the target.

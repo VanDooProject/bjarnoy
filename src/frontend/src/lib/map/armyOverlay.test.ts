@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ForeignArmyResponse } from '../../api/types';
-import { armyOverlayMovement, campArmyMarkers, campFleetLiveCoord, campFleetMovement, campLandMarkerId, foreignArmyMarker } from './armyOverlay';
+import { armyOverlayMovement, campArmyMarkers, campFleetLiveCoord, campFleetMovement, campLandMarkerId, foreignArmyMarker, foreignArmyOwner } from './armyOverlay';
 import type { ArmyOverlayMarker } from './HexMapRenderer';
 import { GUILD_REALM_COLOR, RIVAL_REALM_COLOR } from './realmColours';
 import type { Settlement } from './types';
@@ -8,6 +8,7 @@ import type { Settlement } from './types';
 const army: ForeignArmyResponse = {
   id: 'army-x',
   settlementId: 'rival-1',
+  ownerId: 'them',
   isFleet: true,
   position: { q: 3, r: 0 },
   movement: {
@@ -47,6 +48,29 @@ describe('foreignArmyMarker', () => {
     expect(foreignArmyMarker(army, owner({ relation: 'guild' }), 'me').color).toBe(GUILD_REALM_COLOR);
     expect(foreignArmyMarker(army, owner({}), 'me').color).toBe(RIVAL_REALM_COLOR);
     expect(foreignArmyMarker(army, undefined, 'me').color).toBe(RIVAL_REALM_COLOR);
+  });
+});
+
+describe('foreignArmyOwner', () => {
+  const settlements = [owner({ id: 'other', ownerId: 'someone' }), owner({ relation: 'guild' })];
+  const model = {
+    getSettlement: (id: string | null) => settlements.find((s) => s.id === id),
+    listSettlements: () => settlements,
+  };
+
+  it("is the army's home settlement", () => {
+    expect(foreignArmyOwner(army, model)?.id).toBe('rival-1');
+  });
+
+  it('is a settlement of the same owner for an army without a home, so it wears its realm colour', () => {
+    const homeless = { ...army, settlementId: null };
+
+    expect(foreignArmyOwner(homeless, model)?.id).toBe('rival-1');
+    expect(foreignArmyMarker(homeless, foreignArmyOwner(homeless, model), 'me').color).toBe(GUILD_REALM_COLOR);
+  });
+
+  it('is unknown (a rival) for an army without a home whose owner has no settlement on the map', () => {
+    expect(foreignArmyOwner({ ...army, settlementId: null, ownerId: 'nobody' }, model)).toBeUndefined();
   });
 });
 
