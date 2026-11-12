@@ -30,8 +30,8 @@ public sealed class BattleReportService(GameDbContext dbContext)
             .FirstOrDefaultAsync(r => r.Id == reportId, cancellationToken);
 
     /// <summary>Reports where <paramref name="settlementId"/> was either the attacker's or the defender's settlement, newest first.</summary>
-    public async Task<List<BattleReportEntity>> GetForSettlementAsync(
-        Guid settlementId, CancellationToken cancellationToken = default)
+    public async Task<List<BattleReportEntity>> GetForOwnerAsync(
+        Guid worldId, string ownerId, CancellationToken cancellationToken = default)
     {
         // Ordered client-side rather than via OrderByDescending in the
         // query — same reasoning (and same fix) as
@@ -49,7 +49,7 @@ public sealed class BattleReportService(GameDbContext dbContext)
             .AsNoTracking()
             .Include(r => r.AttackerLines)
             .Include(r => r.DefenderLines)
-            .Where(r => r.AttackerSettlementId == settlementId || r.DefenderSettlementId == settlementId)
+            .Where(r => r.WorldId == worldId && (r.AttackerOwnerId == ownerId || r.DefenderOwnerId == ownerId))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 

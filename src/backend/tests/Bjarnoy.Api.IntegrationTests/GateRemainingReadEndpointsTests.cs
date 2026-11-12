@@ -120,10 +120,7 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         yield return ["/api/v1/settlements/{0}/trade-offers/board"];
         yield return ["/api/v1/settlements/{0}/trade-offers/mine"];
         yield return ["/api/v1/settlements/{0}/shipments"];
-        yield return ["/api/v1/settlements/{0}/trade-reports"];
         yield return ["/api/v1/settlements/{0}/armies"];
-        yield return ["/api/v1/settlements/{0}/reports"];
-        yield return ["/api/v1/settlements/{0}/field-reports"];
     }
 
     [Theory]
@@ -364,6 +361,7 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         };
         return await WithDbAsync(async db =>
         {
+            await OwnReportAsync(db, report, attackerSettlementId, defenderSettlementId);
             db.BattleReports.Add(report);
             await db.SaveChangesAsync(Ct);
             return report.Id;
@@ -388,10 +386,21 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         };
         return await WithDbAsync(async db =>
         {
+            var a = await db.Settlements.SingleAsync(s => s.Id == sideASettlementId, Ct);
+            var b = await db.Settlements.SingleAsync(s => s.Id == sideBSettlementId, Ct);
+            (report.WorldId, report.SideAOwnerId, report.SideBOwnerId) = (a.WorldId, a.OwnerId, b.OwnerId);
             db.FieldBattleReports.Add(report);
             await db.SaveChangesAsync(Ct);
             return report.Id;
         });
+    }
+
+    /// <summary>Hangs a planted battle report on the players of the two settlements, the way the battle writer does.</summary>
+    private static async Task OwnReportAsync(GameDbContext db, BattleReportEntity report, Guid attackerSettlementId, Guid defenderSettlementId)
+    {
+        var attacker = await db.Settlements.SingleAsync(s => s.Id == attackerSettlementId, Ct);
+        var defender = await db.Settlements.SingleAsync(s => s.Id == defenderSettlementId, Ct);
+        (report.WorldId, report.AttackerOwnerId, report.DefenderOwnerId) = (attacker.WorldId, attacker.OwnerId, defender.OwnerId);
     }
 
     [Theory]
@@ -443,7 +452,9 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         };
         await WithDbAsync(async db =>
         {
-            db.BattleReports.Add(BattleReportEntity.FromDomain(report));
+            var entity = BattleReportEntity.FromDomain(report);
+            await OwnReportAsync(db, entity, mineId, rivalId);
+            db.BattleReports.Add(entity);
             await db.SaveChangesAsync(Ct);
             return 0;
         });
@@ -506,6 +517,62 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         var response = await client.GetAsync($"/api/v1/field-reports/{reportId}", Ct);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    // ------------------------------------------------------- per-player report lists
+
+    public static IEnumerable<object[]> PlayerReportLists()
+    {
+        yield return ["/api/v1/worlds/{0}/reports"];
+        yield return ["/api/v1/worlds/{0}/field-reports"];
+        yield return ["/api/v1/worlds/{0}/camp-reports"];
+        yield return ["/api/v1/worlds/{0}/trade-reports"];
+    }
+
+    [Theory]
+    [MemberData(nameof(PlayerReportLists))]
+    public async Task A_player_report_list_needs_the_owner_header(string routeTemplate)
+    {
+        using var client = Client();
+        var (worldId, _, _, _, _) = await TwoSettlementsAsync();
+
+        var response = await client.GetAsync(string.Format(routeTemplate, worldId), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Theory]
+    [MemberData(nameof(PlayerReportLists))]
+    public async Task A_player_report_list_is_accepted_for_the_owner(string routeTemplate)
+    {
+        using var client = Client();
+        var (worldId, _, mineOwnerId, _, _) = await TwoSettlementsAsync();
+
+        SetOwner(client, mineOwnerId);
+        var response = await client.GetAsync(string.Format(routeTemplate, worldId), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task The_battle_report_list_holds_the_players_reports_from_both_roles_and_nobody_elses()
+    {
+        using var client = Client();
+        var (worldId, mineId, mineOwnerId, rivalId, rivalOwnerId) = await TwoSettlementsAsync();
+        var asAttacker = await PlantBattleReportAsync(mineId, rivalId);
+        var asDefender = await PlantBattleReportAsync(rivalId, mineId);
+
+        SetOwner(client, mineOwnerId);
+        var mine = await client.GetFromJsonAsync<List<BattleReportResponse>>($"/api/v1/worlds/{worldId}/reports", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(new[] { asAttacker, asDefender }.Order(), mine!.Select(r => r.Id).Order());
+
+        SetOwner(client, Unique("stranger"));
+        var stranger = await client.GetFromJsonAsync<List<BattleReportResponse>>($"/api/v1/worlds/{worldId}/reports", SqliteApiFixture.StrictJson, Ct);
+        Assert.Empty(stranger!);
+
+        SetOwner(client, rivalOwnerId);
+        var rival = await client.GetFromJsonAsync<List<BattleReportResponse>>($"/api/v1/worlds/{worldId}/reports", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(2, rival!.Count);
     }
 
     // -------------------------------------------------------- settlements/mine

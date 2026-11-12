@@ -216,7 +216,9 @@ public sealed class CampAggressionService(
             Guid.CreateVersion7(), worldId, CampReportKind.Tower, now, camp, effectiveLevel,
             tower.SettlementId, defenders.FirstOrDefault()?.Id, pooled, garrison, plan, seed,
             towerCoord: tower.Hex, towerBurned: burned);
-        _dbContext.CampReports.Add(CampReportEntity.FromDomain(report));
+        var reportEntity = CampReportEntity.FromDomain(report);
+        reportEntity.OwnerId = (await ReportOwners.OfAsync(_dbContext, tower.SettlementId, cancellationToken).ConfigureAwait(false)).OwnerId;
+        _dbContext.CampReports.Add(reportEntity);
 
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 

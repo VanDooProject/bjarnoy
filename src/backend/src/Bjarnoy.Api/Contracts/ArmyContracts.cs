@@ -334,6 +334,10 @@ public sealed record BattleReportShipFightResponse(
 /// <param name="Drowned">The passengers the surviving ships could not carry.</param>
 /// <param name="FireShipsBurned">The Fire Ships burned by the fire damage.</param>
 /// <param name="FireSiege">The Fire Ships' damage to a building in the water, if any burned.</param>
+/// <param name="ViewerSide">
+/// <c>"attacker"</c> or <c>"defender"</c>: the side the reading player fought on (a player's reports cover all their
+/// settlements, so the side cannot be told from one settlement id); <see langword="null"/> when the reader fought neither.
+/// </param>
 public sealed record BattleReportResponse(
     Guid Id,
     DateTimeOffset OccurredAt,
@@ -352,13 +356,20 @@ public sealed record BattleReportResponse(
     BattleReportShipFightResponse? ShipFight,
     IReadOnlyList<ArmyUnitStackResponse> Drowned,
     int FireShipsBurned,
-    BattleReportSiegeResponse? FireSiege)
+    BattleReportSiegeResponse? FireSiege,
+    string? ViewerSide = null)
 {
-    public static BattleReportResponse From(BattleReportEntity entity)
+    /// <param name="entity">The stored report.</param>
+    /// <param name="viewerOwnerId">The reading player; <see cref="ViewerSide"/> is the side that player fought on.</param>
+    public static BattleReportResponse From(BattleReportEntity entity, string? viewerOwnerId = null)
     {
         ArgumentNullException.ThrowIfNull(entity);
 
-        return From(entity.ToDomain());
+        var side = viewerOwnerId is null ? null
+            : viewerOwnerId == entity.AttackerOwnerId ? "attacker"
+            : viewerOwnerId == entity.DefenderOwnerId ? "defender"
+            : null;
+        return From(entity.ToDomain()) with { ViewerSide = side };
     }
 
     public static BattleReportResponse From(BattleReport domain)
@@ -420,11 +431,13 @@ public sealed record FieldBattleReportResponse(
     bool SideBWasDefending,
     int Seed,
     ResourceAmountsResponse LootTaken,
-    IReadOnlyList<FieldBattleReportLineResponse> Lines)
+    IReadOnlyList<FieldBattleReportLineResponse> Lines,
+    string? ViewerSide = null)
 {
     /// <param name="names">Settlement/owner names by settlement id (<c>FieldBattleReportService.GetSideNamesAsync</c>); a side whose settlement is gone has null names.</param>
+    /// <param name="viewerOwnerId">The reading player; <see cref="ViewerSide"/> is the side (<c>"sidea"</c>/<c>"sideb"</c>) that player fought on, null when neither.</param>
     public static FieldBattleReportResponse From(
-        FieldBattleReportEntity entity, IReadOnlyDictionary<Guid, FieldBattleSideName> names)
+        FieldBattleReportEntity entity, IReadOnlyDictionary<Guid, FieldBattleSideName> names, string? viewerOwnerId = null)
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(names);
@@ -451,7 +464,11 @@ public sealed record FieldBattleReportResponse(
             entity.SideBWasDefending,
             entity.Seed,
             new ResourceAmountsResponse(entity.LootWood, entity.LootStone, entity.LootFood, entity.LootIron),
-            [.. entity.Lines.Select(FieldBattleReportLineResponse.From)]);
+            [.. entity.Lines.Select(FieldBattleReportLineResponse.From)],
+            viewerOwnerId is null ? null
+                : viewerOwnerId == entity.SideAOwnerId ? "sidea"
+                : viewerOwnerId == entity.SideBOwnerId ? "sideb"
+                : null);
     }
 }
 

@@ -797,6 +797,60 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
     }
 
     [Fact]
+    public async Task Reseeding_deletes_the_settlements_but_keeps_every_kind_of_report()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        var settlement = await FoundSettlementAsync(client, world);
+
+        string ownerId;
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            ownerId = (await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == settlement.Id, Ct)).OwnerId;
+            db.BattleReports.Add(new BattleReportEntity
+            {
+                OccurredAt = DateTimeOffset.UtcNow, AttackerArmyId = Guid.CreateVersion7(), AttackerSettlementId = settlement.Id,
+                DefenderSettlementId = Guid.CreateVersion7(), WorldId = world.Id, AttackerOwnerId = ownerId, DefenderOwnerId = "someone",
+            });
+            db.FieldBattleReports.Add(new FieldBattleReportEntity
+            {
+                OccurredAt = DateTimeOffset.UtcNow, SideAArmyId = Guid.CreateVersion7(), SideASettlementId = settlement.Id,
+                SideBArmyId = Guid.CreateVersion7(), SideBSettlementId = Guid.CreateVersion7(),
+                WorldId = world.Id, SideAOwnerId = ownerId, SideBOwnerId = "someone",
+            });
+            db.CampReports.Add(new CampReportEntity
+            {
+                WorldId = world.Id, OccurredAt = DateTimeOffset.UtcNow, Family = "wolfden", SettlementId = settlement.Id, OwnerId = ownerId,
+            });
+            var offer = new TradeOfferEntity
+            {
+                WorldId = world.Id, PosterSettlementId = settlement.Id, PostedAt = DateTimeOffset.UtcNow, ExpiresAt = DateTimeOffset.UtcNow.AddDays(1),
+            };
+            db.TradeOffers.Add(offer);
+            db.TradeReports.Add(new TradeReportEntity
+            {
+                OfferId = offer.Id, CompletedAt = DateTimeOffset.UtcNow, PosterSettlementId = settlement.Id,
+                AcceptorSettlementId = Guid.CreateVersion7(), WorldId = world.Id, PosterOwnerId = ownerId, AcceptorOwnerId = "someone",
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        Authorize(client, await CreateAdminTokenAsync(client));
+        var response = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/reseed", new ReseedWorldRequest(world.Name, Seed: 9001), Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        await using var after = _fixture.Factory.Services.CreateAsyncScope();
+        var read = after.ServiceProvider.GetRequiredService<GameDbContext>();
+        Assert.Equal(0, await read.Settlements.CountAsync(s => s.WorldId == world.Id, Ct));
+        Assert.Equal(1, await read.BattleReports.CountAsync(r => r.AttackerOwnerId == ownerId, Ct));
+        Assert.Equal(1, await read.FieldBattleReports.CountAsync(r => r.SideAOwnerId == ownerId, Ct));
+        Assert.Equal(1, await read.CampReports.CountAsync(r => r.OwnerId == ownerId, Ct));
+        Assert.Equal(1, await read.TradeReports.CountAsync(r => r.PosterOwnerId == ownerId, Ct));
+    }
+
+    [Fact]
     public async Task Reseeding_is_refused_while_another_players_settlement_stands()
     {
         using var client = _fixture.CreateClient();

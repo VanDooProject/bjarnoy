@@ -261,6 +261,9 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
 
         var report = FieldBattleReportEntity.FromDomain(
             Guid.CreateVersion7(), at, hex, armyA.Id, armyA.SettlementId, armyB.Id, armyB.SettlementId, plan, seed);
+        report.WorldId = armyA.Settlement!.WorldId;
+        report.SideAOwnerId = armyA.Settlement.OwnerId;
+        report.SideBOwnerId = armyB.Settlement!.OwnerId;
         _dbContext.FieldBattleReports.Add(report);
 
         _logger.LogInformation(

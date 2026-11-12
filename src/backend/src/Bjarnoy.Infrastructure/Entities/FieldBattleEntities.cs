@@ -66,6 +66,15 @@ public class FieldBattleReportEntity
 
     public Guid SideBSettlementId { get; set; }
 
+    /// <summary>The world the armies met in; scopes the per-player inbox.</summary>
+    public Guid WorldId { get; set; }
+
+    /// <summary>Side A's player (<c>SettlementEntity.OwnerId</c> when the armies met). A report belongs to the players, not to a settlement.</summary>
+    public string SideAOwnerId { get; set; } = string.Empty;
+
+    /// <summary>Side B's player; see <see cref="SideAOwnerId"/>.</summary>
+    public string SideBOwnerId { get; set; } = string.Empty;
+
     public int Winner { get; set; }
 
     public double SideAPower { get; set; }

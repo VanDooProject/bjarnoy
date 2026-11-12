@@ -1217,7 +1217,13 @@ public sealed class ArmyService(
         var report = BattleReport.From(
             Guid.CreateVersion7(), movement.ArrivesAt, armyEntity.Id, armyEntity.SettlementId, targetId,
             domain.Stacks, arrival.Attack!, seed, wasRaid: domain.Mission == ArmyMission.Raid);
-        _dbContext.BattleReports.Add(BattleReportEntity.FromDomain(report));
+        var battleEntity = BattleReportEntity.FromDomain(report);
+        var attackerOwner = await ReportOwners.OfAsync(_dbContext, armyEntity.SettlementId, cancellationToken).ConfigureAwait(false);
+        var defenderOwner = await ReportOwners.OfAsync(_dbContext, targetId, cancellationToken).ConfigureAwait(false);
+        battleEntity.WorldId = attackerOwner.WorldId;
+        battleEntity.AttackerOwnerId = attackerOwner.OwnerId;
+        battleEntity.DefenderOwnerId = defenderOwner.OwnerId;
+        _dbContext.BattleReports.Add(battleEntity);
 
         if (fireSiege.Applied)
         {
@@ -1305,7 +1311,9 @@ public sealed class ArmyService(
         var report = CampReport.From(
             Guid.CreateVersion7(), worldId, CampReportKind.Hunt, arrivesAt, camp, effectiveLevel,
             armyEntity.SettlementId, armyEntity.Id, domain.Stacks, garrison, plan, seed);
-        _dbContext.CampReports.Add(CampReportEntity.FromDomain(report));
+        var huntEntity = CampReportEntity.FromDomain(report);
+        huntEntity.OwnerId = (await ReportOwners.OfAsync(_dbContext, armyEntity.SettlementId, cancellationToken).ConfigureAwait(false)).OwnerId;
+        _dbContext.CampReports.Add(huntEntity);
 
         _logger.LogInformation(
             "Army {ArmyId} hunted {Family} camp at {Camp}: {Winner} won ({ArmyPower} vs {CampPower}); "

@@ -94,7 +94,9 @@ public sealed class CampAmbushService(
         var report = CampReport.From(
             Guid.CreateVersion7(), worldId, CampReportKind.Ambush, ambush.At, camp, effectiveLevel,
             armyEntity.SettlementId, armyEntity.Id, domain.Stacks, garrison, plan, seed);
-        _dbContext.CampReports.Add(CampReportEntity.FromDomain(report));
+        var reportEntity = CampReportEntity.FromDomain(report);
+        reportEntity.OwnerId = settlement.OwnerId;
+        _dbContext.CampReports.Add(reportEntity);
 
         _logger.LogInformation(
             "{Family} camp at {Camp} ambushed army {ArmyId} at {Hex}: {Winner} won ({ArmyPower} vs {CampPower}); "
