@@ -49,7 +49,7 @@ import { atlasPageCount } from './atlasManifests';
 import { attachFramePacing } from './framePacing';
 import { insetBorderCorners, splitBorderEdges } from './realmBorderEdges';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
-import { drawsAsSea, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
+import { drawsAsSea, type CartShipment, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { buildingName } from '../../i18n/catalogueNames';
@@ -240,6 +240,9 @@ export const LABEL_STYLES = {
 
 /** Frames a keyed label may stay unused before its Text is destroyed (see hideUnusedLabels). */
 const LABEL_POOL_IDLE_FRAMES = 600;
+
+/** Texels per world unit of the baked wave squiggle: 4 keeps it crisp at the world map's top zoom (4); the texture is tiny. */
+const WAVE_TEXTURE_RESOLUTION = 4;
 
 const WORLD_PROTOTYPE_HEX_W = 40;
 const WAVE_SCALE = 168 / WORLD_PROTOTYPE_HEX_W;
@@ -957,8 +960,8 @@ export function fadeAlphaAt(elapsedMs: number, delayMs: number, durationMs: numb
 }
 
 // One tile-art size for both views — see the module comment above.
-const TILE_W = 168;
-const TILE_H = TILE_W * TILE_ART_TOPFACE_H_FRAC;
+export const TILE_W = 168;
+export const TILE_H = TILE_W * TILE_ART_TOPFACE_H_FRAC;
 const TILE_CANVAS_H = TILE_W * (TILE_ART_NATIVE_H / TILE_ART_NATIVE_W);
 const TILE_TOPFACE_Y_OFFSET = TILE_W * TILE_ART_TOPFACE_Y_FRAC;
 // How far past the viewport edge (world-space) coordsInRect/isEntirelyDeepFog
@@ -2314,9 +2317,8 @@ export class HexMapRenderer {
   // rather than drawing at one coord of its own.
   private attentionPulse: number | null = null;
   // Issue #159 part B: the composing-a-dispatch/field-order range tint —
-  // every hex `setRangeOverlay` hands in, drawn as a translucent fill plus
-  // an outline on the boundary edges (the edges whose neighbour isn't in the
-  // set), static: drawn when `setRangeOverlay` stores new hexes (not per tick), unlike
+  // every hex `setRangeOverlay` hands in, drawn as a flat translucent fill
+  // (no outline), static: drawn when `setRangeOverlay` stores new hexes (not per tick), unlike
   // `armyOverlay`. Sits directly below `highlightLayer` (both immediately
   // above `terrainTop.container` — see mount()'s addChild order) so it tints
   // the tile tops the way the hover/highlight layers do; fog sits above
@@ -2365,8 +2367,7 @@ export class HexMapRenderer {
   private campPawLayer = new Graphics();
   // Pooled labels keyed by what they show (`owner:<settlementId>`, `island:<islandId>`, ...), so a label that stays on
   // screen keeps its Text (and its rasterised glyphs) while others come and go; see acquireLabel.
-  private labelPool = new Map<string, { text: Text; lastUsedFrame: number }>();
-  private labelFrame = 0;
+  private labelPool = new IdleKeyedPool<Text>(LABEL_POOL_IDLE_FRAMES);
   /**
    * World-space Y of each island's bottom edge, for placing its name label.
    * Measuring it walks the island's whole footprint, so it is done once per
@@ -2374,10 +2375,9 @@ export class HexMapRenderer {
    */
   private islandBottomCache = new Map<string, number>();
   private islandBottomCacheFor: IslandLabel[] | null = null;
-  // Issue #40 phase 2: see `setArmyOverlay` — drawn every tick alongside the
-  // settlement badge (rebuildMarkers), same "recomputed from hex coords on
-  // every rebuild" pattern as everything else in this layer, so it keeps up
-  // with pan/zoom for free.
+  // Issue #40 phase 2: see `setArmyOverlay` — drawn by `drawArmyOverlay` from rebuildMarkers every tick: what moves per
+  // frame (markers, pick rings, the split route leg) is redrawn each time, the static part (routes, pins, targets) only when
+  // `armyStaticCache` says it changed, and a pan is a single position write on its container.
   private armyOverlay: ArmyOverlayData | null = null;
   // Issue #93/#94: the SVG marker icon set (see markerIcons.ts), drawn as
   // pooled Sprites parented to markerLayer — `Graphics` is a `Container`, so
@@ -2390,13 +2390,15 @@ export class HexMapRenderer {
   // The army overlay's static part (routes, pins, targets: see drawArmyOverlay) lives in its own container, a child of
   // markerLayer placed first so it draws under the pooled icons and labels. Its content is laid out in "world x zoom"
   // space and rebuilt only when the overlay, the zoom or the selection changes; a pan is one position write.
+  // Draw order inside markerLayer: its own geometry (pills, ...) -> armyStatic (routes, pins, target rings) ->
+  // armyFrameGraphics (what moves per frame: the split route leg, shadows, wakes, pick rings, icon-less fallbacks) ->
+  // the pooled sprites and labels.
   private armyStatic = new Container();
   private armyStaticGraphics = new Graphics();
+  private armyFrameGraphics = new Graphics();
   private staticIcons: IconSink = { pool: [], used: 0, parent: this.armyStatic };
-  // What the static part was last built from (see armyStaticSignature), plus the zoom/leg/drag key: both are compared
-  // every frame, since the caller may change the overlay's arrays in place.
-  private armyStaticSnapshot: number[] | null = null;
-  private armyStaticKey = '';
+  // Decides each frame whether the static part is rebuilt (the caller may change the overlay's arrays in place).
+  private armyStaticCache = new ArmyStaticCache();
   private armyStaticWaypoints: { index: number; x: number; y: number }[] = [];
   private armyStaticTargets: { kind: ArmyOverlayTarget['kind']; x: number; y: number }[] = [];
   // Read back by `lastArmyOverlayFrame()` — recorded by drawArmyOverlay as it
@@ -2930,6 +2932,7 @@ export class HexMapRenderer {
     app.stage.addChild(this.world, this.campPawLayer, this.blackFogLayer.mesh, this.markerLayer, this.whiteMistLayer.mesh);
     this.armyStatic.addChild(this.armyStaticGraphics);
     this.markerLayer.addChildAt(this.armyStatic, 0);
+    this.markerLayer.addChildAt(this.armyFrameGraphics, 1);
 
     app.ticker.add(this.onTick);
     // See framePacing.ts: a loop whose frames outlast the vsync interval otherwise starves input and timers.
@@ -5100,8 +5103,8 @@ export class HexMapRenderer {
 
   /**
    * The one squiggle every wave sprite shares: today's two quadratic curves and round-capped stroke at WAVE_STROKE
-   * (world units), drawn once. 2 texels per world unit keeps it crisp up to zoom 2 (the squiggles are fully visible
-   * from zoom ~0.18); mipmaps keep it clean when minified. The anchor is the squiggle's start point, so a sprite's
+   * (world units), drawn once. 4 texels per world unit keeps it crisp up to the world map's maxZoom (4); mipmaps keep it
+   * clean when minified. The anchor is the squiggle's start point, so a sprite's
    * position is the same (x, y) the path used to start at.
    */
   private bakeWaveTexture(): Texture | null {
@@ -5119,7 +5122,7 @@ export class HexMapRenderer {
     this.waveTexture = renderer.generateTexture({
       target: g,
       frame,
-      resolution: 2,
+      resolution: WAVE_TEXTURE_RESOLUTION,
       antialias: true,
       defaultAnchor: { x: pad / frame.width, y: (bump + pad) / frame.height },
       textureSourceOptions: { autoGenerateMipmaps: true },
@@ -5676,12 +5679,13 @@ export class HexMapRenderer {
 
   private rebuildMarkers() {
     this.markerLayer.clear();
+    this.armyFrameGraphics.clear();
     this.campPawLayer.clear();
     // markerLayer.clear() only wipes the Graphics geometry, not the pooled
     // Sprite/Text children parented to it — each pass counts what it used and
     // hides the rest, same bookkeeping labels do (hideUnusedLabels).
     this.movingIcons.used = 0;
-    this.labelFrame++;
+    this.labelPool.nextFrame();
     if (this.options.mode === 'settlement') {
       if (!this.options.hideSettlementBadge) this.rebuildSettlementLabels();
       this.pruneConstructionDials();
@@ -5781,26 +5785,20 @@ export class HexMapRenderer {
     // arrival. (Fleets ride the backend-fed army overlay's own marker/route
     // instead of a world-mode loop like this one — see `drawArmyOverlay`.)
     for (const cart of worldModel.listCartShipments()) {
-      const t = Math.min(1, Math.max(0, (now - cart.departedAt) / (cart.etaAt - cart.departedAt || 1)));
-      const fromGrid = isoGridPosition({ q: cart.fromQ, r: cart.fromR }, TILE_W, TILE_H);
-      const toGrid = isoGridPosition({ q: cart.toQ, r: cart.toR }, TILE_W, TILE_H);
-      const world = {
-        x: fromGrid.x + (toGrid.x - fromGrid.x) * t,
-        y: fromGrid.y + (toGrid.y - fromGrid.y) * t,
-      };
+      const { world, heading } = cartWorldPoint(cart, now);
       const cartCoord = isoPixelToAxial(world, TILE_W, TILE_H);
       if (fogActive && !worldModel.isExplored(cartCoord.q, cartCoord.r)) continue;
       const screen = this.toScreen(world);
 
-      // cart.svg is authored with the shaft to the left and its wheels' ground line at y 50 of 64, so the cart stands
-      // on its hex and faces its direction of travel (flipped when it rolls to the right).
+      // cart.svg is authored with the shaft to the right (+x) and its wheels' ground line at y 50 of 64, so the cart
+      // stands on its hex and faces its direction of travel (flipped when it rolls to the left), like the flag and ship.
       if (
         !this.drawIcon('cart', screen.x, screen.y, {
           size: CART_MARKER_SIZE,
           color: CART_COLOR,
           anchorX: 0.5,
           anchorY: 50 / 64,
-          flipX: toGrid.x > fromGrid.x,
+          flipX: heading.x < 0,
         })
       ) {
         this.markerLayer
@@ -6041,6 +6039,9 @@ export class HexMapRenderer {
    * Pooled for the same reason labels are — the overlay is redrawn from
    * scratch every frame, and allocating a Sprite per marker per frame would
    * churn the GPU's batcher for no reason.
+   *
+   * `x` / `y` are in the `sink`'s space: screen pixels for the default (per-frame) sink, "world x zoom" for `staticIcons`,
+   * whose container carries the camera offset.
    */
   private drawIcon(
     name: MarkerIconName,
@@ -6089,14 +6090,11 @@ export class HexMapRenderer {
    * `scale` and `alpha` are reset here because a label's scale changes with the zoom and the pool outlives a mode switch.
    */
   private acquireLabel(key: string, style: TextStyle, scale = 1): Text {
-    let entry = this.labelPool.get(key);
-    if (!entry) {
-      entry = { text: new Text({ text: '', style }), lastUsedFrame: this.labelFrame };
-      this.labelPool.set(key, entry);
-      this.markerLayer.addChild(entry.text);
-    }
-    entry.lastUsedFrame = this.labelFrame;
-    const label = entry.text;
+    const label = this.labelPool.acquire(key, () => {
+      const text = new Text({ text: '', style });
+      this.markerLayer.addChild(text);
+      return text;
+    });
     if (label.style !== style) label.style = style;
     label.scale.set(scale);
     label.alpha = 1;
@@ -6106,14 +6104,10 @@ export class HexMapRenderer {
 
   /** Labels not acquired this frame are hidden; ones unused for LABEL_POOL_IDLE_FRAMES frames are destroyed. */
   private hideUnusedLabels() {
-    for (const [key, entry] of this.labelPool) {
-      if (entry.lastUsedFrame === this.labelFrame) continue;
-      entry.text.visible = false;
-      if (this.labelFrame - entry.lastUsedFrame > LABEL_POOL_IDLE_FRAMES) {
-        entry.text.destroy();
-        this.labelPool.delete(key);
-      }
-    }
+    this.labelPool.sweep(
+      (text) => (text.visible = false),
+      (text) => text.destroy(),
+    );
   }
 
   /**
@@ -6393,8 +6387,7 @@ export class HexMapRenderer {
    * Issue #159 part B: the reachable-range tint shown while composing a
    * dispatch or field order — see `lib/map/hexPath.ts`'s `reachableRange`,
    * which is what the store should feed in here. Pass `null` (or an empty
-   * array) to clear it. Like `setArmyOverlay`, this only stores the data;
-   * `onTick` (already running every frame) redraws it on the next tick.
+   * array) to clear it. Static: the tint is redrawn here, once, not per tick.
    */
   setRangeOverlay(hexes: AxialCoord[] | null) {
     this.rangeOverlay = hexes && hexes.length > 0 ? hexes : null;
@@ -6430,8 +6423,8 @@ export class HexMapRenderer {
 
   /**
    * Hands in the under-construction dials (`constructionDialsFromQueue`).
-   * Like `setRangeOverlay`, this only stores the data; the HTML layer (BuildingHudLayer) draws and animates the dials from
-   * `constructionDialList`. `null` clears.
+   * Only stores the data (the renderer draws nothing for it); the HTML layer (BuildingHudLayer) draws and animates the dials
+   * from `constructionDialList`. `null` clears.
    */
   setConstructionDials(dials: ConstructionDial[] | null) {
     const merged = retainFinishingDials(this.constructionDials ?? [], dials ?? [], Date.now());
@@ -6549,8 +6542,7 @@ export class HexMapRenderer {
 
   /** World-space centre of a hex's top face — `hexCenterScreen` before the camera transform. */
   private hexCenterWorld(coord: AxialCoord): { x: number; y: number } {
-    const grid = isoGridPosition(coord, TILE_W, TILE_H);
-    return { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
+    return hexCenterWorldOf(coord);
   }
 
   /**
@@ -6700,12 +6692,11 @@ export class HexMapRenderer {
 
   /** Hides the army overlay's static part (no overlay, or a mode that draws none) and forgets what it showed. */
   private clearArmyStatic() {
-    if (this.armyStaticSnapshot === null) return;
+    if (!this.armyStaticCache.isBuilt) return;
     this.armyStaticGraphics.clear();
     this.staticIcons.used = 0;
     this.hideUnusedIcons(this.staticIcons);
-    this.armyStaticSnapshot = null;
-    this.armyStaticKey = '';
+    this.armyStaticCache.reset();
     this.armyStaticWaypoints = [];
     this.armyStaticTargets = [];
   }
@@ -6819,7 +6810,7 @@ export class HexMapRenderer {
     }
 
     const now = Date.now();
-    const movingSink: ArmyDrawSink = { g: this.markerLayer, icons: this.movingIcons };
+    const movingSink: ArmyDrawSink = { g: this.armyFrameGraphics, icons: this.movingIcons };
 
     // The overlay's static part (routes, draft line, pins, target icons and rings) is drawn into `armyStatic` in
     // "world x zoom" space, so a pan only moves that container. What moves on its own stays per frame in markerLayer: the
@@ -6861,10 +6852,14 @@ export class HexMapRenderer {
 
     const draggedIndex = this.waypointDrag?.index ?? null;
     const zoom = this.camera.zoom;
-    const staticKey = `${zoom}|${split ? split.legIndex : -1}|${draggedIndex}|${this.icons !== null}`;
-    if (this.armyStaticKey !== staticKey || !armyStaticSnapshotMatches(overlay, this.armyStaticSnapshot)) {
-      this.armyStaticSnapshot = armyStaticSignature(overlay);
-      this.armyStaticKey = staticKey;
+    if (
+      this.armyStaticCache.needsRebuild(overlay, {
+        zoom,
+        splitLeg: split ? split.legIndex : -1,
+        draggedIndex,
+        iconsReady: this.icons !== null,
+      })
+    ) {
       this.rebuildArmyStatic(overlay, split ? split.legIndex : -1, draggedIndex);
     }
     const offset = this.toScreen({ x: 0, y: 0 });
@@ -6917,14 +6912,14 @@ export class HexMapRenderer {
           })
         ) {
           const r = army.selected ? 9 : 7;
-          this.markerLayer
+          this.armyFrameGraphics
             .poly([p.x - r, p.y, p.x + r * 0.4, p.y - r * 0.4, p.x + r, p.y, p.x + r * 0.4, p.y + r * 0.4])
             .fill({ color })
             .stroke({ width: 1.5, color: army.selected ? 0xffffff : 0x0b1116, alpha: 0.9 });
         }
         // A wake ellipse, not a ground shadow — this marker floats on water,
         // it doesn't stand on land.
-        this.markerLayer.ellipse(p.x, p.y + size * 0.28, 7, 3).stroke({ width: 1.5, color: 0xbfe3f0, alpha: 0.4 });
+        this.armyFrameGraphics.ellipse(p.x, p.y + size * 0.28, 7, 3).stroke({ width: 1.5, color: 0xbfe3f0, alpha: 0.4 });
       } else {
         if (army.selected) {
           this.drawIcon('flag', p.x, p.y, {
@@ -6948,30 +6943,30 @@ export class HexMapRenderer {
           })
         ) {
           const r = army.selected ? 9 : 7;
-          this.markerLayer
+          this.armyFrameGraphics
             .poly([p.x, p.y - r, p.x + r, p.y, p.x, p.y + r, p.x - r, p.y])
             .fill({ color })
             .stroke({ width: 1.5, color: army.selected ? 0xffffff : 0x0b1116, alpha: 0.9 });
         }
         // A small ground shadow anchors the banner to its point — without it
         // a pole drawn upward from the position reads as hovering above the map.
-        this.markerLayer.ellipse(p.x, p.y, 7, 3).fill({ color: 0x0b1116, alpha: 0.35 });
+        this.armyFrameGraphics.ellipse(p.x, p.y, 7, 3).fill({ color: 0x0b1116, alpha: 0.35 });
       }
       // The send picker's cue: a ring says "tap me" (dashed) or "this one" (solid). Static, so there is no motion to gate.
       if (army.pick === 'eligible' || army.pick === 'selected') {
         const c = this.armyHitCentre(p, army.isFleet);
         if (army.pick === 'selected') {
-          this.markerLayer.circle(c.x, c.y, PICK_RING_RADIUS).stroke({ width: 2.5, color: GOLD, alpha: 1 });
+          this.armyFrameGraphics.circle(c.x, c.y, PICK_RING_RADIUS).stroke({ width: 2.5, color: GOLD, alpha: 1 });
         } else {
           const dashes = 14;
           for (let i = 0; i < dashes; i++) {
             const a0 = (i / dashes) * Math.PI * 2;
             const a1 = ((i + 0.55) / dashes) * Math.PI * 2;
-            this.markerLayer
+            this.armyFrameGraphics
               .moveTo(c.x + Math.cos(a0) * PICK_RING_RADIUS, c.y + Math.sin(a0) * PICK_RING_RADIUS)
               .arc(c.x, c.y, PICK_RING_RADIUS, a0, a1);
           }
-          this.markerLayer.stroke({ width: 2, color: GOLD, alpha: 0.95 });
+          this.armyFrameGraphics.stroke({ width: 2, color: GOLD, alpha: 0.95 });
         }
       }
     }
@@ -7153,28 +7148,141 @@ export class HexMapRenderer {
 }
 
 /**
- * What the army overlay's static part draws, as numbers: the route, the draft waypoints and the targets with their kinds.
- * The overlay's arrays can be changed in place (a dragged pin), so the static part compares this instead of the object.
+ * Where a trade cart is at `now`, in world space: interpolated between the centres of its two hexes (so at departure it
+ * stands on its own hex and `isoPixelToAxial` of the point names the hex it is in), and the direction it travels in.
  */
-export function armyStaticSignature(overlay: ArmyOverlayData): number[] {
-  const out: number[] = [overlay.route.length, overlay.draftWaypoints.length];
-  for (const c of overlay.route) out.push(c.q, c.r);
-  for (const c of overlay.draftWaypoints) out.push(c.q, c.r);
-  for (const t of overlay.targets ?? []) out.push(t.coord.q, t.coord.r, t.kind === 'attack' ? 1 : 0);
-  return out;
+export function cartWorldPoint(cart: CartShipment, now: number): { world: { x: number; y: number }; heading: { x: number; y: number } } {
+  const t = Math.min(1, Math.max(0, (now - cart.departedAt) / (cart.etaAt - cart.departedAt || 1)));
+  const from = hexCenterWorldOf({ q: cart.fromQ, r: cart.fromR });
+  const to = hexCenterWorldOf({ q: cart.toQ, r: cart.toR });
+  return {
+    world: { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t },
+    heading: { x: to.x - from.x, y: to.y - from.y },
+  };
 }
 
-/** `armyStaticSignature(overlay)` equals `snapshot`, without building the array. */
-export function armyStaticSnapshotMatches(overlay: ArmyOverlayData, snapshot: number[] | null): boolean {
-  if (!snapshot) return false;
-  const targets = overlay.targets ?? [];
-  if (snapshot.length !== 2 + 2 * overlay.route.length + 2 * overlay.draftWaypoints.length + 3 * targets.length) return false;
-  if (snapshot[0] !== overlay.route.length || snapshot[1] !== overlay.draftWaypoints.length) return false;
-  let i = 2;
-  for (const c of overlay.route) if (snapshot[i++] !== c.q || snapshot[i++] !== c.r) return false;
-  for (const c of overlay.draftWaypoints) if (snapshot[i++] !== c.q || snapshot[i++] !== c.r) return false;
-  for (const t of targets) if (snapshot[i++] !== t.coord.q || snapshot[i++] !== t.coord.r || snapshot[i++] !== (t.kind === 'attack' ? 1 : 0)) return false;
-  return true;
+/** World-space centre of a hex's top face. */
+function hexCenterWorldOf(coord: AxialCoord): { x: number; y: number } {
+  const grid = isoGridPosition(coord, TILE_W, TILE_H);
+  return { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
+}
+
+/** What, besides the overlay's own arrays, decides how the army overlay's static part looks. */
+export interface ArmyStaticView {
+  zoom: number;
+  /** The route leg the selected army is on (-1: none). */
+  splitLeg: number;
+  /** The draft pin being dragged, or null. */
+  draggedIndex: number | null;
+  iconsReady: boolean;
+}
+
+/**
+ * Decides whether the army overlay's static part (routes, pins, target icons and rings) has to be rebuilt. It walks the
+ * view (zoom, split leg, dragged pin, icons ready) and what the overlay draws (route, draft waypoints, targets with their
+ * kinds) into one reusable number array and compares it element-wise with the one the last rebuild was made from; the two
+ * arrays swap on a change, so once they have grown to size a frame allocates nothing. The overlay's arrays can be changed
+ * in place (a dragged pin), which is why this compares values and not the object.
+ */
+export class ArmyStaticCache {
+  private scratch: number[] = [];
+  private built: number[] = [];
+  private hasBuilt = false;
+
+  /** True when the static part must be rebuilt; the caller does that, this only remembers what it was built from. */
+  needsRebuild(overlay: ArmyOverlayData, view: ArmyStaticView): boolean {
+    const out = this.scratch;
+    let n = 0;
+    out[n++] = view.zoom;
+    out[n++] = view.splitLeg;
+    out[n++] = view.draggedIndex ?? -1;
+    out[n++] = view.iconsReady ? 1 : 0;
+    out[n++] = overlay.route.length;
+    out[n++] = overlay.draftWaypoints.length;
+    for (const c of overlay.route) {
+      out[n++] = c.q;
+      out[n++] = c.r;
+    }
+    for (const c of overlay.draftWaypoints) {
+      out[n++] = c.q;
+      out[n++] = c.r;
+    }
+    for (const t of overlay.targets ?? []) {
+      out[n++] = t.coord.q;
+      out[n++] = t.coord.r;
+      out[n++] = t.kind === 'attack' ? 1 : 0;
+    }
+    out.length = n;
+    const prev = this.built;
+    if (this.hasBuilt && prev.length === n) {
+      let same = true;
+      for (let i = 0; i < n; i++) {
+        if (prev[i] !== out[i]) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return false;
+    }
+    this.scratch = prev;
+    this.built = out;
+    this.hasBuilt = true;
+    return true;
+  }
+
+  /** Forgets what was built, so the next `needsRebuild` is true. */
+  reset() {
+    this.hasBuilt = false;
+  }
+
+  get isBuilt(): boolean {
+    return this.hasBuilt;
+  }
+}
+
+/**
+ * Keyed pool of display objects with idle expiry: `acquire` hands out the same object for the same key, `sweep` (once per
+ * frame, after the frame's acquires) hides the ones not acquired this frame and destroys the ones unused for more than
+ * `idleFrames` frames. `nextFrame` starts a frame.
+ */
+export class IdleKeyedPool<T> {
+  private entries = new Map<string, { item: T; lastUsedFrame: number }>();
+  private frame = 0;
+
+  private readonly idleFrames: number;
+
+  constructor(idleFrames: number) {
+    this.idleFrames = idleFrames;
+  }
+
+  nextFrame() {
+    this.frame++;
+  }
+
+  acquire(key: string, create: () => T): T {
+    let entry = this.entries.get(key);
+    if (!entry) {
+      entry = { item: create(), lastUsedFrame: this.frame };
+      this.entries.set(key, entry);
+    }
+    entry.lastUsedFrame = this.frame;
+    return entry.item;
+  }
+
+  sweep(hide: (item: T) => void, destroy: (item: T) => void) {
+    for (const [key, entry] of this.entries) {
+      if (entry.lastUsedFrame === this.frame) continue;
+      hide(entry.item);
+      if (this.frame - entry.lastUsedFrame > this.idleFrames) {
+        destroy(entry.item);
+        this.entries.delete(key);
+      }
+    }
+  }
+
+  get size(): number {
+    return this.entries.size;
+  }
 }
 
 const NEIGHBOR_DIRS: AxialCoord[] = [

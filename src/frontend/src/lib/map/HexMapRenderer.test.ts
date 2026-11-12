@@ -5,8 +5,12 @@ import {
   VISIBLE_RECT_MARGIN,
   armyMarkerColor,
   armyMarkerAt,
-  armyStaticSignature,
-  armyStaticSnapshotMatches,
+  ArmyStaticCache,
+  IdleKeyedPool,
+  TILE_H,
+  TILE_W,
+  cartWorldPoint,
+  type ArmyStaticView,
   armyTapSwallowed,
   armyVisionEntryOf,
   grantsArmyVision,
@@ -46,9 +50,10 @@ import {
 import { GIANT_MAX_NATIVE_H } from './giantTiles';
 import { StaticWorldModel } from './StaticWorldModel';
 import { PREVIEW_ISLAND_RADIUS } from './WorldModel';
-import type { RiverTile, Tile } from './types';
+import type { CartShipment, RiverTile, Tile } from './types';
 import type { TileTextures } from './textures';
 import { hexesInRadius, type AxialCoord } from '../hex/coords';
+import { isoGridPosition, isoPixelToAxial } from '../hex/geometry';
 
 // Regression coverage for a reported bug: a river mouth's hover tooltip
 // read "Shore" (its underlying sand terrain) instead of naming the river
@@ -1339,38 +1344,167 @@ describe('terrain rebuild cadence', () => {
   });
 });
 
-describe('army overlay static signature', () => {
+describe('army overlay static rebuild decision', () => {
   const overlay = (): ArmyOverlayData => ({
     armies: [],
     route: [{ q: 0, r: 0 }, { q: 1, r: 0 }],
     draftWaypoints: [{ q: 2, r: 1 }],
     targets: [{ kind: 'attack', coord: { q: 3, r: 3 } }],
   });
+  const view = (patch: Partial<ArmyStaticView> = {}): ArmyStaticView => ({
+    zoom: 0.5,
+    splitLeg: -1,
+    draggedIndex: null,
+    iconsReady: true,
+    ...patch,
+  });
+  const warm = () => {
+    const cache = new ArmyStaticCache();
+    expect(cache.needsRebuild(overlay(), view())).toBe(true);
+    return cache;
+  };
 
-  it('matches the overlay it was taken from and nothing else is needed to tell it is unchanged', () => {
-    const o = overlay();
-    expect(armyStaticSnapshotMatches(o, armyStaticSignature(o))).toBe(true);
-    expect(armyStaticSnapshotMatches(overlay(), armyStaticSignature(o))).toBe(true);
-    expect(armyStaticSnapshotMatches(o, null)).toBe(false);
+  it('rebuilds the first time, then not while nothing changed (also for an equal copy of the overlay)', () => {
+    const cache = new ArmyStaticCache();
+    expect(cache.needsRebuild(overlay(), view())).toBe(true);
+    expect(cache.needsRebuild(overlay(), view())).toBe(false);
+    expect(cache.needsRebuild(overlay(), view())).toBe(false);
+  });
+
+  it('rebuilds again after a reset', () => {
+    const cache = warm();
+    cache.reset();
+    expect(cache.needsRebuild(overlay(), view())).toBe(true);
+  });
+
+  it('rebuilds on a zoom change', () => {
+    const cache = warm();
+    expect(cache.needsRebuild(overlay(), view({ zoom: 0.6 }))).toBe(true);
+    expect(cache.needsRebuild(overlay(), view({ zoom: 0.6 }))).toBe(false);
+  });
+
+  it('rebuilds when the selected army moves on to another route leg', () => {
+    const cache = warm();
+    expect(cache.needsRebuild(overlay(), view({ splitLeg: 0 }))).toBe(true);
+    expect(cache.needsRebuild(overlay(), view({ splitLeg: 0 }))).toBe(false);
+    expect(cache.needsRebuild(overlay(), view({ splitLeg: 1 }))).toBe(true);
+  });
+
+  it('rebuilds when a pin starts and stops being dragged', () => {
+    const cache = warm();
+    expect(cache.needsRebuild(overlay(), view({ draggedIndex: 0 }))).toBe(true);
+    expect(cache.needsRebuild(overlay(), view({ draggedIndex: 0 }))).toBe(false);
+    expect(cache.needsRebuild(overlay(), view({ draggedIndex: null }))).toBe(true);
+  });
+
+  it('rebuilds once the icons have loaded', () => {
+    const cache = new ArmyStaticCache();
+    expect(cache.needsRebuild(overlay(), view({ iconsReady: false }))).toBe(true);
+    expect(cache.needsRebuild(overlay(), view({ iconsReady: false }))).toBe(false);
+    expect(cache.needsRebuild(overlay(), view({ iconsReady: true }))).toBe(true);
   });
 
   it('notices a pin moved in place inside the same arrays (a dragged waypoint)', () => {
+    const cache = warm();
     const o = overlay();
-    const before = armyStaticSignature(o);
     o.draftWaypoints[0] = { q: 2, r: 2 };
-    expect(armyStaticSnapshotMatches(o, before)).toBe(false);
+    expect(cache.needsRebuild(o, view())).toBe(true);
   });
 
   it('notices a changed route, a different number of pins and a target that changed kind', () => {
-    const before = armyStaticSignature(overlay());
     const route = overlay();
     route.route[1] = { q: 1, r: 1 };
-    expect(armyStaticSnapshotMatches(route, before)).toBe(false);
+    expect(warm().needsRebuild(route, view())).toBe(true);
     const pins = overlay();
     pins.draftWaypoints.push({ q: 4, r: 4 });
-    expect(armyStaticSnapshotMatches(pins, before)).toBe(false);
+    expect(warm().needsRebuild(pins, view())).toBe(true);
     const target = overlay();
     target.targets = [{ kind: 'support', coord: { q: 3, r: 3 } }];
-    expect(armyStaticSnapshotMatches(target, before)).toBe(false);
+    expect(warm().needsRebuild(target, view())).toBe(true);
+    const noTargets = overlay();
+    noTargets.targets = undefined;
+    expect(warm().needsRebuild(noTargets, view())).toBe(true);
+  });
+});
+
+describe('IdleKeyedPool (the keyed label pool)', () => {
+  const frame = (pool: IdleKeyedPool<{ id: number }>, keys: string[], created: { n: number }, hidden: number[], gone: number[]) => {
+    pool.nextFrame();
+    const items = keys.map((k) => pool.acquire(k, () => ({ id: created.n++ })));
+    pool.sweep(
+      (i) => hidden.push(i.id),
+      (i) => gone.push(i.id),
+    );
+    return items;
+  };
+
+  it('hands out the same object for the same key, however the visible set changes around it', () => {
+    const pool = new IdleKeyedPool<{ id: number }>(600);
+    const created = { n: 0 };
+    const [a1, b1] = frame(pool, ['a', 'b'], created, [], []);
+    const [b2] = frame(pool, ['b'], created, [], []);
+    const [a3, b3] = frame(pool, ['a', 'b'], created, [], []);
+    expect(b2).toBe(b1);
+    expect(a3).toBe(a1);
+    expect(b3).toBe(b1);
+    expect(created.n).toBe(2);
+  });
+
+  it('hides what was not acquired this frame and destroys it only after more than the idle frames', () => {
+    const idle = 5;
+    const pool = new IdleKeyedPool<{ id: number }>(idle);
+    const created = { n: 0 };
+    const hidden: number[] = [];
+    const gone: number[] = [];
+    frame(pool, ['a', 'b'], created, hidden, gone);
+    for (let i = 0; i < idle; i++) frame(pool, ['b'], created, hidden, gone);
+    // 'a' has now been idle for exactly `idle` frames: hidden every frame, not yet destroyed.
+    expect(hidden.filter((id) => id === 0)).toHaveLength(idle);
+    expect(gone).toEqual([]);
+    expect(pool.size).toBe(2);
+    frame(pool, ['b'], created, hidden, gone);
+    expect(gone).toEqual([0]);
+    expect(pool.size).toBe(1);
+    // Coming back after destruction makes a new object.
+    const [again] = frame(pool, ['a'], created, hidden, gone);
+    expect(again.id).toBe(2);
+  });
+});
+
+describe('cartWorldPoint', () => {
+  const cart = (patch: Partial<CartShipment> = {}): CartShipment => ({
+    id: 'c',
+    fromQ: 0,
+    fromR: 0,
+    toQ: 3,
+    toR: 0,
+    departedAt: 1000,
+    etaAt: 2000,
+    cargoResource: 'wood',
+    cargoAmount: 1,
+    ...patch,
+  });
+  const centre = (q: number, r: number) => {
+    const g = isoGridPosition({ q, r }, TILE_W, TILE_H);
+    return { x: g.x + TILE_W / 2, y: g.y + TILE_H / 2 };
+  };
+
+  it('stands on the centre of its from-hex at departure, where the fog check finds that hex', () => {
+    const { world } = cartWorldPoint(cart({ fromQ: 2, fromR: 1, toQ: 5, toR: 1 }), 1000);
+    expect(world).toEqual(centre(2, 1));
+    expect(isoPixelToAxial(world, TILE_W, TILE_H)).toEqual({ q: 2, r: 1 });
+  });
+
+  it('ends on the centre of its to-hex and is halfway between the centres at the half time', () => {
+    const c = cart();
+    expect(cartWorldPoint(c, 2000).world).toEqual(centre(3, 0));
+    const mid = cartWorldPoint(c, 1500).world;
+    expect(mid.x).toBeCloseTo((centre(0, 0).x + centre(3, 0).x) / 2);
+    expect(mid.y).toBeCloseTo((centre(0, 0).y + centre(3, 0).y) / 2);
+  });
+
+  it('heads the way it travels', () => {
+    expect(cartWorldPoint(cart({ fromQ: 3, toQ: 0 }), 1500).heading.x).toBeLessThan(0);
+    expect(cartWorldPoint(cart(), 1500).heading.x).toBeGreaterThan(0);
   });
 });
