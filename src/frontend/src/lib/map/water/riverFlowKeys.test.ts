@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Renderer, Texture } from 'pixi.js';
 import { neighbors } from '../../hex/coords';
+import { isoGridPosition } from '../../hex/geometry';
 import { TILE_ORIENTATIONS, type RiverTile } from '../types';
 import { createRiverFlowEntrySource } from './riverFlowEntries';
 import type { RiverFlowEntry } from './riverFlowLayer';
@@ -41,9 +42,10 @@ function chain(n: number, joinAt?: number) {
   const source = createRiverFlowEntrySource(
     { getRiverTile: river, getBog: () => undefined, seaFacingDirectionOf: () => null },
     (c) => (index(c.q, c.r) < 0 ? undefined : tex(`f${index(c.q, c.r)}`)),
-    168,
-    84,
-    10,
+    (c) => {
+      const grid = isoGridPosition(c, 168, 84);
+      return { x: grid.x, y: grid.y - 10 };
+    },
   );
   return { coords, source };
 }
