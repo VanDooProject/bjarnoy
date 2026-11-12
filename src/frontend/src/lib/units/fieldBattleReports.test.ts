@@ -3,7 +3,6 @@ import {
   fieldBattleLossCount,
   fieldBattleOpponent,
   fieldBattleOutcomeLabel,
-  fieldBattleSideFor,
   fieldBattleSummaryLine,
   fieldBattleSurvivorCount,
   groupFieldBattleLinesByUnit,
@@ -96,18 +95,6 @@ describe('groupFieldBattleLinesByUnit', () => {
 
   it('returns an empty array for a side with no lines', () => {
     expect(groupFieldBattleLinesByUnit([], 'sidea')).toEqual([]);
-  });
-});
-
-describe('fieldBattleSideFor', () => {
-  it('identifies side A', () => {
-    expect(fieldBattleSideFor(baseReport, 'a-settlement')).toBe('sidea');
-  });
-  it('identifies side B', () => {
-    expect(fieldBattleSideFor(baseReport, 'b-settlement')).toBe('sideb');
-  });
-  it('returns null for an unrelated settlement', () => {
-    expect(fieldBattleSideFor(baseReport, 'someone-else')).toBeNull();
   });
 });
 

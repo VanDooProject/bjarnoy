@@ -22,6 +22,7 @@ function battle(id: string, occurredAt: string): BattleReportResponse {
     drowned: [],
     fireShipsBurned: 0,
     fireSiege: null,
+    viewerSide: 'attacker',
   };
 }
 
@@ -46,6 +47,7 @@ function field(id: string, occurredAt: string): FieldBattleReportResponse {
     seed: 1,
     lootTaken: { wood: 0, stone: 0, food: 0, iron: 0 },
     lines: [],
+    viewerSide: 'sidea',
   };
 }
 
@@ -62,6 +64,7 @@ function trade(id: string, completedAt: string): TradeReportResponse {
     requestedAmount: 100,
     guildTrade: false,
     travelHours: 1,
+    viewerSide: 'poster',
   };
 }
 

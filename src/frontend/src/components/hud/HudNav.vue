@@ -11,6 +11,7 @@ import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../../stores/auth';
 import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
+import { useWorldStore } from '../../stores/world';
 import { useHudNavEntries, type HudNavEntry } from '../../composables/useHudNavEntries';
 import { useLogout } from '../../composables/useLogout';
 import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
@@ -70,6 +71,7 @@ const router = useRouter();
 const auth = useAuthStore();
 const player = usePlayerStore();
 const reports = useReportsStore();
+const worldStore = useWorldStore();
 const { logout } = useLogout();
 const { primary, secondary } = useHudNavEntries();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -80,15 +82,15 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 // see stores/reports.ts's own comment on why this isn't folded into
 // stores/world.ts's poll loop.
 function syncPolling() {
-  if (!DEMO_MODE && player.settlementId) {
-    reports.startPolling(player.settlementId, player.id);
+  if (!DEMO_MODE && worldStore.worldId) {
+    reports.startPolling(worldStore.worldId, player.id);
   } else {
     reports.stopPolling();
   }
 }
 onMounted(syncPolling);
 onUnmounted(() => reports.stopPolling());
-watch(() => player.settlementId, syncPolling);
+watch(() => worldStore.worldId, syncPolling);
 
 const initials = computed(() => {
   if (!player.nickname) return 'BJ';

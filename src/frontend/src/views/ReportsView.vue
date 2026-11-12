@@ -21,16 +21,16 @@ import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { usePlayerStore } from '../stores/player';
 import { useReportsStore } from '../stores/reports';
+import { useWorldStore } from '../stores/world';
 import { DEMO_MODE } from '../config';
 import type { BattleReportResponse, FieldBattleReportResponse, TradeReportResponse } from '../api/types';
-import { isVictoryFor, missionLabel, outcomeLabel, reportSummaryLine, sideFor } from '../lib/units/battleReports';
+import { isVictoryFor, missionLabel, outcomeLabel, reportSummaryLine } from '../lib/units/battleReports';
 import {
   fieldBattleOutcomeLabel,
-  fieldBattleSideFor,
   fieldBattleSummaryLine,
   isFieldBattleVictoryFor,
 } from '../lib/units/fieldBattleReports';
-import { tradeSideFor, tradeSummaryLine } from '../lib/units/tradeReports';
+import { tradeSummaryLine } from '../lib/units/tradeReports';
 import { type InboxKindFilter, filterInbox } from '../lib/units/inbox';
 import BattleReportCard from '../components/battle/BattleReportCard.vue';
 import FieldBattleReportCard from '../components/battle/FieldBattleReportCard.vue';
@@ -44,13 +44,14 @@ const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const route = useRoute();
 const player = usePlayerStore();
 const reports = useReportsStore();
+const world = useWorldStore();
 
 const reportId = computed(() => (typeof route.params.reportId === 'string' ? route.params.reportId : null));
 const kindFilter = ref<InboxKindFilter>('all');
 
 async function load() {
-  if (!player.settlementId) return;
-  await reports.load(player.settlementId, player.id);
+  if (!world.worldId) return;
+  await reports.load(world.worldId, player.id);
   // Opening the inbox (list or a specific report) is what "reading it"
   // means client-side — see stores/reports.ts's own comment on why there is
   // no backend read-state to defer to instead.
@@ -58,7 +59,7 @@ async function load() {
 }
 
 onMounted(load);
-watch(() => player.settlementId, load);
+watch(() => world.worldId, load);
 
 // Rows currently expanded. Local state, not the URL: any number can be open at once.
 const expanded = ref(new Set<string>());
@@ -91,19 +92,17 @@ watch(
   },
 );
 
+// The side comes from the server (`viewerSide`): a player's inbox covers all their settlements, so it cannot be told from one settlement id.
 function sideOf(report: BattleReportResponse): 'attacker' | 'defender' {
-  if (!player.settlementId) return 'attacker';
-  return sideFor(report, player.settlementId) ?? 'attacker';
+  return report.viewerSide ?? 'attacker';
 }
 
 function fieldSideOf(report: FieldBattleReportResponse): 'sidea' | 'sideb' {
-  if (!player.settlementId) return 'sidea';
-  return fieldBattleSideFor(report, player.settlementId) ?? 'sidea';
+  return report.viewerSide ?? 'sidea';
 }
 
 function tradeSideOf(report: TradeReportResponse): 'poster' | 'acceptor' {
-  if (!player.settlementId) return 'poster';
-  return tradeSideFor(report, player.settlementId) ?? 'poster';
+  return report.viewerSide ?? 'poster';
 }
 
 const filteredItems = computed(() => filterInbox(reports.inboxItems, kindFilter.value));

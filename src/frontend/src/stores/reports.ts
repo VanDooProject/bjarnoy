@@ -18,7 +18,7 @@ const REPORT_POLL_MS = 5000;
 const LAST_SEEN_KEY = 'bjarnoy.reportsLastSeenAt';
 
 /**
- * Battle reports for the player's own settlement (issue #40 phase 3). Kept
+ * Battle reports of the player in the current world (issue #40 phase 3). Kept
  * as its own store rather than folded into `stores/world.ts`'s `hud` —
  * reports are read-at-leisure history, not part of the live settlement
  * snapshot, and this store's own polling only needs to run while a HUD nav
@@ -44,7 +44,7 @@ const LAST_SEEN_KEY = 'bjarnoy.reportsLastSeenAt';
  */
 export const useReportsStore = defineStore('reports', {
   state: () => ({
-    settlementId: null as string | null,
+    worldId: null as string | null,
     // The client-local owner id these reports were last loaded under — see
     // `load`'s own comment. Needed again by `getById`/`getFieldById`'s deep
     // links, which don't otherwise carry it.
@@ -75,25 +75,26 @@ export const useReportsStore = defineStore('reports', {
   },
   actions: {
     /**
-     * Fetches (or re-fetches) this settlement's battle, field-battle, and
-     * trade reports, each newest first. `ownerId` is the caller's own
-     * client-local id (`stores/player.ts`'s `id`) — proves ownership of
-     * `settlementId` to the backend's ownership filters; remembered so
+     * Fetches (or re-fetches) the player's battle, field-battle, camp and
+     * trade reports in a world, each newest first — one inbox across all their
+     * settlements, because reports belong to the player. `ownerId` is the
+     * caller's own client-local id (`stores/player.ts`'s `id`) — the backend
+     * resolves the player's realm in `worldId` from it; remembered so
      * `getById`/`getFieldById` can reuse it for a deep-linked report not in
      * the already-loaded list.
      */
-    async load(settlementId: string, ownerId?: string) {
-      this.settlementId = settlementId;
+    async load(worldId: string, ownerId?: string) {
+      this.worldId = worldId;
       this.ownerId = ownerId ?? null;
       this.loading = true;
       this.error = null;
       try {
         // Wildlife camp fights exist only against a live backend (the demo has no army simulation).
         const [battleItems, tradeItems, fieldItems, campItems] = await Promise.all([
-          api.getSettlementReports(settlementId, ownerId),
-          api.getSettlementTradeReports(settlementId, ownerId),
-          api.getSettlementFieldReports(settlementId, ownerId),
-          DEMO_MODE ? Promise.resolve([] as CampReportResponse[]) : api.getSettlementCampReports(settlementId, ownerId),
+          api.getWorldReports(worldId, ownerId),
+          api.getWorldTradeReports(worldId, ownerId),
+          api.getWorldFieldReports(worldId, ownerId),
+          DEMO_MODE ? Promise.resolve([] as CampReportResponse[]) : api.getWorldCampReports(worldId, ownerId),
         ]);
         this.campItems = [...campItems].sort(
           (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
@@ -155,11 +156,11 @@ export const useReportsStore = defineStore('reports', {
         // Private-browsing/storage-disabled: unread badge just won't persist across reloads.
       }
     },
-    /** Starts (or restarts, if already polling for a different settlement) the light background poll HudNav's badge relies on. */
-    startPolling(settlementId: string, ownerId?: string) {
+    /** Starts (or restarts, if already polling for a different world) the light background poll HudNav's badge relies on. */
+    startPolling(worldId: string, ownerId?: string) {
       this.stopPolling();
-      void this.load(settlementId, ownerId);
-      this.pollHandle = setInterval(() => void this.load(settlementId, ownerId), REPORT_POLL_MS);
+      void this.load(worldId, ownerId);
+      this.pollHandle = setInterval(() => void this.load(worldId, ownerId), REPORT_POLL_MS);
     },
     stopPolling() {
       if (this.pollHandle) clearInterval(this.pollHandle);
