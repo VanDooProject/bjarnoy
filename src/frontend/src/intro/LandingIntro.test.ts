@@ -8,6 +8,7 @@ import { introSignal } from './introSignal';
 import { IDLE_DIM_MS } from './useIdleDim';
 import { beatsFor, CLIP_MS, holdMinMs, VOICE_TAIL_MS } from './introVoice';
 import { buildTimeline, fmtTime, selectBeats } from './timeline';
+import { advanceAndRender } from '../test/advanceAndRender';
 
 // jsdom has no canvas 2D context; the texture is irrelevant to the host's behaviour.
 vi.mock('./fogTexture', () => ({ introFogUrl: () => 'data:image/png;base64,' }));
@@ -135,14 +136,14 @@ describe('LandingIntro', () => {
   it('keeps the longship scene mounted from hold into landfall, after the hold narration had time to be read', async () => {
     const w = await mountIntro({ locale: 'de' });
     const introMs = beatsFor('de', BEATS).filter((b) => b.role === 'intro').reduce((t, b) => t + b.durationMs, 0);
-    await vi.advanceTimersByTimeAsync(introMs);
+    await advanceAndRender(introMs);
     expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe('hold');
     const scene = w.get('.longship').element;
     await w.setProps({ loaded: true });
     const minMs = holdMinMs('de');
-    await vi.advanceTimersByTimeAsync(minMs - 1);
+    await advanceAndRender(minMs - 1);
     expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe('hold');
-    await vi.advanceTimersByTimeAsync(1);
+    await advanceAndRender(1);
     expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe('landfall');
     expect(w.get('.longship').element).toBe(scene);
     expect(w.get('.longship').classes()).toContain('is-landfall');
@@ -152,7 +153,7 @@ describe('LandingIntro', () => {
   it('loop: restarts after landfall, never fades out, emits nothing and shows no end screen', async () => {
     const w = await mountIntro({ mode: 'loop' });
     const total = BEATS_EN.reduce((t, b) => t + (b.role === 'hold' ? holdMinMs('en') : b.durationMs), 0);
-    await vi.advanceTimersByTimeAsync(total);
+    await advanceAndRender(total);
     expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe(BEATS[0].id);
     expect(phase(w)).toBe('playing');
     expect(w.classes()).not.toContain('is-fading');

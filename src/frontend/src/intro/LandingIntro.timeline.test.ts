@@ -7,6 +7,7 @@ import type { BeatId } from './beats/types';
 import { introLoad } from './introLoad';
 import { beatsFor, holdMinMs, IntroVoice } from './introVoice';
 import { buildTimeline, selectBeats } from './timeline';
+import { advanceAndRender } from '../test/advanceAndRender';
 
 // jsdom has no canvas 2D context; the texture is irrelevant to the host's behaviour.
 vi.mock('./fogTexture', () => ({ introFogUrl: () => 'data:image/png;base64,' }));
@@ -194,7 +195,7 @@ describe('LandingIntro timeline', () => {
       await pointer(hit, 'pointerup');
       expect(root(w).attributes('data-voice-state')).toBe('playing');
       expect(w.get('[data-testid="intro-pause"]').attributes('aria-pressed')).toBe('false');
-      await vi.advanceTimersByTimeAsync(60_000);
+      await advanceAndRender(60_000);
       expect(beat(w)).not.toBe(dragged);
     });
 
