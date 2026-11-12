@@ -61,7 +61,7 @@ describe('BeachCampView', () => {
     wrapper.unmount();
   });
 
-  it('states the stock cap, no production, its own hex, the settlement limit and the danger of an empty camp', async () => {
+  it('states the stock cap, no production, its own hex and the settlement limit', async () => {
     const wrapper = await mountPage();
 
     expect(wrapper.get('#holds').text()).toContain('up to 2,000 of each resource');
@@ -69,7 +69,17 @@ describe('BeachCampView', () => {
     expect(wrapper.get('#claim').text()).toContain('only its own hex');
     expect(wrapper.get('#claim').text()).toContain('does not count towards your limit');
     expect(wrapper.find('#claim a[href="/docs/realm"]').exists()).toBe(true);
-    expect(wrapper.get('#risks').text()).toContain('without siege engines');
+    wrapper.unmount();
+  });
+
+  it('says a camp falls only to an attack that leaves nobody in it, and that nothing destroys a guarded one', async () => {
+    const wrapper = await mountPage();
+
+    const risks = wrapper.get('#risks').text();
+    expect(risks).toContain('falls only to an attack that leaves nobody in it while the attacker still has troops left');
+    expect(risks).toContain('needs no siege engines');
+    expect(risks).toContain('A raid only plunders it');
+    expect(risks).toContain('nothing destroys it: not catapults, rams or fire ships');
     wrapper.unmount();
   });
 });
