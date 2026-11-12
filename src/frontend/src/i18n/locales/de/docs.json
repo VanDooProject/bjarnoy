@@ -1178,7 +1178,11 @@
     "risks": {
       "heading": "Gefahren",
       "attacked": "Ein Lager kann von Land und vom Meer aus angegriffen werden. Verteidigen keine Truppen es, kannst du es plündern.",
-      "empty": "Sind keine Truppen darin, lässt es sich auch ohne Belagerungsgerät zerstören."
+      "empty": "Sind keine Truppen darin, lässt es sich auch ohne Belagerungsgerät zerstören.",
+      "destroyed": "Wird das Lager zerstört, ist es weg – so wie ein Reich endet, wenn sein Langhaus fällt. Alles, was es an Vorräten hatte, ist verloren, bis auf die Beute des Angreifers.",
+      "troopsOut": "Sind beim Fall des Lagers Truppen von dort unterwegs, ziehen sie zu deinem nächsten Garnisonsort, den sie erreichen können. Der wird ihr neues Zuhause. Erreichen sie keinen, bleiben sie, wo sie sind, bis ihr Proviant aufgebraucht ist – dann verhungern sie.",
+      "onTheWay": "Ist eine Armee gerade zu einem Lager unterwegs, das zerstört wird, zieht sie trotzdem bis auf sein Feld und bleibt dort stehen.",
+      "withoutHome": "Eine Armee ohne Zuhause nimmt weiter Befehle an: ziehen, angreifen, unterstützen oder zu einem deiner Garnisonsorte. Der Ort, an dem sie einrückt, wird ihr neues Zuhause. Zurückrufen kannst du sie nicht. Du findest sie in der Armeeliste jedes deiner Reiche unter „Ohne Zuhause“."
     }
   },
   "realm": {
