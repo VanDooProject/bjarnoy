@@ -818,6 +818,42 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
     }
 
     [Fact]
+    public async Task Reseeding_replaces_the_cached_river_index_and_bog_overlay_the_game_rules_read()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+
+        // What the rules' caches answer for the world, next to what its island rows store; `probe` adds hexes to ask the index about.
+        async Task<(HashSet<HexCoord> StoredRivers, HashSet<HexCoord> IndexedRivers, HashSet<HexCoord> StoredBog, HashSet<HexCoord> CachedBog)> ReadAsync(
+            IEnumerable<HexCoord> probe)
+        {
+            await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var islands = await db.Islands.AsNoTracking().Where(i => i.WorldId == world.Id).ToListAsync(Ct);
+            var storedRivers = islands.SelectMany(i => i.RiverTiles).Select(t => new HexCoord(t.Q, t.R)).ToHashSet();
+            var storedBog = islands.SelectMany(i => i.BogTiles).Select(t => new HexCoord(t.Q, t.R)).ToHashSet();
+            var index = await WorldRivers.IndexAsync(db, world.Id, Ct);
+            var overlay = await WorldTerrain.OverlayAsync(db, world.Id, Ct);
+            return (storedRivers, [.. storedRivers.Concat(probe).Where(index.IsRiver)], storedBog, [.. overlay.Keys]);
+        }
+
+        var before = await ReadAsync([]); // primes both caches
+        Assert.NotEmpty(before.StoredRivers);
+        Assert.Equal(before.StoredRivers, before.IndexedRivers);
+        Assert.Equal(before.StoredBog, before.CachedBog);
+
+        Authorize(client, await CreateAdminTokenAsync(client));
+        var response = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/reseed", new ReseedWorldRequest(world.Name, Seed: 9001), Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var after = await ReadAsync(before.StoredRivers);
+        Assert.NotEqual(before.StoredRivers, after.StoredRivers);
+        Assert.Equal(after.StoredRivers, after.IndexedRivers); // none of the old world's river hexes linger
+        Assert.Equal(after.StoredBog, after.CachedBog);
+    }
+
+    [Fact]
     public async Task Reseeding_is_refused_while_another_players_settlement_stands()
     {
         using var client = _fixture.CreateClient();
