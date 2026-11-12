@@ -31,7 +31,21 @@ public sealed class FieldBattleReportServiceTests : IDisposable
         _connection.Dispose();
     }
 
-    private static FieldBattleReportEntity MakeReport(Guid sideASettlementId, Guid sideBSettlementId) =>
+    private static readonly Guid WorldId = Guid.NewGuid();
+
+    /// <summary>A report between two settlements whose players are named after them ("owner-of-" + the settlement id).</summary>
+    private static FieldBattleReportEntity MakeReport(Guid sideASettlementId, Guid sideBSettlementId)
+    {
+        var report = BuildReport(sideASettlementId, sideBSettlementId);
+        report.WorldId = WorldId;
+        report.SideAOwnerId = OwnerOf(sideASettlementId);
+        report.SideBOwnerId = OwnerOf(sideBSettlementId);
+        return report;
+    }
+
+    private static string OwnerOf(Guid settlementId) => $"owner-of-{settlementId}";
+
+    private static FieldBattleReportEntity BuildReport(Guid sideASettlementId, Guid sideBSettlementId) =>
         FieldBattleReportEntity.FromDomain(
             Guid.CreateVersion7(),
             DateTimeOffset.UtcNow,
@@ -81,7 +95,7 @@ public sealed class FieldBattleReportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetForSettlementAsync_finds_reports_from_either_side_newest_first()
+    public async Task GetForOwnerAsync_finds_reports_from_either_side_newest_first()
     {
         var settlementA = Guid.NewGuid();
         var settlementB = Guid.NewGuid();
@@ -96,11 +110,14 @@ public sealed class FieldBattleReportServiceTests : IDisposable
         await _dbContext.SaveChangesAsync(Ct);
 
         var service = new FieldBattleReportService(_dbContext);
-        var results = await service.GetForSettlementAsync(settlementB, Ct);
+        var results = await service.GetForOwnerAsync(WorldId, OwnerOf(settlementB), Ct);
 
         Assert.Equal(2, results.Count);
         Assert.Equal(newer.Id, results[0].Id);
         Assert.Equal(older.Id, results[1].Id);
+
+        // Another world's inbox of the same player stays separate.
+        Assert.Empty(await service.GetForOwnerAsync(Guid.NewGuid(), OwnerOf(settlementB), Ct));
     }
 
     [Fact]

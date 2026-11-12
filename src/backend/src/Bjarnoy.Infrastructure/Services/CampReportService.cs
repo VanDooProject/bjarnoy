@@ -21,15 +21,15 @@ public sealed class CampReportService(GameDbContext dbContext)
             .FirstOrDefaultAsync(r => r.Id == reportId, cancellationToken);
 
     /// <summary>Camp reports of <paramref name="settlementId"/>, newest first.</summary>
-    public async Task<List<CampReportEntity>> GetForSettlementAsync(
-        Guid settlementId, CancellationToken cancellationToken = default)
+    public async Task<List<CampReportEntity>> GetForOwnerAsync(
+        Guid worldId, string ownerId, CancellationToken cancellationToken = default)
     {
         // Sorted in memory: the SQLite provider cannot ORDER BY a DateTimeOffset column (see BattleReportService).
         var reports = await _dbContext.CampReports
             .AsNoTracking()
             .Include(r => r.UnitLines)
             .Include(r => r.BeastLines)
-            .Where(r => r.SettlementId == settlementId)
+            .Where(r => r.WorldId == worldId && r.OwnerId == ownerId)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 

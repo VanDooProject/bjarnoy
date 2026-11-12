@@ -517,15 +517,11 @@ public sealed class WorldService(
         }
 
         // Order matters: each step clears the references the next one would
-        // otherwise trip over. Shipments and reports before the offers they
-        // hang off, everything before the settlements themselves.
+        // otherwise trip over. Shipments before the offers they hang off,
+        // everything before the settlements themselves. Reports (battle, field
+        // battle, camp, trade) are not deleted: they belong to the players.
         await _dbContext.Shipments
             .Where(s => settlementIds.Contains(s.FromSettlementId) || settlementIds.Contains(s.ToSettlementId))
-            .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-
-        await _dbContext.TradeReports
-            .Where(r => settlementIds.Contains(r.PosterSettlementId)
-                || settlementIds.Contains(r.AcceptorSettlementId))
             .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 
         await _dbContext.TradeOffers
@@ -537,13 +533,6 @@ public sealed class WorldService(
         await _dbContext.Armies
             .Where(a => settlementIds.Contains(a.SettlementId)
                 || (a.TargetSettlementId != null && settlementIds.Contains(a.TargetSettlementId.Value)))
-            .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-
-        // No FK to settlements at all (only indexes — see GameDbContext), so
-        // these would survive as unreadable orphans rather than fail loudly.
-        await _dbContext.BattleReports
-            .Where(r => settlementIds.Contains(r.AttackerSettlementId)
-                || settlementIds.Contains(r.DefenderSettlementId))
             .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 
         // The settlements themselves last; their own children (buildings,
