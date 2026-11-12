@@ -112,6 +112,11 @@ The `Officer` role in the rules above is decided to be replaced, see
 - Two guilds have peace, war, or no relation. War is a status like peace: it
   is declared, and it ends only when both guilds agree to end it, which
   returns the pair to no relation.
+- A guild can show a text on its public profile, visible to every player.
+- Roles can be renamed by the guild.
+- Battle and raid reports and camp fight reports can be shared to the guild
+  board. A shared report is a snapshot: it shows what was shared, also after
+  the original report changes or is deleted.
 
 ### Map colours
 
