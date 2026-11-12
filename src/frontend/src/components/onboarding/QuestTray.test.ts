@@ -96,6 +96,18 @@ describe('QuestTray', () => {
     expect(wrapper.get('[data-testid="quest-next-up"]').attributes('data-quest-id')).toBe('storagehouse1');
   });
 
+  it('shows premium days in the next-up block for a quest that pays premium instead of resources', () => {
+    const world = useWorldStore();
+    world.hud.quests = [
+      quest('producers3', { completed: true }),
+      quest('register', { reward: { wood: 0, stone: 0, food: 0, iron: 0 }, premiumDays: 14 }),
+    ];
+
+    const wrapper = mountTray();
+
+    expect(wrapper.get('[data-testid="quest-next-up"] [data-testid="quest-premium-reward"]').text()).toBe('14 days of Premium');
+  });
+
   it('shows no separate next-up block while the current quest is itself unfinished', () => {
     const world = useWorldStore();
     world.hud.quests = all({ longhouse2: { completed: true } });
