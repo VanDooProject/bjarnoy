@@ -114,10 +114,13 @@ public sealed class BridgePlacementTests
     public void A_bridge_is_refused_on_a_spring_confluence_or_mouth(RiverTileShape shape) =>
         Assert.Equal(BuildRejection.TerrainNotAllowed, Plan(Home(), shape: shape).Rejection);
 
-    [Fact]
-    public void A_bridge_is_refused_on_dry_land()
+    [Theory]
+    [InlineData(Terrain.Grass)]
+    [InlineData(Terrain.Forest)]
+    [InlineData(Terrain.Sand)]
+    public void A_bridge_is_refused_on_dry_land(Terrain terrain)
     {
-        Assert.Equal(BuildRejection.TerrainNotAllowed, Plan(Home(), shape: null, wide: false).Rejection);
+        Assert.Equal(BuildRejection.TerrainNotAllowed, Plan(Home(), shape: null, wide: false, terrain: terrain).Rejection);
     }
 
     [Fact]

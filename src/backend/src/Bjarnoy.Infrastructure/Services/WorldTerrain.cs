@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -14,25 +13,18 @@ namespace Bjarnoy.Infrastructure.Services;
 /// </summary>
 /// <remarks>
 /// The overlay of a world is loaded once and kept (a world's bog only changes when it is reseeded, which calls
-/// <see cref="Invalidate"/>): reading every island's bog column on each request would cost more than the request. At most
-/// <see cref="MaxCachedWorlds"/> worlds are kept, oldest use first out.
+/// <see cref="WorldIslandCaches.Invalidate"/>): reading every island's bog column on each request would cost more than the
+/// request. At most <see cref="MaxCachedWorlds"/> worlds are kept, oldest use first out (<see cref="PerWorldCache{T}"/>).
 /// </remarks>
 public static class WorldTerrain
 {
     /// <summary>How many worlds' overlays are kept in memory.</summary>
-    public const int MaxCachedWorlds = 8;
+    public const int MaxCachedWorlds = PerWorldCache<object>.DefaultMaxCachedWorlds;
 
     /// <summary>What is kept per world: the bog / lake / inland-lake overlay of its terrain, and the kind of every bog hex (moss, shore, creek, ...).</summary>
     private sealed record BogData(IReadOnlyDictionary<HexCoord, Terrain> Overlay, IReadOnlyDictionary<HexCoord, BogTileKind> Kinds);
 
-    private sealed class Entry(Task<BogData> data)
-    {
-        public Task<BogData> Data { get; } = data;
-
-        public long LastUsedTicks { get; set; } = Environment.TickCount64;
-    }
-
-    private static readonly ConcurrentDictionary<Guid, Entry> Cache = new();
+    private static readonly PerWorldCache<BogData> Cache = WorldIslandCaches.Register(new PerWorldCache<BogData>(MaxCachedWorlds));
 
     /// <summary>The sampler for <paramref name="world"/>, with its bog laid over the seed's terrain.</summary>
     public static async Task<TerrainSampler> SamplerAsync(GameDbContext db, WorldEntity world, CancellationToken cancellationToken = default)
@@ -56,31 +48,12 @@ public static class WorldTerrain
         return data.Kinds.TryGetValue(coord, out var kind) ? kind : null;
     }
 
-    private static async Task<BogData> DataAsync(GameDbContext db, Guid worldId, CancellationToken cancellationToken)
+    private static Task<BogData> DataAsync(GameDbContext db, Guid worldId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
-
-        if (!Cache.TryGetValue(worldId, out var entry))
-        {
-            var created = new Entry(LoadAsync(db, worldId));
-            entry = Cache.GetOrAdd(worldId, created);
-            Trim();
-        }
-
-        entry.LastUsedTicks = Environment.TickCount64;
-        try
-        {
-            return await entry.Data.WaitAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception) when (entry.Data.IsFaulted)
-        {
-            Cache.TryRemove(new KeyValuePair<Guid, Entry>(worldId, entry));
-            throw;
-        }
+        var options = WorldIslandCaches.OptionsOf(db);
+        return Cache.GetAsync(worldId, () => WorldIslandCaches.LoadAsync(options, loadDb => LoadAsync(loadDb, worldId)), cancellationToken);
     }
-
-    /// <summary>Forgets a world's overlay; call it when its islands are regenerated.</summary>
-    public static void Invalidate(Guid worldId) => Cache.TryRemove(worldId, out _);
 
     private static async Task<BogData> LoadAsync(GameDbContext db, Guid worldId)
     {
@@ -106,14 +79,5 @@ public static class WorldTerrain
         }
 
         return new BogData(overlay, kinds);
-    }
-
-    private static void Trim()
-    {
-        while (Cache.Count > MaxCachedWorlds)
-        {
-            var oldest = Cache.OrderBy(kv => kv.Value.LastUsedTicks).First().Key;
-            Cache.TryRemove(oldest, out _);
-        }
     }
 }

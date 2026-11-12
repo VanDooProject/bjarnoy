@@ -42,22 +42,22 @@ beforeEach(() => {
 });
 
 describe('ShipsView', () => {
-  it('compares the Karve and the Longship from the unit catalogue', async () => {
+  it('compares the Karve, the Longship and the Fire Ship from the unit catalogue', async () => {
     const wrapper = await mountPage();
 
-    expect(wrapper.findAll('[data-testid=ships-table] thead th[data-ship]').map((th) => th.text())).toEqual(['Karve', 'Longship']);
+    expect(wrapper.findAll('[data-testid=ships-table] thead th[data-ship]').map((th) => th.text())).toEqual(['Karve', 'Longship', 'Fire Ship']);
     const row = (id: string) => wrapper.get(`[data-row=${id}]`).findAll('td').map((td) => td.text());
-    expect(row('attack')).toEqual(['5', '60']);
-    expect(row('defense')).toEqual(['30', '40']);
-    expect(row('speed')).toEqual(['8', '10']);
-    expect(row('perHex')).toEqual(['7.5 min', '6 min']);
-    expect(row('loot')).toEqual(['200', '80']);
-    expect(row('slots')).toEqual(['10', '20']);
-    expect(row('food')).toEqual(['100', '60']);
-    expect(row('upkeep')).toEqual(['2', '3']);
-    expect(row('cost')).toEqual(['250 / 100 / 40 / 100', '400 / 200 / 60 / 220']);
-    expect(row('time')).toEqual(['45 min', '90 min']);
-    expect(row('needs')).toEqual(['Longhouse 8', 'Longhouse 20 · Karve']);
+    expect(row('attack')).toEqual(['5', '60', '0']);
+    expect(row('defense')).toEqual(['30', '40', '25']);
+    expect(row('speed')).toEqual(['8', '10', '8']);
+    expect(row('perHex')).toEqual(['7.5 min', '6 min', '7.5 min']);
+    expect(row('loot')).toEqual(['200', '80', '0']);
+    expect(row('slots')).toEqual(['10', '20', '0']);
+    expect(row('food')).toEqual(['600', '320', '200']);
+    expect(row('upkeep')).toEqual(['1.5', '2', '5']);
+    expect(row('cost')).toEqual(['250 / 100 / 40 / 100', '400 / 200 / 60 / 220', '300 / 60 / 40 / 80']);
+    expect(row('time')).toEqual(['45 min', '90 min', '40 min']);
+    expect(row('needs')).toEqual(['Longhouse 8', 'Longhouse 20 · Karve', 'Longhouse 12 · Karve']);
     wrapper.unmount();
   });
 
@@ -72,9 +72,9 @@ describe('ShipsView', () => {
     });
     const text = wrapper.get('#troops').text();
     expect(text).toContain('slowest ship');
-    expect(text).toContain('do not fight');
+    expect(text).toContain('do not take part in the ship fight');
     expect(text).toContain('drown');
-    expect(wrapper.get('#battles').text()).toContain('Only ships fight');
+    expect(wrapper.get('#battles').text()).toContain('An attack is two fights');
     wrapper.unmount();
   });
 
@@ -99,13 +99,13 @@ describe('ShipsView', () => {
     wrapper.unmount();
   });
 
-  it('explains that a fleet is sent at one shore building, which a won fight damages', async () => {
+  it('explains that ships do not damage buildings on land and loot needs a won land fight', async () => {
     const wrapper = await mountPage();
 
     const text = wrapper.get('#battles').text();
-    expect(text).toContain("one building on the enemy's shore");
-    expect(text).toContain('Longhouse can stand inland');
-    expect(text).toContain('it damages that building');
+    expect(text).toContain('Ships do no damage to buildings on land');
+    expect(text).toContain('10 Fire Ships take one level off');
+    expect(text).toContain('Loot needs a won land fight');
     wrapper.unmount();
   });
 
@@ -114,7 +114,7 @@ describe('ShipsView', () => {
     const wrapper = await mountPage();
 
     expect(wrapper.find('[data-testid=admin-note]').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('Founding by sea');
+    expect(wrapper.text()).not.toContain('(ShipCargo)');
     wrapper.unmount();
   });
 

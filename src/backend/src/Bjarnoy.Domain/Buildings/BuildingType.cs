@@ -164,7 +164,7 @@ public enum BuildingType
 
     /// <summary>
     /// No production or storage of its own yet — its ring of runestones is
-    /// meant for a future favour/rune mechanic. Placed on grass, behind a
+    /// meant for a future favour/rune mechanic. Placed in the forest, behind a
     /// standing <see cref="TownSquare"/>.
     /// </summary>
     DruidHut = 23,
@@ -245,6 +245,13 @@ public enum BuildingType
     /// level-3 <see cref="ArcheryRange"/>. Appended at the end so persisted integers do not shift.
     /// </summary>
     SiegeWorkshop = 33,
+
+    /// <summary>
+    /// The one-hex settlement centre a camp builder places instead of a <see cref="Longhouse"/>: a stock, a garrison and no
+    /// production, claiming only its own hex. See <c>docs/design/skirmish/beach-camp.md</c>. Appended at the end so persisted
+    /// integers do not shift.
+    /// </summary>
+    BeachCamp = 34,
 }
 
 public static class BuildingTypeExtensions
@@ -285,6 +292,7 @@ public static class BuildingTypeExtensions
         BuildingType.PalisadeGate => "palisadegate",
         BuildingType.Bridge => "bridge",
         BuildingType.SiegeWorkshop => "siegeworkshop",
+        BuildingType.BeachCamp => "beachcamp",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }

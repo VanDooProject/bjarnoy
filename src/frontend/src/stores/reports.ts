@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ApiError, api } from '../api/client';
 import type {
+  ArmyReportResponse,
   BattleReportResponse,
   CampReportResponse,
   FieldBattleReportResponse,
@@ -53,6 +54,9 @@ export const useReportsStore = defineStore('reports', {
     tradeItems: [] as TradeReportResponse[],
     fieldItems: [] as FieldBattleReportResponse[],
     campItems: [] as CampReportResponse[],
+    armyItems: [] as ArmyReportResponse[],
+    // The world the army reports (which belong to the player, not to a settlement) are listed for.
+    worldId: null as string | null,
     loading: false,
     error: null as string | null,
     lastSeenAt: (() => {
@@ -65,12 +69,12 @@ export const useReportsStore = defineStore('reports', {
     pollHandle: null as ReturnType<typeof setInterval> | null,
   }),
   getters: {
-    /** All three report kinds, merged newest-first — see `lib/units/inbox.ts`. */
+    /** All report kinds, merged newest-first — see `lib/units/inbox.ts`. */
     inboxItems(state): InboxItem[] {
-      return mergeInbox(state.items, state.tradeItems, state.fieldItems, state.campItems);
+      return mergeInbox(state.items, state.tradeItems, state.fieldItems, state.campItems, state.armyItems);
     },
     unreadCount(state): number {
-      return inboxUnreadCount(mergeInbox(state.items, state.tradeItems, state.fieldItems, state.campItems), state.lastSeenAt);
+      return inboxUnreadCount(mergeInbox(state.items, state.tradeItems, state.fieldItems, state.campItems, state.armyItems), state.lastSeenAt);
     },
   },
   actions: {
@@ -82,19 +86,24 @@ export const useReportsStore = defineStore('reports', {
      * `getById`/`getFieldById` can reuse it for a deep-linked report not in
      * the already-loaded list.
      */
-    async load(settlementId: string, ownerId?: string) {
+    async load(settlementId: string, ownerId?: string, worldId?: string | null) {
       this.settlementId = settlementId;
       this.ownerId = ownerId ?? null;
+      this.worldId = worldId ?? null;
       this.loading = true;
       this.error = null;
       try {
         // Wildlife camp fights exist only against a live backend (the demo has no army simulation).
-        const [battleItems, tradeItems, fieldItems, campItems] = await Promise.all([
+        const [battleItems, tradeItems, fieldItems, campItems, armyItems] = await Promise.all([
           api.getSettlementReports(settlementId, ownerId),
           api.getSettlementTradeReports(settlementId, ownerId),
           api.getSettlementFieldReports(settlementId, ownerId),
           DEMO_MODE ? Promise.resolve([] as CampReportResponse[]) : api.getSettlementCampReports(settlementId, ownerId),
+          DEMO_MODE || !worldId ? Promise.resolve([] as ArmyReportResponse[]) : api.getWorldArmyReports(worldId, ownerId),
         ]);
+        this.armyItems = [...armyItems].sort(
+          (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
+        );
         this.campItems = [...campItems].sort(
           (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
         );
@@ -146,6 +155,16 @@ export const useReportsStore = defineStore('reports', {
         return null;
       }
     },
+    /** The army-report sibling of `getById` — see its own comment. */
+    async getArmyById(reportId: string): Promise<ArmyReportResponse | null> {
+      const cached = this.armyItems.find((r) => r.id === reportId);
+      if (cached) return cached;
+      try {
+        return await api.getArmyReport(reportId, this.ownerId ?? undefined);
+      } catch {
+        return null;
+      }
+    },
     /** Marks every currently-known report as seen — call when the player opens the inbox. */
     markAllSeen() {
       this.lastSeenAt = new Date().toISOString();
@@ -156,10 +175,10 @@ export const useReportsStore = defineStore('reports', {
       }
     },
     /** Starts (or restarts, if already polling for a different settlement) the light background poll HudNav's badge relies on. */
-    startPolling(settlementId: string, ownerId?: string) {
+    startPolling(settlementId: string, ownerId?: string, worldId?: string | null) {
       this.stopPolling();
-      void this.load(settlementId, ownerId);
-      this.pollHandle = setInterval(() => void this.load(settlementId, ownerId), REPORT_POLL_MS);
+      void this.load(settlementId, ownerId, worldId);
+      this.pollHandle = setInterval(() => void this.load(settlementId, ownerId, worldId), REPORT_POLL_MS);
     },
     stopPolling() {
       if (this.pollHandle) clearInterval(this.pollHandle);

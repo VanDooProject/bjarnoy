@@ -379,7 +379,8 @@ export interface Tile {
     | 'palisade'
     | 'palisadegate'
     | 'bridge'
-    | 'siegeworkshop';
+    | 'siegeworkshop'
+    | 'beachcamp';
   buildingLevel?: number;
   /**
    * The building on this hex stands outside its owner's realm (`PlacedBuildingResponse.outsideRealmSince` is set): it has no

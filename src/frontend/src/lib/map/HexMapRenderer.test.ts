@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   armyMarkerColor,
+  armyMarkerAt,
+  armyTapSwallowed,
   armyVisionEntryOf,
   grantsArmyVision,
   type ArmyOverlayMarker,
@@ -1255,5 +1257,44 @@ describe('foreign army markers', () => {
 
     expect(armyVisionEntryOf({ ...own, movement: undefined }, point)).toBeNull();
     expect(armyVisionEntryOf(foreign, point)).toBeNull();
+  });
+});
+
+describe('armyMarkerAt', () => {
+  const marker = (id: string, extra: Partial<ArmyOverlayMarker> = {}): ArmyOverlayMarker => ({
+    id, position: { q: 0, r: 0 }, selected: false, returning: false, isFleet: true, visionRadius: 1, ...extra,
+  });
+  const centre = (p: { x: number; y: number }) => p;
+  const placed = [{ id: 'a', x: 100, y: 100 }, { id: 'b', x: 110, y: 100 }];
+
+  it('hits the nearest own marker when no picker is open', () => {
+    expect(armyMarkerAt([marker('a'), marker('b')], placed, { x: 108, y: 100 }, centre)).toBe('b');
+  });
+
+  it('misses outside the tap radius', () => {
+    expect(armyMarkerAt([marker('a')], placed, { x: 200, y: 200 }, centre)).toBeNull();
+  });
+
+  it('ignores foreign markers when no picker is open', () => {
+    expect(armyMarkerAt([marker('a', { foreign: true })], placed, { x: 100, y: 100 }, centre)).toBeNull();
+  });
+
+  it('only hits pick markers while the send picker is open', () => {
+    const armies = [marker('a'), marker('b', { pick: 'ineligible' })];
+    expect(armyMarkerAt(armies, placed, { x: 100, y: 100 }, centre)).toBe('b');
+  });
+});
+
+describe('armyTapSwallowed', () => {
+  const marker = (id: string, extra: Partial<ArmyOverlayMarker> = {}): ArmyOverlayMarker => ({
+    id, position: { q: 0, r: 0 }, selected: false, returning: false, isFleet: true, visionRadius: 1, ...extra,
+  });
+
+  it('lets a marker tap reach the tile below when no send picker is open', () => {
+    expect(armyTapSwallowed([marker('a'), marker('b')])).toBe(false);
+  });
+
+  it('keeps the tap on the marker while the send picker is open', () => {
+    expect(armyTapSwallowed([marker('a'), marker('b', { pick: 'eligible' })])).toBe(true);
   });
 });

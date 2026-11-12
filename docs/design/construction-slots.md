@@ -18,11 +18,10 @@ can't be used as a raid-proof vault.
 ## The slot formula
 
 ```
-Settlement.ConstructionSlots = 2 + max(0, (longhouseLevel − 5) / 5)
+Settlement.ConstructionSlots = max(2, longhouseLevel)
 ```
 
-2 slots at longhouse level 1–9, 3 at level 10, 4 at level 15, 5 at level 20 — the formula deliberately
-outlives today's `BuildingCatalogue.MaxLevel` of 10. A razed settlement (`LonghouseLevel == 0`) still reports
+2 slots at longhouse level 1–2, then one more per level: 3 at level 3, 10 at level 10, 30 at level 30. A razed settlement (`LonghouseLevel == 0`) still reports
 2 slots — harmless, since every building needs `RequiredLonghouseLevel >= 1` and nothing can be queued on a
 razed settlement anyway.
 
@@ -55,8 +54,8 @@ determinism the whole lazy model rests on.
 
 ## Multi-slot buildings
 
-`BuildingDefinition.SlotCost` (default 1) and `BuildingDefinition.OccupiesAllSlots`. The Longhouse sets
-`OccupiesAllSlots = true`: its effective cost is `settlement.ConstructionSlots`, not a fixed number, so a
+`BuildingDefinition.SlotCost` (default 1) and `BuildingDefinition.OccupiesMostSlots`. The Longhouse sets
+`OccupiesMostSlots = true`: its effective cost is `settlement.ConstructionSlots`, not a fixed number, so a
 Longhouse upgrade can only start with **every** slot free, and blocks everything queued behind it while it
 runs — the issue's original request ("longhouse upgrades should block all other construction"), for free
 from the same mechanism that gives multi-slot buildings their cost.
@@ -146,7 +145,7 @@ A player can raze their own buildings, one level at a time.
 - `BuildOrderResponse` gains `state` (`"building"` / `"waiting"`) and `slotCost`; `completesAtGameTime` is
   `null` for a waiting order (it hasn't started, so there's no real completion instant yet — `totalSeconds`
   is an estimate in that case, since the real duration is only fixed at promotion).
-- `BuildingDefinitionResponse` gains `slotCost`/`occupiesAllSlots`.
+- `BuildingDefinitionResponse` gains `slotCost`/`occupiesMostSlots`.
 - `Describe(BuildRejection)` covers the new `NoFreeSlot` ("Every construction slot is busy" + a premium
   hint), and every `NotEnoughResources` text (build/train/trade/dispatch/guild-fee) gained a "may be reserved
   for queued construction" clause. `QueueBuild`'s 409 now also sets `ProblemDetails.Extensions["rejection"]`,

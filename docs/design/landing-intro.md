@@ -152,12 +152,14 @@ What a visitor without a settlement sees after "Go to the map": the island previ
   tick, name muted; upcoming: dark node, muted). It sits bottom centre on desktop, full width at the bottom on portrait
   phones, compact at the bottom right on landscape phones. The current step is the button that pokes the guidance
   arrow. It stays after founding, through steps 2 and 3, and leaves when all three are done.
-- Progress animation, when a step is placed: its node flips edge-on (0.5s) from the number to the tick; an ember runs
-  along the line into the next step (0.7s, after 0.3s) while the gold fills behind it; the next node ignites at 0.95s
-  (glow, then it turns current) and its instruction fades in at 1.15s; the current node's glow breathes while it
-  waits; when all three are done the nodes do one small wave. The first render never animates. With menu animations
-  off (or the device asking for reduced motion) none of this plays and states only fade (150ms). The timings are CSS
-  custom properties on `.steps`.
+- The guidance arrow moves on to the next guided building as soon as one is chosen in the ring, and never points at a
+  hex that already holds a build order.
+- Progress animation, when a step's building is queued (once the server accepts the order; the step does not wait for
+  the construction): its node flips edge-on (0.5s) from the number to the tick; an ember runs along the line into the
+  next step (0.7s, after 0.3s) while the gold fills behind it; the next node ignites at 0.95s (glow, then it turns
+  current) and its instruction fades in at 1.15s; the current node's glow breathes while it waits; when all three are
+  done the nodes do one small wave. The first render never animates. With menu animations off (or the device asking for
+  reduced motion) none of this plays and states only fade (150ms). The timings are CSS custom properties on `.steps`.
 
 ## Technique
 

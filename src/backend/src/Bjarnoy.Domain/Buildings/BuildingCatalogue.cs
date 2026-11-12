@@ -61,6 +61,7 @@ public static class BuildingCatalogue
         BuildingType.Palisade or BuildingType.PalisadeGate => 3,
         BuildingType.Bridge => 4,
         BuildingType.SiegeWorkshop => 20,
+        BuildingType.BeachCamp => 1,
         _ => 0,
     };
 
@@ -108,8 +109,8 @@ public static class BuildingCatalogue
     /// <summary>One level of a <paramref name="type"/> outside the realm is lost every this long (<see cref="DecayInterval(int)"/> of its max level).</summary>
     public static TimeSpan DecayInterval(BuildingType type, double speedFactor = 1.0) => DecayInterval(MaxLevelFor(type), speedFactor);
 
-    /// <summary>Whether a <paramref name="type"/> outside the realm decays: every building does except the Longhouse, which makes the realm.</summary>
-    public static bool Decays(BuildingType type) => type != BuildingType.Longhouse;
+    /// <summary>Whether a <paramref name="type"/> outside the realm decays: every building does except the Longhouse and the beach camp, which make the realm.</summary>
+    public static bool Decays(BuildingType type) => type is not (BuildingType.Longhouse or BuildingType.BeachCamp);
 
     /// <summary>What a settlement can store before it builds a storage house.</summary>
     public static ResourceAmounts BaseStorageCapacity { get; } = ResourceAmounts.Uniform(500);
@@ -199,7 +200,17 @@ public static class BuildingCatalogue
     public static IReadOnlySet<BuildingType> NewPlacementDisabled { get; } = new HashSet<BuildingType>
     {
         BuildingType.Quarry,
+
+        // Never placed by a player: a camp builder sets it down as a settlement's centre, and it has a single level.
+        BuildingType.BeachCamp,
     };
+
+    /// <summary>What a beach camp stores of each resource: the whole of its capacity (no <see cref="BaseStorageCapacity"/> on top).</summary>
+    public const double BeachCampStorage = 2000;
+
+    /// <summary>The base storage a building set gets: none for a beach camp, which stores exactly <see cref="BeachCampStorage"/>.</summary>
+    private static ResourceAmounts BaseCapacityFor(bool hasBeachCamp) =>
+        hasBeachCamp ? ResourceAmounts.Zero : BaseStorageCapacity;
 
     /// <summary>
     /// The Longhouse level <paramref name="type"/> unlocks at (1 for the
@@ -333,6 +344,7 @@ public static class BuildingCatalogue
         var definition = type switch
         {
             BuildingType.Longhouse => Longhouse(level),
+            BuildingType.BeachCamp => BeachCamp(level),
             BuildingType.Lumberjack => Producer(type, level, Forest, new ResourceAmounts(Wood: 40, 0, 0, 0)),
             BuildingType.Quarry => Producer(type, level, Ridge, new ResourceAmounts(0, Stone: 40, 0, 0)),
             // The starting food building: any grass, any island, LH 1. No
@@ -505,10 +517,11 @@ public static class BuildingCatalogue
     {
         ArgumentNullException.ThrowIfNull(buildings);
 
+        var list = buildings as IReadOnlyCollection<(BuildingType Type, int Level)> ?? buildings.ToList();
         var production = ResourceAmounts.Zero;
-        var capacity = BaseStorageCapacity;
+        var capacity = BaseCapacityFor(list.Any(b => b.Type == BuildingType.BeachCamp && b.Level >= 1));
 
-        foreach (var (type, level) in buildings)
+        foreach (var (type, level) in list)
         {
             if (level < 1)
             {
@@ -558,7 +571,7 @@ public static class BuildingCatalogue
             .ToList();
 
         var production = ResourceAmounts.Zero;
-        var capacity = BaseStorageCapacity;
+        var capacity = BaseCapacityFor(placed.Any(b => b.Type == BuildingType.BeachCamp));
 
         foreach (var building in placed)
         {
@@ -782,7 +795,10 @@ public static class BuildingCatalogue
         // producer): +15 wood, +12 stone, +15 food, +2 iron per level.
         ProductionPerHour = new ResourceAmounts(Wood: 15, Stone: 12, Food: 15, Iron: 2) * level,
         StorageCapacity = ResourceAmounts.Uniform(250) * level,
-        AllowedTerrain = Grass,
+        // Grass, or the shore sand a settlement founded from the sea stands on (docs/design/skirmish/realm-takeover.md): the
+        // upgrade re-checks the hex, so a sand-founded Longhouse could not be levelled while this was grass only. The
+        // Longhouse is never placed anew (PlanBuild refuses a second one), so this only keeps the founded one upgradable.
+        AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Sand },
         // The settlement's own centre-disc claim radius at this longhouse
         // level — see Settlement.ClaimRadius, which reads this back. The
         // Longhouse only grows the realm until towers are available: 2 at
@@ -791,9 +807,25 @@ public static class BuildingCatalogue
         // MaxTowers and docs/design/economy.md section 5).
         ClaimRadius = level == 1 ? 2 : 3,
         // A longhouse upgrade is the settlement's biggest single commitment —
-        // it consumes every construction slot the settlement currently has,
-        // blocking all other construction until it finishes (issue #158).
-        OccupiesAllSlots = true,
+        // it consumes 90 % (rounded down) of the construction slots the
+        // settlement currently has, leaving the rest for other construction.
+        OccupiesMostSlots = true,
+    };
+
+    /// <summary>
+    /// A beach camp: one level, no production, a flat <see cref="BeachCampStorage"/> of each resource and no claim beyond its own
+    /// hex (<see cref="BuildingDefinition.ClaimRadius"/> 0). Placed by a camp builder, never through the build ring.
+    /// </summary>
+    private static BuildingDefinition BeachCamp(int level) => new()
+    {
+        Type = BuildingType.BeachCamp,
+        Level = level,
+        Cost = ResourceAmounts.Zero,
+        BuildDuration = TimeSpan.Zero,
+        ProductionPerHour = ResourceAmounts.Zero,
+        StorageCapacity = ResourceAmounts.Uniform(BeachCampStorage),
+        AllowedTerrain = new HashSet<Terrain> { Terrain.Sand },
+        ClaimRadius = 0,
     };
 
     private static BuildingDefinition StorageHouse(int level) => new()
@@ -889,7 +921,8 @@ public static class BuildingCatalogue
     /// favour (<see cref="ShrineCatalogue.Favour"/>) is a percentage bonus,
     /// folded into <see cref="Settlement.CurrentTotals"/> instead of summed
     /// here alongside the additive totals. Grass-only, like Farm/PumpkinFarm —
-    /// except the Shrine of Njörd, whose art is a shrine on a skerry standing
+    /// except the Shrine of Ullr, the god of the hunt, which stands in the
+    /// forest (a grove shrine), and the Shrine of Njörd, whose art is a shrine on a skerry standing
     /// in the shallows: it is built directly on a coastal-water hex
     /// (<see cref="BuildingDefinition.RequiresCoastalWater"/>, the hex under it
     /// stays plain <see cref="World.Terrain.Sea"/>) like FishingHut/Dockyard
@@ -903,7 +936,12 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 180, Stone: 140, Food: 60, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(12, level),
-        AllowedTerrain = type == BuildingType.ShrineOfNjord ? new HashSet<Terrain>() : Grass,
+        AllowedTerrain = type switch
+        {
+            BuildingType.ShrineOfNjord => new HashSet<Terrain>(),
+            BuildingType.ShrineOfUllr => Forest,
+            _ => Grass,
+        },
         RequiresCoastalWater = type == BuildingType.ShrineOfNjord,
     };
 
@@ -1071,7 +1109,8 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 160, Stone: 110, Food: 80, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(9, level),
-        AllowedTerrain = Grass,
+        // A sacred grove: the druid hut stands in the forest, not on grass.
+        AllowedTerrain = Forest,
     };
 
     /// <summary>

@@ -191,19 +191,27 @@ public static class HexPathfinder
         Func<HexCoord, double?>? bridgeCost = null) =>
         LandStepCost(hex, terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost, leaving: true);
 
-    /// <summary>The leave price of a fleet's hex: the sea table, with the land-endpoint 1.0 fallback (a harbour or beaching hex).</summary>
+    /// <summary>The price of a fleet's land endpoint (a harbour or beaching hex): 1.0, except sand, which a fleet runs up onto at <see cref="FleetSandCost"/>.</summary>
+    private static double FleetLandEndpointCost(Terrain terrain) => terrain == Terrain.Sand ? FleetSandCost : 1.0;
+
+    /// <summary>What a fleet pays for a sand hex at either end of its route (a beach to land on or push off from): twice a sea hex.</summary>
+    public const double FleetSandCost = 2.0;
+
+    /// <summary>The leave price of a fleet's hex: the sea table, with the land-endpoint fallback (<see cref="FleetLandEndpointCost"/>).</summary>
     private static double SeaLeaveCost(IReadOnlyDictionary<Terrain, double> costTable, Terrain terrain) =>
-        costTable.TryGetValue(terrain, out var cost) ? cost : 1.0;
+        costTable.TryGetValue(terrain, out var cost) ? cost : FleetLandEndpointCost(terrain);
 
     /// <summary>
     /// Hard cap on nodes a single search may expand. A world is unbounded, so
     /// without this, "no route exists" (e.g. an island cut off by sea) would
     /// otherwise search forever outward looking for one. Combined with the
     /// bounding box in <see cref="FindPath"/>, this is a belt-and-braces
-    /// bound, not the primary defence — a plausible in-game dispatch is at
-    /// most a few hundred hexes.
+    /// bound, not the primary defence. A plausible dispatch is a few hundred
+    /// hexes, but a long sea route that has to detour around land can need
+    /// ~100k expansions (a 534-hex fleet route against a 345-hex straight
+    /// distance took 93k), so the cap sits well above that.
     /// </summary>
-    private const int MaxExpandedNodes = 20_000;
+    private const int MaxExpandedNodes = 250_000;
 
     /// <summary>
     /// Finds the cheapest route from <paramref name="from"/> to
@@ -373,7 +381,7 @@ public static class HexPathfinder
                 {
                     if (neighbour == to)
                     {
-                        enterCost = costTable.TryGetValue(terrainAt(neighbour), out var seaCost) ? seaCost : 1.0;
+                        enterCost = costTable.TryGetValue(terrainAt(neighbour), out var seaCost) ? seaCost : FleetLandEndpointCost(terrainAt(neighbour));
                     }
                     else if (!costTable.TryGetValue(terrainAt(neighbour), out enterCost))
                     {
@@ -546,7 +554,7 @@ public static class HexPathfinder
         {
             // Mirrors FindPath's own beaching/harbor exemption: a fleet's land endpoint (its home
             // settlement's centre, an Attack/Support target's centre) charges the flat 1.0 fallback on
-            // both the leave and the enter side, rather than the double.PositiveInfinity every other
+            // both the leave and the enter side (2.0 on sand, see FleetSandCost), rather than the double.PositiveInfinity every other
             // impassable hex gets.
             double enterCost;
             double leaveCost;
@@ -559,10 +567,10 @@ public static class HexPathfinder
             {
                 enterCost = costTable.TryGetValue(terrainAt(path[i]), out var cost)
                     ? cost
-                    : i == path.Count - 1 ? 1.0 : double.PositiveInfinity;
+                    : i == path.Count - 1 ? FleetLandEndpointCost(terrainAt(path[i])) : double.PositiveInfinity;
                 leaveCost = costTable.TryGetValue(terrainAt(path[i - 1]), out var leave)
                     ? leave
-                    : i == 1 ? 1.0 : double.PositiveInfinity;
+                    : i == 1 ? FleetLandEndpointCost(terrainAt(path[i - 1])) : double.PositiveInfinity;
             }
 
             edges[i] = hours[i - 1] + (leaveCost / 2.0 / effectiveHexesPerHour);

@@ -82,6 +82,11 @@ export function isWaterCampFamily(family: string): boolean {
   return campFamilyInfo(family)?.ground === 'sea';
 }
 
+/** True for a sand camp (a seal or walrus haul-out) — mirrors `CampFamilies.IsSand`. A fleet's land troops hunt it from the ships. */
+export function isSandCampFamily(family: string): boolean {
+  return campFamilyInfo(family)?.ground === 'sand';
+}
+
 /** One strong camp per this many land tiles (rounded) — mirrors `CampGenerator.StrongCampTilesPer`. */
 export const StrongCampTilesPer = 1500;
 

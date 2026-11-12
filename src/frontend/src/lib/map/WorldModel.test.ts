@@ -11,10 +11,20 @@ import { giantCoverage } from './giantTiles';
 import { guardRange, placeCamps } from './campPlacement';
 import { BOG_REACH } from './bogGenerator';
 import { placeLakeProps } from './lakeProps';
-import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
+import { FOG_SCOUT_RING, floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
 import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } from './worldGenerator';
 import type { BogTile, RiverTile, Settlement } from './types';
 import { JOTNAR_OWNER_KEY } from './endgamePlacement';
+import { claimRadiusForLevel } from './shoreline';
+import {
+  guidedBuildTarget,
+  guidedTypesStarted,
+  GUIDED_BUILD_TERRAIN,
+  nextGuidedType,
+  type GuidedBuildType,
+  type GuidedQueueOrder,
+} from './onboardingGuidance';
+import { makePendingOrder } from '../hud/pendingBuild';
 
 // A free grass hex with no river on it: the ground every ordinary building stands on (the catalogue's `allowedTerrain`, `riverBuildingAllowedHere`).
 function isEmptyGrass(model: WorldModel, c: AxialCoord): boolean {
@@ -414,6 +424,50 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     // a level-0 foundation stub grants nothing yet
     model.applyServerSnapshot(settlement.id, snapshot([{ q: settlement.q + 1, r: settlement.r, type: 'odinstatue', level: 0 }]));
     expect(model.ravensRingsFor(settlement.id)).toBe(0);
+  });
+
+  it('gives a beach camp (a beachcamp building, no Longhouse) the sight of a level-1 Longhouse, Ravens included', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    settlement.level = 0;
+    const snapshot = (buildings: { q: number; r: number; type: string; level: number }[]) => ({
+      level: 0,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.capacity!,
+      buildings,
+    });
+
+    // a Longhouse-less settlement without a camp sees nothing
+    model.applyServerSnapshot(settlement.id, snapshot([]));
+    expect(model.visionDiscsFor(settlement)).toEqual([]);
+    const signatureBefore = model.fogSignature();
+
+    model.applyServerSnapshot(settlement.id, snapshot([{ q: settlement.q, r: settlement.r, type: 'beachcamp', level: 1 }]));
+    expect(model.visionDiscsFor(settlement)).toEqual([{ q: settlement.q, r: settlement.r, radius: 2 }]);
+    expect(model.exploredRadius(settlement)).toBe(2 + FOG_SCOUT_RING);
+    expect(model.fogSignature()).not.toBe(signatureBefore);
+  });
+
+  it('gives a beach camp a claim of its own hex only (border radius 0), not the nothing of a destroyed Longhouse', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    settlement.level = 0;
+    const snapshot = (buildings: { q: number; r: number; type: string; level: number }[]) => ({
+      level: 0,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.capacity!,
+      buildings,
+    });
+
+    model.applyServerSnapshot(settlement.id, snapshot([]));
+    expect(model.borderRadius(settlement)).toBe(0);
+    expect(model.claimDiscsOf(settlement.id)).toEqual([]);
+
+    model.applyServerSnapshot(settlement.id, snapshot([{ q: settlement.q, r: settlement.r, type: 'beachcamp', level: 1 }]));
+    expect(model.claimDiscsOf(settlement.id)).toEqual([{ q: settlement.q, r: settlement.r, radius: 0 }]);
+    expect(model.claimedHexCount(settlement.id)).toBe(1);
   });
 
   it('refuses to place a tower outside the existing border, so it can only bump the shape outward, never teleport it', () => {
@@ -2806,11 +2860,51 @@ describe('WorldModel.applyRivalBuildings', () => {
       buildings: [{ ...own, type: 'palisade', level: 1 }],
     });
 
-    model.applyRivalBuildings([rivalBuilding(own.q, own.r), rivalBuilding(settlement.q, settlement.r, { type: 'longhouse' })]);
-    model.applyRivalBuildings([]);
+    model.applyRivalBuildings([rivalBuilding(own.q, own.r), rivalBuilding(settlement.q, settlement.r, { type: 'longhouse' })], settlement.id);
+    model.applyRivalBuildings([], settlement.id);
 
     expect(model.getTile(own.q, own.r)).toMatchObject({ buildingType: 'palisade', ownerId: settlement.id });
     expect(model.rivalBuildingOwner(own.q, own.r)).toBeUndefined();
+  });
+
+  // Regression: the buildings of the player's other settlements were only drawn after the player had opened (switched to) them.
+  it('draws the buildings of an own settlement that was never opened, without treating them as a rival\'s', () => {
+    const model = new WorldModel(20260825);
+    const { settlement: opened } = foundLandedSettlement(model);
+    const other = model.registerSettlement({
+      id: 'own-2', ownerId: 'p1', ownerName: 'Tester', name: 'Second',
+      q: opened.q + 40, r: opened.r, level: 1,
+      resources: { ...opened.resources }, rates: { ...opened.rates },
+      foundedAt: 0, realmId: 'own-2', islandId: opened.islandId,
+    });
+    const at = { q: other.q + 1, r: other.r };
+
+    model.applyRivalBuildings([
+      { ...at, type: 'palisade', level: 2, settlementId: other.id, ownerUserId: null },
+    ]);
+
+    expect(model.getTile(at.q, at.r)).toMatchObject({ buildingType: 'palisade', buildingLevel: 2, ownerId: other.id });
+    // Own, not a rival's: no siege target, and routed as the player's own wall.
+    expect(model.rivalBuildingOwner(at.q, at.r)).toBeUndefined();
+    expect(model.standingPalisadeWalls().get(`${at.q},${at.r}`)?.owner).toBe('p1');
+
+    model.applyRivalBuildings([]);
+    expect(model.getTile(at.q, at.r).buildingType).toBeUndefined();
+  });
+
+  // Regression: a settlement opened once and then left kept its old buildings, because every ever-rendered hex was skipped.
+  it('keeps updating an own settlement the player opened and then left', () => {
+    const model = new WorldModel(20260825);
+    const { settlement: left } = foundLandedSettlement(model);
+    const at = { q: left.q + 1, r: left.r };
+    model.applyServerSnapshot(left.id, {
+      level: left.level, resources: left.resources, rates: left.rates, capacity: left.resources,
+      buildings: [{ ...at, type: 'farm', level: 1 }],
+    });
+
+    model.applyRivalBuildings([{ ...at, type: 'farm', level: 3, settlementId: left.id, ownerUserId: null }], 'another-open-one');
+
+    expect(model.getTile(at.q, at.r).buildingLevel).toBe(3);
   });
 });
 
@@ -3100,5 +3194,102 @@ describe('WorldModel destroyed Longhouse vision', () => {
     snapTowers(model, razed, [chained, lone]);
 
     expect(model.visionDiscsFor(razed).map((d) => `${d.q},${d.r}`)).toEqual([`${chained.q},${chained.r}`]);
+  });
+});
+
+// The onboarding pointer (LandingView's nextGuidedTargetCoord, via `guidedBuildTarget`) aims at the nearest realm hex `hexTakesBuilding` accepts. It used
+// to check only ownership and emptiness, so on a start whose nearest grass/forest hex is a river or guarded-camp hex (the world
+// generator promises the terrain only) it pointed at a hex where the ring offers neither the Reindeer Herder nor the Lumberjack.
+describe('WorldModel.hexTakesBuilding — the onboarding pointer target', () => {
+  const SEED = 20260825;
+
+  function pointerTarget(model: WorldModel, settlement: Settlement, type: GuidedBuildType, queue: readonly GuidedQueueOrder[] = []): AxialCoord | null {
+    return guidedBuildTarget(model, { q: settlement.q, r: settlement.r }, claimRadiusForLevel(settlement.level), type, (owner) => owner === settlement.id, queue);
+  }
+
+  it.each(['reindeerherder', 'lumberjack'] as const)('the %s target skips a river hex and lands where it can be built', (type) => {
+    const control = new WorldModel(SEED);
+    const { settlement: controlSettlement } = foundLandedSettlement(control);
+    const nearest = pointerTarget(control, controlSettlement, type);
+    expect(nearest).not.toBeNull();
+    expect(control.getTile(nearest!.q, nearest!.r).terrain).toBe(GUIDED_BUILD_TERRAIN[type]);
+
+    const model = new WorldModel(SEED);
+    const { settlement } = foundLandedSettlement(model);
+    model.setRiverTiles([riverTile(nearest!, 'straight')]);
+    expect(model.hexTakesBuilding(nearest!, type)).toBe(false);
+    expect(model.placeBuilding(settlement.id, nearest!, type)).toBe(false);
+
+    const target = pointerTarget(model, settlement, type);
+    expect(target).not.toBeNull();
+    expect(target).not.toEqual(nearest);
+    expect(model.placeBuilding(settlement.id, target!, type)).toBe(true);
+  });
+
+  it('the reindeer herder target skips a guarded camp hex, and takes a cleared one', () => {
+    const control = new WorldModel(SEED);
+    const { settlement: controlSettlement } = foundLandedSettlement(control);
+    const nearest = pointerTarget(control, controlSettlement, 'reindeerherder')!;
+
+    const model = new WorldModel(SEED);
+    const { settlement } = foundLandedSettlement(model);
+    model.setCamps([{ family: 'wolfden', coord: nearest, level: 2, orientation: 'SE' }]);
+    expect(model.hexTakesBuilding(nearest, 'reindeerherder')).toBe(false);
+    const target = pointerTarget(model, settlement, 'reindeerherder');
+    expect(target).not.toBeNull();
+    expect(target).not.toEqual(nearest);
+    expect(model.placeBuilding(settlement.id, target!, 'reindeerherder')).toBe(true);
+
+    model.getTile(nearest.q, nearest.r).camp!.empty = true;
+    expect(model.hexTakesBuilding(nearest, 'reindeerherder')).toBe(true);
+    expect(pointerTarget(model, settlement, 'reindeerherder')).toEqual(nearest);
+  });
+
+  it('refuses a hex with a building already on it', () => {
+    const model = new WorldModel(SEED);
+    const { settlement } = foundLandedSettlement(model);
+    const target = pointerTarget(model, settlement, 'reindeerherder')!;
+    expect(model.placeBuilding(settlement.id, target, 'reindeerherder')).toBe(true);
+    expect(model.hexTakesBuilding(target, 'reindeerherder')).toBe(false);
+  });
+  // Once the server confirms a new building it sends it as a level-0 foundation in the settlement snapshot: the checklist
+  // counts it as placed (onboarding ticks and completes on queue) and the pointer no longer aims at its hex.
+  it('counts a level-0 foundation from the server as placed and never aims at its hex', () => {
+    const model = new WorldModel(SEED);
+    const { settlement } = foundLandedSettlement(model);
+    const herderHex = pointerTarget(model, settlement, 'reindeerherder')!;
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.capacity!,
+      buildings: [
+        { q: settlement.q, r: settlement.r, type: 'longhouse', level: 1 },
+        { q: herderHex.q, r: herderHex.r, type: 'reindeerherder', level: 0 },
+      ],
+    });
+    const placed = model.listPlacedBuildings(settlement.id);
+    expect(placed).toContain('reindeerherder');
+    expect(nextGuidedType(placed)).toBe('lumberjack');
+    expect(pointerTarget(model, settlement, 'reindeerherder')).not.toEqual(herderHex);
+  });
+
+  // Until the server answers, a queued build is only an optimistic order in `hud.queue` (no foundation on the tile yet).
+  // The pointer used to count it as not placed and its hex as free for that wait, so it stayed on the herder's hex.
+  it('moves on to the Lumberjack once the Reindeer Herder is queued, and never aims at the queued hex', () => {
+    const model = new WorldModel(SEED);
+    const { settlement } = foundLandedSettlement(model);
+    const placed = model.listPlacedBuildings(settlement.id);
+    const herderHex = pointerTarget(model, settlement, 'reindeerherder')!;
+    expect(nextGuidedType(guidedTypesStarted(placed, []))).toBe('reindeerherder');
+
+    const queue = [makePendingOrder('reindeerherder', herderHex)];
+    expect(nextGuidedType(guidedTypesStarted(placed, queue))).toBe('lumberjack');
+    const herderAgain = pointerTarget(model, settlement, 'reindeerherder', queue);
+    expect(herderAgain).not.toBeNull();
+    expect(herderAgain).not.toEqual(herderHex);
+
+    queue.push(makePendingOrder('lumberjack', pointerTarget(model, settlement, 'lumberjack', queue)!));
+    expect(nextGuidedType(guidedTypesStarted(placed, queue))).toBeNull();
   });
 });

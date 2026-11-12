@@ -12,7 +12,7 @@ import {
   ravensRings,
   wisdomBuildTimeFactor,
 } from './buildingEconomy';
-import { buildingAllowedOnHex, cropAllowedHere, newPlacementDisabled, riverBuildingAllowedHere } from './ringCatalogue';
+import { buildingAllowedOnHex, cropAllowedHere, hexOccupant, newPlacementDisabled, riverBuildingAllowedHere } from './ringCatalogue';
 import { canPlacePalisade, type PalisadeRefusal, type WallSet } from './palisadeTiles';
 import type { PalisadeWalls } from './palisadeMovement';
 import type { StandingBridges } from './bridgeMovement';
@@ -21,9 +21,8 @@ import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './g
 import { campGuardRange, isStrongCampFamily, placeCamps, placeWhaleRoads, StartPositionMargin } from './campPlacement';
 import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
 import type { PalisadePiece } from './palisadeTiles';
-import { campHexBuildable } from './campRules';
 import type { CampStateResponse } from '../../api/types';
-import { longhouseDiscs, type ClaimDisc } from './shoreline';
+import { centreClaimDiscs, centreVisionDiscs, claimDiscs, type ClaimDisc } from './shoreline';
 import type { FogCoverageLookup } from './fog/fogCoverage';
 import { claimsWithGiants } from './territory';
 import { realmFromDiscs, resolveRealm, type ConnectedRealm } from './realmChain';
@@ -378,6 +377,15 @@ export class WorldModel {
    */
   private settlementTowers = new Map<string, { q: number; r: number; level: number }[]>();
   /**
+   * The standing towers the server delivered per rival settlement (`applyRivalBuildings`). Kept apart from `settlementTowers` on
+   * purpose: those feed the chain rule, vision and exploring, none of which a rival's towers take part in for the player. A
+   * rival's claim is its Longhouse disc plus the full disc of every tower listed here (`claimDiscsFor`), no chain check.
+   */
+  private rivalTowers = new Map<string, { q: number; r: number; level: number }[]>();
+  /** Bumped whenever something a rival's claim depends on changes; `rivalClaimOwners` is rebuilt lazily when it lags behind. */
+  private rivalClaimRevision = 0;
+  private rivalClaimCache: { revision: number; owners: Map<string, string> } | null = null;
+  /**
    * The settlements the chain rule resolves together locally (`realmChain.ts`): one player's settlements on one island, keyed
    * by `realmGroupKey`. Kept up to date by `registerSettlement`, the only place a settlement enters the model. Demo mode (and
    * live settlements without a server realm) read the realm from here.
@@ -402,6 +410,15 @@ export class WorldModel {
    * (`wisdomFactor`, shorter builds) read. Updated alongside `settlementTowers`.
    */
   private settlementOdinLevels = new Map<string, number>();
+  /** Settlements that are beach camps (a `beachcamp` building in the server's list): they see like a level-1 Longhouse. */
+  private beachCampIds = new Set<string>();
+  /** Rival settlements whose `beachcamp` the server delivered (`applyRivalBuildings`): they claim their own hex only. */
+  private rivalBeachCampIds = new Set<string>();
+
+  /** Whether the settlement is a beach camp (it has a `beachcamp` instead of a Longhouse): the one place the client tells. */
+  isBeachCamp(settlementId: string): boolean {
+    return this.beachCampIds.has(settlementId) || this.rivalBeachCampIds.has(settlementId);
+  }
   /**
    * Every hex belonging to a giant's 7-hex footprint, mapped to that giant's
    * own anchor coord — this model's own `IGiantIndex` (see the backend's
@@ -1070,6 +1087,7 @@ export class WorldModel {
       signature += `|${s.id}:${s.level}:${s.q},${s.r}`;
       for (const t of this.settlementTowers.get(s.id) ?? []) signature += `;${t.q},${t.r},${t.level}`;
       signature += `;odin${this.settlementOdinLevels.get(s.id) ?? 0}`;
+      if (this.isBeachCamp(s.id)) signature += ';camp';
     }
     return signature;
   }
@@ -1236,6 +1254,7 @@ export class WorldModel {
     const previous = this.settlements.get(settlement.id);
     if (previous) this.realmGroups.get(realmGroupKey(previous))?.delete(previous.id);
     this.settlements.set(settlement.id, settlement);
+    this.rivalClaimRevision++;
     const key = realmGroupKey(settlement);
     const group = this.realmGroups.get(key) ?? new Map<string, Settlement>();
     group.set(settlement.id, settlement);
@@ -1260,7 +1279,7 @@ export class WorldModel {
     this.syncClaim(settlement);
     // Only the player's own settlements explore: a rival's vision ring is the rival's, the player sees it through the server's fog
     // coverage alone (`setFogCoverage`). A rival keeps its own id as `ownerId`, which never equals the player's account id.
-    if (settlement.ownerId === settlement.id) return;
+    if (this.isRivalSettlement(settlement)) return;
     for (const c of this.exploredHexesFor(settlement)) {
       this.explored.add(coordKey(c));
     }
@@ -1325,6 +1344,20 @@ export class WorldModel {
       if (tile.ownerId === settlementId && tile.buildingType) types.add(tile.buildingType);
     }
     return [...types];
+  }
+
+  /** Every building standing on a settlement's claimed hexes (coord, type, level) — the demo's counterpart of the live building list. */
+  listBuildings(settlementId: string): { q: number; r: number; type: string; level: number }[] {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return [];
+    const buildings: { q: number; r: number; type: string; level: number }[] = [];
+    for (const c of this.claimedHexes(settlement)) {
+      const tile = this.getTile(c.q, c.r);
+      if (tile.ownerId === settlementId && tile.buildingType) {
+        buildings.push({ q: c.q, r: c.r, type: tile.buildingType, level: tile.buildingLevel ?? 1 });
+      }
+    }
+    return buildings;
   }
 
   /**
@@ -1434,10 +1467,10 @@ export class WorldModel {
    * `HexMapRenderer.rebuildSettlementLabels`). Fog radius
    * (`visibleHexes`/`exploredRadius`) is tower-aware via `visionDiscsFor`
    * instead. HUD territory-size readouts use `claimedHexCount` instead,
-   * which also accounts for towers. 0 when the Longhouse is destroyed (`longhouseDiscs` has no disc then).
+   * which also accounts for towers. 0 when the Longhouse is destroyed (`centreClaimDiscs` has no disc then); 0 for a beach camp, which claims its own hex only.
    */
   borderRadius(settlement: Settlement): number {
-    return longhouseDiscs(settlement, settlement.level)[0]?.radius ?? 0;
+    return centreClaimDiscs(settlement, settlement.level, this.isBeachCamp(settlement.id))[0]?.radius ?? 0;
   }
 
   /**
@@ -1474,6 +1507,7 @@ export class WorldModel {
         q: m.q,
         r: m.r,
         level: m.level,
+        isBeachCamp: this.isBeachCamp(m.id),
         towers: this.settlementTowers.get(m.id) ?? [],
       })),
     );
@@ -1484,7 +1518,32 @@ export class WorldModel {
    * this settlement's full claimed territory. A cut-off tower claims nothing.
    */
   private claimDiscsFor(settlement: Settlement) {
+    // A rival's claim is its Longhouse plus every tower the server delivered, whether or not the chain connects it: the client
+    // cannot resolve another player's realm and draws what the server showed it.
+    if (this.isRivalSettlement(settlement)) {
+      return claimDiscs({ q: settlement.q, r: settlement.r }, settlement.level, this.rivalTowers.get(settlement.id) ?? [], this.isBeachCamp(settlement.id));
+    }
     return this.realmOf(settlement).discsOf(settlement.id);
+  }
+
+  /**
+   * Whether this settlement is another player's (a guild member's or treaty partner's included): its id is its own `ownerId`,
+   * where the player's own settlements carry the account id.
+   */
+  private isRivalSettlement(settlement: Settlement): boolean {
+    return settlement.ownerId === settlement.id;
+  }
+
+  /** Whether the id is one of the player's own registered settlements; false for a rival and for an unknown id. */
+  private isOwnRealm(settlementId: string): boolean {
+    const settlement = this.settlements.get(settlementId);
+    return settlement !== undefined && !this.isRivalSettlement(settlement);
+  }
+
+  /** `isRivalSettlement` by id; false for an unknown id. */
+  isRivalRealm(settlementId: string): boolean {
+    const settlement = this.settlements.get(settlementId);
+    return settlement !== undefined && this.isRivalSettlement(settlement);
   }
 
   /** `claimDiscsFor` by id — the discs of this settlement's claim that count (connected towers only); empty for an unknown id. */
@@ -1512,7 +1571,7 @@ export class WorldModel {
     // A tower cut off from every longhouse of the player's realm sees nothing (and gets no Ravens rings either).
     const realm = this.realmOf(settlement);
     return [
-      ...longhouseDiscs(settlement, settlement.level).map((d) => ({ ...d, radius: d.radius + ravens })),
+      ...centreVisionDiscs(settlement, settlement.level, this.isBeachCamp(settlement.id)).map((d) => ({ ...d, radius: d.radius + ravens })),
       ...(this.settlementTowers.get(settlement.id) ?? []).filter((t) => realm.isTowerConnected(settlement.id, t)).map((t) => ({
         q: t.q,
         r: t.r,
@@ -1624,6 +1683,7 @@ export class WorldModel {
       else tile.ownerId = undefined;
     }
     this.claimedKeys.set(id, owned);
+    this.rivalClaimRevision++;
   }
 
   /** Marks everything the realm's vision reaches as explored (nothing ever leaves `explored`), for every settlement of the realm. */
@@ -1713,6 +1773,16 @@ export class WorldModel {
   }
 
   /**
+   * Whether data of another player's settlement (its realm border, its buildings) on this hex may be shown: the hex is explored or
+   * its mist is not fully opaque (`FogCoverage.isOpaque`) — the same reach the server delivers rival data out to, 11.2 hexes past
+   * each of the player's sources (docs/design/map-fog-v2.md section 1h). `isExplored` stays the check for everything else (hover,
+   * clicks, founding).
+   */
+  isRivalDataVisible(q: number, r: number): boolean {
+    return this.isExplored(q, r) || !(this.fogCoverage?.isOpaque(q, r) ?? true);
+  }
+
+  /**
    * For an unexplored hex, how many hex-steps past the nearest settlement's
    * current-vision scouted ring (`exploredRadius`) it sits. Used by the renderer to fade
    * the unexplored fog in gradually from the ring's edge instead of a hard
@@ -1788,6 +1858,11 @@ export class WorldModel {
     this.settlementOdinLevels.set(settlementId, odin);
     const ravensChanged = ravensRings(odin) !== ravensRings(previousOdin);
 
+    const wasBeachCamp = this.beachCampIds.has(settlementId);
+    const isBeachCamp = snapshot.buildings.some((b) => b.type === 'beachcamp' && b.level >= 1);
+    if (isBeachCamp) this.beachCampIds.add(settlementId);
+    else this.beachCampIds.delete(settlementId);
+
     const levelIncreased = snapshot.level > settlement.level;
     if (levelIncreased) settlement.level = snapshot.level;
 
@@ -1795,7 +1870,7 @@ export class WorldModel {
     // centre disc grew (a longhouse level-up) or the set of Tower satellite
     // discs changed (a new, levelled-up, downgraded or burnt tower) — not
     // every poll, since claiming is otherwise pure repeated work.
-    const claimChanged = levelIncreased || towersChanged || ravensChanged || realmChanged;
+    const claimChanged = levelIncreased || towersChanged || ravensChanged || realmChanged || isBeachCamp !== wasBeachCamp;
     if (claimChanged) this.exploreRealm(settlement);
     settlement.resources = snapshot.resources;
     settlement.rates = snapshot.rates;
@@ -1937,30 +2012,41 @@ export class WorldModel {
   }
 
   /** The rival buildings `applyRivalBuildings` last placed, by hex: who owns each (a user id, null for an anonymous settlement) and its settlement. */
-  private rivalBuildings = new Map<string, { settlementId: string; ownerUserId: string | null }>();
+  private rivalBuildings = new Map<string, { settlementId: string; ownerUserId: string | null; own: boolean }>();
 
   /**
-   * Replaces the set of other players' buildings this model knows (live mode: `GET /worlds/{id}/rival-buildings`, which is fog-gated
-   * per hex and leaves the player's own buildings out). Each building is put on its tile the way an own one is (type, level, owning
+   * Replaces the set of buildings this model learns from the world read rather than from an opened settlement (live mode:
+   * `GET /worlds/{id}/rival-buildings`: other players' buildings, fog-gated per hex, plus every building of the player's own
+   * settlements, so one they have not opened yet is drawn too; the hexes of the open settlement, `openSettlementId`, are skipped). Each building is put on its tile the way an own one is (type, level, owning
    * settlement), so the piece it draws, the hit-test and the route rules need nothing special. A building of the previous call that
    * is missing now is cleared; a hex one of the player's own settlements renders is never touched.
    */
   applyRivalBuildings(
     buildings: { q: number; r: number; type: string; level: number; settlementId: string; ownerUserId: string | null; outsideRealm?: boolean }[],
+    openSettlementId: string | null = null,
   ) {
-    const ownRendered = new Set<string>();
-    for (const keys of this.renderedBuildingCoords.values()) for (const key of keys) ownRendered.add(key);
+    // Only the open settlement's snapshot is polled, so only its hexes are left to it; a settlement the player opened earlier and left
+    // is kept current by these rows like any other.
+    const ownRendered = new Set<string>(openSettlementId ? this.renderedBuildingCoords.get(openSettlementId) : []);
 
-    const next = new Map<string, { settlementId: string; ownerUserId: string | null }>();
+    const next = new Map<string, { settlementId: string; ownerUserId: string | null; own: boolean }>();
+    const towers = new Map<string, { q: number; r: number; level: number }[]>();
+    const rivalCamps = new Set<string>();
     for (const building of buildings) {
       const key = coordKey({ q: building.q, r: building.r });
       if (ownRendered.has(key)) continue;
+      if (building.type === 'beachcamp' && building.level >= 1) rivalCamps.add(building.settlementId);
+      if (building.type === 'tower' && building.level >= 1) {
+        const list = towers.get(building.settlementId) ?? [];
+        list.push({ q: building.q, r: building.r, level: building.level });
+        towers.set(building.settlementId, list);
+      }
       const tile = this.getTile(building.q, building.r);
       tile.ownerId = building.settlementId;
       tile.buildingType = building.type as Tile['buildingType'];
       tile.buildingLevel = building.level;
       tile.buildingOutsideRealm = building.outsideRealm === true || undefined;
-      next.set(key, { settlementId: building.settlementId, ownerUserId: building.ownerUserId });
+      next.set(key, { settlementId: building.settlementId, ownerUserId: building.ownerUserId, own: this.isOwnRealm(building.settlementId) });
     }
 
     for (const [key, previous] of this.rivalBuildings) {
@@ -1974,7 +2060,39 @@ export class WorldModel {
     }
 
     this.rivalBuildings = next;
+    this.rivalTowers = towers;
+    this.rivalBeachCampIds = rivalCamps;
+    this.rivalClaimRevision++;
     this.wallRevision++;
+  }
+
+  /**
+   * The settlement whose realm border is drawn on this hex, ignoring the fog: for the player's own settlements the tile's owner
+   * as `syncClaim` left it; for a rival the owner by claim only (`rivalClaimOwners`), so a rival building standing outside every
+   * claim disc of its realm gets no border of its own.
+   */
+  realmBorderOwnerAt(q: number, r: number): string | undefined {
+    const ownerId = this.getTile(q, r).ownerId;
+    if (ownerId !== undefined && !this.isRivalRealm(ownerId)) return ownerId;
+    return this.rivalClaimOwners().get(coordKey({ q, r }));
+  }
+
+  /**
+   * Every hex inside a rival's claim, with the settlement that wins it: where discs of two rivals overlap the oldest one does.
+   * Settlement ids are UUIDv7, which sort by creation time, so the oldest is the smallest id.
+   */
+  private rivalClaimOwners(): Map<string, string> {
+    if (this.rivalClaimCache?.revision === this.rivalClaimRevision) return this.rivalClaimCache.owners;
+    const owners = new Map<string, string>();
+    const rivals = [...this.settlements.values()].filter((s) => this.isRivalSettlement(s)).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    for (const rivalSettlement of rivals) {
+      for (const c of this.claimedHexes(rivalSettlement)) {
+        const key = coordKey(c);
+        if (!owners.has(key)) owners.set(key, rivalSettlement.id);
+      }
+    }
+    this.rivalClaimCache = { revision: this.rivalClaimRevision, owners };
+    return owners;
   }
 
   /**
@@ -1982,7 +2100,8 @@ export class WorldModel {
    * a rival building `applyRivalBuildings` placed (the player's own, or none). What the siege action's own/friendly check reads.
    */
   rivalBuildingOwner(q: number, r: number): string | null | undefined {
-    return this.rivalBuildings.get(coordKey({ q, r }))?.ownerUserId;
+    const building = this.rivalBuildings.get(coordKey({ q, r }));
+    return building && !building.own ? building.ownerUserId : undefined;
   }
 
   /**
@@ -2041,7 +2160,8 @@ export class WorldModel {
     for (const [key, wall] of this.palisadeIndex()) {
       if (wall.level < 1) continue;
       // A rival wall's owner key is the one the server's PalisadeIndex uses: the account, or the settlement for an anonymous one.
-      const rival = this.rivalBuildings.get(key);
+      const rivalEntry = this.rivalBuildings.get(key);
+      const rival = rivalEntry && !rivalEntry.own ? rivalEntry : undefined;
       const owner = rival
         ? (rival.ownerUserId ?? rival.settlementId)
         : wall.tileOwner
@@ -2116,6 +2236,40 @@ export class WorldModel {
     return result;
   }
 
+  /**
+   * Whether the hex itself takes a new `type`, whoever builds there: the per-hex refusals of `placeBuilding` (giant, guarded
+   * camp, endgame site, terrain/coastal water/bog kind, a building already standing, a type switched off for new placement,
+   * and the river rule). Leaves out who may build (claim, island soil, tower/shrine/storage limits, wall shapes), which
+   * `placeBuilding` adds. The onboarding pointer (LandingView) aims only at hexes this accepts, so it never points at a hex
+   * the ring offers nothing for.
+   */
+  hexTakesBuilding(at: AxialCoord, type: NonNullable<Tile['buildingType']>): boolean {
+    const tile = this.getTile(at.q, at.r);
+    // A giant (even one whose whole 7-hex footprint reads as claimed), a wildlife camp until it is cleared (never Fenrir's brood),
+    // an Utgard wall (rubble included) or a Jötunn watchtower holds the hex against every building — the same rule the ring's
+    // Build lock reads (`hexOccupant`; matches BuildRejection.HexOccupiedByCamp / HexOccupiedByEndgameSite).
+    if (hexOccupant(tile)) return false;
+    // Every other building needs dry land; the fishing hut, dockyard and
+    // Shrine of Njörd are the exceptions, and *only* stand on the coastal ring of
+    // the sea, not open water and not land either (matches
+    // BuildingDefinition.RequiresCoastalWater).
+    // The bog buildings stand only on their own bog kinds (plain moss, creek), the Fishing Hut also on a lake's half
+    // shore, and nothing stands on a lake or on bog it has no business on (matches BuildingDefinition.AllowsHex).
+    if (!buildingAllowedOnHex(type, tile)) return false;
+    if (tile.buildingType) return false;
+    // A type switched off for placement (the Quarry) is never placed anew (matches BuildRejection.NewPlacementDisabled).
+    if (newPlacementDisabled(type)) return false;
+    // No ordinary building stands on a river hex; the Sawmill and Crop Mill
+    // are built directly on one, and only certain shapes (and, for the
+    // Sawmill, only some variants — see the catalogue's excludedRiverVariants)
+    // have a matching river-composite art (matches Settlement.PlanBuild's
+    // onRiverTile and BuildingDefinition.RequiresRiverShape/ExcludedRiverVariants,
+    // see riverBuildingAllowedHere). textures.ts's riverBuildingArtFor reads
+    // this same own-hex river tile to pick which composite (and orientation) to render.
+    const riverAtHex = this.getRiverTile(at.q, at.r);
+    return riverBuildingAllowedHere(type, riverAtHex?.shape, riverAtHex ? this.riverVariantAt(at, riverAtHex.shape) : undefined, riverAtHex?.width);
+  }
+
   placeBuilding(settlementId: string, at: AxialCoord, type: Tile['buildingType']): boolean {
     const settlement = this.settlements.get(settlementId);
     if (!settlement) return false;
@@ -2126,40 +2280,8 @@ export class WorldModel {
     if (!this.claims(settlement, at)) {
       return false;
     }
+    if (!type || !this.hexTakesBuilding(at, type)) return false;
     const tile = this.getTile(at.q, at.r);
-    // A giant hex is never buildable, claimed or not — the giant's own art
-    // fully occupies the ground there (matches the backend's own rule; see
-    // `Tile.giant`'s doc comment and `Territory`'s own remarks). Checked
-    // even though `claims` above already excludes an *unclaimed* giant hex,
-    // since a giant whose whole 7-hex footprint *is* fully enclosed reads as
-    // claimed but must still refuse building on it.
-    if (tile.giant) return false;
-    // A wildlife camp hex is not buildable while the camp stands guarded; a cleared
-    // (empty) camp is, except Fenrir's brood (matches BuildRejection.HexOccupiedByCamp).
-    if (tile.camp && !campHexBuildable(tile.camp)) return false;
-    // An Utgard wall (rubble included) or a Jötun watchtower is never buildable (matches BuildRejection.HexOccupiedByEndgameSite).
-    if (tile.utgardWall || tile.jotunTower) return false;
-    // Every other building needs dry land; the fishing hut, dockyard and
-    // Shrine of Njörd are the exceptions, and *only* stand on the coastal ring of
-    // the sea, not open water and not land either (matches
-    // BuildingDefinition.RequiresCoastalWater).
-    // The bog buildings stand only on their own bog kinds (plain moss, creek), the Fishing Hut also on a lake's half
-    // shore, and nothing stands on a lake or on bog it has no business on (matches BuildingDefinition.AllowsHex).
-    if (!type || !buildingAllowedOnHex(type, tile)) return false;
-    if (tile.buildingType) return false;
-    // A type switched off for placement (the Quarry) is never placed anew (matches BuildRejection.NewPlacementDisabled).
-    if (newPlacementDisabled(type)) return false;
-    // The Sawmill and Crop Mill are built directly on a river tile — only
-    // certain shapes (and, for the Sawmill, only some variants — see
-    // the catalogue's excludedRiverVariants) have a matching river-
-    // composite art (matches BuildingDefinition.RequiresRiverShape/
-    // ExcludedRiverVariants, see riverBuildingAllowedHere). textures.ts's
-    // riverBuildingArtFor reads this same own-hex river tile to pick which
-    // composite (and orientation) to render.
-    const riverAtHex = this.getRiverTile(at.q, at.r);
-    if (type && !riverBuildingAllowedHere(type, riverAtHex?.shape, riverAtHex ? this.riverVariantAt(at, riverAtHex.shape) : undefined, riverAtHex?.width)) {
-      return false;
-    }
     // PumpkinFarm is only buildable on a Pumpkin-soil island (matches
     // BuildRejection.WrongCropForIslandSoil) — Farm has no such gate.
     if (type && !cropAllowedHere(type, this.soilForSettlement(settlementId))) {
@@ -2577,6 +2699,7 @@ export class WorldModel {
     }
     tile.giant = { family, anchor, part, orientation };
     this.giantAnchorByHex.set(coordKey(coord), anchor);
+    this.rivalClaimRevision++;
   }
 
   /**

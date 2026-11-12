@@ -5,6 +5,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -105,8 +106,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         using var client = _fixture.CreateClient();
         var world = await CreateWorldAsync(seed: 21, radius: 45);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
         Assert.NotNull(islands);
         // Wasted islands stay hidden from this endpoint until the endboss reveals them.
@@ -127,8 +127,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         // several rivers, so this doesn't depend on getting lucky with the default.
         var world = await CreateWorldAsync(seed: 2024, radius: 40);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
         Assert.NotNull(islands);
         var riverTiles = islands.SelectMany(i => i.RiverTiles).ToList();
@@ -157,8 +156,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         // lucky with the default.
         var world = await CreateWorldAsync(seed: 11, radius: 300);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
         Assert.NotNull(islands);
         var giants = islands.SelectMany(i => i.Giants).ToList();
@@ -207,8 +205,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         // 394 bog tiles with 20 lake tiles, so this doesn't depend on getting lucky with the default.
         var world = await CreateWorldAsync(seed: 1, radius: 600);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
         Assert.NotNull(islands);
         static string Key(int island, BogTileResponse t) =>
@@ -234,8 +231,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         var wastedCount = world.Islands.Count(i => i.IsWasted);
         Assert.True(wastedCount > 0, "expected the fixture seed to actually place wasted islands");
 
-        var beforeReveal = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var beforeReveal = await client.GetFullIslandsAsync(world.Id, Ct);
 
         Assert.NotNull(beforeReveal);
         Assert.Equal(world.Islands.Count - wastedCount, beforeReveal.Count);
@@ -249,8 +245,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
             await db.SaveChangesAsync(Ct);
         }
 
-        var afterReveal = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var afterReveal = await client.GetFullIslandsAsync(world.Id, Ct);
 
         Assert.NotNull(afterReveal);
         Assert.Equal(world.Islands.Count, afterReveal.Count);
@@ -269,8 +264,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         var stored = world.Islands.Where(i => i.IsWasted && i.UtgardWalls.Count > 0).ToList();
         Assert.True(stored.Count > 0, "expected the fixture seed to place a wasted island with Utgard walls");
 
-        var hidden = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var hidden = await client.GetFullIslandsAsync(world.Id, Ct);
         Assert.NotNull(hidden);
         Assert.All(hidden, i => Assert.Empty(i.UtgardWalls));
         Assert.All(hidden, i => Assert.Empty(i.JotunTowers));
@@ -283,8 +277,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
             await db.SaveChangesAsync(Ct);
         }
 
-        var revealed = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var revealed = await client.GetFullIslandsAsync(world.Id, Ct);
         Assert.NotNull(revealed);
 
         foreach (var island in stored)

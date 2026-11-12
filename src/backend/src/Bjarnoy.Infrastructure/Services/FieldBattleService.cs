@@ -66,17 +66,9 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
             return false;
         }
 
-        // A voluntary Recall (IsReturning but not RetreatImmune) is still
-        // fully interceptable — only the two immune legs are exempt (issue
-        // #206 §5).
-        if (movement.IsReturning && movement.RetreatImmune)
-        {
-            return false;
-        }
-
         var worldId = army.Settlement!.WorldId;
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World!, cancellationToken).ConfigureAwait(false);
-        var homeA = army.Settlement.HomeHexFor(domain, sampler.TerrainAt);
+        var homeA = army.Settlement.HomeHexFor(domain);
 
         var candidates = await _dbContext.Armies
             .Include(a => a.Stacks)
@@ -86,8 +78,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
             .Where(a => a.Id != army.Id
                 && !a.AtHome
                 && !a.IsSupporting
-                && a.Settlement!.WorldId == worldId
-                && !(a.IsReturning && a.RetreatImmune))
+                && a.Settlement!.WorldId == worldId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         (ArmyEntity Other, Army OtherDomain, Movement OtherMovement, HexCoord Hex, DateTimeOffset At)? earliest = null;
@@ -107,9 +98,17 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
                 continue;
             }
 
-            var homeB = other.Settlement.HomeHexFor(otherDomain, sampler.TerrainAt);
-            var meeting = MovementOccupancy.EarliestMeeting(movement, otherMovement, homeA, homeB);
+            var homeB = other.Settlement.HomeHexFor(otherDomain);
+            // An army fleeing a lost field battle cannot be fought until its protection ends (docs/design/troop-movement-range.md §2a).
+            var notBefore = Max(movement.FieldBattleImmuneUntil, otherMovement.FieldBattleImmuneUntil);
+            var meeting = MovementOccupancy.EarliestMeeting(movement, otherMovement, homeA, homeB, notBefore);
             if (meeting is not { } found || found.At > now)
+            {
+                continue;
+            }
+
+            // A stranded army that has starved by then is no longer there to fight, on either side.
+            if (found.At >= domain.StarvesAt || found.At >= otherDomain.StarvesAt)
             {
                 continue;
             }
@@ -140,7 +139,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
         var walls = await WorldBridges.RouteIndexAsync(
             _dbContext, worldId, new TerrainSampler(army.Settlement!.World!.ToGenerationOptions()).WithBogOverlay(bog).TerrainAt,
-            rivers.IsWide, cancellationToken).ConfigureAwait(false);
+            rivers.IsWide, chosen.At, cancellationToken).ConfigureAwait(false);
         Resolve(army, domain, movement, chosen.Other, chosen.OtherDomain, chosen.OtherMovement, chosen.Hex, chosen.At, giants, bog, rivers, walls, realms);
         return true;
     }
@@ -231,7 +230,8 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         var seed = BitConverter.ToInt32(ClaimId(armyA.Id, armyB.Id, at).ToByteArray(), 0);
 
         var plan = FieldBattleResolver.Resolve(
-            domainA.Stacks, claimA, domainB.Stacks, claimB, domainA.Loot, domainB.Loot, seed);
+            domainA.Stacks, claimA, domainB.Stacks, claimB, domainA.Loot, domainB.Loot,
+            domainA.ProvisionsAt(at), domainB.ProvisionsAt(at), seed);
 
         Army updatedA;
         Army updatedB;
@@ -239,13 +239,13 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         switch (plan.Winner)
         {
             case FieldBattleWinner.SideA:
-                updatedA = ApplyWin(domainA, movementA, plan.SideASurvivors, plan.LootTakenByWinner);
-                updatedB = ApplyLoss(armyB.Settlement, domainB, hex, at, plan.SideBSurvivors, plan.LootTakenByWinner, bog, rivers, walls);
+                updatedA = ApplyWin(domainA, movementA, plan.SideASurvivors, plan.LootTakenByWinner, plan.FoodRefillToWinner, at);
+                updatedB = ApplyLoss(armyB.Settlement, domainB, hex, at, plan.SideBSurvivors, TakenFromLoser(plan), bog, rivers, walls);
                 break;
 
             case FieldBattleWinner.SideB:
-                updatedA = ApplyLoss(armyA.Settlement, domainA, hex, at, plan.SideASurvivors, plan.LootTakenByWinner, bog, rivers, walls);
-                updatedB = ApplyWin(domainB, movementB, plan.SideBSurvivors, plan.LootTakenByWinner);
+                updatedA = ApplyLoss(armyA.Settlement, domainA, hex, at, plan.SideASurvivors, TakenFromLoser(plan), bog, rivers, walls);
+                updatedB = ApplyWin(domainB, movementB, plan.SideBSurvivors, plan.LootTakenByWinner, plan.FoodRefillToWinner, at);
                 break;
 
             default:
@@ -268,15 +268,26 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
             hex.Q, hex.R, armyA.Id, armyB.Id, plan.Winner, plan.SideAPower, plan.SideBPower);
     }
 
-    private static Army ApplyWin(Army domain, Movement movement, IReadOnlyList<UnitStack> survivors, ResourceAmounts lootTaken) =>
-        domain with
+    private static DateTimeOffset? Max(DateTimeOffset? a, DateTimeOffset? b) =>
+        a is { } x && b is { } y ? (x > y ? x : y) : a ?? b;
+
+    /// <summary>What the winner took from the loser's carried loot: the loot and the food that refilled its provisions.</summary>
+    private static ResourceAmounts TakenFromLoser(FieldBattlePlan plan) =>
+        plan.LootTakenByWinner + new ResourceAmounts(0, 0, plan.FoodRefillToWinner, 0);
+
+    private static Army ApplyWin(
+        Army domain, Movement movement, IReadOnlyList<UnitStack> survivors, ResourceAmounts lootTaken, double foodRefill,
+        DateTimeOffset at) =>
+        // The refill tops the provisions up, on top of the loot. The stored figure is the leg's departure baseline and the survivors
+        // burn less than the full army did, so it is rebased: what the army carried at the battle, plus the refill, from `at` on.
+        (domain with
         {
             Stacks = survivors,
             Loot = domain.Loot + lootTaken,
             // The winner's own journey is untouched — it simply continues
             // wherever it was already headed (issue #206 §3).
             Location = new ArmyLocation.InTransit(movement),
-        };
+        }).WithProvisionsAt(at, domain.ProvisionsAt(at) + foodRefill);
 
     private static Army ApplyLoss(
         SettlementEntity? loserSettlement,
@@ -285,7 +296,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         IReadOnlyDictionary<HexCoord, Terrain> bog, RiverIndex rivers, LandRouteIndex walls)
     {
         var loserSampler = new TerrainSampler(loserSettlement!.World!.ToGenerationOptions()).WithBogOverlay(bog);
-        var home = loserSettlement.HomeHexFor(domain, loserSampler.TerrainAt);
+        var home = loserSettlement.HomeHexFor(domain);
 
         var afterLosses = domain with
         {
@@ -294,6 +305,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         };
 
         return afterLosses.ForceFieldRetreat(at, hex, home, loserSampler.TerrainAt, loserSettlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide,
-            walls.ForOwner(WorldPalisades.OwnerKeyOf(loserSettlement.UserId, loserSettlement.Id)));
+            walls.ForOwner(WorldPalisades.OwnerKeyOf(loserSettlement.UserId, loserSettlement.Id)),
+            provisionsAtBattle: domain.ProvisionsAt(at));
     }
 }

@@ -27,6 +27,10 @@ public sealed record FoundSettlementRequest(
     [property: Required, MinLength(2), MaxLength(100)] string OwnerName,
     [property: Required, MinLength(1), MaxLength(200)] string OwnerId);
 
+/// <param name="Name">The new display name; trimmed server-side, 2-100 characters after trimming.</param>
+public sealed record RenameSettlementRequest(
+    [property: Required, MinLength(2), MaxLength(100)] string Name);
+
 /// <param name="Q">The hex whose building loses one level.</param>
 public sealed record RazeBuildingRequest(int Q, int R);
 
@@ -126,9 +130,9 @@ public sealed record PlacedBuildingResponse(
 /// waiting queue.
 /// </param>
 /// <param name="SlotCost">
-/// How many construction slots this order occupies once building — every
-/// slot the settlement currently has, for a Longhouse upgrade
-/// (<c>OccupiesAllSlots</c>); otherwise the catalogue's per-order
+/// How many construction slots this order occupies once building — 90 % of the
+/// slots the settlement currently has (rounded down), for a Longhouse upgrade
+/// (<c>OccupiesMostSlots</c>); otherwise the catalogue's per-order
 /// <c>SlotCost</c> (1 for everything today).
 /// </param>
 /// <param name="Kind">
@@ -307,6 +311,7 @@ public sealed record SettlementResponse(
     IReadOnlyList<PlacedBuildingResponse> Buildings,
     IReadOnlyList<BuildOrderResponse> Queue,
     IReadOnlyList<UnitStackResponse> Garrison,
+    IReadOnlyList<GarrisonSpotResponse> GarrisonSpots,
     IReadOnlyList<TrainingOrderResponse> TrainingQueue,
     IReadOnlyList<RuneInstanceResponse> Runes,
     FeastResponse? Feast,
@@ -397,8 +402,8 @@ public sealed record SettlementResponse(
                 o.Type.ToWireName(),
                 o.TargetLevel,
                 o.IsWaiting ? "waiting" : "building",
-                BuildingCatalogue.Get(o.Type, o.LevelInWork).OccupiesAllSlots
-                    ? domain.ConstructionSlots
+                BuildingCatalogue.Get(o.Type, o.LevelInWork).OccupiesMostSlots
+                    ? Settlement.LonghouseSlotCost(domain.ConstructionSlots)
                     : BuildingCatalogue.Get(o.Type, o.LevelInWork).SlotCost,
                 o.CompletesAt,
                 (clock.FreezesTime || o.IsWaiting) ? null : o.RemainingAt(gameNow).TotalSeconds,
@@ -407,6 +412,14 @@ public sealed record SettlementResponse(
                     : (o.CompletesAt!.Value - o.StartedAt!.Value).TotalSeconds,
                 o.Kind.ToWireName()))],
             [.. domain.Garrison.Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))],
+            [.. domain.GarrisonSpots.Select(spot => new GarrisonSpotResponse(
+                spot.Kind.ToWireName(),
+                spot.Coord.Q,
+                spot.Coord.R,
+                [.. spot.Stacks.Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))],
+                [.. session.GuestStacksAt(id, spot.Coord).Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))],
+                spot.HoldsLand,
+                spot.HoldsShips))],
             [.. domain.TrainingQueue.Select(o => TrainingOrderResponse.From(o, clock, gameNow))],
             [.. domain.Runes.Select(r => new RuneInstanceResponse(
                 r.Id, r.Type.ToWireName(), r.Rarity.ToWireName(), r.SlottedAt?.Q, r.SlottedAt?.R))],
@@ -418,7 +431,8 @@ public sealed record SettlementResponse(
                     Feasts.Duration.TotalSeconds / speedFactor,
                     Feasts.RenownFor(domain.TownSquareLevel))
                 : null,
-            [.. Bjarnoy.Domain.Settlers.Quests.All.Select(q => new QuestResponse(
+            // Quests are enabled on the player's first settlement only (economy.md section 7).
+            [.. Bjarnoy.Domain.Settlers.Quests.All.Where(_ => id == session.FirstSettlementId).Select(q => new QuestResponse(
                 q.Id, q.IsCompleted(domain), domain.HasClaimed(q), ResourceLine.From(q.Reward),
                 q.Progress?.Invoke(domain) is { } p ? new QuestProgressResponse(p.Current, p.Target) : null))],
             WorldClockResponse.From(clock, gameNow),
@@ -430,6 +444,17 @@ public sealed record SettlementResponse(
             [.. component]);
     }
 }
+
+/// <summary>
+/// One garrison spot of a settlement: its longhouse hex, a tower or a dock (empty ones included).
+/// </summary>
+/// <param name="Kind"><c>"longhouse"</c>, <c>"tower"</c> or <c>"dock"</c>.</param>
+/// <param name="Stacks">The settlement's own units standing here.</param>
+/// <param name="Guests">The units of supporting armies standing here, pooled by type.</param>
+/// <param name="HoldsLand">Whether land units may stand here.</param>
+/// <param name="HoldsShips">Whether ships may stand here.</param>
+public sealed record GarrisonSpotResponse(
+    string Kind, int Q, int R, IReadOnlyList<UnitStackResponse> Stacks, IReadOnlyList<UnitStackResponse> Guests, bool HoldsLand, bool HoldsShips);
 
 /// <summary>One connected claim disc: a longhouse's or a connected tower's centre and claim radius.</summary>
 public sealed record ClaimDiscResponse(int Q, int R, int Radius);
@@ -501,7 +526,7 @@ public sealed record BuildingDefinitionResponse(
     bool AlsoOnInlandLakeShore,
     int RequiredLonghouseLevel,
     int SlotCost,
-    bool OccupiesAllSlots,
+    bool OccupiesMostSlots,
     int ClaimRadius,
     IReadOnlyList<BuildingPrerequisiteResponse> Prerequisites,
     string? RingCategory,
@@ -530,7 +555,7 @@ public sealed record BuildingDefinitionResponse(
             definition.AlsoOnInlandLakeShore,
             definition.RequiredLonghouseLevel,
             definition.SlotCost,
-            definition.OccupiesAllSlots,
+            definition.OccupiesMostSlots,
             definition.ClaimRadius,
             [.. definition.Prerequisites.Select(p => new BuildingPrerequisiteResponse(p.Type.ToWireName(), p.Level))],
             definition.RingCategory?.ToString().ToLowerInvariant(),
@@ -553,11 +578,12 @@ public sealed record BuildingDefinitionResponse(
 /// <param name="Mine">Whether the settlement belongs to the caller (never the owner or user id itself).</param>
 /// <param name="RealmId">The oldest member of the linked realm this settlement belongs to (itself when it stands alone).</param>
 /// <param name="Relation">How the owner stands to the caller, which picks the realm colour: <c>mine</c>, <c>guild</c> (same guild), <c>treaty</c> (guild with an active peace treaty) or <c>rival</c>.</param>
-/// <param name="LabelQ">Axial q of the hex the client puts the settlement's label on, decided here: the centre for the caller's own settlements and for a rival whose centre is explored, else the explored building of a rival closest to its centre.</param>
+/// <param name="LabelQ">Axial q of the hex the client puts the settlement's label on, decided here: the centre for the caller's own settlements and for a rival whose centre is visible, else the visible hex (a standing building's or one inside its claim) of a rival closest to its centre.</param>
 /// <param name="LabelR">Axial r of the label hex, see <paramref name="LabelQ"/>.</param>
+/// <param name="IsBeachCamp">Whether the settlement is a beach camp (<see cref="Settlement.IsBeachCamp"/>): a one-hex settlement with no Longhouse.</param>
 public sealed record SettlementSummary(
     Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine, Guid RealmId, string Relation,
-    int LabelQ, int LabelR)
+    int LabelQ, int LabelR, bool IsBeachCamp = false)
 {
     public static SettlementSummary From(SettlementEntity s, bool mine, RealmLabel realm, string relation, HexCoord label)
     {
@@ -566,7 +592,8 @@ public sealed record SettlementSummary(
         return new SettlementSummary(
             s.Id, realm.Name, s.OwnerName, s.CentreQ, s.CentreR,
             s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
-            s.IslandId, mine, realm.RealmId, relation, label.Q, label.R);
+            s.IslandId, mine, realm.RealmId, relation, label.Q, label.R,
+            Settlement.HasBeachCampAt([.. s.Buildings.Select(b => b.ToPlacedBuilding())], new HexCoord(s.CentreQ, s.CentreR)));
     }
 }
 
@@ -607,10 +634,9 @@ public static class SettlementRelations
 
 /// <summary>
 /// <c>GET /settlements/{id}/view</c>'s fog-gated read: what a rival's
-/// explored ground on the world map earns them — identity, position and
-/// <paramref name="Buildings"/> only (and only the ones standing on a hex
-/// they've actually explored; the read exists once the centre or any
-/// standing building's hex is explored). Deliberately missing everything
+/// visible ground on the world map earns them — identity, position and
+/// <paramref name="Buildings"/> only (the ones standing on a hex they see, plus the towers and Longhouse whose claim disc reaches
+/// ground they see; the read exists once the centre, a standing building's hex or a hex of a claim disc is visible). Deliberately missing everything
 /// <see cref="SettlementResponse"/> carries beyond that: no stock, rates,
 /// construction queue, garrison, training queue or runes — none of that is
 /// something a rival's own map view could ever have told them, so none of it

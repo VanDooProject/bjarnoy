@@ -30,9 +30,12 @@ public sealed record AdminEditArmyRequest(
     double? ArriveInMinutes = null,
     HexPointRequest? Position = null);
 
-/// <summary>An army in the admin troop browser: the army itself plus who owns it.</summary>
+/// <summary>
+/// An army in the admin troop browser: the army itself, who owns it, and the
+/// loot (wood included) it is carrying home but has not deposited yet.
+/// </summary>
 public sealed record AdminArmyResponse(
-    ArmyResponse Army, Guid WorldId, string SettlementName, string OwnerName)
+    ArmyResponse Army, Guid WorldId, string SettlementName, string OwnerName, ResourceAmountsResponse Loot)
 {
     public static AdminArmyResponse From(ArmyEntity entity, DateTimeOffset gameNow)
     {
@@ -43,6 +46,7 @@ public sealed record AdminArmyResponse(
             ArmyResponse.From(entity, gameNow),
             entity.Settlement.WorldId,
             entity.Settlement.Name,
-            entity.Settlement.OwnerName);
+            entity.Settlement.OwnerName,
+            new ResourceAmountsResponse(entity.LootWood, entity.LootStone, entity.LootFood, entity.LootIron));
     }
 }

@@ -15,8 +15,7 @@ namespace Bjarnoy.Api.Endpoints;
 
 /// <summary>
 /// The premium fight simulator (issue #40 phase 7, design doc §9): calls
-/// <see cref="BattleResolver.Resolve"/> (and <see cref="SiegeResolver.Resolve"/>
-/// when applicable) directly, with no settlement, army, or
+/// <see cref="AttackResolver.Resolve"/> (the ship fight and the land fight, and the siege) directly, with no settlement, army, or
 /// <c>BattleReportEntity</c> — no database write happens as a side effect of
 /// calling this endpoint at all. This is the entire payoff of keeping
 /// <c>Bjarnoy.Domain</c> pure since phase 3: a premium user can explore "what
@@ -90,51 +89,20 @@ public static class SimulatorEndpoints
             });
         }
 
-        var combinedDefense = defenderStacks
-            .Concat(guestStacks)
-            .GroupBy(s => s.Type)
-            .Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))
-            .ToList();
-
         var defenseBonusPercent = BuildingCatalogue.TowerDefenseBonusPercent(request.TowerLevel);
         var seed = request.Seed ?? Random.Shared.Next();
         var raid = mission == ArmyMission.Raid;
 
-        var plan = BattleResolver.Resolve(
-            attackerStacks, combinedDefense, defenseBonusPercent, AbundantLoot, seed, raid,
-            request.LandAttackBonusPercent, request.ShipAttackBonusPercent);
+        // The one code path a real attack takes: a land army fights the land units, a fleet fights the ships and then lands what is
+        // aboard. No provisions to refill, and no named target building (so no fire damage); the siege hits the nominal Longhouse.
+        var plan = AttackResolver.Resolve(
+            attackerStacks, defenderStacks, guestStacks, defenseBonusPercent, AbundantLoot, seed, raid,
+            request.LandAttackBonusPercent, request.ShipAttackBonusPercent,
+            targetBuildingCoord: null, NominalDefenderBuildings, _ => Terrain.Grass, provisionsAtBattle: double.PositiveInfinity);
 
-        var siege = plan.Winner == BattleWinner.Attacker
-            ? SiegeResolver.Resolve(plan.AttackerSurvivors, NominalDefenderBuildings, requestedTargetCoord: null, seed)
-            : SiegeOutcome.None;
-
-        var lostByType = plan.AttackerLosses.ToDictionary(s => s.Type, s => s.Count);
-        var survivedByType = plan.AttackerSurvivors.ToDictionary(s => s.Type, s => s.Count);
-        var attackerLines = attackerStacks
-            .Select(sent => new BattleReportAttackerLineResponse(
-                sent.Type.ToWireName(), sent.Count,
-                lostByType.GetValueOrDefault(sent.Type), survivedByType.GetValueOrDefault(sent.Type)))
-            .ToList();
-
-        var defenderSurvivedByType = plan.DefenderSurvivors.ToDictionary(s => s.Type, s => s.Count);
-        var defenderLines = plan.DefenderLosses
-            .Select(lost => new BattleReportDefenderLineResponse(
-                lost.Type.ToWireName(), lost.Count, defenderSurvivedByType.GetValueOrDefault(lost.Type)))
-            .Concat(plan.DefenderSurvivors
-                .Where(s => !plan.DefenderLosses.Any(l => l.Type == s.Type))
-                .Select(s => new BattleReportDefenderLineResponse(s.Type.ToWireName(), Lost: 0, Survived: s.Count)))
-            .ToList();
-
-        var response = new SimulatorResponse(
-            raid ? "raid" : "attack",
-            plan.Winner.ToString().ToLowerInvariant(),
-            plan.AttackPower,
-            plan.DefensePower,
-            seed,
-            ResourceAmountsResponse.From(plan.LootTaken),
-            attackerLines,
-            defenderLines,
-            BattleReportSiegeResponse.From(BattleReportSiegeLine.From(siege)));
+        var report = BattleReport.From(
+            Guid.Empty, DateTimeOffset.UnixEpoch, Guid.Empty, Guid.Empty, Guid.Empty, attackerStacks, plan, seed, raid);
+        var response = SimulatorResponse.From(report);
 
         return TypedResults.Ok(response);
     }

@@ -3,6 +3,7 @@ import type { BuildOrderResponse } from '../../api/types';
 import { makePendingOrder } from '../hud/pendingBuild';
 import {
   rejectDialAt,
+  dialPhase,
   constructionDialsFromQueue,
   DIAL_HOVER_MS,
   DIAL_LABEL_BASE_PX,
@@ -517,5 +518,29 @@ describe('rejectDialAt', () => {
   it('keeps a running build on the hex (an upgrade refused behind it) instead of replacing it', () => {
     const running = { coord: at, startMs: 0, endMs: 9000, state: 'building' as const, queuePosition: null };
     expect(rejectDialAt([other, running], at, 500)).toEqual([other, running]);
+  });
+});
+
+describe('dialPhase', () => {
+  const base: ConstructionDial = { coord: { q: 1, r: 0 }, startMs: 0, endMs: 10_000, state: 'building', queuePosition: null };
+
+  it('reads a running build as progress and time left', () => {
+    expect(dialPhase(base, 2_500, false)).toEqual({ kind: 'building', progress: 0.25, remaining: 7.5 });
+  });
+
+  it('reads queued with its place and pending as such', () => {
+    expect(dialPhase({ ...base, startMs: null, endMs: null, state: 'queued', queuePosition: 2 }, 0, false)).toEqual({ kind: 'queued', position: 2 });
+    expect(dialPhase({ ...base, startMs: null, endMs: null, state: 'pending' }, 0, false)).toEqual({ kind: 'pending' });
+  });
+
+  it('plays the finish frame from the end on and is over after DIAL_FINISH_MS', () => {
+    expect(dialPhase(base, 10_000 + 300, false)).toEqual({ kind: 'finish', frame: dialFinishFrame(300) });
+    expect(dialPhase(base, 10_000 + DIAL_FINISH_MS, false)).toBeNull();
+  });
+
+  it('plays the rejection frame of a refused order and is over after DIAL_REJECT_MS', () => {
+    const rejected: ConstructionDial = { ...base, startMs: null, endMs: null, state: 'pending', rejectedAtMs: 1_000 };
+    expect(dialPhase(rejected, 1_200, true)).toEqual({ kind: 'reject', frame: dialRejectFrame(200, true) });
+    expect(dialPhase(rejected, 1_000 + DIAL_REJECT_MS, false)).toBeNull();
   });
 });

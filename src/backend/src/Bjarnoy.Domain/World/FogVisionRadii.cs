@@ -28,6 +28,33 @@ public static class FogVisionRadii
     public const int ScoutRingHexes = 3;
 
     /// <summary>
+    /// The ramp value at which the client's fog mist is fully opaque (the point the edge noise has shut off). Mirrors the frontend's
+    /// <c>FOG_MIST_OPAQUE_AT_RAMP</c> (<c>src/frontend/src/lib/map/fog/fogRamp.ts</c>); <c>FogVisionRadiiTests</c> pins the number.
+    /// </summary>
+    public const double MistOpaqueAtRamp = 0.8;
+
+    /// <summary>
+    /// How far past a settlement's or tower's <see cref="ExploredRadius"/> (straight-line distance) the ground is still visible
+    /// through the mist: the unknown ramp's width times <see cref="MistOpaqueAtRamp"/> (11.2 hexes).
+    /// </summary>
+    public const double SourceMistOpaqueMargin = FogMaskOptions.DefaultUnknownMarginHexes * MistOpaqueAtRamp;
+
+    /// <summary>Where a marching army's own white fog ramp starts, past its vision radius. Mirrors the frontend's <c>ARMY_FOG_WHITE_OFFSET</c> (<c>fogRamp.ts</c>).</summary>
+    public const double ArmyFogWhiteOffsetHexes = 0.75;
+
+    /// <summary>The army white ramp's width in hexes. Mirrors the frontend's <c>ARMY_FOG_WHITE_MARGIN</c> (<c>fogRamp.ts</c>).</summary>
+    public const int ArmyFogWhiteMarginHexes = 6;
+
+    /// <summary>
+    /// How far past a marching army's vision radius (straight-line distance) the ground is still visible through the mist:
+    /// <see cref="ArmyFogWhiteOffsetHexes"/> plus the white ramp's width times <see cref="MistOpaqueAtRamp"/> (5.55 hexes).
+    /// </summary>
+    public const double ArmyMistOpaqueMargin = ArmyFogWhiteOffsetHexes + (ArmyFogWhiteMarginHexes * MistOpaqueAtRamp);
+
+    /// <summary>Slack for comparing a euclidean distance against the margins above (they are sums of binary fractions).</summary>
+    public const double ReachEpsilon = 1e-9;
+
+    /// <summary>
     /// The settlement's realm-border radius, in hexes. Mirrors the
     /// frontend's <c>borderRadius(settlement)</c>.
     /// </summary>
@@ -54,17 +81,24 @@ public static class FogVisionRadii
     /// <summary>
     /// Builds the <see cref="FogVisionSource"/> a settlement's centre contributes to the
     /// mask, or <see langword="null"/> when it has none: a settlement whose Longhouse is destroyed (level 0) sees nothing
-    /// around its centre. That is decided by the same <see cref="Buildings.Settlement.LonghouseDisc"/> that decides whether
+    /// around its centre. That is decided by the same <see cref="Buildings.Settlement.CentreDisc"/> that decides whether
     /// it has a claim, so sight and claim cannot drift apart. <paramref name="bonusRings"/> is Odin's Ravens
     /// (<see cref="Buildings.Settlement.VisionBonusRings"/>): extra rings on both the explored and the visible radius.
+    /// A beach camp (<paramref name="isBeachCamp"/>) sees like a level-1 Longhouse, fixed: it has no Longhouse level of its own.
     /// </summary>
-    public static FogVisionSource? ToVisionSource(HexCoord coord, int longhouseLevel, int bonusRings = 0) =>
-        Buildings.Settlement.LonghouseDisc(coord, longhouseLevel) is null
+    public static FogVisionSource? ToVisionSource(HexCoord coord, int longhouseLevel, int bonusRings = 0, bool isBeachCamp = false)
+    {
+        var level = isBeachCamp ? BeachCampSightLevel : longhouseLevel;
+        return Buildings.Settlement.LonghouseDisc(coord, level) is null
             ? null
             : new FogVisionSource(
                 coord,
-                ExploredRadius(longhouseLevel) + Math.Max(0, bonusRings),
-                VisibleRadius(longhouseLevel) + Math.Max(0, bonusRings));
+                ExploredRadius(level) + Math.Max(0, bonusRings),
+                VisibleRadius(level) + Math.Max(0, bonusRings));
+    }
+
+    /// <summary>The Longhouse level a beach camp sees like (explored and visible radius), whatever it is.</summary>
+    public const int BeachCampSightLevel = 1;
 
     /// <summary>
     /// A single standing <see cref="Buildings.BuildingType.Tower"/>'s own

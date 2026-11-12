@@ -7,8 +7,7 @@ namespace Bjarnoy.Api.Contracts;
 
 /// <summary>
 /// A premium fight simulation request (issue #40 phase 7) — calls
-/// <see cref="BattleResolver.Resolve"/> (and, if applicable,
-/// <see cref="SiegeResolver.Resolve"/>) directly with no settlement, army, or
+/// <see cref="AttackResolver.Resolve"/> (the ship fight and the land fight, and the siege) directly with no settlement, army, or
 /// database involved; see <c>SimulatorEndpoints</c>.
 /// </summary>
 /// <param name="AttackerStacks">The hypothetical attacking force.</param>
@@ -75,6 +74,10 @@ public sealed record SimulatorRequest(
 /// level-1 Longhouse — see <c>SimulatorEndpoints</c>'s remarks — so this
 /// previews the levels-destroyed math, not a real building's fate.
 /// </param>
+/// <param name="ShipFight">The fight at sea of a fleet, as in <see cref="BattleReportResponse.ShipFight"/>.</param>
+/// <param name="Drowned">The passengers the surviving ships could not carry.</param>
+/// <param name="FireShipsBurned">Always zero: the simulator names no building for Fire Ships to burn.</param>
+/// <param name="FireSiege">Always null, see <paramref name="FireShipsBurned"/>.</param>
 public sealed record SimulatorResponse(
     string Mission,
     string Winner,
@@ -84,4 +87,21 @@ public sealed record SimulatorResponse(
     ResourceAmountsResponse LootTaken,
     IReadOnlyList<BattleReportAttackerLineResponse> AttackerLines,
     IReadOnlyList<BattleReportDefenderLineResponse> DefenderLines,
-    BattleReportSiegeResponse? Siege);
+    BattleReportSiegeResponse? Siege,
+    BattleReportShipFightResponse? ShipFight,
+    IReadOnlyList<ArmyUnitStackResponse> Drowned,
+    int FireShipsBurned,
+    BattleReportSiegeResponse? FireSiege)
+{
+    /// <summary>The simulated attack as the report a real one would have written: one mapping for both.</summary>
+    public static SimulatorResponse From(BattleReport report)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+
+        var response = BattleReportResponse.From(report);
+        return new SimulatorResponse(
+            response.Mission, response.Winner, response.AttackPower, response.DefensePower, response.Seed, response.LootTaken,
+            response.AttackerLines, response.DefenderLines, response.Siege, response.ShipFight, response.Drowned,
+            response.FireShipsBurned, response.FireSiege);
+    }
+}

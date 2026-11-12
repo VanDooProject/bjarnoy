@@ -50,6 +50,17 @@ public class ShipCargoTests
     }
 
     [Fact]
+    public void A_fire_ship_is_a_ship_that_offers_no_slots_and_sets_the_pace_of_a_fleet_it_sails_with()
+    {
+        UnitStack[] stacks = [new(UnitType.Longship, 1), new(UnitType.FireShip, 10)];
+
+        Assert.True(ShipCargo.IsShip(UnitType.FireShip));
+        Assert.Equal(20, ShipCargo.SlotsOffered(stacks));
+        Assert.Equal(8, ShipCargo.Pace(stacks));
+        Assert.Equal(2, ShipCargo.Ships(stacks).Count);
+    }
+
+    [Fact]
     public void DropOverflow_keeps_everyone_when_the_ships_left_can_carry_them()
     {
         var (kept, drowned) = ShipCargo.DropOverflow([new(UnitType.Karve, 1)], [new(UnitType.Spearman, 10)]);

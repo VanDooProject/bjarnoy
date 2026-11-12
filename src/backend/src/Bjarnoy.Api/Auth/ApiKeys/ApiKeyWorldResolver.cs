@@ -74,6 +74,12 @@ public sealed class ApiKeyWorldResolver(GameDbContext dbContext)
             .Select(r => r.WorldId)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Guid>> ForArmyReportAsync(Guid reportId, CancellationToken cancellationToken) =>
+        await dbContext.ArmyReports.AsNoTracking()
+            .Where(r => r.Id == reportId)
+            .Select(r => r.WorldId)
+            .ToListAsync(cancellationToken);
+
     private async Task<IReadOnlyList<Guid>> WorldsOfAsync(Guid[] settlementIds, CancellationToken cancellationToken) =>
         await dbContext.Settlements.AsNoTracking()
             .Where(s => settlementIds.Contains(s.Id))

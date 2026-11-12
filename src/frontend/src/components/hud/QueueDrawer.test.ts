@@ -8,6 +8,8 @@ import type { ArmyResponse, BuildOrderResponse, TrainingOrderResponse } from '..
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
+import { DOUBLE_TAP_MS } from '../../lib/map/doubleTap';
+import { ApiError } from '../../api/client';
 
 const { recallArmy } = vi.hoisted(() => ({ recallArmy: vi.fn() }));
 vi.mock('../../api/client', async (importOriginal) => {
@@ -82,7 +84,10 @@ function army(overrides: Partial<ArmyResponse> = {}): ArmyResponse {
       turnAroundAt: '2026-01-01T02:00:00Z',
       returnArrivesAt: '2026-01-01T04:00:00Z',
       isReturning: false,
+      isStranded: false,
+      isFleeing: false,
     },
+    starvesAt: null,
     ...overrides,
   };
 }
@@ -394,6 +399,61 @@ describe('QueueDrawer', () => {
       expect(recallArmy).toHaveBeenCalledWith('army-1', undefined);
     });
 
+    it('a refused recall (409) shows the translated rejection on the clicked row', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' }), army({ id: 'army-2' })];
+      recallArmy.mockRejectedValue(
+        new ApiError(409, { title: 'Nothing to recall.', detail: 'The army is already heading home.', status: 409, rejection: 'NothingToRecall' }),
+      );
+
+      const wrapper = mountDrawer({ open: true });
+      const rows = wrapper.findAll('.army-row');
+      await rows[1].get('.recall').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('.recall-refusal').exists()).toBe(true));
+
+      expect(wrapper.findAll('.recall-refusal')).toHaveLength(1);
+      expect(wrapper.findAll('.army-row')[1].get('.recall-refusal').text()).toBe('The army is already heading home.');
+    });
+
+    it('a rate-limited recall (429 RouteRateLimited) shows the translated wait-and-retry text', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+      recallArmy.mockRejectedValue(
+        new ApiError(429, { title: 'Too many requests.', status: 429, rejection: 'RouteRateLimited' }),
+      );
+
+      const wrapper = mountDrawer({ open: true });
+      await wrapper.get('.army-row .recall').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('.recall-refusal').exists()).toBe(true));
+
+      expect(wrapper.get('.recall-refusal').text()).toBe('Too many marching orders at once. Wait a moment and try again.');
+    });
+
+    it('a recall refused without a rejection code (429) shows the generic recall error', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+      recallArmy.mockRejectedValue(new ApiError(429, undefined));
+
+      const wrapper = mountDrawer({ open: true });
+      await wrapper.get('.army-row .recall').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('.recall-refusal').exists()).toBe(true));
+
+      expect(wrapper.get('.recall-refusal').text()).toBe('Recall failed.');
+    });
+
+    it('a new recall clears the previous refusal', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+      recallArmy.mockRejectedValueOnce(new ApiError(429, undefined));
+
+      const wrapper = mountDrawer({ open: true });
+      await wrapper.get('.army-row .recall').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('.recall-refusal').exists()).toBe(true));
+
+      await wrapper.get('.army-row .recall').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('.recall-refusal').exists()).toBe(false));
+    });
+
     it('a single row tap selects the army and keeps the drawer open', async () => {
       const world = useWorldStore();
       world.armies = [army({ id: 'army-1' })];
@@ -417,6 +477,37 @@ describe('QueueDrawer', () => {
 
       expect(wrapper.emitted('select-army')).toEqual([['army-1']]);
       expect(wrapper.emitted('update:open')).toEqual([[false]]);
+    });
+
+    it('a double tap on an already selected row keeps it selected throughout', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+      world.selectArmy('army-1');
+      const clear = vi.spyOn(world, 'clearSelectedArmy');
+
+      const wrapper = mountDrawer({ open: true });
+      const row = wrapper.get('.army-row .status-row-click');
+      await row.trigger('click');
+      expect(world.selectedArmyId).toBe('army-1');
+      await row.trigger('click');
+      vi.runAllTimers();
+
+      expect(clear).not.toHaveBeenCalled();
+      expect(world.selectedArmyId).toBe('army-1');
+      expect(wrapper.emitted('select-army')).toEqual([['army-1']]);
+    });
+
+    it('a single tap on the selected row deselects it after the double-tap window', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+      world.selectArmy('army-1');
+
+      const wrapper = mountDrawer({ open: true });
+      await wrapper.get('.army-row .status-row-click').trigger('click');
+      expect(world.selectedArmyId).toBe('army-1');
+      vi.advanceTimersByTime(DOUBLE_TAP_MS);
+
+      expect(world.selectedArmyId).toBeNull();
     });
 
     it('taps on two different rows are not a double tap', async () => {

@@ -41,9 +41,8 @@ public sealed class ReservedResourcesTests
                 new PlacedBuilding(Centre, BuildingType.Longhouse, 2),
                 new PlacedBuilding(new HexCoord(9, 9), BuildingType.Barracks, 1),
             ],
-            Garrison = [new UnitStack(UnitType.Axeman, 100)],
             Resources = ResourcePool.Create(farmCost * 2, production, ResourceAmounts.Uniform(10_000), T0),
-        };
+        }.WithGarrison([new UnitStack(UnitType.Axeman, 100)]);
 
         // Fill both construction slots first, so the reservation-testing
         // order below must go to the waiting queue.

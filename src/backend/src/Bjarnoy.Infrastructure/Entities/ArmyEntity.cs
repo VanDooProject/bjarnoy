@@ -30,7 +30,20 @@ public class ArmyEntity
 
     public SettlementEntity? Settlement { get; set; }
 
+    /// <summary>The hex of the garrison spot of <see cref="SettlementId"/> the army leaves from and returns to — <see cref="Army.HomeSpot"/>.</summary>
+    public int HomeSpotQ { get; set; }
+
+    public int HomeSpotR { get; set; }
+
     public int Mission { get; set; }
+
+    /// <summary>The gathering this army is a group of until it merges or leaves it — <see cref="Army.GatheringId"/>.</summary>
+    public Guid? GatheringId { get; set; }
+
+    public GatheringEntity? Gathering { get; set; }
+
+    /// <summary>When that gathering leaves — <see cref="Army.GatherDepartAt"/>; set and cleared together with <see cref="GatheringId"/>.</summary>
+    public DateTimeOffset? GatherDepartAt { get; set; }
 
     /// <summary>
     /// The settlement an <see cref="ArmyMission.Attack"/> army is headed to
@@ -53,7 +66,8 @@ public class ArmyEntity
 
     /// <summary>
     /// The building coordinate an <see cref="ArmyMission.Attack"/> army was
-    /// told to hit (issue #40 phase 5) — see <see cref="Army.TargetBuildingCoord"/>.
+    /// told to hit (issue #40 phase 5), or the host's garrison spot a <see cref="ArmyMission.Support"/> army joins — see
+    /// <see cref="Army.TargetBuildingCoord"/>.
     /// Null (both columns) means "no preference"; the two are always either
     /// both set or both null, never one alone.
     /// </summary>
@@ -115,14 +129,20 @@ public class ArmyEntity
 
     public bool IsReturning { get; set; }
 
-    /// <summary>Persisted mirror of <see cref="Movement.RetreatImmune"/> (issue #206 §5).</summary>
-    public bool RetreatImmune { get; set; }
+    /// <summary>Persisted mirror of <see cref="Movement.FieldBattleImmuneUntil"/>; <see langword="null"/> unless the army is fleeing a lost field battle.</summary>
+    public DateTimeOffset? FieldBattleImmuneUntil { get; set; }
+
+    /// <summary>Persisted mirror of <see cref="Movement.IsStranded"/>: the army cannot get home and starves when its food runs out.</summary>
+    public bool IsStranded { get; set; }
+
+    /// <summary>Persisted mirror of <see cref="Movement.RoutePlannedAt"/>; <see langword="null"/> for a row stored before it was recorded.</summary>
+    public DateTimeOffset? RoutePlannedAt { get; set; }
 
     /// <summary>Rebuilds the domain aggregate from the stored columns.</summary>
     public Army ToDomain()
     {
         ArmyLocation location = IsSupporting
-            ? new ArmyLocation.Supporting(TargetSettlementId!.Value)
+            ? new ArmyLocation.Supporting(TargetSettlementId!.Value, new HexCoord(TargetBuildingQ!.Value, TargetBuildingR!.Value))
             : AtHome
                 ? new ArmyLocation.AtHome()
                 : new ArmyLocation.InTransit(new Movement
@@ -136,17 +156,22 @@ public class ArmyEntity
                     ReturnEdgeHours = ReturnEdgeHours,
                     TurnAroundAt = TurnAroundAt,
                     IsReturning = IsReturning,
-                    RetreatImmune = RetreatImmune,
+                    FieldBattleImmuneUntil = FieldBattleImmuneUntil,
+                    IsStranded = IsStranded,
+                    RoutePlannedAt = RoutePlannedAt,
                 });
 
         return new Army
         {
             Id = Id,
             SettlementId = SettlementId,
+            HomeSpot = new HexCoord(HomeSpotQ, HomeSpotR),
             Stacks = [.. Stacks.OrderBy(s => s.UnitType).Select(s => new UnitStack(s.UnitType, s.Count))],
             Location = location,
             Provisions = Provisions,
             Mission = (ArmyMission)Mission,
+            GatheringId = GatheringId,
+            GatherDepartAt = GatherDepartAt,
             TargetSettlementId = TargetSettlementId,
             TargetBuildingCoord = TargetBuildingQ is { } q ? new HexCoord(q, TargetBuildingR!.Value) : null,
             TargetCampCoord = TargetCampQ is { } cq ? new HexCoord(cq, TargetCampR!.Value) : null,
@@ -187,7 +212,12 @@ public class ArmyEntity
             WalkedLegs.Add(walked);
         }
 
+        SettlementId = army.SettlementId;
+        HomeSpotQ = army.HomeSpot.Q;
+        HomeSpotR = army.HomeSpot.R;
         Mission = (int)army.Mission;
+        GatheringId = army.GatheringId;
+        GatherDepartAt = army.GatherDepartAt;
         TargetSettlementId = army.TargetSettlementId;
         TargetBuildingQ = army.TargetBuildingCoord?.Q;
         TargetBuildingR = army.TargetBuildingCoord?.R;
@@ -228,13 +258,17 @@ public class ArmyEntity
                 ReturnEdgeHours = [];
                 TurnAroundAt = default;
                 IsReturning = false;
-                RetreatImmune = false;
+                FieldBattleImmuneUntil = null;
+                IsStranded = false;
+                RoutePlannedAt = null;
                 break;
 
             case ArmyLocation.Supporting supporting:
                 AtHome = false;
                 IsSupporting = true;
                 TargetSettlementId = supporting.HostSettlementId;
+                TargetBuildingQ = supporting.Spot.Q;
+                TargetBuildingR = supporting.Spot.R;
                 DepartedAt = default;
                 Path = [];
                 CumulativeHours = [];
@@ -244,7 +278,9 @@ public class ArmyEntity
                 ReturnEdgeHours = [];
                 TurnAroundAt = default;
                 IsReturning = false;
-                RetreatImmune = false;
+                FieldBattleImmuneUntil = null;
+                IsStranded = false;
+                RoutePlannedAt = null;
                 break;
 
             case ArmyLocation.InTransit inTransit:
@@ -260,7 +296,9 @@ public class ArmyEntity
                 ReturnEdgeHours = [.. movement.ReturnEdgeHours];
                 TurnAroundAt = movement.TurnAroundAt;
                 IsReturning = movement.IsReturning;
-                RetreatImmune = movement.RetreatImmune;
+                FieldBattleImmuneUntil = movement.FieldBattleImmuneUntil;
+                IsStranded = movement.IsStranded;
+                RoutePlannedAt = movement.RoutePlannedAt;
                 break;
         }
     }

@@ -289,6 +289,39 @@ public class FogChunkServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Explored_ground_in_a_neighbouring_chunk_near_the_seam_changes_this_chunks_version_and_pixels()
+    {
+        const int radius = 150;
+        var worldId = AddWorld(radius);
+        AddSettlement(worldId, "player-1", 0, 0, level: 1);
+        await _dbContext.SaveChangesAsync(Ct);
+
+        var home = new FogChunkCoord(0, 0);
+        var before = await GetWorldAsync(worldId, "player-1", radius);
+
+        // One explored hex at texel (64, 0): the first column of the chunk east of home, 2 hexes from
+        // texel (62, 0), the last column of home but one. Nothing in home's own bounds changes.
+        var across = FogMaskLayout.ToHex(new MaskTexel(64, 0));
+        var acrossChunk = FogChunkLayout.ChunkOf(across);
+        Assert.Equal(new FogChunkCoord(1, 0), acrossChunk);
+        var data = PersistedExploredBitset.Encode(acrossChunk, [across]);
+        _dbContext.PlayerExploredChunks.Add(new PlayerExploredChunkEntity
+        {
+            WorldId = worldId, OwnerId = "player-1", ChunkU = acrossChunk.U, ChunkV = acrossChunk.V, Bits = data.Bits,
+        });
+        await _dbContext.SaveChangesAsync(Ct);
+
+        var after = await GetWorldAsync(worldId, "player-1", radius);
+
+        Assert.NotEqual(ChunkAt(before, home).Version, ChunkAt(after, home).Version);
+        Assert.NotSame(ChunkAt(before, home).Png, ChunkAt(after, home).Png);
+
+        var nearSeam = new MaskTexel(62, 0);
+        Assert.Equal(255, CellAt(before, nearSeam).Unknown);
+        Assert.InRange(CellAt(after, nearSeam).Unknown, 1, 254);
+    }
+
+    [Fact]
     public async Task Persisted_history_survives_the_settlement_that_explored_it_being_lost()
     {
         var worldId = AddWorld(8);
@@ -636,5 +669,149 @@ public class FogChunkServiceTests : IDisposable
         var standing = new HexCoord(20, 0);
         Assert.Equal([new ExploredDisc(standing, rings)], area!.LiveArmyDiscs);
         Assert.Contains(new ExploredDisc(standing, rings), area.Discs);
+    }
+
+    [Fact]
+    public async Task Visible_ground_reaches_to_where_the_fog_is_fully_opaque_around_a_current_source()
+    {
+        var worldId = AddWorld(60);
+        AddSettlement(worldId, "player-1", 0, 0, level: 1); // explored radius 5, so the mist is opaque past 5 + 11.2
+        await _dbContext.SaveChangesAsync(Ct);
+        var service = new ExploredAreaService(_dbContext, TimeProvider.System);
+        var area = await service.GetAsync(worldId, "player-1", persist: false, Ct);
+
+        var visible = await service.VisibleAmongAsync(
+            area!, [new HexCoord(9, 0), new HexCoord(16, 0), new HexCoord(17, 0), new HexCoord(0, 17)], Ct);
+
+        // Straight-line, not in hex steps: (16, 0) is 16 away (inside 5 + 11.2), (17, 0) is 17 (outside).
+        Assert.Contains(new HexCoord(9, 0), visible);
+        Assert.Contains(new HexCoord(16, 0), visible);
+        Assert.DoesNotContain(new HexCoord(17, 0), visible);
+        Assert.Equal(
+            HexCoord.EuclideanDistance(HexCoord.Origin, new HexCoord(0, 17)) <= 5 + FogVisionRadii.SourceMistOpaqueMargin,
+            visible.Contains(new HexCoord(0, 17)));
+    }
+
+    [Fact]
+    public async Task Visible_ground_reaches_past_a_live_armys_vision_to_where_its_fog_is_fully_opaque()
+    {
+        var worldId = AddWorld(60);
+        var settlement = AddSettlement(worldId, "player-1", 0, 0, level: 1);
+        _dbContext.Armies.Add(new ArmyEntity
+        {
+            SettlementId = settlement.Id,
+            Settlement = settlement,
+            AtHome = false,
+            IsSupporting = false,
+            DepartedAt = DateTimeOffset.UnixEpoch,
+            Path = [new HexPoint(30, 0)],
+            CumulativeHours = [0],
+            EdgeHours = [0],
+            ReturnPath = [new HexPoint(30, 0), new HexPoint(0, 0)],
+            ReturnCumulativeHours = [0, 1],
+            ReturnEdgeHours = [0, 1],
+            TurnAroundAt = DateTimeOffset.UnixEpoch.AddDays(3650),
+            IsReturning = false,
+            Stacks = [new ArmyUnitStackEntity { UnitType = UnitType.Spearman, Count = 1 }], // sees 2 rings
+        });
+        await _dbContext.SaveChangesAsync(Ct);
+        var service = new ExploredAreaService(_dbContext, TimeProvider.System);
+        var area = await service.GetAsync(worldId, "player-1", persist: false, Ct);
+
+        var visible = await service.VisibleAmongAsync(area!, [new HexCoord(37, 0), new HexCoord(38, 0)], Ct);
+
+        // 2 + 5.55 = 7.55 hexes straight-line from the army standing at (30, 0).
+        Assert.Contains(new HexCoord(37, 0), visible);
+        Assert.DoesNotContain(new HexCoord(38, 0), visible);
+    }
+
+    private async Task<(ExploredAreaService Service, ExploredArea Area)> StoreAsync(params HexCoord[] explored)
+    {
+        var worldId = AddWorld(150);
+        AddSettlement(worldId, "player-1", 0, 0, level: 1);
+        foreach (var (chunk, hexes) in PersistedExploredBitset.GroupByChunk(explored))
+        {
+            _dbContext.PlayerExploredChunks.Add(new PlayerExploredChunkEntity
+            {
+                WorldId = worldId, OwnerId = "player-1", ChunkU = chunk.U, ChunkV = chunk.V,
+                Bits = PersistedExploredBitset.Encode(chunk, hexes).Bits,
+            });
+        }
+
+        await _dbContext.SaveChangesAsync(Ct);
+        var service = new ExploredAreaService(_dbContext, TimeProvider.System);
+        return (service, (await service.GetAsync(worldId, "player-1", persist: false, Ct))!);
+    }
+
+    [Fact]
+    public async Task Stored_explored_ground_without_a_current_source_is_visible_as_far_as_a_marching_armys_mist_margin_straight_line()
+    {
+        var old = new HexCoord(-100, 40);
+        var (service, area) = await StoreAsync(old);
+        HexCoord[] candidates =
+        [
+            old, new HexCoord(old.Q + 1, old.R), new HexCoord(old.Q + 5, old.R), new HexCoord(old.Q + 6, old.R),
+            new HexCoord(old.Q - 3, old.R + 6), new HexCoord(old.Q + 3, old.R + 4), new HexCoord(old.Q, old.R + 7),
+        ];
+
+        var visible = await service.VisibleAmongAsync(area, candidates, Ct);
+
+        // 5.55 straight-line hexes: (-3, 6) is 5.2 away, (3, 4) 6.1, (6, 0) 6.0, (0, 7) 6.06.
+        Assert.Equal(
+            candidates.Where(c => HexCoord.EuclideanDistance(c, old) <= FogVisionRadii.ArmyMistOpaqueMargin).ToHashSet(),
+            visible);
+        Assert.Contains(new HexCoord(old.Q - 3, old.R + 6), visible);
+        Assert.DoesNotContain(new HexCoord(old.Q + 3, old.R + 4), visible);
+    }
+
+    [Fact]
+    public async Task The_margin_around_stored_ground_reaches_across_a_chunk_seam_into_a_chunk_without_a_stored_row()
+    {
+        // Texel column 63 of chunk -2: three hexes on lies in chunk -1, where nothing is stored.
+        var edge = new HexCoord(-65, 40);
+        var across = new HexCoord(-62, 40);
+        var (service, area) = await StoreAsync(edge);
+        Assert.NotEqual(FogChunkLayout.ChunkOf(edge), FogChunkLayout.ChunkOf(across));
+
+        Assert.Contains(across, await service.VisibleAmongAsync(area, [across], Ct));
+        Assert.DoesNotContain(new HexCoord(-58, 40), await service.VisibleAmongAsync(area, [new HexCoord(-58, 40)], Ct));
+        Assert.Equal([across], await service.FirstVisibleAmongAsync(area, [[new HexCoord(-58, 40), across]], Ct));
+    }
+
+    [Fact]
+    public async Task A_candidate_whose_neighbourhood_touches_no_stored_chunk_is_not_visible()
+    {
+        var (service, area) = await StoreAsync(new HexCoord(-100, 40));
+
+        Assert.Empty(await service.VisibleAmongAsync(area, [new HexCoord(100, -40), new HexCoord(-100, 80)], Ct));
+    }
+
+    [Fact]
+    public async Task The_first_visible_hex_of_each_group_is_found_in_the_given_order_through_current_sources_and_stored_ground()
+    {
+        var worldId = AddWorld(150);
+        AddSettlement(worldId, "player-1", 0, 0, level: 1);
+        var old = new HexCoord(-100, 40);
+        var oldChunk = FogChunkLayout.ChunkOf(old);
+        _dbContext.PlayerExploredChunks.Add(new PlayerExploredChunkEntity
+        {
+            WorldId = worldId, OwnerId = "player-1", ChunkU = oldChunk.U, ChunkV = oldChunk.V,
+            Bits = PersistedExploredBitset.Encode(oldChunk, [old]).Bits,
+        });
+        await _dbContext.SaveChangesAsync(Ct);
+        var service = new ExploredAreaService(_dbContext, TimeProvider.System);
+        var area = await service.GetAsync(worldId, "player-1", persist: false, Ct);
+
+        var first = await service.FirstVisibleAmongAsync(
+            area!,
+            [
+                [new HexCoord(60, 0), new HexCoord(16, 0), new HexCoord(3, 0)],
+                [new HexCoord(60, 0), new HexCoord(-107, 40), new HexCoord(-101, 40), old],
+                [new HexCoord(60, 0), new HexCoord(61, 0)],
+            ],
+            Ct);
+
+        // (-107, 40) is 7 hexes from the stored hex and out; (-101, 40) is 1 away and in, before the stored hex itself.
+        Assert.Equal([new HexCoord(16, 0), new HexCoord(-101, 40), null], first);
     }
 }

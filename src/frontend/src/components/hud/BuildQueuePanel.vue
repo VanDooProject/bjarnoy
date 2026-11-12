@@ -19,6 +19,7 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { useWorldStore } from '../../stores/world';
 import { useBuildOrders } from '../../composables/useQueueOrders';
+import { useHudPanelContent } from '../../composables/useHudPanelContent';
 import { confirmedBuild, coordKey, heldBuildRows, releaseBuildRow } from '../../composables/buildFeedback';
 import { motionEnabled } from '../../lib/motion';
 import { bumpCount, flyToken, slideInCard, slideInRow } from '../../lib/hud/queueMotion';
@@ -43,6 +44,7 @@ async function cancel(orderId: string) {
 }
 
 const orders = useBuildOrders();
+const { construction: hasContent } = useHudPanelContent();
 
 // Q1 + Q5: after a confirmed build a gold token flies from the hex's dial into
 // the new row, which then slides in while the slot count bumps; if the card
@@ -97,8 +99,8 @@ const reservedTotal = computed(() => {
 </script>
 
 <template>
-  <div v-if="orders.length" ref="cardEl" class="status-card" :class="{ 'is-held': cardHeld }">
-    <div class="status-card-header">
+  <div v-if="hasContent" ref="cardEl" class="status-card" data-testid="construction-panel" :class="{ 'is-held': cardHeld }">
+    <div class="status-card-header" data-dock-handle>
       <span class="status-card-title">{{ t('hud.buildQueue.title') }}</span>
       <span class="status-card-count">{{ t('hud.buildQueue.slots', { used: world.hud.construction.slotsUsed, total: world.hud.construction.slots }) }}</span>
     </div>
@@ -154,39 +156,13 @@ const reservedTotal = computed(() => {
  * added here since only this construction panel is wired up yet.
  */
 .status-card {
-  position: absolute;
   left: 16px;
   top: 76px;
-  z-index: 10;
-  width: 240px;
-  padding: 14px 15px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 0;
 }
 /* The first build's card, until its confirmation reveals it (Q5). */
 .status-card.is-held,
 .status-row.is-held {
   visibility: hidden;
-}
-.status-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--panel-border);
-}
-.status-card-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text);
-}
-.status-card-count {
-  font-size: 12px;
-  color: var(--muted);
 }
 .status-row {
   display: flex;

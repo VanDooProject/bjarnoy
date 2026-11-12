@@ -1,11 +1,16 @@
 /**
  * Construction progress dial: pure helpers for the hex-shaped dial drawn over
- * a building under construction (see `HexMapRenderer.drawHighlight`). Kept
+ * a building under construction (drawn by `components/hud/BuildingHudDial.vue`). Kept
  * free of Pixi so the mapping and geometry are unit-testable.
  */
 import type { BuildOrderResponse } from '../../api/types';
 import type { AxialCoord } from '../hex/coords';
 import { isPendingOrder } from '../hud/pendingBuild';
+
+/** The elapsed arc, the sweep and the finish animation. */
+export const CONSTRUCTION_DIAL_ELAPSED_COLOR = 0xffd23f;
+/** The refused-build dial: red outline, flash and rings. */
+export const CONSTRUCTION_DIAL_REJECT_COLOR = 0xff4d3d;
 
 export interface ConstructionDial {
   coord: AxialCoord;
@@ -205,7 +210,7 @@ export function polylinePartial(points: { x: number; y: number }[], fraction: nu
   return out;
 }
 
-/** The dial label's font size in px at map scale 1 (`LABEL_STYLES.dialTime` is 12 px, drawn at 1.2x). */
+/** The dial label's font size in px at map scale 1 (12 px drawn at 1.2x: the HUD dial's label, see `HUD_TIER.labelBelow`). */
 export const DIAL_LABEL_BASE_PX = 12 * 1.2;
 /** A dial's time label is hidden while it would be smaller than this many on-screen px. */
 export const DIAL_MIN_LABEL_PX = 10;
@@ -219,6 +224,11 @@ export interface DialScale {
   showLabel: boolean;
 }
 
+/** `mapScale` lifted toward `target` by the eased hover progress `hoverT` (0..1, clamped): the one hover growth of the canvas dial and the HUD marker. */
+export function liftedScale(mapScale: number, target: number, hoverT: number): number {
+  return mapScale + (target - mapScale) * easeInOut(clamp01(hoverT));
+}
+
 /**
  * Dial sizing. `mapScale` is `camera.zoom / SETTLEMENT_DEFAULT_ZOOM`: the dial
  * scales exactly with the map (no floor, so it stays the same fraction of a
@@ -230,8 +240,7 @@ export interface DialScale {
  */
 export function dialScale(mapScale: number, hoverT: number, rejectScale = 1): DialScale {
   const t = clamp01(hoverT);
-  const eased = easeInOut(t);
-  const zs = mapScale + (Math.max(mapScale, 1) - mapScale) * eased;
+  const zs = liftedScale(mapScale, Math.max(mapScale, 1), t);
   return { zs, showLabel: t >= 0.5 || DIAL_LABEL_BASE_PX * zs * rejectScale >= DIAL_MIN_LABEL_PX };
 }
 
@@ -414,4 +423,30 @@ export function rejectDialAt(dials: ConstructionDial[], coord: AxialCoord, nowMs
   const here = (d: ConstructionDial) => d.coord.q === coord.q && d.coord.r === coord.r;
   if (dials.some((d) => here(d) && d.endMs !== null)) return dials;
   return [...dials.filter((d) => !here(d)), { coord, startMs: null, endMs: null, state: 'pending', queuePosition: null, rejectedAtMs: nowMs }];
+}
+
+/**
+ * What a dial shows at `nowMs`, for every surface that draws one (the canvas and the building HUD's marker dial): the finish
+ * or rejection animation frame while one plays, else the order's own state. Null once a finish / rejection has played out (the
+ * dial is pruned then).
+ */
+export type DialPhase =
+  | { kind: 'finish'; frame: DialFinishFrame }
+  | { kind: 'reject'; frame: DialRejectFrame }
+  | { kind: 'pending' }
+  | { kind: 'queued'; position: number | null }
+  | { kind: 'building'; progress: number; remaining: number | null };
+
+export function dialPhase(d: ConstructionDial, nowMs: number, reducedMotion: boolean): DialPhase | null {
+  if (d.rejectedAtMs !== undefined) {
+    const frame = dialRejectFrame(nowMs - d.rejectedAtMs, reducedMotion);
+    return frame ? { kind: 'reject', frame } : null;
+  }
+  if (d.endMs !== null && nowMs >= d.endMs) {
+    const frame = dialFinishFrame(nowMs - d.endMs);
+    return frame ? { kind: 'finish', frame } : null;
+  }
+  if (d.state === 'pending') return { kind: 'pending' };
+  if (d.state === 'queued') return { kind: 'queued', position: d.queuePosition };
+  return { kind: 'building', progress: dialProgress(d, nowMs), remaining: dialRemainingSeconds(d, nowMs) };
 }

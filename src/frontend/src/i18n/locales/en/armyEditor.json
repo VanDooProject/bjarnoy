@@ -5,6 +5,14 @@
   "empty": "No armies in the field.",
   "editError": "Could not edit the army.",
   "unitsEmpty": "empty",
+  "col": {
+    "mission": "Mission",
+    "units": "Units",
+    "provisions": "Provisions",
+    "loot": "Loot carried",
+    "position": "Position"
+  },
+  "lootLine": "{wood} wood, {stone} stone, {food} food, {iron} iron",
   "where": {
     "atHome": "at home",
     "supporting": "supporting",

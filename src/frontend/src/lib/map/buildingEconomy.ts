@@ -272,9 +272,21 @@ export function buildingStatsAt(
   tile: AxialCoord & { bog?: Tile['bog'] },
   getTile: (q: number, r: number) => Tile,
 ): BuildingLevelStats {
+  const { matchingNeighbours, onLake } = boostContextAt(type, tile, getTile);
+  return buildingStatsFor(type, level, matchingNeighbours, onLake);
+}
+
+/** The map-dependent inputs of `buildingStatsFor` for a building of `type` standing on `tile`. */
+export function boostContextAt(
+  type: BuildingKind,
+  tile: AxialCoord & { bog?: Tile['bog'] },
+  getTile: (q: number, r: number) => Tile,
+): { matchingNeighbours: number; onLake: boolean } {
   const boostTerrain = BOOST_TERRAIN[type];
-  const matching = boostTerrain ? matchingNeighbourCount(tile, boostTerrain, getTile) : 0;
-  return buildingStatsFor(type, level, matching, type === 'fishinghut' && tile.bog?.kind === 'half');
+  return {
+    matchingNeighbours: boostTerrain ? matchingNeighbourCount(tile, boostTerrain, getTile) : 0,
+    onLake: type === 'fishinghut' && tile.bog?.kind === 'half',
+  };
 }
 
 /** Whether any of `tile`'s six direct neighbours is one of `terrains`. */
@@ -521,6 +533,7 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   greatstorehouse: { wood: 300, stone: 260, food: 0, iron: 0 },
   archeryrange: { wood: 140, stone: 100, food: 0, iron: 0 },
   siegeworkshop: { wood: 220, stone: 160, food: 0, iron: 0 },
+  beachcamp: { wood: 0, stone: 0, food: 0, iron: 0 },
   dockyard: { wood: 200, stone: 120, food: 0, iron: 0 },
   barracks: { wood: 130, stone: 110, food: 0, iron: 0 },
   sawmill: SMALL_BUILDING_COST,

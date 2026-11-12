@@ -51,6 +51,21 @@ public class TrainingAndGarrisonTests
     }
 
     [Fact]
+    public void Training_settlers_costs_exactly_the_catalogue_price_per_unit()
+    {
+        // The settler price is flat: it does not scale with the settlements a player holds.
+        var settlement = Found(
+            longhouseLevel: 10, stock: 10_000,
+            extraBuildings: new PlacedBuilding(new HexCoord(8, 8), BuildingType.CartWorkshop, 1));
+        var order = Plan(settlement, UnitType.Settler, 5, T0);
+
+        var queued = settlement.EnqueueTraining([order], T0);
+
+        var expected = UnitCatalogue.Get(UnitType.Settler).TrainingCost * 5;
+        Assert.Equal(settlement.Resources.At(T0) - expected, queued.Resources.At(T0));
+    }
+
+    [Fact]
     public void A_unit_below_its_longhouse_requirement_is_refused()
     {
         var settlement = Found(longhouseLevel: 1);
@@ -227,13 +242,12 @@ public class TrainingAndGarrisonTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = [new UnitStack(UnitType.Berserker, 50)],
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: 20, Iron: 1_000_000),
                 production with { Food = production.Food - (50 * UnitCatalogue.Get(UnitType.Berserker).UpkeepPerHour) },
                 capacity,
                 T0),
-        };
+        }.WithGarrison([new UnitStack(UnitType.Berserker, 50)]);
 
         var result = settlement.SettleTo(T0.AddDays(30));
 
@@ -249,9 +263,9 @@ public class TrainingAndGarrisonTests
         var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, longhouseLevel)]);
         var berserkerUpkeep = UnitCatalogue.Get(UnitType.Berserker).UpkeepPerHour;
 
-        // 40 Berserkers cost 80/h; the longhouse alone makes 60/h of food, so
+        // 80 Berserkers (upkeep 1) cost 80/h; the longhouse alone makes 60/h of food, so
         // the net rate starts at -20/h.
-        var garrison = new List<UnitStack> { new(UnitType.Berserker, 40) };
+        var garrison = new List<UnitStack> { new(UnitType.Berserker, 80) };
         var netFoodRate = production.Food - (garrison[0].Count * berserkerUpkeep);
 
         var settlement = SettlementWith(longhouseLevel, garrison, netFoodRate, foodStock: 10);
@@ -261,8 +275,8 @@ public class TrainingAndGarrisonTests
         Assert.True(result.Changed);
         var death = Assert.Single(result.Deaths);
         Assert.Equal(UnitType.Berserker, death.Type);
-        Assert.Equal(10, death.Count); // ceil(20 / 2) units needed to zero the deficit
-        Assert.Equal(30, Assert.Single(result.Settlement.Garrison).Count);
+        Assert.Equal(20, death.Count); // ceil(20 / 1) units needed to zero the deficit
+        Assert.Equal(60, Assert.Single(result.Settlement.Garrison).Count);
         Assert.True(result.Settlement.Resources.RatePerHour.Food >= 0);
     }
 
@@ -276,10 +290,10 @@ public class TrainingAndGarrisonTests
 
         var garrison = new List<UnitStack>
         {
-            new(UnitType.Spearman, 100),
+            new(UnitType.Spearman, 400),
             new(UnitType.Berserker, 10),
         };
-        var totalUpkeep = (100 * spearmanUpkeep) + (10 * berserkerUpkeep);
+        var totalUpkeep = (400 * spearmanUpkeep) + (10 * berserkerUpkeep);
         var netFoodRate = production.Food - totalUpkeep;
 
         var settlement = SettlementWith(longhouseLevel, garrison, netFoodRate, foodStock: 5);
@@ -287,7 +301,7 @@ public class TrainingAndGarrisonTests
         var result = settlement.SettleTo(T0.AddHours(1));
 
         Assert.Equal(2, result.Deaths.Count);
-        // Berserker (upkeep 2/unit) is the highest-upkeep stack, so it is
+        // Berserker (upkeep 1/unit) is the highest-upkeep stack, so it is
         // fully wiped out first even though wiping it out alone is not
         // enough; the shortfall then comes out of the Spearman stack.
         Assert.Equal(UnitType.Berserker, result.Deaths[0].Type);
@@ -297,7 +311,7 @@ public class TrainingAndGarrisonTests
         var remainingSpearmen = result.Settlement.Garrison.Single(s => s.Type == UnitType.Spearman).Count;
         Assert.DoesNotContain(result.Settlement.Garrison, s => s.Type == UnitType.Berserker);
         Assert.True(result.Settlement.Resources.RatePerHour.Food >= 0);
-        Assert.Equal(100 - result.Deaths[1].Count, remainingSpearmen);
+        Assert.Equal(400 - result.Deaths[1].Count, remainingSpearmen);
     }
 
     [Fact]
@@ -317,13 +331,12 @@ public class TrainingAndGarrisonTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = [],
-            Garrison = garrison,
             Resources = ResourcePool.Create(
-                new ResourceAmounts(Wood: 0, Stone: 0, Food: 2, Iron: 0),
+                new ResourceAmounts(Wood: 0, Stone: 0, Food: 0.5, Iron: 0),
                 new ResourceAmounts(Wood: 0, Stone: 0, Food: netFoodRate, Iron: 0),
                 ResourceAmounts.Uniform(1000),
                 T0),
-        };
+        }.WithGarrison(garrison);
 
         var result = settlement.SettleTo(T0.AddHours(1));
 
@@ -372,13 +385,12 @@ public class TrainingAndGarrisonTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = homeGarrison,
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: 10, Iron: 1_000_000),
                 production with { Food = production.Food - homeUpkeep - guestUpkeep },
                 ResourceAmounts.Uniform(1_000_000),
                 T0),
-        };
+        }.WithGarrison(homeGarrison);
 
         var result = settlement.SettleTo(T0.AddHours(1), guestStacks: guestStacks);
 
@@ -397,10 +409,10 @@ public class TrainingAndGarrisonTests
         var berserkerUpkeep = UnitCatalogue.Get(UnitType.Berserker).UpkeepPerHour;
 
         // Same unit type on both sides so the pooled starvation pass has a
-        // single type to kill from, split 30 home / 10 guest — 3:1.
-        var homeGarrison = new List<UnitStack> { new(UnitType.Berserker, 30) };
-        var guestStacks = new List<UnitStack> { new(UnitType.Berserker, 10) };
-        var totalUpkeep = berserkerUpkeep * 40;
+        // single type to kill from, split 60 home / 20 guest — 3:1.
+        var homeGarrison = new List<UnitStack> { new(UnitType.Berserker, 60) };
+        var guestStacks = new List<UnitStack> { new(UnitType.Berserker, 20) };
+        var totalUpkeep = berserkerUpkeep * 80;
         var netFoodRate = production.Food - totalUpkeep;
 
         var settlement = new Settlement
@@ -409,13 +421,12 @@ public class TrainingAndGarrisonTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = homeGarrison,
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: 10, Iron: 1_000_000),
                 production with { Food = netFoodRate },
                 ResourceAmounts.Uniform(1_000_000),
                 T0),
-        };
+        }.WithGarrison(homeGarrison);
 
         var result = settlement.SettleTo(T0.AddHours(1), guestStacks: guestStacks);
 
@@ -444,12 +455,11 @@ public class TrainingAndGarrisonTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = garrison,
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: foodStock, Iron: 1_000_000),
                 production with { Food = netFoodRate },
                 capacity,
                 T0),
-        };
+        }.WithGarrison(garrison);
     }
 }

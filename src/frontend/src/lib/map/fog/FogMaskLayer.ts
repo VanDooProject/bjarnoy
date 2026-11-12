@@ -6,7 +6,7 @@
 import { BufferImageSource, GlProgram, Mesh, MeshGeometry, Shader, Texture, UniformGroup } from 'pixi.js';
 import { noiseLatticeTexture } from '../shaderNoise';
 import { FOG_FRAGMENT, FOG_VERTEX, MAX_ARMY_VISION_SOURCES } from './fogShader';
-import { FOG_MIST_OPAQUE_AT_RAMP, NOISE_REACH } from './fogRamp';
+import { ARMY_FOG_WHITE_MARGIN, ARMY_FOG_WHITE_OFFSET, FOG_MIST_OPAQUE_AT_RAMP, NOISE_REACH } from './fogRamp';
 
 export type FogTier = 'outOfSight' | 'unknown';
 
@@ -30,8 +30,7 @@ export interface ArmyVisionSource {
  */
 export const ARMY_FOG_BLACK_OFFSET = -0.25;
 export const ARMY_FOG_BLACK_MARGIN = 2;
-export const ARMY_FOG_WHITE_OFFSET = 0.75;
-export const ARMY_FOG_WHITE_MARGIN = 6;
+export { ARMY_FOG_WHITE_OFFSET, ARMY_FOG_WHITE_MARGIN };
 
 /**
  * How far from a troop, in hex-euclidean distance, its fog can show the ground: past
@@ -39,15 +38,22 @@ export const ARMY_FOG_WHITE_MARGIN = 6;
  * (the same bound the settlement terrain cull uses). HexMapRenderer's terrain cull draws ground out to here.
  */
 export function armyFogClearReachHexes(visionRadiusHexes: number): number {
-  return visionRadiusHexes + ARMY_FOG_WHITE_OFFSET + ARMY_FOG_WHITE_MARGIN * FOG_MIST_OPAQUE_AT_RAMP;
+  return visionRadiusHexes + ARMY_MIST_OPAQUE_MARGIN_HEXES;
 }
+
+/**
+ * How far past a troop's vision radius the ground is still visible through its mist (5.55): the part of `armyFogClearReachHexes`
+ * that does not depend on the radius. The backend's `FogVisionRadii.ArmyMistOpaqueMargin` decides which rival data to deliver
+ * from the same numbers.
+ */
+export const ARMY_MIST_OPAQUE_MARGIN_HEXES = ARMY_FOG_WHITE_OFFSET + ARMY_FOG_WHITE_MARGIN * FOG_MIST_OPAQUE_AT_RAMP;
 
 // --- Vision-edge shaping (fogShader.ts's tierAlpha) ------------------------
 //
 // Everything below is in *ramp units*: 0 is the tier's own ring, 1 is the
 // generator's full margin for that tier — 14 hexes for unknown
-// (FOG_RAMP_MARGIN_HEXES / UNKNOWN_MARGIN_HEXES /
-// FogMaskOptions.UnknownMarginHexes, which all have to agree), 2 for
+// (UNKNOWN_RAMP_MARGIN_HEXES in fogRamp.ts, which
+// FogMaskOptions.UnknownMarginHexes has to equal), 2 for
 // out-of-sight. So 0.1 of the unknown ramp is 1.4 hexes, and 0.1 of the
 // out-of-sight ramp is a fifth of one.
 
