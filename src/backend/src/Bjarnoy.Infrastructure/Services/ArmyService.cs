@@ -162,10 +162,31 @@ public sealed class ArmyService(
     /// <param name="fromSpot">
     /// The garrison spot (longhouse, tower or dock hex) of the settlement the units leave from; it becomes the army's home spot.
     /// </param>
-    public async Task<ArmyDispatchResult> DispatchAsync(
+    public Task<ArmyDispatchResult> DispatchAsync(
         Guid settlementId,
         HexCoord fromSpot,
         IReadOnlyList<UnitStack> unitCounts,
+        IReadOnlyList<HexCoord> waypoints,
+        HexCoord? destination,
+        double provisions,
+        ArmyMission mission = ArmyMission.Move,
+        Guid? targetSettlementId = null,
+        HexCoord? targetBuildingCoord = null,
+        CancellationToken cancellationToken = default) =>
+        DispatchAsync(
+            settlementId, [(fromSpot, unitCounts)], waypoints, destination, provisions, mission, targetSettlementId, targetBuildingCoord,
+            cancellationToken);
+
+    /// <summary>
+    /// <see cref="DispatchAsync(Guid, HexCoord, IReadOnlyList{UnitStack}, IReadOnlyList{HexCoord}, HexCoord?, double, ArmyMission, Guid?, HexCoord?, CancellationToken)"/>
+    /// for units standing at one or several garrison spots. With one group the army leaves its spot, which becomes its home spot; with
+    /// several, each group leaves its own spot as an army of its own and they meet on the way
+    /// (<see cref="Army.PlanGatheredDispatch"/>). Answers with the one army the caller reports: the group that reaches the meeting first.
+    /// </summary>
+    /// <param name="groups">The units of each garrison spot they leave from.</param>
+    public async Task<ArmyDispatchResult> DispatchAsync(
+        Guid settlementId,
+        IReadOnlyList<(HexCoord Spot, IReadOnlyList<UnitStack> Units)> groups,
         IReadOnlyList<HexCoord> waypoints,
         HexCoord? destination,
         double provisions,
@@ -237,7 +258,7 @@ public sealed class ArmyService(
         if (mission == ArmyMission.Hunt)
         {
             (effectiveDestination, targetCampCoord, targetCampIsWater, targetCampIsSand) = await ResolveHuntCampAsync(
-                settlement.WorldId, effectiveDestination, fromSpot,
+                settlement.WorldId, effectiveDestination, groups[0].Spot,
                 now, sampler.TerrainAt, cancellationToken).ConfigureAwait(false);
         }
 
@@ -295,23 +316,56 @@ public sealed class ArmyService(
             isCampSiteOccupied = hex => campSiteOccupied && hex == campSite;
         }
 
-        var decision = Army.PlanDispatch(
-            settled, fromSpot, unitCounts, provisions, waypoints, effectiveDestination, now, armyId, sampler.TerrainAt,
-            mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
-            mission is ArmyMission.Attack or ArmyMission.Raid or ArmyMission.Support ? targetBuildingCoord : null, targetClaimDiscs,
-            isHexFoundable, renownAndSlotAllowed, session.SpeedFactor, rivers.IsRiver, rivers.IsWide,
-            dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater,
-            targetCampIsSand: targetCampIsSand, targetSpots: targetSpots, isCampSiteOccupied: isCampSiteOccupied);
+        var targetSettlement = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null;
+        var targetBuilding = mission is ArmyMission.Attack or ArmyMission.Raid or ArmyMission.Support ? targetBuildingCoord : null;
 
-        if (!decision.Accepted)
+        // One spot: the army leaves it at once. Several: each group leaves its own spot and they meet on the way. Everything
+        // above and below is the same for both; only the planner differs.
+        Settlement dispatchedFrom;
+        List<Army> newArmies;
+        List<Gathering> newGatherings = [];
+        Army reported;
+        if (groups.Count == 1)
         {
-            // Even a refused dispatch may have completed queued work while
-            // settling, which is a real change worth keeping.
-            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
-            return new ArmyDispatchResult(decision.Rejection);
+            var decision = Army.PlanDispatch(
+                settled, groups[0].Spot, groups[0].Units, provisions, waypoints, effectiveDestination, now, armyId, sampler.TerrainAt,
+                mission, targetSettlement, targetBuilding, targetClaimDiscs,
+                isHexFoundable, renownAndSlotAllowed, session.SpeedFactor, rivers.IsRiver, rivers.IsWide,
+                dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater,
+                targetCampIsSand: targetCampIsSand, targetSpots: targetSpots, isCampSiteOccupied: isCampSiteOccupied);
+            if (!decision.Accepted)
+            {
+                // Even a refused dispatch may have completed queued work while
+                // settling, which is a real change worth keeping.
+                await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
+                return new ArmyDispatchResult(decision.Rejection);
+            }
+
+            dispatchedFrom = decision.Settlement!;
+            reported = decision.Army!;
+            newArmies = [reported];
+        }
+        else
+        {
+            var decision = Army.PlanGatheredDispatch(
+                settled, groups, provisions, waypoints, effectiveDestination, now, Guid.CreateVersion7, sampler.TerrainAt,
+                mission, targetSettlement, targetBuilding, targetClaimDiscs,
+                isHexFoundable, renownAndSlotAllowed, session.SpeedFactor, rivers.IsRiver, rivers.IsWide,
+                dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater,
+                targetCampIsSand: targetCampIsSand, targetSpots: targetSpots, isCampSiteOccupied: isCampSiteOccupied);
+            if (!decision.Accepted)
+            {
+                await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
+                return new ArmyDispatchResult(decision.Rejection);
+            }
+
+            dispatchedFrom = decision.Settlement!;
+            reported = decision.Reported!;
+            newArmies = [.. decision.Armies!];
+            newGatherings = [.. decision.Gatherings!];
         }
 
-        session.Apply(settlementId, decision.Settlement!);
+        session.Apply(settlementId, dispatchedFrom);
         await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         if (mission == ArmyMission.Hunt && settled.TroopsTrained)
         {
@@ -321,18 +375,31 @@ public sealed class ArmyService(
             settlement.HuntStarted = true;
         }
 
-        var armyEntity = new ArmyEntity { Id = armyId, SettlementId = settlementId };
-        armyEntity.ApplyDomain(decision.Army!);
-        _dbContext.Armies.Add(armyEntity);
+        foreach (var gathering in newGatherings)
+        {
+            _dbContext.Gatherings.Add(GatheringEntity.From(gathering));
+        }
+
+        ArmyEntity? reportedEntity = null;
+        foreach (var army in newArmies)
+        {
+            var entity = new ArmyEntity { Id = army.Id, SettlementId = settlementId };
+            entity.ApplyDomain(army);
+            _dbContext.Armies.Add(entity);
+            if (army.Id == reported.Id)
+            {
+                reportedEntity = entity;
+            }
+        }
 
         await SaveAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
-            "Settlement {SettlementId} dispatched army {ArmyId} ({Count} stack(s)) to {Destination}, arriving {ArrivesAt}.",
-            settlementId, armyId, decision.Army!.Stacks.Count, effectiveDestination,
-            ((ArmyLocation.InTransit)decision.Army.Location).Movement.ArrivesAt);
+            "Settlement {SettlementId} dispatched {Count} army group(s) ({ReportedId} first) to {Destination}, arriving {ArrivesAt}.",
+            settlementId, newArmies.Count, reported.Id, effectiveDestination,
+            ((ArmyLocation.InTransit)reported.Location).Movement.ArrivesAt);
 
-        return new ArmyDispatchResult(DispatchRejection.None, armyEntity);
+        return new ArmyDispatchResult(DispatchRejection.None, reportedEntity);
     }
 
     /// <summary>
@@ -933,6 +1000,7 @@ public sealed class ArmyService(
             .Include(a => a.Settlement!).ThenInclude(s => s.Buildings)
             .Include(a => a.Stacks)
             .Include(a => a.TargetSettlement)
+            .Include(a => a.Gathering)
             .Where(a => a.Settlement!.WorldId == worldId)
             .OrderBy(a => a.Id)
             .ToListAsync(cancellationToken);
@@ -1935,6 +2003,7 @@ public sealed class ArmyService(
         _dbContext.Armies
             .Include(a => a.Stacks)
             .Include(a => a.TargetSettlement)
+            .Include(a => a.Gathering)
             .Include(a => a.Settlement!).ThenInclude(s => s.World)
             .Include(a => a.Settlement!).ThenInclude(s => s.Owner)
             .Include(a => a.Settlement!).ThenInclude(s => s.Buildings)

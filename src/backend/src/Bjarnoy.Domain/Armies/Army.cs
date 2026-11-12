@@ -109,7 +109,7 @@ public sealed record WallRerouteResult(Army Army, HexCoord? StuckAt);
 /// terrain as impassable either way.
 /// </para>
 /// </remarks>
-public sealed record Army
+public sealed partial record Army
 {
     public required Guid Id { get; init; }
 
@@ -123,6 +123,13 @@ public sealed record Army
     public required HexCoord HomeSpot { get; init; }
 
     public IReadOnlyList<UnitStack> Stacks { get; init; } = [];
+
+    /// <summary>
+    /// The <see cref="Gathering"/> this army is walking to or waiting at (a group of an army sent from several garrison spots), or
+    /// <see langword="null"/> for an army that is not part of one. Recalling, a field order, a split, a lost fight and a turn-around
+    /// all clear it.
+    /// </summary>
+    public Guid? GatheringId { get; init; }
 
     /// <summary>
     /// True when any stack is a <see cref="UnitClass.Ship"/> (the rest are passengers, see this file's own class
@@ -374,59 +381,19 @@ public sealed record Army
         // Any request with at least one ship is a fleet, for every mission; the non-ship stacks in it are its
         // passengers (docs/design/economy.md, "Troops on ships"). Whether a requested unit type even exists is
         // Settlement.PlanDispatch's job below.
-        var isFoundingConvoy = mission == ArmyMission.Found;
         var isFleet = normalisedRequest.Any(s => UnitCatalogue.Get(s.Type).Class == UnitClass.Ship);
 
-        // Ship slots, hunt camp, target settlement, target building and fleet shore rules: shared with
-        // PlanFieldOrder, which holds a field order to exactly the same targets.
-        var target = ValidateMissionTarget(
-            mission, normalisedRequest, settlement.Id, targetSettlementId, targetBuildingCoord, targetClaimDiscs,
-            destination, targetCampCoord, targetCampIsWater, targetCampIsSand, terrainAt, giants, targetSpots);
-        if (target.Rejection != DispatchRejection.None)
+        var check = ValidateDispatchRequest(
+            mission, normalisedRequest, settlement.Id, targetSettlementId, targetBuildingCoord, targetClaimDiscs, destination,
+            targetCampCoord, targetCampIsWater, targetCampIsSand, terrainAt, giants, targetSpots, isHexFoundable,
+            renownAndSlotAllowed, isCampSiteOccupied);
+        if (check.Rejection != DispatchRejection.None)
         {
-            return DispatchDecision.Rejected(target.Rejection);
+            return DispatchDecision.Rejected(check.Rejection);
         }
 
-        var routeDestination = target.RouteDestination;
-
-        if (isFoundingConvoy)
-        {
-            var settlerCount = normalisedRequest
-                .Where(s => s.Type == UnitType.Settler)
-                .Sum(s => s.Count);
-            if (settlerCount != Founding.RequiredSettlers)
-            {
-                return DispatchDecision.Rejected(DispatchRejection.WrongSettlerCount);
-            }
-
-            if (!renownAndSlotAllowed)
-            {
-                return DispatchDecision.Rejected(DispatchRejection.RenownOrSettlementSlotRequirementNotMet);
-            }
-
-            if (isHexFoundable is not null && !isHexFoundable(destination))
-            {
-                return DispatchDecision.Rejected(DispatchRejection.TargetHexNotFoundable);
-            }
-        }
-
+        var routeDestination = check.RouteDestination;
         var isCampMission = mission == ArmyMission.SetUpCamp;
-        if (isCampMission)
-        {
-            var builderCount = normalisedRequest
-                .Where(s => s.Type == UnitType.CampBuilder)
-                .Sum(s => s.Count);
-            if (builderCount != BeachCamp.RequiredBuilders)
-            {
-                return DispatchDecision.Rejected(DispatchRejection.WrongCampBuilderCount);
-            }
-
-            var siteRejection = BeachCamp.CheckSite(destination, terrainAt, giants, isCampSiteOccupied);
-            if (siteRejection != DispatchRejection.None)
-            {
-                return DispatchDecision.Rejected(siteRejection);
-            }
-        }
 
         var settlementDecision = settlement.PlanDispatch(fromSpot, requestedUnits, provisions, now);
         if (!settlementDecision.Accepted)
@@ -453,67 +420,34 @@ public sealed record Army
         // every HexPathfinder call for this dispatch.
         var isLandUnit = !isFleet;
 
-        // A land army's Attack/Support destination is always a real settlement's own centre — inherently land — so
-        // this check applies to it exactly as before fleets existed. A fleet's Attack/Raid destination is the shore
-        // building it was sent at (a shoreline land hex or a sea hex), and its Support destination is the settlement
-        // centre, which is land; landing on land is exactly the point for a fleet (see FindPath's isLandUnit remarks
-        // on the beaching/harbor exemption it applies at both route endpoints), so this generic sea-only check is
-        // skipped for those missions. The real fleet-reachability gate for Attack/Raid is the shore-building check
-        // above, not this one. A sea Found convoy's destination is, by definition, the land hex it means to land
-        // settlers on (issue #55 §2) — same beaching exemption, no separate shoreline check needed:
-        // HexPathfinder can only ever reach that land hex by sea if it is adjacent to reachable open water, which is
-        // exactly what "shoreline" means (see Shoreline.IsShoreline); any other land hex fails as UnreachableLeg below.
-        if (!SkipsDestinationTerrainCheck(isFleet, mission, targetCampIsSand) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
+        var endpointRejection = ValidateEndpoints(isFleet, mission, targetCampIsSand, routeDestination, waypoints, terrainAt);
+        if (endpointRejection != DispatchRejection.None)
         {
-            return DispatchDecision.Rejected(isFleet
-                ? DispatchRejection.DestinationNotSea
-                : DispatchRejection.DestinationNotLand);
-        }
-
-        foreach (var waypoint in waypoints)
-        {
-            if (!terrainAt(waypoint).IsTraversable(isLandUnit))
-            {
-                return DispatchDecision.Rejected(isFleet
-                    ? DispatchRejection.WaypointNotSea
-                    : DispatchRejection.WaypointNotLand);
-            }
+            return DispatchDecision.Rejected(endpointRejection);
         }
 
         // The army leaves from (and returns to) the garrison spot its units stood at.
-        var origin = fromSpot;
-        List<HexCoord> stops = [origin, .. waypoints, routeDestination];
-        List<HexCoord> fullPath = [origin];
-
-        for (var i = 0; i < stops.Count - 1; i++)
+        var router = new Router(terrainAt, speedFactor, isRiver, isWideRiver, walls);
+        var (fullPath, routeRejection) = router.Chain(fromSpot, [.. waypoints, routeDestination], isLandUnit);
+        if (fullPath is null)
         {
-            var search = HexPathfinder.Search(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
-            if (search.Path is not { Count: > 0 } leg)
-            {
-                return DispatchDecision.Rejected(
-                    search.LimitReached ? DispatchRejection.RouteTooLong
-                    : isFleet ? DispatchRejection.NoSeaRoute
-                    : DispatchRejection.UnreachableLeg);
-            }
-
-            // Drop the joint hex: leg[0] is stops[i], already the last entry added.
-            fullPath.AddRange(leg.Skip(1));
+            return DispatchDecision.Rejected(routeRejection);
         }
 
         var stacks = settlementDecision.Stacks!;
         var speed = ShipCargo.Pace(stacks);
         var upkeepPerHour = stacks.Sum(s => UnitCatalogue.Get(s.Type).UpkeepPerHour * s.Count);
 
-        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
-        var edgeHours = HexPathfinder.EdgeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var outbound = router.Times(fullPath, speed, isLandUnit);
+        var cumulativeHours = outbound.Cumulative;
+        var edgeHours = outbound.Edges;
 
         // The way home is the way out walked backwards: a second search from the destination would be a fresh
         // search with its own node budget and could give up on a trip the outbound search just planned.
-        List<HexCoord> returnPath = [.. fullPath];
-        returnPath.Reverse();
-
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
-        var returnEdgeHours = HexPathfinder.EdgeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnPath = Reversed(fullPath);
+        var homeWay = router.Times(returnPath, speed, isLandUnit);
+        var returnCumulativeHours = homeWay.Cumulative;
+        var returnEdgeHours = homeWay.Edges;
 
         // Every mission, Support included, needs the full round trip: a guest
         // does not burn its own provisions while hosted (Settlement.SettleTo
@@ -549,6 +483,111 @@ public sealed record Army
         };
 
         return DispatchDecision.Accept(dispatchedFrom, army);
+    }
+
+    /// <summary>
+    /// The rules a dispatch holds its request to before any unit leaves the garrison, in one place for a dispatch from one spot
+    /// (<see cref="PlanDispatch"/>) and one from several (<see cref="PlanGatheredDispatch"/>): the mission and target rules
+    /// (<see cref="ValidateMissionTarget"/>), the settler count, renown and free site of a <see cref="ArmyMission.Found"/> convoy, and the
+    /// builder count and site of a <see cref="ArmyMission.SetUpCamp"/> army. <paramref name="units"/> are all the units that travel.
+    /// </summary>
+    private static (DispatchRejection Rejection, HexCoord RouteDestination) ValidateDispatchRequest(
+        ArmyMission mission,
+        IReadOnlyList<UnitStack> units,
+        Guid homeSettlementId,
+        Guid? targetSettlementId,
+        HexCoord? targetBuildingCoord,
+        IReadOnlyList<(HexCoord Centre, int Radius)>? targetClaimDiscs,
+        HexCoord destination,
+        HexCoord? targetCampCoord,
+        bool targetCampIsWater,
+        bool targetCampIsSand,
+        Func<HexCoord, Terrain> terrainAt,
+        IGiantIndex? giants,
+        IReadOnlyList<GarrisonSpot>? targetSpots,
+        Func<HexCoord, bool>? isHexFoundable,
+        bool renownAndSlotAllowed,
+        Func<HexCoord, bool>? isCampSiteOccupied)
+    {
+        // Ship slots, hunt camp, target settlement, target building and fleet shore rules: shared with
+        // PlanFieldOrder, which holds a field order to exactly the same targets.
+        var target = ValidateMissionTarget(
+            mission, units, homeSettlementId, targetSettlementId, targetBuildingCoord, targetClaimDiscs,
+            destination, targetCampCoord, targetCampIsWater, targetCampIsSand, terrainAt, giants, targetSpots);
+        if (target.Rejection != DispatchRejection.None)
+        {
+            return target;
+        }
+
+        if (mission == ArmyMission.Found)
+        {
+            var settlerCount = units
+                .Where(s => s.Type == UnitType.Settler)
+                .Sum(s => s.Count);
+            if (settlerCount != Founding.RequiredSettlers)
+            {
+                return (DispatchRejection.WrongSettlerCount, destination);
+            }
+
+            if (!renownAndSlotAllowed)
+            {
+                return (DispatchRejection.RenownOrSettlementSlotRequirementNotMet, destination);
+            }
+
+            if (isHexFoundable is not null && !isHexFoundable(destination))
+            {
+                return (DispatchRejection.TargetHexNotFoundable, destination);
+            }
+        }
+
+        if (mission == ArmyMission.SetUpCamp)
+        {
+            var builderCount = units
+                .Where(s => s.Type == UnitType.CampBuilder)
+                .Sum(s => s.Count);
+            if (builderCount != BeachCamp.RequiredBuilders)
+            {
+                return (DispatchRejection.WrongCampBuilderCount, destination);
+            }
+
+            var siteRejection = BeachCamp.CheckSite(destination, terrainAt, giants, isCampSiteOccupied);
+            if (siteRejection != DispatchRejection.None)
+            {
+                return (siteRejection, destination);
+            }
+        }
+
+        return target;
+    }
+
+    /// <summary>
+    /// The terrain rules for the hexes a dispatch names, shared by both dispatch planners: the route's end and every waypoint must be
+    /// traversable for the unit kind, except where a fleet lands (see <see cref="SkipsDestinationTerrainCheck"/>).
+    /// </summary>
+    private static DispatchRejection ValidateEndpoints(
+        bool isFleet, ArmyMission mission, bool targetCampIsSand, HexCoord routeDestination, IReadOnlyList<HexCoord> waypoints,
+        Func<HexCoord, Terrain> terrainAt)
+    {
+        var isLandUnit = !isFleet;
+
+        // A land army's Attack/Support destination is always a real settlement's own centre — inherently land. A fleet's
+        // Attack/Raid destination is the shore building it was sent at and its Support destination is the settlement centre; landing
+        // on land is exactly the point for a fleet (see HexPathfinder.FindPath's beaching exemption at both route endpoints), so the
+        // generic sea-only check is skipped for those missions, and for a sea Found convoy's landing hex (issue #55 §2).
+        if (!SkipsDestinationTerrainCheck(isFleet, mission, targetCampIsSand) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
+        {
+            return isFleet ? DispatchRejection.DestinationNotSea : DispatchRejection.DestinationNotLand;
+        }
+
+        foreach (var waypoint in waypoints)
+        {
+            if (!terrainAt(waypoint).IsTraversable(isLandUnit))
+            {
+                return isFleet ? DispatchRejection.WaypointNotSea : DispatchRejection.WaypointNotLand;
+            }
+        }
+
+        return DispatchRejection.None;
     }
 
     /// <summary>
@@ -1497,6 +1536,7 @@ public sealed record Army
             {
                 Location = new ArmyLocation.InTransit(returning),
                 Provisions = provisionsAtTurnAround,
+                GatheringId = null,
             };
 
             var outbound = new WalkedLeg(movement, movement.TurnAroundAt);
@@ -1605,7 +1645,7 @@ public sealed record Army
             RoutePlannedAt = now,
         };
 
-        return this with { Location = new ArmyLocation.InTransit(recallMovement), Provisions = provisionsNow };
+        return this with { Location = new ArmyLocation.InTransit(recallMovement), Provisions = provisionsNow, GatheringId = null };
     }
 
     /// <summary>
@@ -1648,7 +1688,7 @@ public sealed record Army
         {
             // No way home (a wall in the way): it stays where it fought, still protected from further fights, and starves
             // when the food runs out (docs/design/troop-movement-range.md §2a).
-            return WithProvisionsAt(battleInstant, provisionsNow).Strand(battleInstant, fromHex, immuneUntil);
+            return (this with { GatheringId = null }).WithProvisionsAt(battleInstant, provisionsNow).Strand(battleInstant, fromHex, immuneUntil);
         }
 
         var speed = TotalSpeed;
@@ -1671,7 +1711,7 @@ public sealed record Army
         };
 
         // The retreat departs at the battle instant, so the stored baseline is what the army carried then.
-        return (this with { Location = new ArmyLocation.InTransit(retreatMovement) }).WithProvisionsAt(battleInstant, provisionsNow);
+        return (this with { Location = new ArmyLocation.InTransit(retreatMovement), GatheringId = null }).WithProvisionsAt(battleInstant, provisionsNow);
     }
 
     /// <summary>
@@ -2124,6 +2164,7 @@ public sealed record Army
             Location = new ArmyLocation.InTransit(newMovement),
             Provisions = provisionsAtDeparture,
             Loot = isSplit ? default : army.Loot,
+            GatheringId = null,
             Mission = mission,
             TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             TargetBuildingCoord = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetBuildingCoord : null,
@@ -2751,9 +2792,6 @@ public enum DispatchRejection
 
     /// <summary>The garrison spot a <see cref="ArmyMission.Support"/> dispatch named is none of the target's, or cannot hold the army's units.</summary>
     SupportSpotCannotHold,
-
-    /// <summary>A dispatch listed units at more than one garrison spot; gathering from several spots on the way is not built yet.</summary>
-    UnitsAtSeveralSpots,
 }
 
 /// <summary>The outcome of asking to dispatch an army — mirrors <see cref="BuildDecision"/>.</summary>
@@ -2783,6 +2821,22 @@ public sealed record SettlementDispatchDecision(
 
     public static SettlementDispatchDecision Accept(Settlement settlement, IReadOnlyList<UnitStack> stacks) =>
         new(DispatchRejection.None, settlement, stacks);
+}
+
+/// <summary>
+/// The settlement-only half of dispatching an army from several garrison spots (<see cref="Settlement.PlanDispatch(IReadOnlyList{ValueTuple{HexCoord, IReadOnlyList{UnitStack}}}, double, DateTimeOffset)"/>):
+/// the settlement with every group's units and the food removed, and each group's normalised stacks.
+/// </summary>
+public sealed record GatheredSettlementDispatchDecision(
+    DispatchRejection Rejection, Settlement? Settlement = null, IReadOnlyList<(HexCoord Spot, IReadOnlyList<UnitStack> Units)>? GroupStacks = null)
+{
+    public bool Accepted => Rejection == DispatchRejection.None && Settlement is not null && GroupStacks is not null;
+
+    public static GatheredSettlementDispatchDecision Rejected(DispatchRejection reason) => new(reason);
+
+    public static GatheredSettlementDispatchDecision Accept(
+        Settlement settlement, IReadOnlyList<(HexCoord Spot, IReadOnlyList<UnitStack> Units)> groupStacks) =>
+        new(DispatchRejection.None, settlement, groupStacks);
 }
 
 /// <summary>A march to a garrison spot (<see cref="Army.PlanSpotMarch"/>): the army (no provisions yet) and the food its walk burns.</summary>

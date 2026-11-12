@@ -312,6 +312,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<DateTimeOffset?>("FieldBattleImmuneUntil")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("GatheringId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("HomeSpotQ")
                         .HasColumnType("integer");
 
@@ -386,6 +389,8 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("GatheringId");
 
                     b.HasIndex("SettlementId");
 
@@ -959,6 +964,63 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.HasIndex("FieldBattleReportId");
 
                     b.ToTable("field_battle_report_lines", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GatheringEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("DepartAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("HexQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("HexR")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("HomeSpotQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("HomeSpotR")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Mission")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ParentGatheringId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SettlementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Stops")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("TargetBuildingQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TargetBuildingR")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TargetCampQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TargetCampR")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("TargetSettlementId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentGatheringId");
+
+                    b.HasIndex("SettlementId");
+
+                    b.ToTable("gatherings", (string)null);
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GuildBoardPostEntity", b =>
@@ -2225,6 +2287,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyEntity", b =>
                 {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.GatheringEntity", "Gathering")
+                        .WithMany()
+                        .HasForeignKey("GatheringId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
                         .WithMany()
                         .HasForeignKey("SettlementId")
@@ -2235,6 +2302,8 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .WithMany()
                         .HasForeignKey("TargetSettlementId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Gathering");
 
                     b.Navigation("Settlement");
 
@@ -2362,6 +2431,24 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsRequired();
 
                     b.Navigation("FieldBattleReport");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GatheringEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.GatheringEntity", "ParentGathering")
+                        .WithMany()
+                        .HasForeignKey("ParentGatheringId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
+                        .WithMany()
+                        .HasForeignKey("SettlementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ParentGathering");
+
+                    b.Navigation("Settlement");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GuildBoardPostEntity", b =>
