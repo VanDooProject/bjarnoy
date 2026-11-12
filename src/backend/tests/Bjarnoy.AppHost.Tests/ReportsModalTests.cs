@@ -241,7 +241,7 @@ public class ReportsModalTests(AppHostFixture fixture)
         arrivedArmyResponse.EnsureSuccessStatusCode();
 
         var reports = await playerHttpClient.GetFromJsonAsync<BattleReportResponse[]>(
-            $"/api/v1/settlements/{playerSettlement.Id}/reports", cancellationToken);
+            $"/api/v1/worlds/{playerSettlement.WorldId}/reports", cancellationToken);
         var report = Assert.Single(reports!);
         // The rival garrison is empty, so any attacker with positive attack
         // power wins outright (BattleResolver.Resolve) — the attacker here

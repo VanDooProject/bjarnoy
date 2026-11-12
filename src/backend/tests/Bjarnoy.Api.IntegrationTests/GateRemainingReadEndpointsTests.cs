@@ -575,6 +575,45 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         Assert.Equal(2, rival!.Count);
     }
 
+    [Fact]
+    public async Task A_players_report_list_covers_all_their_settlements_and_survives_deleting_one()
+    {
+        using var client = Client();
+        var (worldId, mineId, mineOwnerId, rivalId, rivalOwnerId) = await TwoSettlementsAsync();
+        var secondId = await WithDbAsync(async db =>
+        {
+            var islandId = (await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == mineId, Ct)).IslandId;
+            var second = MakeSettlement(worldId, islandId, mineOwnerId, 20, 0);
+            db.Settlements.Add(second);
+            await db.SaveChangesAsync(Ct);
+            return second.Id;
+        });
+        var fromFirst = await PlantBattleReportAsync(mineId, rivalId);
+        var fromSecond = await PlantBattleReportAsync(rivalId, secondId);
+
+        SetOwner(client, mineOwnerId);
+        var before = await client.GetFromJsonAsync<List<BattleReportResponse>>($"/api/v1/worlds/{worldId}/reports", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(new[] { fromFirst, fromSecond }.Order(), before!.Select(r => r.Id).Order());
+        Assert.Equal("attacker", before!.Single(r => r.Id == fromFirst).ViewerSide);
+        Assert.Equal("defender", before!.Single(r => r.Id == fromSecond).ViewerSide);
+
+        // Deleting a settlement keeps the reports that mention it.
+        await WithDbAsync(async db =>
+        {
+            await db.Settlements.Where(s => s.Id == secondId).ExecuteDeleteAsync(Ct);
+            return 0;
+        });
+        var after = await client.GetFromJsonAsync<List<BattleReportResponse>>($"/api/v1/worlds/{worldId}/reports", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(2, after!.Count);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/v1/reports/{fromSecond}", Ct)).StatusCode);
+
+        // The rival sees its own two reports, and a stranger none.
+        SetOwner(client, rivalOwnerId);
+        Assert.Equal(2, (await client.GetFromJsonAsync<List<BattleReportResponse>>($"/api/v1/worlds/{worldId}/reports", SqliteApiFixture.StrictJson, Ct))!.Count);
+        SetOwner(client, Unique("stranger"));
+        Assert.Empty((await client.GetFromJsonAsync<List<BattleReportResponse>>($"/api/v1/worlds/{worldId}/reports", SqliteApiFixture.StrictJson, Ct))!);
+    }
+
     // -------------------------------------------------------- settlements/mine
 
     private async Task<(string UserName, string AccessToken, Guid UserId)> RegisterAsync(HttpClient client)
