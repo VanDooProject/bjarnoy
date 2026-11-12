@@ -38,7 +38,7 @@ import {
   markerFadeStep,
   type OcclusionCircle,
 } from './markerOcclusion';
-import { Application, Container, Graphics, GraphicsContext, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
+import { Application, Container, Graphics, GraphicsContext, Rectangle, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
 import { axialToOddQ, coordKey, hexesInRadius, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
@@ -2176,7 +2176,11 @@ export class HexMapRenderer {
   private bogEdgeOverPool: Graphics[] = [];
   private bogEdgeCache = new Map<string, { under: GraphicsContext | null; over: GraphicsContext | null }>();
   private bogEdgeCacheKey = '';
-  private waveLayer = new Graphics();
+  // World-mode wave squiggles: pooled Sprites sharing one baked squiggle texture (see bakeWaveTexture); a frame only
+  // moves them (drawWaves), `rebuildWaves` syncs the pool to the visible wave points.
+  private waveLayer = new Container();
+  private wavePool: Sprite[] = [];
+  private waveTexture: Texture | null = null;
   // docs/design/water-shader.md. Constructed in the constructor rather than
   // here because which view this is decides whether it draws a sea body at all
   // (§4.1), and `options` isn't in scope for a field initialiser.
@@ -5000,6 +5004,7 @@ export class HexMapRenderer {
     // as well as the per-frame stroking it feeds.
     if (WAVE_STROKE * this.camera.zoom < WAVE_MIN_STROKE_PX) {
       this.wavePoints = [];
+      this.syncWavePool();
       fogPerfStats.waveDrawnCount = 0;
       fogPerfStats.waveCulledCount = 0;
       return;
@@ -5045,15 +5050,66 @@ export class HexMapRenderer {
       }
     }
     this.wavePoints = points;
+    this.syncWavePool();
     fogPerfStats.waveDrawnCount = points.length;
     fogPerfStats.waveCulledCount = culled;
+  }
+
+  /**
+   * The one squiggle every wave sprite shares: today's two quadratic curves and round-capped stroke at WAVE_STROKE
+   * (world units), drawn once. 2 texels per world unit keeps it crisp up to zoom 2 (the squiggles are fully visible
+   * from zoom ~0.18); mipmaps keep it clean when minified. The anchor is the squiggle's start point, so a sprite's
+   * position is the same (x, y) the path used to start at.
+   */
+  private bakeWaveTexture(): Texture | null {
+    if (this.waveTexture) return this.waveTexture;
+    const renderer = this.app?.renderer;
+    if (!renderer) return null;
+    const bump = 4.5 * WAVE_SCALE;
+    const pad = WAVE_STROKE;
+    const g = new Graphics()
+      .moveTo(0, 0)
+      .quadraticCurveTo(WAVE_WIDTH / 4, -bump, WAVE_WIDTH / 2, 0)
+      .quadraticCurveTo((WAVE_WIDTH * 3) / 4, bump, WAVE_WIDTH, 0)
+      .stroke({ width: WAVE_STROKE, color: WAVE_COLOR, alpha: 1, cap: 'round' });
+    const frame = new Rectangle(-pad, -bump - pad, WAVE_WIDTH + 2 * pad, 2 * bump + 2 * pad);
+    this.waveTexture = renderer.generateTexture({
+      target: g,
+      frame,
+      resolution: 2,
+      antialias: true,
+      defaultAnchor: { x: pad / frame.width, y: (bump + pad) / frame.height },
+      textureSourceOptions: { autoGenerateMipmaps: true },
+    });
+    g.destroy();
+    return this.waveTexture;
+  }
+
+  /** Makes the pooled wave sprites match `wavePoints` (positions are set per frame by drawWaves). */
+  private syncWavePool() {
+    const count = this.wavePoints.length;
+    const texture = count > 0 ? this.bakeWaveTexture() : null;
+    if (texture) {
+      while (this.wavePool.length < count) {
+        const sprite = new Sprite(texture);
+        this.wavePool.push(sprite);
+        this.waveLayer.addChild(sprite);
+      }
+    }
+    for (let i = 0; i < this.wavePool.length; i++) {
+      const sprite = this.wavePool[i];
+      sprite.visible = texture !== null && i < count;
+      // Placed at the point's rest position so a sprite never shows at a stale spot before drawWaves animates it.
+      if (sprite.visible) sprite.position.set(this.wavePoints[i].x, this.wavePoints[i].y);
+    }
+    if (count === 0) this.waveLayer.visible = false;
   }
 
   // zip 7 prototype's `vr-swell`: each wave nudges up-and-right and back,
   // independently timed — not a scrolling/drifting pattern.
   private drawWaves() {
     if (this.wavePoints.length === 0) {
-      this.waveLayer.clear();
+      this.waveLayer.visible = false;
       fogPerfStats.waveDrawMs = 0;
       return;
     }
@@ -5067,24 +5123,21 @@ export class HexMapRenderer {
       Math.max(0, (strokePx - WAVE_MIN_STROKE_PX) / (WAVE_MIN_STROKE_PX * (WAVE_FADE_BAND - 1))),
     );
     if (fade <= 0) {
-      this.waveLayer.clear();
+      this.waveLayer.visible = false;
       fogPerfStats.waveDrawMs = 0;
       return;
     }
-    const alpha = WAVE_ALPHA * fade;
+    this.waveLayer.visible = true;
+    this.waveLayer.alpha = WAVE_ALPHA * fade;
     // Frozen water holds the squiggles at a fixed phase instead of the map animation clock (mapAnimMs).
     const now = this.waterMotion ? this.mapAnimMs : 0;
-    this.waveLayer.clear();
-    for (const p of this.wavePoints) {
+    const pool = this.wavePool;
+    const points = this.wavePoints;
+    const n = Math.min(points.length, pool.length);
+    for (let i = 0; i < n; i++) {
+      const p = points[i];
       const s = (Math.sin((now / p.periodMs) * Math.PI * 2 + p.phase) + 1) / 2;
-      const x = p.x + s * 7 * WAVE_SCALE;
-      const y = p.y - s * 3 * WAVE_SCALE;
-      const bump = 4.5 * WAVE_SCALE;
-      this.waveLayer
-        .moveTo(x, y)
-        .quadraticCurveTo(x + WAVE_WIDTH / 4, y - bump, x + WAVE_WIDTH / 2, y)
-        .quadraticCurveTo(x + (WAVE_WIDTH * 3) / 4, y + bump, x + WAVE_WIDTH, y)
-        .stroke({ width: WAVE_STROKE, color: WAVE_COLOR, alpha, cap: 'round' });
+      pool[i].position.set(p.x + s * 7 * WAVE_SCALE, p.y - s * 3 * WAVE_SCALE);
     }
     // Smoothed over roughly a second: this is a per-frame number and a raw
     // sample of it jitters too much to read off a panel that polls at 4Hz.
@@ -6889,11 +6942,10 @@ export class HexMapRenderer {
       // Leaving world mode: drop its flat-fill polygons (rebuildTerrain's
       // settlement branch never calls rebuildTerrainFlat, so terrainFlat is
       // never cleared by the normal draw path) and its wave squiggles
-      // (drawWaves, gated to world mode, is the only thing that ever clears
-      // waveLayer).
+      // (syncWavePool hides every sprite once wavePoints is empty).
       this.terrainFlat.clear();
-      this.waveLayer.clear();
       this.wavePoints = [];
+      this.syncWavePool();
       this.riverLayer.clear();
     }
 
@@ -6964,6 +7016,8 @@ export class HexMapRenderer {
     this.bogLakeLayer.destroy();
     // The cached bog edge contexts are only borrowed by the pooled Graphics, so the stage teardown below won't free them.
     this.clearBogEdgeCache();
+    this.waveTexture?.destroy(true);
+    this.waveTexture = null;
     this.app?.destroy(false, { children: true });
     this.app = null;
   }
