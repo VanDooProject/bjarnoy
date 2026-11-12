@@ -483,16 +483,22 @@ public class AttackResolverTests
         Assert.NotEqual(buildings, plan.Buildings);
     }
 
-    [Fact]
-    public void A_won_raid_from_a_fleet_with_siege_engines_on_board_takes_no_levels_off_a_beach_building()
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void A_fleet_with_siege_engines_aboard_damages_a_beach_building_only_in_an_attack(bool raid, bool sieges)
     {
         var farm = new PlacedBuilding(LandHex, BuildingType.Farm, 4);
         var buildings = Buildings(farm);
 
+        // 10 Karves carry 100 slots: 10 Axemen (2 each) and 8 Catapults (10 each) fit, so the engines reach the land fight.
         var plan = Attack(
-            [new(UnitType.Karve, 10), .. SiegeArmy], home: [new(UnitType.Spearman, 2)], buildings: buildings, target: LandHex, raid: true);
+            [new(UnitType.Karve, 10), new(UnitType.Axeman, 10), new(UnitType.Catapult, 8)],
+            home: [new(UnitType.Spearman, 2)], buildings: buildings, target: LandHex, raid: raid);
 
-        Assert.False(plan.LandSiege.Applied);
-        Assert.Equal(buildings, plan.Buildings);
+        Assert.Equal(BattleWinner.Attacker, plan.Winner);
+        Assert.Equal(8, Count(plan.AttackerSurvivors, UnitType.Catapult));
+        Assert.Equal(sieges, plan.LandSiege.Applied);
+        Assert.Equal(sieges, !buildings.SequenceEqual(plan.Buildings));
     }
 }
