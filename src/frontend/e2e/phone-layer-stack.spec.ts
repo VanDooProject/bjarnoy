@@ -30,6 +30,33 @@ test.describe('one layer at a time on a phone', { tag: '@g3' }, () => {
     await expect(bar).toBeVisible();
   });
 
+  test('the open player menu hides the top bar and stays tappable, and closing it brings the bar back', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await SettlementPage.found(page);
+    const bar = page.locator('.hud-bar');
+    await expect(bar).toBeVisible();
+
+    await page.getByTestId('returning-player-trigger').tap();
+    const menu = page.getByTestId('returning-player-menu');
+    await expect(menu).toBeVisible();
+    await expect(bar).toBeHidden();
+
+    // A tap on the menu's own row still works: Settings opens the settings modal, and the menu closes with it.
+    await page.getByTestId('returning-player-settings').tap();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(menu).toHaveCount(0);
+    await page.getByRole('button', { name: 'Back' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(bar).toBeVisible();
+
+    // Closing without picking (Escape) brings the bar back too.
+    await page.getByTestId('returning-player-trigger').tap();
+    await expect(bar).toBeHidden();
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await expect(bar).toBeVisible();
+  });
+
   test('a route modal opened over the training window hides it, and closing the modal brings it back', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);

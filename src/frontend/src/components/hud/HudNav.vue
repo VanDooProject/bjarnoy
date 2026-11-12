@@ -5,8 +5,8 @@
 // both real features now. The avatar carries the player's nickname initials
 // (or the game's own initials as a fallback), replacing the plain nickname
 // pill TopBar used to show.
-import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../../stores/auth';
 import { usePlayerStore } from '../../stores/player';
@@ -16,6 +16,8 @@ import { useHudNavEntries, type HudNavEntry } from '../../composables/useHudNavE
 import { useLogout } from '../../composables/useLogout';
 import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
 import { useIsMobile } from '../../composables/useIsMobile';
+import { barMenuHorizontal, useAnchoredMenu } from '../../composables/useAnchoredMenu';
+import { vPhoneHidden } from '../../composables/usePhoneLayer';
 import { fadeChip } from '../../lib/hud/chipMotion';
 import { profileLocation } from '../../lib/profileRoute';
 import { settingsLocation } from '../../lib/modalRoute';
@@ -66,7 +68,6 @@ const props = withDefaults(defineProps<{ hasDrawer?: boolean; hasResourceBar?: b
   floating: false,
 });
 
-const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const player = usePlayerStore();
@@ -141,15 +142,25 @@ function onChipLeave(el: Element, done: () => void) {
 // mirroring ReturningPlayerMenu's own trigger/panel open-close pattern
 // (click to open, closes on outside click or Escape) since this is the same
 // kind of small anchored panel.
-const accountMenuOpen = ref(false);
 const accountMenuRoot = ref<HTMLDivElement | null>(null);
-
-function toggleAccountMenu() {
-  accountMenuOpen.value = !accountMenuOpen.value;
-}
-function closeAccountMenu() {
-  accountMenuOpen.value = false;
-}
+const accountTrigger = ref<HTMLButtonElement | null>(null);
+const accountPanel = ref<HTMLElement | null>(null);
+// The panel is teleported (the bar hides under a phone layer, see usePhoneLayer) and hangs from the avatar.
+const {
+  open: accountMenuOpen,
+  layer: accountLayer,
+  style: accountPanelStyle,
+  side: accountSide,
+  isMobile: accountIsMobile,
+  toggle: toggleAccountMenu,
+  close: closeAccountMenu,
+} = useAnchoredMenu({
+  trigger: accountTrigger,
+  root: accountMenuRoot,
+  panel: accountPanel,
+  gap: 10,
+  horizontal: barMenuHorizontal(160),
+});
 // The Reports unread count stays visible on the closed menu's trigger.
 const unreadBadge = computed(() => secondary.value.find((e) => e.id === 'reports')?.badge ?? 0);
 function onMenuEntryClick(entry: HudNavEntry, close: () => void) {
@@ -170,25 +181,6 @@ async function onLogoutClick() {
   closeAccountMenu();
   await logout();
 }
-function onAccountMenuPointerDown(event: PointerEvent) {
-  if (!accountMenuOpen.value) return;
-  const target = event.target as Node | null;
-  if (accountMenuRoot.value && target && !accountMenuRoot.value.contains(target)) closeAccountMenu();
-}
-function onAccountMenuKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') closeAccountMenu();
-}
-onMounted(() => {
-  document.addEventListener('pointerdown', onAccountMenuPointerDown, true);
-  document.addEventListener('keydown', onAccountMenuKeydown);
-});
-onBeforeUnmount(() => {
-  document.removeEventListener('pointerdown', onAccountMenuPointerDown, true);
-  document.removeEventListener('keydown', onAccountMenuKeydown);
-});
-// A navigation while the menu is open should close it, same as
-// ReturningPlayerMenu does for its own panel.
-watch(() => route.fullPath, closeAccountMenu);
 </script>
 
 <template>
@@ -218,6 +210,7 @@ watch(() => route.fullPath, closeAccountMenu);
          slot) once onboarding is done. -->
     <div v-if="auth.isAuthenticated" ref="accountMenuRoot" class="account-menu">
       <button
+        ref="accountTrigger"
         type="button"
         class="avatar avatar-button"
         aria-haspopup="menu"
@@ -229,8 +222,17 @@ watch(() => route.fullPath, closeAccountMenu);
         {{ initials }}
         <span v-if="unreadBadge > 0" class="badge avatar-badge" data-testid="account-menu-badge">{{ unreadBadge }}</span>
       </button>
-      <div v-if="accountMenuOpen" class="panel menu account-panel" role="menu" data-testid="account-menu">
-        <div class="notch" />
+      <Teleport to="body">
+      <div
+        v-if="accountMenuOpen"
+        ref="accountPanel"
+        v-phone-hidden="accountLayer.hidden.value"
+        class="panel menu account-panel"
+        role="menu"
+        data-testid="account-menu"
+        :style="accountPanelStyle"
+      >
+        <div v-if="accountSide === 'below' && !accountIsMobile" class="notch" />
         <!-- These entries live in the avatar menu for now and will be
              refactored to a place of their own later, like the onboarding
              quests were. -->
@@ -261,6 +263,7 @@ watch(() => route.fullPath, closeAccountMenu);
           {{ t('hud.accountMenu.logout') }}
         </button>
       </div>
+      </Teleport>
     </div>
     <Transition :css="false" @enter="onChipEnter" @leave="onChipLeave">
       <ReturningPlayerMenu
@@ -433,11 +436,9 @@ watch(() => route.fullPath, closeAccountMenu);
   flex: none;
 }
 .account-panel {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
+  position: fixed;
   z-index: 50;
-  width: 160px;
+  box-sizing: border-box;
   padding: 8px;
   /* Same fix as ReturningPlayerMenu.vue's own identical `.menu` panel — see
      that file's comment. `.hud-bar`'s ambient `pointer-events: none` only
