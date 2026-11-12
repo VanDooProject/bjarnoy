@@ -404,17 +404,18 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_dispatch_listing_units_at_two_spots_is_refused_as_units_at_several_spots()
+    public async Task A_dispatch_listing_units_at_a_second_hex_that_is_no_garrison_spot_is_refused_for_that_spot()
     {
         var (client, homeId, home, support) = await SupportSetupAsync();
         using var _ = client;
 
+        // (3,0) is no spot of the home settlement: sending from several spots is allowed, every one of them must be a spot.
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{homeId}/armies",
             support([new(home, [new UnitCountRequest("spearman", 3)]), new(new HexPointRequest(3, 0), [new UnitCountRequest("spearman", 2)])]), Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Equal("UnitsAtSeveralSpots", await response.RejectionAsync(Ct));
+        Assert.Equal("NotAGarrisonSpot", await response.RejectionAsync(Ct));
     }
 
     [Fact]
