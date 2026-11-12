@@ -3,7 +3,7 @@ import { hexesInRadius, neighbors, oddQToAxial, axialToOddQ, type AxialCoord } f
 import { isoGridPosition, isoTopPoints } from '../../hex/geometry';
 import { bakeWaterMask } from './waterMask';
 import { waterMaskRegion } from './waterMaskLayout';
-import { WaterMeshBuffers, coveredHexes, seaAndShoreHexes } from './waterCoverage';
+import { WaterMeshBuffers, seaAndShoreHexes } from './waterCoverage';
 
 const TILE_W = 168;
 const TILE_H = (TILE_W * 92) / 200;
@@ -48,20 +48,6 @@ describe('water mesh coverage', () => {
       if (cx < rect.minX || cx > rect.maxX || cy < rect.minY || cy > rect.maxY) continue;
       expect(covered.has(key(c.q, c.r)), `sea ${c.q},${c.r}`).toBe(true);
     }
-  });
-
-  it('adds river hexes as their own term, once, even when the sea cover already has them', () => {
-    const mask = bake();
-    const seaAndShore = seaAndShoreHexes(mask, TILE_W, TILE_H);
-    const inland = axialToOddQ({ q: 0, r: 0 });
-    const onShore = axialToOddQ({ q: 3, r: 0 });
-    expect(asKeys(seaAndShore).has(key(0, 0))).toBe(false);
-    expect(asKeys(seaAndShore).has(key(3, 0))).toBe(true);
-
-    const without = coveredHexes({ seaAndShore, riverHexes: [] });
-    const withRiver = coveredHexes({ seaAndShore, riverHexes: [inland, onShore] });
-    expect(withRiver.length).toBe(without.length + 1);
-    expect(asKeys(withRiver).has(key(0, 0))).toBe(true);
   });
 });
 

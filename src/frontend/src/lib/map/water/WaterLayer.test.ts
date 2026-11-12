@@ -39,6 +39,13 @@ function maskOver(minX: number, minY: number, maxX: number, maxY: number): Water
   };
 }
 
+/** A mask whose every texel is sea (R at or above the coastline), so the water mesh covers every hex in it. */
+function seaMaskOver(minX: number, minY: number, maxX: number, maxY: number): WaterMask {
+  const mask = maskOver(minX, minY, maxX, maxY);
+  for (let i = 0; i < mask.data.length; i += 4) mask.data[i] = 255;
+  return mask;
+}
+
 function riverUniformsOf(layer: WaterLayer): Record<string, unknown> {
   return (layer.river.mesh.shader!.resources.riverUniforms as { uniforms: Record<string, unknown> }).uniforms;
 }
@@ -508,12 +515,14 @@ describe('WaterLayer', () => {
     expect(layer.mesh.geometry.getBuffer('aPosition').data.length).toBe(0);
     expect(layer.mesh.geometry.indexBuffer.data.length).toBe(0);
 
-    // River flow is drawn on land, so a river hex alone gets a hexagon.
-    layer.setRiverHexes([{ q: 0, r: 0 }]);
-    expect(layer.mesh.geometry.getBuffer('aPosition').data.length).toBe(12);
-    expect(layer.mesh.geometry.indexBuffer.data.length).toBe(12);
+    // A sea mask gets a hexagon per hex (six vertices, twelve indices each), a land mask none.
+    layer.setMask(seaMaskOver(-400, -250, 600, 350));
+    const vertexValues = layer.mesh.geometry.getBuffer('aPosition').data.length;
+    expect(vertexValues).toBeGreaterThan(0);
+    expect(vertexValues % 12).toBe(0);
+    expect(layer.mesh.geometry.indexBuffer.data.length).toBe(vertexValues);
 
-    layer.setRiverHexes([]);
+    layer.setMask(maskOver(-400, -250, 600, 350));
     expect(layer.mesh.geometry.getBuffer('aPosition').data.length).toBe(0);
   });
 
@@ -522,11 +531,10 @@ describe('WaterLayer', () => {
     // must never carry a transform of its own — mask UV and world position stay
     // locked together because the vertices are in world space.
     const layer = new WaterLayer('world', TILE_W, TILE_H);
-    layer.setRiverHexes([{ q: 0, r: 0 }]);
-    layer.setMask(maskOver(-400, -250, 600, 350));
+    layer.setMask(seaMaskOver(-400, -250, 600, 350));
     const first = Array.from(layer.mesh.geometry.getBuffer('aUV').data);
 
-    layer.setMask(maskOver(2000, 1000, 3000, 1600));
+    layer.setMask(seaMaskOver(2000, 1000, 3000, 1600));
     const second = Array.from(layer.mesh.geometry.getBuffer('aUV').data);
 
     expect(second).not.toEqual(first);

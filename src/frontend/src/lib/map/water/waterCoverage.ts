@@ -4,8 +4,8 @@
 // The water shader used to run on one quad over the whole baked rect, land
 // included, only to `discard` there. In the software renderer the rasterising
 // and blending of that quad alone cost ~150 ms a frame, and in settlement view
-// most of the screen is land. The shader can only draw in three places, so the
-// mesh covers exactly those:
+// most of the screen is land. The shader can only draw in two places, so the
+// mesh covers exactly those (river flow has its own mesh, riverFlowMesh.ts):
 //
 //   1. sea hexes: pixels the mask calls water (`R > 0.5`), where the sea body,
 //      caustics, waves and the settlement-mode taint wash are drawn;
@@ -13,11 +13,7 @@
 //      reaches onto the beach by `uFoamWidth * uFoamLandReach` tile widths
 //      (0.3 * 0.12 = 0.036 of a tile in settlement view at the default tuning,
 //      0.4 * 0.12 at the slider's highest; a hex is ~0.87 tile across the
-//      ground), which one ring of land covers many times over;
-//   3. river hexes, supplied by the caller: the shader paints river flow on
-//      land hexes before its land discard. Kept as its own term
-//      (`WaterCoverageInput.riverHexes`) so it can be dropped on its own if
-//      rivers get a mesh of their own.
+//      ground), which one ring of land covers many times over.
 //
 // Each covered hex is its exact top-face hexagon (`isoTopPoints`), built from
 // shared lattice coordinates, so neighbouring hexes share bit-identical edge
@@ -31,13 +27,6 @@ import type { WorldRect } from './waterMaskLayout';
 export interface OffsetHex {
   col: number;
   row: number;
-}
-
-const KEY_OFFSET = 1 << 16;
-const KEY_STRIDE = 1 << 17;
-
-function hexKey(col: number, row: number): number {
-  return (col + KEY_OFFSET) * KEY_STRIDE + (row + KEY_OFFSET);
 }
 
 /** R byte of the mask at or above this is water (`R = 0.5` is the coastline). */
@@ -96,28 +85,6 @@ export function seaAndShoreHexes(mask: WaterMask, tileWidth: number, tileHeight:
     }
   }
   return hexes;
-}
-
-export interface WaterCoverageInput {
-  /** Sea hexes plus their land ring — `seaAndShoreHexes`. */
-  seaAndShore: readonly OffsetHex[];
-  /** Hexes that carry river or bog-creek flow, drawn on land by the shader. Its own term: see the file header. */
-  riverHexes: readonly OffsetHex[];
-}
-
-/** The union of the cover's terms, each hex once (a hex drawn twice would be blended twice). */
-export function coveredHexes(input: WaterCoverageInput): OffsetHex[] {
-  const seen = new Set<number>();
-  const out: OffsetHex[] = [];
-  for (const list of [input.seaAndShore, input.riverHexes]) {
-    for (const hex of list) {
-      const key = hexKey(hex.col, hex.row);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(hex);
-    }
-  }
-  return out;
 }
 
 /** Vertices and indices per hex: the top-face hexagon as a fan of four triangles. */

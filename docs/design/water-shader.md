@@ -478,31 +478,30 @@ of the water-side reach for that reason.
 - The mesh keeps `eventMode = 'none'`, like the fog quads, so it never eats a
   hex click.
 
-### 3.7 The mesh covers only water, shore and river hexes
+### 3.7 The mesh covers only water and the shore ring
 
 The mesh is not one quad over the mask's rect. A full-rect quad makes the
 rasteriser and blender touch every pixel, land included, only for the fragment
 shader to `discard` there; in the software renderer that alone is ~150 ms a
 frame, and in settlement view most of the screen is land. The shader can only
-draw in three places, so the mesh is the hexagons of exactly those
+draw in two places, so the mesh is the hexagons of exactly those
 (`waterCoverage.ts`):
 
 - **sea hexes**, read off the mask (`R` at the hex centre is above 0.5);
 - **the shore ring**: every land hex touching a sea hex. Foam reaches onto the
   beach by `uFoamWidth * uFoamLandReach` tile widths (0.036 at the defaults, a
   tenth of a tile at most), and a hex is ~0.87 tile across, so one ring is
-  enough;
-- **river hexes** (`WaterLayer.setRiverHexes`), because the river flow of §4.4e
-  is drawn on land, before the land discard. This term is separate so it can go
-  when rivers get a mesh of their own.
+  enough.
+
+Rivers are not part of it: `RiverFlowMesh` draws them on its own quad over the river rect (§4.4e), so an
+inland river hex has no water mesh under it.
 
 Each hexagon is the tile's exact top face (`isoTopPoints`) with UVs taken from
 world position against the mask rect, so the fragment shader sees the same
 inputs it saw on the quad. Corners are computed from integer lattice
 coordinates, so neighbours share bit-identical vertices: no cracks, and no
 margin to overdraw, which matters because the blend is not idempotent. The
-mesh is rebuilt with each mask bake (about 1 ms, in reused buffers) and when the
-river hexes change. World mode uses the same rule; there the sea covers most of
+mesh is rebuilt with each mask bake (about 1 ms, in reused buffers). World mode uses the same rule; there the sea covers most of
 the viewport, so the mesh is simply large.
 
 ---
@@ -1124,8 +1123,9 @@ lookups) is large, and inside the water shader every water and land pixel of the
 share. In the software renderer, leaving the river call out of the water shader cut the frame time by about 30 %. The river shader reads the water
 mask itself (same texture, with the mask's rect as `uMaskRect`) and draws only where the mask says land, as before; it shares `hash`/`noise`
 (`NOISE_LATTICE_GLSL`) and `fbm` (`WATER_FBM_GLSL`) with the water shader, and runs on the water layer's clock, flags, suppression and
-freeze. The water mesh no longer knows rivers: on a river pixel it draws what it draws on any land pixel (the beach foam within its short land
-reach, which the river-mouth no-foam field already clears around a mouth), and the river overlay is drawn over that.
+freeze. The water mesh does not know rivers and does not cover inland river hexes at all (§3.7); only where a river hex touches the sea does it cover that
+hex as shore ring, and there it draws the beach foam within its short land reach, which the river-mouth no-foam field already clears around a mouth.
+The river overlay is drawn over that.
 
 **Water pixels: by colour, at build time.** `build/waterDryMasks.ts` (`buildRiverWaterMasks`, packed by `packMaskAtlas`) serves
 `virtual:river-water-masks`: one half-resolution mask cell per frame, one grey+alpha PNG, the data shape of §4.4b.

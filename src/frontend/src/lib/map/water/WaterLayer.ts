@@ -6,9 +6,7 @@ import { BufferImageSource, GlProgram, Mesh, MeshGeometry, Shader, Texture, Unif
 import { noiseLatticeTexture } from '../shaderNoise';
 import { FOAM_REACH_TILES, NEAR_SPAN_TILES, groundSquash, type WaterMask } from './waterMask';
 import { waterDebugFlags, waterDebugTuning, waterPerfStats } from './waterDebug';
-import { axialToOddQ, type AxialCoord } from '../../hex/coords';
-import { WaterMeshBuffers, coveredHexes, seaAndShoreHexes, type OffsetHex } from './waterCoverage';
-import type { WorldRect } from './waterMaskLayout';
+import { WaterMeshBuffers, seaAndShoreHexes, type OffsetHex } from './waterCoverage';
 import { WATER_FRAGMENT, WATER_VERTEX } from './waterShader';
 import { RiverFlowMesh } from './riverFlowMesh';
 
@@ -332,10 +330,8 @@ export class WaterLayer {
   private readonly meshBuffers = new WaterMeshBuffers();
   private readonly tileWidth: number;
   private readonly tileHeight: number;
-  // The cover's two terms (waterCoverage.ts) and the rect the UVs are taken against; the mesh is rebuilt from them.
+  // The hexes the mesh covers (waterCoverage.ts), rebuilt with every mask.
   private seaAndShoreHexes: OffsetHex[] = [];
-  private riverHexes: OffsetHex[] = [];
-  private maskRect: WorldRect | null = null;
   // Not readonly: setMode() rewrites this (and the three foam uniforms baked
   // from it below) so the zoom-driven mode switch can flip it in place
   // instead of reconstructing the layer — see setMode's own doc comment.
@@ -573,29 +569,12 @@ export class WaterLayer {
     // The mesh covers only the hexes the shader can draw on (waterCoverage.ts), not the whole baked rect.
     const coverStart = performance.now();
     this.seaAndShoreHexes = seaAndShoreHexes(mask, this.tileWidth, this.tileHeight);
-    this.maskRect = mask.region.rect;
-    this.rebuildGeometry();
-    waterPerfStats.coverMs = performance.now() - coverStart;
-    this.hasMask = true;
-  }
-
-  /**
-   * The hexes whose river or bog-creek flow the shader draws on land (the river term of the cover, see
-   * waterCoverage.ts). Pass `[]` when there is no flow texture.
-   */
-  setRiverHexes(hexes: readonly AxialCoord[]): void {
-    this.riverHexes = hexes.map(axialToOddQ);
-    this.rebuildGeometry();
-  }
-
-  /** Rewrites the mesh from the cover's terms. UVs are `world -> mask rect`, so the shader's inputs are unchanged. */
-  private rebuildGeometry(): void {
-    if (!this.maskRect) return;
-    const cover = coveredHexes({ seaAndShore: this.seaAndShoreHexes, riverHexes: this.riverHexes });
-    const { positions, uvs, indices } = this.meshBuffers.fill(cover, this.tileWidth, this.tileHeight, this.maskRect);
+    const { positions, uvs, indices } = this.meshBuffers.fill(this.seaAndShoreHexes, this.tileWidth, this.tileHeight, mask.region.rect);
     this.geometry.getBuffer('aPosition').data = positions;
     this.geometry.getBuffer('aUV').data = uvs;
     this.geometry.indexBuffer.data = indices;
+    waterPerfStats.coverMs = performance.now() - coverStart;
+    this.hasMask = true;
   }
 
   /**
