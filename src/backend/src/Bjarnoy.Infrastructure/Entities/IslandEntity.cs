@@ -241,3 +241,20 @@ public readonly record struct RiverTileRecord(
         return hash.ToHashCode();
     }
 }
+
+/// <summary>
+/// An island without its terrain columns (bog tiles, river tiles, start positions): what the island list needs, read by
+/// <see cref="Services.WorldService.GetIslandSummariesAsync"/>.
+/// </summary>
+public sealed record IslandSummary(
+    Guid Id,
+    int Index,
+    string Name,
+    int CentreQ,
+    int CentreR,
+    int TileCount,
+    bool IsWasted,
+    List<GiantRecord> Giants,
+    List<CampRecord> Camps,
+    List<UtgardWallRecord> UtgardWalls,
+    List<JotunTowerRecord> JotunTowers);

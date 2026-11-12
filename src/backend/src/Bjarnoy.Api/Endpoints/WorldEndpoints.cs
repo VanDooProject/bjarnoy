@@ -14,6 +14,7 @@ using Bjarnoy.Infrastructure.Services.PlotReservations;
 using Bjarnoy.Infrastructure.World;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace Bjarnoy.Api.Endpoints;
@@ -271,7 +272,7 @@ public static class WorldEndpoints
             return TypedResults.NotFound(WorldNotFoundProblem());
         }
 
-        var islands = await worlds.GetIslandsAsync(worldId, cancellationToken);
+        var islands = await worlds.GetIslandSummariesAsync(worldId, cancellationToken);
 
         // Wasted islands are hidden — as far as this player-facing endpoint
         // is concerned, sea — until the world's endboss has actually
@@ -293,7 +294,7 @@ public static class WorldEndpoints
     private static async Task<Results<Ok<TerrainChunkManifestResponse>, NotFound<ProblemDetails>>> GetTerrainChunkManifest(
         Guid worldId,
         WorldService worlds,
-        IServiceScopeFactory scopes,
+        DbContextOptions<GameDbContext> dbOptions,
         IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions> json,
         CancellationToken cancellationToken)
     {
@@ -303,7 +304,7 @@ public static class WorldEndpoints
             return TypedResults.NotFound(WorldNotFoundProblem());
         }
 
-        var chunks = await IslandPayloads.TerrainAsync(scopes, json.Value.SerializerOptions, worldId, world.EndbossTriggeredAt is not null, cancellationToken);
+        var chunks = await IslandPayloads.TerrainAsync(dbOptions, json.Value.SerializerOptions, worldId, world.EndbossTriggeredAt is not null, cancellationToken);
         return TypedResults.Ok(chunks.Manifest());
     }
 
@@ -313,7 +314,7 @@ public static class WorldEndpoints
         int chunk,
         HttpContext httpContext,
         WorldService worlds,
-        IServiceScopeFactory scopes,
+        DbContextOptions<GameDbContext> dbOptions,
         IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions> json,
         CancellationToken cancellationToken)
     {
@@ -323,7 +324,7 @@ public static class WorldEndpoints
             return TypedResults.NotFound(WorldNotFoundProblem());
         }
 
-        var chunks = await IslandPayloads.TerrainAsync(scopes, json.Value.SerializerOptions, worldId, world.EndbossTriggeredAt is not null, cancellationToken);
+        var chunks = await IslandPayloads.TerrainAsync(dbOptions, json.Value.SerializerOptions, worldId, world.EndbossTriggeredAt is not null, cancellationToken);
         if (chunk < 0 || chunk >= chunks.Chunks.Count)
         {
             var problem = new ProblemDetails
@@ -343,7 +344,7 @@ public static class WorldEndpoints
     private static async Task<IResult> GetStartPositions(
         Guid worldId,
         WorldService worlds,
-        IServiceScopeFactory scopes,
+        DbContextOptions<GameDbContext> dbOptions,
         IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions> json,
         CancellationToken cancellationToken)
     {
@@ -353,7 +354,7 @@ public static class WorldEndpoints
             return TypedResults.NotFound(WorldNotFoundProblem());
         }
 
-        var payload = await IslandPayloads.StartPositionsAsync(scopes, json.Value.SerializerOptions, worldId, world.EndbossTriggeredAt is not null, cancellationToken);
+        var payload = await IslandPayloads.StartPositionsAsync(dbOptions, json.Value.SerializerOptions, worldId, world.EndbossTriggeredAt is not null, cancellationToken);
         return new GzipPayloadResult(payload);
     }
 

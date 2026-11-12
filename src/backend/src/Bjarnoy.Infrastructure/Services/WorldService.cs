@@ -1059,30 +1059,28 @@ public sealed class WorldService(
     }
 
     /// <summary>
-    /// The islands of a world in index order, without their bog tiles, river tiles and start positions: those are the bulk of the
-    /// row (tens of megabytes for a large world), change only on a reseed and are served cached by their own endpoints. The
-    /// projection keeps them out of the SELECT; the returned entities have them empty.
+    /// The islands of a world in index order as summaries: the labels and what changes while the world runs, without the bog tiles,
+    /// river tiles and start positions. Those are the bulk of the row (tens of megabytes for a large world), change only on a reseed
+    /// and are served cached by their own endpoints. A dedicated record, not <see cref="IslandEntity"/>, so no caller can mistake the
+    /// missing terrain columns for an island that has none.
     /// </summary>
-    public Task<List<IslandEntity>> GetIslandsAsync(Guid worldId, CancellationToken cancellationToken = default) =>
+    public Task<List<IslandSummary>> GetIslandSummariesAsync(Guid worldId, CancellationToken cancellationToken = default) =>
         _dbContext.Islands
             .AsNoTracking()
             .Where(i => i.WorldId == worldId)
             .OrderBy(i => i.Index)
-            .Select(i => new IslandEntity
-            {
-                Id = i.Id,
-                WorldId = i.WorldId,
-                Index = i.Index,
-                Name = i.Name,
-                CentreQ = i.CentreQ,
-                CentreR = i.CentreR,
-                TileCount = i.TileCount,
-                IsWasted = i.IsWasted,
-                Giants = i.Giants,
-                Camps = i.Camps,
-                UtgardWalls = i.UtgardWalls,
-                JotunTowers = i.JotunTowers,
-            })
+            .Select(i => new IslandSummary(
+                i.Id,
+                i.Index,
+                i.Name,
+                i.CentreQ,
+                i.CentreR,
+                i.TileCount,
+                i.IsWasted,
+                i.Giants,
+                i.Camps,
+                i.UtgardWalls,
+                i.JotunTowers))
             .ToListAsync(cancellationToken);
 
     /// <summary>

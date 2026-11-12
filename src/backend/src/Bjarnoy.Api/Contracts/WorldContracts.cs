@@ -263,9 +263,9 @@ public sealed record IslandResponse(
     IReadOnlyList<UtgardWallResponse> UtgardWalls,
     IReadOnlyList<JotunTowerResponse> JotunTowers)
 {
-    /// <param name="island">The stored island (read without its terrain columns).</param>
+    /// <param name="island">The island summary (no terrain columns).</param>
     /// <param name="includeCamps">Whether the island's camps ship; false answers an empty list (the island is not one the caller has seen).</param>
-    public static IslandResponse From(IslandEntity island, bool includeCamps = true)
+    public static IslandResponse From(IslandSummary island, bool includeCamps = true)
     {
         ArgumentNullException.ThrowIfNull(island);
 
