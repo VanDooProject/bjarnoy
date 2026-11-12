@@ -371,6 +371,13 @@ function directHit(mouse: { x: number; y: number } | null, candidates: { key: st
 const root = ref<HTMLElement | null>(null);
 const elements = new Map<string, HTMLElement>();
 const lastZ = new Map<string, number>();
+/** The transform / visibility string last written per marker, so the frame loop only touches the style when one changed. */
+const lastTransform = new Map<string, string>();
+const lastVisibility = new Map<string, string>();
+
+// The layer's size, kept up to date by the same ResizeObserver as the boxes' sizes (ensureBoxObserver) so the frame loop never reads the layout for it. Until the first
+// observation (or without a ResizeObserver) it is read once from the element and then cached the same way.
+let rootSize: { w: number; h: number } | null = null;
 
 /** Ring-menu fade per marker (`markerFadeStep`); absent = fully visible. */
 const visibility = new Map<string, number>();
@@ -392,6 +399,10 @@ function ensureBoxObserver(): ResizeObserver | null {
   boxObserver = new ResizeObserver((entries) => {
     for (const entry of entries) {
       const el = entry.target as HTMLElement;
+      if (el === root.value) {
+        rootSize = { w: Math.round(entry.contentRect.width), h: Math.round(entry.contentRect.height) };
+        continue;
+      }
       const key = keyOf(el);
       if (!key || observedBoxes.get(key) !== el) continue;
       // The border box: the near / mid padding change resizes it too. Where the entry has no border-box size, the layout size.
@@ -422,6 +433,8 @@ function setElement(key: string, el: unknown) {
   else {
     elements.delete(key);
     lastZ.delete(key);
+    lastTransform.delete(key);
+    lastVisibility.delete(key);
     dialDiscs.delete(key);
     boxRects.delete(key);
     hoverT.delete(key);
@@ -468,8 +481,9 @@ function tick() {
     return;
   }
   const mapScale = renderer.dialMapScale;
-  const width = root.value?.offsetWidth ?? window.innerWidth;
-  const height = root.value?.offsetHeight ?? window.innerHeight;
+  if (!rootSize && root.value) rootSize = { w: root.value.offsetWidth, h: root.value.offsetHeight };
+  const width = rootSize?.w ?? window.innerWidth;
+  const height = rootSize?.h ?? window.innerHeight;
   const circle = renderer.markerOcclusionCircle;
   const placed: { key: string; x: number; hovered: boolean }[] = [];
   const mouse = renderer.mousePoint;
@@ -532,10 +546,18 @@ function tick() {
     else dialDiscs.set(marker.key, { key: marker.hexKey, cx: x, cy: y, r: dialRadiusPx(zs) });
     if (boxSize) boxRects.set(marker.key, markerBoxRect(x, y, boxSize, zs));
     else boxRects.delete(marker.key);
-    el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${zs.toFixed(3)})`;
+    const transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${zs.toFixed(3)})`;
+    if (lastTransform.get(marker.key) !== transform) {
+      lastTransform.set(marker.key, transform);
+      el.style.transform = transform;
+    }
     // A marker well off screen is not worth compositing.
     const reach = 320 * zs;
-    el.style.visibility = x < -reach || x > width + reach || y < -reach || y > height + reach ? 'hidden' : 'visible';
+    const shown = x < -reach || x > width + reach || y < -reach || y > height + reach ? 'hidden' : 'visible';
+    if (lastVisibility.get(marker.key) !== shown) {
+      lastVisibility.set(marker.key, shown);
+      el.style.visibility = shown;
+    }
     placed.push({ key: marker.key, x, hovered: t > 0 });
   }
   if (tiersChanged) tiers.value = nextTiers;
@@ -689,6 +711,7 @@ function onKeyDown(e: KeyboardEvent) {
 }
 
 onMounted(() => {
+  if (root.value) ensureBoxObserver()?.observe(root.value, { box: 'border-box' });
   window.addEventListener('keydown', onKeyDown);
   props.renderer?.setTapObserver(onMapTap);
   props.renderer?.setFrameObserver(tick);
@@ -709,6 +732,7 @@ onUnmounted(() => {
   motion.dispose();
   boxObserver?.disconnect();
   boxObserver = null;
+  rootSize = null;
   observedBoxes.clear();
   boxSizes.clear();
   window.removeEventListener('keydown', onKeyDown);
