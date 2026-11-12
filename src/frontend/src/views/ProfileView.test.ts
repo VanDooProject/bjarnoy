@@ -11,7 +11,8 @@ import enProfile from '../i18n/locales/en/profile.json';
 function mountProfileView(options: { attachTo?: HTMLElement } = {}) {
   return mount(ProfileView, {
     ...options,
-    global: { plugins: [createTestI18n({ profile: enProfile })] },
+    // The report dialog is teleported to body; stubbed, it renders in place so the wrapper can reach it.
+    global: { plugins: [createTestI18n({ profile: enProfile })], stubs: { teleport: true } },
   });
 }
 

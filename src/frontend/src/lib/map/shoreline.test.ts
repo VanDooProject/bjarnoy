@@ -15,12 +15,41 @@ import {
   type TerrainLookup,
 } from './shoreline';
 
-// A tiny fake terrain: sea everywhere except the coordinates listed as land.
-function landAt(coords: Array<{ q: number; r: number }>): TerrainLookup {
+// A tiny fake terrain: sea everywhere except the coordinates listed as land (and as inland lake: water, but not the sea).
+function landAt(coords: Array<{ q: number; r: number }>, inlandLakes: Array<{ q: number; r: number }> = []): TerrainLookup {
   const key = (q: number, r: number) => `${q},${r}`;
   const land = new Set(coords.map((c) => key(c.q, c.r)));
-  return { isLand: (q, r) => land.has(key(q, r)) };
+  const lakes = new Set(inlandLakes.map((c) => key(c.q, c.r)));
+  return { isLand: (q, r) => land.has(key(q, r)), isSea: (q, r) => !land.has(key(q, r)) && !lakes.has(key(q, r)) };
 }
+
+describe('inland lakes', () => {
+  // A land hex whose six neighbours are all inland lake: nothing around it is sea.
+  const centre = { q: 0, r: 0 };
+  const ring = [
+    { q: 1, r: 0 },
+    { q: 1, r: -1 },
+    { q: 0, r: -1 },
+    { q: -1, r: 0 },
+    { q: -1, r: 1 },
+    { q: 0, r: 1 },
+  ];
+
+  it('is no shoreline when the land borders only an inland lake', () => {
+    const terrain = landAt([centre], ring);
+    expect(hasShoreline(centre, 0, terrain)).toBe(false);
+    expect(isShoreBuildingHex(centre, terrain)).toBe(false);
+  });
+
+  it('is not a shore building when it stands on an inland lake hex', () => {
+    const terrain = landAt([centre], ring);
+    expect(isShoreBuildingHex(ring[0]!, terrain)).toBe(false);
+  });
+
+  it('still counts a sea hex as a shore building', () => {
+    expect(isShoreBuildingHex({ q: 5, r: 5 }, landAt([centre]))).toBe(true);
+  });
+});
 
 describe('hasShoreline', () => {
   it('is false for a settlement whose whole claim is inland (no sea neighbour anywhere)', () => {
@@ -71,7 +100,7 @@ describe('hasShoreline', () => {
   it('only checks hexes within claimRadius — a sea hex reachable only from outside the claim does not count', () => {
     // Land everywhere except one sea hex two rings straight out from the
     // centre, so no radius-1 claimed hex has it as a direct neighbour.
-    const terrain: TerrainLookup = { isLand: (q, r) => !(q === 3 && r === 0) };
+    const terrain: TerrainLookup = { isLand: (q, r) => !(q === 3 && r === 0), isSea: (q, r) => q === 3 && r === 0 };
     expect(hasShoreline({ q: 0, r: 0 }, 1, terrain)).toBe(false);
     // At radius 2, the claim includes (2,0), whose neighbour (3,0) is sea.
     expect(hasShoreline({ q: 0, r: 0 }, 2, terrain)).toBe(true);
@@ -139,6 +168,7 @@ describe('claimDiscs / hasShorelineInTerritory', () => {
     // own satellite disc (radius 2) sitting at (9, 0).
     const terrain: TerrainLookup = {
       isLand: (q, r) => Math.abs(q - 9) <= 1 && r === 0,
+      isSea: (q, r) => !(Math.abs(q - 9) <= 1 && r === 0),
     };
     const discs = claimDiscs({ q: 0, r: 0 }, 1, [{ q: 9, r: 0, level: 4 }]);
 
@@ -149,7 +179,7 @@ describe('claimDiscs / hasShorelineInTerritory', () => {
   });
 
   it('is false when no disc — centre or any tower — reaches a shoreline hex', () => {
-    const terrain: TerrainLookup = { isLand: () => true }; // no sea anywhere
+    const terrain: TerrainLookup = { isLand: () => true, isSea: () => false }; // no sea anywhere
     const discs = claimDiscs({ q: 0, r: 0 }, 1, [{ q: 5, r: 0, level: 4 }]);
 
     expect(hasShorelineInTerritory(discs, terrain)).toBe(false);
@@ -166,7 +196,7 @@ describe('claimDiscs / hasShorelineInTerritory', () => {
     // exactly like every other footprint hex, including the anchor itself.
     const shorelineFootprintHex = giantCoverage(anchor)[1].coord;
     const seaHex: AxialCoord = { q: shorelineFootprintHex.q + 1, r: shorelineFootprintHex.r };
-    const terrain: TerrainLookup = { isLand: (q, r) => !(q === seaHex.q && r === seaHex.r) };
+    const terrain: TerrainLookup = { isLand: (q, r) => !(q === seaHex.q && r === seaHex.r), isSea: (q, r) => q === seaHex.q && r === seaHex.r };
     const footprint = new Set(giantCoverage(anchor).map((c) => `${c.coord.q},${c.coord.r}`));
     const giantAt = (c: AxialCoord): AxialCoord | null => (footprint.has(`${c.q},${c.r}`) ? anchor : null);
 
@@ -201,7 +231,7 @@ function neighborsOf(c: { q: number; r: number }) {
 
 describe('isShoreBuildingHex', () => {
   // Land at q >= 0, sea at q < 0: (0,0) touches the sea, (1,0) is inland, (-1,0) is a sea hex.
-  const coast: TerrainLookup = { isLand: (q) => q >= 0 };
+  const coast: TerrainLookup = { isLand: (q) => q >= 0, isSea: (q) => q < 0 };
 
   it('is true for a shoreline land hex', () => {
     expect(isShoreBuildingHex({ q: 0, r: 0 }, coast)).toBe(true);

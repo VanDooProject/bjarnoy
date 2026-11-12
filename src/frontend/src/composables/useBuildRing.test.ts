@@ -179,6 +179,13 @@ describe('useBuildRing', () => {
     expect(categoriesFor({ terrain: 'sea', isCoastalWater: true } as Tile).map((c) => c.id)).toEqual(['water', 'defense']);
   });
 
+  it('offers an inland-lake hex beside land only the Fishing Hut, and an interior one nothing', () => {
+    const shore = categoriesFor({ terrain: 'inlandlake', isCoastalWater: true } as Tile);
+    expect(shore.map((c) => c.id)).toEqual(['water']);
+    expect(shore[0].buildings.map((b) => b.type)).toEqual(['fishinghut']);
+    expect(categoriesFor({ terrain: 'inlandlake', isCoastalWater: false } as Tile)).toEqual([]);
+  });
+
   it('offers sand only the tower and the walls, and a lake\'s half shore only the Fishing Hut', () => {
     const sand = categoriesFor({ terrain: 'sand' } as Tile);
     expect(sand.map((c) => c.id)).toEqual(['defense']);

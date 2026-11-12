@@ -35,6 +35,8 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<ArmyEntity> Armies => Set<ArmyEntity>();
 
+    public DbSet<GatheringEntity> Gatherings => Set<GatheringEntity>();
+
     public DbSet<ArmyUnitStackEntity> ArmyUnitStacks => Set<ArmyUnitStackEntity>();
 
     public DbSet<BattleReportEntity> BattleReports => Set<BattleReportEntity>();
@@ -56,6 +58,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
     public DbSet<CampReportUnitLineEntity> CampReportUnitLines => Set<CampReportUnitLineEntity>();
 
     public DbSet<CampReportBeastLineEntity> CampReportBeastLines => Set<CampReportBeastLineEntity>();
+
+    public DbSet<ArmyReportEntity> ArmyReports => Set<ArmyReportEntity>();
+
+    public DbSet<ArmyReportUnitLineEntity> ArmyReportUnitLines => Set<ArmyReportUnitLineEntity>();
 
     public DbSet<UserEntity> Users => Set<UserEntity>();
 
@@ -235,6 +241,9 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 case SettlementEntity settlement when entry.State == EntityState.Modified:
                     touched.Add(settlement.Id);
                     break;
+                case GatheringEntity when entry.State == EntityState.Modified:
+                    entry.Property(nameof(GatheringEntity.Version)).CurrentValue = Guid.NewGuid();
+                    break;
                 case TradeOfferEntity when entry.State == EntityState.Modified:
                     entry.Property(nameof(TradeOfferEntity.Version)).CurrentValue = Guid.NewGuid();
                     break;
@@ -335,6 +344,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             island.Property(i => i.BogTiles)
                 .HasConversion(new BogTileListConverter())
                 .Metadata.SetValueComparer(BogTileListConverter.Comparer);
+
+            island.Property(i => i.InlandLakeTiles)
+                .HasConversion(new HexListConverter())
+                .Metadata.SetValueComparer(HexListConverter.Comparer);
 
             island.Property(i => i.Giants)
                 .HasConversion(new GiantListConverter())
@@ -542,6 +555,14 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             // ArmyService/SettlementService's guest-loading helpers.
             army.HasIndex(a => new { a.TargetSettlementId, a.IsSupporting });
 
+            // A group whose gathering is deleted (merged, or called off) is just an army again.
+            army.HasOne(a => a.Gathering)
+                .WithMany()
+                .HasForeignKey(a => a.GatheringId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            army.HasIndex(a => a.GatheringId);
+
             army.HasMany(a => a.Stacks)
                 .WithOne(s => s.Army!)
                 .HasForeignKey(s => s.ArmyId)
@@ -551,6 +572,34 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             // in-transit, non-home, non-guest armies before doing anything
             // else — this index covers exactly that predicate.
             army.HasIndex(a => new { a.AtHome, a.IsSupporting });
+        });
+
+        modelBuilder.Entity<GatheringEntity>(gathering =>
+        {
+            gathering.ToTable("gatherings");
+            gathering.HasKey(g => g.Id);
+            gathering.Property(g => g.Id).ValueGeneratedNever();
+
+            gathering.Property(g => g.Stops)
+                .HasConversion(new HexListConverter())
+                .Metadata.SetValueComparer(HexListConverter.Comparer);
+
+            gathering.HasOne(g => g.Settlement)
+                .WithMany()
+                .HasForeignKey(g => g.SettlementId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            gathering.HasOne(g => g.ParentGathering)
+                .WithMany()
+                .HasForeignKey(g => g.ParentGatheringId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            gathering.Property(g => g.Version).IsConcurrencyToken();
+
+            // The due gatherings of a world are found by departure (ArmyService.ResolveDueGatheringsAsync), through the settlement.
+            gathering.HasIndex(g => g.DepartAt);
+            gathering.HasIndex(g => g.SettlementId);
+            gathering.HasIndex(g => g.ParentGatheringId);
         });
 
         modelBuilder.Entity<ArmyUnitStackEntity>(stack =>
@@ -698,6 +747,35 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             line.ToTable("camp_report_beast_lines");
             line.HasKey(l => l.Id);
             line.Property(l => l.Id).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<ArmyReportEntity>(report =>
+        {
+            report.ToTable("army_reports");
+            report.HasKey(r => r.Id);
+            report.Property(r => r.Id).ValueGeneratedNever();
+            report.Property(r => r.OwnerId).HasMaxLength(200).IsRequired();
+
+            // The inbox reads by world and the player's owner key — see ArmyReportService.GetForPlayerAsync.
+            report.HasIndex(r => new { r.WorldId, r.OwnerId });
+
+            report.HasOne<WorldEntity>()
+                .WithMany()
+                .HasForeignKey(r => r.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            report.HasMany(r => r.UnitLines)
+                .WithOne(l => l.ArmyReport!)
+                .HasForeignKey(l => l.ArmyReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ArmyReportUnitLineEntity>(line =>
+        {
+            line.ToTable("army_report_unit_lines");
+            line.HasKey(l => l.Id);
+            line.Property(l => l.Id).ValueGeneratedNever();
+            line.Property(l => l.UnitType).HasConversion<int>();
         });
 
         modelBuilder.Entity<UserEntity>(user =>

@@ -13,6 +13,7 @@ import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { useCoversMap } from '../../composables/useMapCover';
+import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import { MOBILE_MODAL_QUERY } from '../../lib/breakpoints';
 import { closeModalRoute } from '../../lib/modalRoute';
 import type { MessageSchema } from '../../i18n/schema';
@@ -37,6 +38,9 @@ const isMobile = useMediaQuery(MOBILE_MODAL_QUERY);
 // The mobile panel fills the screen opaque, so the map behind it is hidden;
 // the desktop panel floats over a translucent backdrop with the map visible.
 useCoversMap(isMobile);
+// A layer on the phone stack: hides while a nested dialog (teleported report /
+// found-guild dialog) is open above it.
+const layer = usePhoneLayer();
 
 const panelEl = ref<HTMLElement | null>(null);
 
@@ -71,7 +75,12 @@ const closeLabel = computed(() => t('profile.close'));
 </script>
 
 <template>
-  <div class="modal-backdrop" :class="{ 'modal-backdrop--mobile': isMobile }" @click.self="close">
+  <div
+    v-phone-hidden="layer.hidden.value"
+    class="modal-backdrop"
+    :class="{ 'modal-backdrop--mobile': isMobile }"
+    @click.self="close"
+  >
     <div
       ref="panelEl"
       class="modal-panel"

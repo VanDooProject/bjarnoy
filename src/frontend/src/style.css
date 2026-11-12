@@ -127,6 +127,8 @@
   --rival: #e2705f;
   --shell: #0b1116;
   --panel-bg: rgba(10, 20, 27, 0.92);
+  /* Dims the map behind a layer (HUD drawer, building and training windows): the map stays readable behind it. */
+  --layer-backdrop: rgba(0, 0, 0, 0.6);
   --panel-border: rgba(255, 255, 255, 0.12);
   --text: #e8f0f5;
   --muted: #8fa3af;
@@ -270,11 +272,14 @@ html[data-hud-motion='reduced'] .floating-art-shadow {
 
 /* The canvas of an inline docs map (composables/useDocsMapRenderer.ts): the reader can drag and zoom it, so it shows the grab
    hand, and `touch-action: pan-y` leaves a one-finger vertical drag to the article's scroll while a pinch still reaches the
-   renderer. (SettlementCanvas.vue's real map uses `touch-action: none` instead: it never scrolls.) */
+   renderer. (SettlementCanvas.vue's real map uses `touch-action: none` instead: it never scrolls.)
+   Pixi writes the canvas's pixel size as an inline style on every resize, and it only learns of a new host size through a
+   ResizeObserver a moment later. The size is `!important` so the canvas box follows its host at once (a viewport shrunk to phone
+   width otherwise leaves it wider than the page until the observer fires). */
 .docs-map-canvas {
   display: block;
-  width: 100%;
-  height: 100%;
+  width: 100% !important;
+  height: 100% !important;
   touch-action: pan-y;
   cursor: grab;
 }

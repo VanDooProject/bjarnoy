@@ -10,6 +10,7 @@ import { isPendingOrder, makePendingOrder } from '../lib/hud/pendingBuild';
 // resetModules-per-test pattern since DEMO_MODE is baked in at import time.
 
 const getSettlementArmies = vi.fn();
+const listMySettlements = vi.fn();
 const getArmy = vi.fn();
 const getSettlementGuests = vi.fn();
 const recallArmy = vi.fn();
@@ -33,6 +34,7 @@ const releasePlotSuggestion = vi.fn();
 const buildDemoFogMask = vi.fn();
 const getWorld = vi.fn();
 const getIslands = vi.fn();
+const getTerrainChunks = vi.fn();
 const listWorlds = vi.fn();
 const getWorldMembership = vi.fn();
 const dispatchArmy = vi.fn();
@@ -78,6 +80,8 @@ async function loadStoreModule(demoMode: boolean) {
       getSettlementGuests: (...args: unknown[]) => getSettlementGuests(...args),
       recallArmy: (...args: unknown[]) => recallArmy(...args),
       listSettlements: (...args: unknown[]) => listSettlements(...args),
+      // Unconfigured, the player owns no other realm.
+      listMySettlements: async (...args: unknown[]) => (await listMySettlements(...args)) ?? [],
       // Unconfigured, the rival buildings read is an empty world.
       listRivalBuildings: async (...args: unknown[]) => (await listRivalBuildings(...args)) ?? [],
       listOwnBuildings: async (...args: unknown[]) => (await listOwnBuildings(...args)) ?? [],
@@ -95,6 +99,7 @@ async function loadStoreModule(demoMode: boolean) {
       releasePlotSuggestion: (...args: unknown[]) => releasePlotSuggestion(...args),
       getWorld: (...args: unknown[]) => getWorld(...args),
       getIslands: (...args: unknown[]) => getIslands(...args),
+      getTerrainChunks: (...args: unknown[]) => getTerrainChunks(...args),
       listWorlds: (...args: unknown[]) => listWorlds(...args),
       getWorldMembership: (...args: unknown[]) => getWorldMembership(...args),
       dispatchArmy: (...args: unknown[]) => dispatchArmy(...args),
@@ -113,6 +118,8 @@ async function loadStoreModule(demoMode: boolean) {
       err instanceof MockApiError && err.problem?.error === 'world_not_found',
     isSettlementNotFound: (err: unknown) =>
       err instanceof MockApiError && err.problem?.error === 'settlement_not_found',
+    isTerrainChunkNotFound: (err: unknown) =>
+      err instanceof MockApiError && err.problem?.error === 'terrain_chunk_not_found',
     // `stores/auth.ts` wires its refresh/lock hooks onto this at module load
     // (`authHooks.getAccessToken = ...`) — world.ts now imports that store
     // for the field-order premium check below, so the mock needs a plain
@@ -249,15 +256,18 @@ describe('useWorldStore confirmDispatch from garrison spots', () => {
     expect(dispatchArmy.mock.calls[0][1]).not.toHaveProperty('units');
   });
 
-  it('does not attempt a dispatch whose units stand at several spots', async () => {
+  it('sends a `from` group for every spot the units are taken from', async () => {
     const store = await composed({ spearman: 6 });
     store.addWaypoint({ q: 8, r: 0 });
 
     await store.confirmDispatch();
 
-    expect(dispatchArmy).not.toHaveBeenCalled();
-    expect(store.dispatchDraft!.error).toMatch(/several spots/i);
-    expect(store.dispatchSpotGroups(store.dispatchDraft!)).toHaveLength(2);
+    expect(dispatchArmy).toHaveBeenCalledTimes(1);
+    expect(dispatchArmy.mock.calls[0][1].from).toEqual([
+      { spot: { q: 6, r: 0 }, units: [{ unit: 'spearman', count: 4 }] },
+      { spot: { q: 0, r: 0 }, units: [{ unit: 'spearman', count: 2 }] },
+    ]);
+    expect(store.dispatchDraft).toBeNull();
   });
 
   it('sends a support to the host spot the ring named', async () => {
@@ -427,6 +437,38 @@ describe('useWorldStore startDispatchAt', () => {
     );
   });
 
+  it('starts a Set up camp draft: the tapped hex is the destination and two camp builders are loaded', async () => {
+    const store = await loadStoreModule(true);
+
+    store.startDispatchAt({ q: 4, r: -1 }, { mission: 'setupcamp' });
+
+    expect(store.dispatchDraft?.mission).toBe('setupcamp');
+    expect(store.dispatchDraft?.route).toEqual([{ q: 4, r: -1 }]);
+    expect(store.dispatchDraft?.unitCounts).toEqual({ campbuilder: 2 });
+  });
+
+  it('sends a Set up camp draft as a setupcamp-mission dispatch, builders fixed at two, ships and escorts addable', async () => {
+    const store = await loadStoreModule(false);
+    dispatchArmy.mockReset().mockResolvedValue({});
+    store.selectedSettlementId = 'home-1';
+    store.hud.garrisonSpots = [{ ...LONGHOUSE_SPOT, stacks: [{ unit: 'campbuilder', count: 2 }, { unit: 'karve', count: 1 }] }];
+    store.startDispatchAt({ q: 4, r: -1 }, { mission: 'setupcamp' });
+
+    store.setDispatchUnitCount('campbuilder', 7);
+    store.setDispatchUnitCount('karve', 1);
+    await store.confirmDispatch();
+
+    expect(dispatchArmy).toHaveBeenCalledWith(
+      'home-1',
+      expect.objectContaining({ mission: 'setupcamp', destination: { q: 4, r: -1 } }),
+      undefined,
+    );
+    const request = dispatchArmy.mock.calls[0][1] as { from: { units: { unit: string; count: number }[] }[] };
+    expect(request.from[0].units).toEqual(
+      expect.arrayContaining([{ unit: 'campbuilder', count: 2 }, { unit: 'karve', count: 1 }]),
+    );
+  });
+
   it('keeps a Found draft\'s settlers at five but lets ships and escorts be added to the dispatch', async () => {
     const store = await loadStoreModule(false);
     dispatchArmy.mockReset().mockResolvedValue({});
@@ -571,11 +613,8 @@ describe('useWorldStore founding a settlement (live mode)', () => {
         q: 0,
         r: 0,
         tileCount: 10,
-        startPositions: [NEAR_ISLAND.at],
-        riverTiles: [],
         giants: [],
         camps: [],
-        bogTiles: [],
         wasted: false,
       },
       {
@@ -585,11 +624,8 @@ describe('useWorldStore founding a settlement (live mode)', () => {
         q: 5,
         r: 5,
         tileCount: 10,
-        startPositions: [FAR_ISLAND.at],
-        riverTiles: [],
         giants: [],
         camps: [],
-        bogTiles: [],
         wasted: false,
       },
     ];
@@ -738,11 +774,8 @@ describe('useWorldStore founding a settlement (L6b: persist before reconciling)'
         q: 0,
         r: 0,
         tileCount: 10,
-        startPositions: [ISLAND.at],
-        riverTiles: [],
         giants: [],
         camps: [],
-        bogTiles: [],
         wasted: false,
       },
     ];
@@ -1319,6 +1352,111 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     expect(store.worldJoinableReason).toBe('NoWorldYet');
   });
 
+  it('falls back to NoWorldYet when the world disappears before its terrain chunks load', async () => {
+    const store = await loadStoreModule(false);
+    const { ApiError: MockedApiError } = await import('../api/client');
+
+    listWorlds.mockReset().mockResolvedValue([
+      {
+        id: 'world-1',
+        name: 'Kettil Sea',
+        status: 'Running',
+        joinable: true,
+        joinableReason: 'None',
+        playerCount: 0,
+        maxPlayers: 100,
+        freeSlots: 100,
+        startsAt: null,
+      },
+    ]);
+    getWorld.mockReset().mockResolvedValue({
+      id: 'world-1',
+      name: 'Kettil Sea',
+      seed: 1,
+      radius: 30,
+      maxPlayers: 100,
+      status: 'Running',
+      islandCount: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      joinable: true,
+      joinableReason: 'None',
+      startsAt: null,
+      endbossTriggered: false,
+      frozenIslesEnabled: false,
+      speedFactor: 1,
+      generation: generationResponse(),
+      movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+    });
+    getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockRejectedValue(new MockedApiError(404, { error: 'world_not_found' }));
+
+    await expect(store.bootstrapLiveWorld()).resolves.toBeUndefined();
+
+    expect(store.worldId).toBeNull();
+    expect(store.liveReady).toBe(false);
+    expect(store.worldJoinableReason).toBe('NoWorldYet');
+  });
+
+  it('hands the river and bog tiles of the terrain chunks to the model once, matched to their island by id', async () => {
+    const store = await loadStoreModule(false);
+
+    listWorlds.mockReset().mockResolvedValue([
+      {
+        id: 'world-1',
+        name: 'Kettil Sea',
+        status: 'Running',
+        joinable: true,
+        joinableReason: 'None',
+        playerCount: 0,
+        maxPlayers: 100,
+        freeSlots: 100,
+        startsAt: null,
+      },
+    ]);
+    getWorld.mockReset().mockResolvedValue({
+      id: 'world-1',
+      name: 'Kettil Sea',
+      seed: 1,
+      radius: 30,
+      maxPlayers: 100,
+      status: 'Running',
+      islandCount: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      joinable: true,
+      joinableReason: 'None',
+      startsAt: null,
+      endbossTriggered: false,
+      frozenIslesEnabled: false,
+      speedFactor: 1,
+      generation: generationResponse(),
+      movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+    });
+    getIslands.mockReset().mockResolvedValue([
+      { id: 'island-a', index: 0, name: 'A', q: 0, r: 0, tileCount: 5, giants: [], camps: [], wasted: false },
+      { id: 'island-w', index: 1, name: 'W', q: 9, r: 9, tileCount: 5, giants: [], camps: [], wasted: true },
+    ]);
+    getTerrainChunks.mockReset().mockResolvedValue([
+      {
+        id: 'island-w',
+        riverTiles: [{ q: 9, r: 9, shape: 'straight', inDirections: ['N'], outDirection: 'S', width: 'stream' }],
+        bogTiles: [],
+      },
+      {
+        id: 'island-a',
+        riverTiles: [{ q: 1, r: 2, shape: 'bend', inDirections: ['N'], outDirection: 'SE' }],
+        bogTiles: [{ q: 3, r: 4, kind: 'bog', inDirections: [], outDirection: null, waterEdges: [] }],
+      },
+    ]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(getTerrainChunks).toHaveBeenCalledWith('world-1');
+    const model = store.model!;
+    expect(model.getRiverTile(1, 2)).toMatchObject({ shape: 'bend', width: 'river', wasted: false });
+    expect(model.getRiverTile(9, 9)).toMatchObject({ shape: 'straight', width: 'stream', wasted: true });
+    expect(model.getBogTile(3, 4)).toMatchObject({ kind: 'bog' });
+  });
+
   it('still throws on an ordinary (non-world_not_found) getIslands failure', async () => {
     const store = await loadStoreModule(false);
 
@@ -1358,6 +1496,75 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     await expect(store.bootstrapLiveWorld()).rejects.toThrow('network error');
   });
 
+  describe('a world reseeded between the chunk manifest and a chunk', () => {
+    const arrangeWorld = () => {
+      listWorlds.mockReset().mockResolvedValue([
+        {
+          id: 'world-1',
+          name: 'Kettil Sea',
+          status: 'Running',
+          joinable: true,
+          joinableReason: 'None',
+          playerCount: 0,
+          maxPlayers: 100,
+          freeSlots: 100,
+          startsAt: null,
+        },
+      ]);
+      getWorld.mockReset().mockResolvedValue({
+        id: 'world-1',
+        name: 'Kettil Sea',
+        seed: 1,
+        radius: 30,
+        maxPlayers: 100,
+        status: 'Running',
+        islandCount: 1,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        joinable: true,
+        joinableReason: 'None',
+        startsAt: null,
+        endbossTriggered: false,
+        frozenIslesEnabled: false,
+        speedFactor: 1,
+        generation: generationResponse(),
+        movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+      });
+    };
+
+    it('reads the islands and the terrain again once, and uses the second answer', async () => {
+      const store = await loadStoreModule(false);
+      const { ApiError: MockedApiError } = await import('../api/client');
+      arrangeWorld();
+      getIslands
+        .mockReset()
+        .mockResolvedValueOnce([{ id: 'old', index: 0, name: 'Old', q: 0, r: 0, tileCount: 5, giants: [], camps: [], wasted: false }])
+        .mockResolvedValueOnce([{ id: 'new', index: 0, name: 'New', q: 1, r: 1, tileCount: 5, giants: [], camps: [], wasted: false }]);
+      getTerrainChunks
+        .mockReset()
+        .mockRejectedValueOnce(new MockedApiError(404, { error: 'terrain_chunk_not_found' }))
+        .mockResolvedValueOnce([{ id: 'new', riverTiles: [], bogTiles: [{ q: 3, r: 4, kind: 'bog', inDirections: [], outDirection: null, waterEdges: [] }] }]);
+
+      await store.bootstrapLiveWorld();
+
+      expect(getIslands).toHaveBeenCalledTimes(2);
+      expect(getTerrainChunks).toHaveBeenCalledTimes(2);
+      expect(store.islands.map((i) => i.id)).toEqual(['new']);
+      expect(store.model!.getBogTile(3, 4)).toMatchObject({ kind: 'bog' });
+    });
+
+    it('throws when the second read misses a chunk too', async () => {
+      const store = await loadStoreModule(false);
+      const { ApiError: MockedApiError } = await import('../api/client');
+      arrangeWorld();
+      getIslands.mockReset().mockResolvedValue([]);
+      getTerrainChunks.mockReset().mockRejectedValue(new MockedApiError(404, { error: 'terrain_chunk_not_found' }));
+
+      await expect(store.bootstrapLiveWorld()).rejects.toMatchObject({ status: 404 });
+
+      expect(getTerrainChunks).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('propagates frozenIslesEnabled onto the world model', async () => {
     const store = await loadStoreModule(false);
 
@@ -1393,10 +1600,59 @@ describe('useWorldStore bootstrapLiveWorld', () => {
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     });
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
 
     await store.bootstrapLiveWorld();
 
     expect(store.model?.isFrozenEnabled()).toBe(true);
+  });
+
+  it('lays every island’s inland lakes over the terrain', async () => {
+    const store = await loadStoreModule(false);
+    listWorlds.mockReset().mockResolvedValue([
+      { id: 'world-1', name: 'Kettil Sea', status: 'Running', joinable: true, joinableReason: 'None', playerCount: 0, maxPlayers: 100, freeSlots: 100, startsAt: null },
+    ]);
+    getWorld.mockReset().mockResolvedValue({
+      id: 'world-1',
+      name: 'Kettil Sea',
+      seed: 1,
+      radius: 30,
+      maxPlayers: 100,
+      status: 'Running',
+      islandCount: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      joinable: true,
+      joinableReason: 'None',
+      startsAt: null,
+      endbossTriggered: false,
+      frozenIslesEnabled: false,
+      speedFactor: 1,
+      generation: generationResponse(),
+      movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+    });
+    getIslands.mockReset().mockResolvedValue([
+      {
+        id: 'island-1',
+        index: 0,
+        name: 'Near',
+        q: 0,
+        r: 0,
+        tileCount: 10,
+        startPositions: [],
+        giants: [],
+        camps: [],
+        wasted: false,
+      },
+    ]);
+    // The lakes ride with the terrain chunks, matched to the island by id, like the bog tiles.
+    getTerrainChunks.mockReset().mockResolvedValue([
+      { id: 'island-1', riverTiles: [], bogTiles: [], inlandLakeTiles: [{ q: 700, r: 700 }] },
+    ]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(store.model?.terrainOf(700, 700)).toBe('inlandlake');
+    expect(store.model?.terrainOf(701, 700)).toBe('sea');
   });
 
   // Regression: see 'refreshCampStates' - /islands hides the camps of unseen islands from a caller it cannot identify.
@@ -1437,6 +1693,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     });
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
 
     await store.bootstrapLiveWorld();
 
@@ -1484,6 +1741,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     listWorlds.mockReset().mockResolvedValue([listedNewest]);
     getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
 
     await store.bootstrapLiveWorld();
 
@@ -1496,6 +1754,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     listWorlds.mockReset().mockResolvedValue([{ ...listedNewest, id: 'world-old', name: 'world-old' }, listedNewest]);
     getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
 
     await store.bootstrapLiveWorld();
 
@@ -1508,6 +1767,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     listWorlds.mockReset().mockResolvedValue([listedNewest]);
     getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
 
     await store.bootstrapLiveWorld();
 
@@ -1522,6 +1782,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     listWorlds.mockReset().mockResolvedValue([listedNewest]);
     getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
 
     await store.bootstrapLiveWorld();
 
@@ -1897,6 +2158,7 @@ describe('useWorldStore fetchFogMask', () => {
       movement: { land: {}, sea: {}, riverCrossingCost: 8 },
     });
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
     listSettlements.mockReset().mockResolvedValue([]);
 
     store.worldId = 'world-1';
@@ -2047,6 +2309,7 @@ describe('useWorldStore joinWorld', () => {
   it('switches to a world with an existing realm and restores it immediately', async () => {
     getWorld.mockReset().mockResolvedValue(worldFixture('world-2'));
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
     listSettlements.mockReset().mockResolvedValue([]);
     getWorldMembership.mockReset().mockResolvedValue({
       worldId: 'world-2',
@@ -2091,6 +2354,7 @@ describe('useWorldStore joinWorld', () => {
   it('switches to a brand-new world with no realm, leaving no stale state from the previous world behind', async () => {
     getWorld.mockReset().mockResolvedValue(worldFixture('world-3'));
     getIslands.mockReset().mockResolvedValue([]);
+    getTerrainChunks.mockReset().mockResolvedValue([]);
     listSettlements.mockReset().mockResolvedValue([]);
     getSettlement.mockReset();
     getWorldMembership.mockReset().mockResolvedValue({
@@ -2111,7 +2375,7 @@ describe('useWorldStore joinWorld', () => {
       reservedUntil: null,
     };
     store.islands = [
-      { id: 'old-island', index: 0, name: 'Old', q: 0, r: 0, tileCount: 1, startPositions: [], riverTiles: [], giants: [], camps: [], bogTiles: [], wasted: false },
+      { id: 'old-island', index: 0, name: 'Old', q: 0, r: 0, tileCount: 1, giants: [], camps: [], wasted: false },
     ];
     store.armies = [{ id: 'old-army' } as never];
     store.liveReady = true;
@@ -2776,7 +3040,7 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
 
 describe('useWorldStore live realm membership', () => {
   const summary = (id: string, mine: boolean, realmId = id, relation: 'guild' | 'treaty' | 'rival' = 'rival') => ({
-    id, realmId, name: id, ownerName: 'Astrid', q: 0, r: 0, labelQ: 0, labelR: 0, longhouseLevel: 1, islandId: 'island-1', mine,
+    id, realmId, name: id, ownerName: 'Astrid', q: 0, r: 0, labelQ: 0, labelR: 0, longhouseLevel: 1, isBeachCamp: false, islandId: 'island-1', mine,
     relation: mine ? ('mine' as const) : relation,
   });
 
@@ -3019,7 +3283,7 @@ describe('useWorldStore linked realms', () => {
   it('registerSettlementSummaries stores the realmId', async () => {
     const store = await loadStoreModule(false);
     store.registerSettlementSummaries([
-      { id: 'r2', realmId: 'r1', name: 'Rival', ownerName: 'Bo', q: 5, r: 5, labelQ: 5, labelR: 5, longhouseLevel: 1, islandId: 'i', mine: false, relation: 'rival' },
+      { id: 'r2', realmId: 'r1', name: 'Rival', ownerName: 'Bo', q: 5, r: 5, labelQ: 5, labelR: 5, longhouseLevel: 1, isBeachCamp: false, islandId: 'i', mine: false, relation: 'rival' },
     ]);
 
     expect(store.model.getSettlement('r2')?.realmId).toBe('r1');
@@ -3079,48 +3343,105 @@ describe('useWorldStore send picker', () => {
 
   it('opens aimed at the tapped target, with no source selected and no draft running', async () => {
     const store = await loadStoreModule(true);
+    store.selectedSettlementId = 'home-1';
     store.startDispatch();
 
     store.openSendPicker({ q: 3, r: -2 });
 
-    expect(store.sendPicker).toEqual({ mission: 'move', coord: { q: 3, r: -2 }, targetSettlementId: null, targetBuildingCoord: null, selectedId: null });
+    expect(store.sendPicker).toEqual({ mission: 'move', coord: { q: 3, r: -2 }, targetSettlementId: null, targetRealmId: null, targetBuildingCoord: null, selectedId: null });
     expect(store.dispatchDraft).toBeNull();
     expect(store.fieldOrderDraft).toBeNull();
   });
 
   it('home hands over to a dispatch draft with the ring\'s mission and target, and closes the picker', async () => {
     const store = await loadStoreModule(true);
+    store.selectedSettlementId = 'home-1';
     store.openSendPicker({ q: 5, r: 1 }, { mission: 'attack', targetSettlementId: 'enemy-1' });
 
-    store.selectSendSource('home');
+    store.selectSendSource('home:home-1');
 
     expect(store.sendPicker).toBeNull();
     expect(store.dispatchDraft?.mission).toBe('attack');
     expect(store.dispatchDraft?.targetSettlementId).toBe('enemy-1');
   });
 
-  it('a support names the tapped garrison spot of the host, and home hands it to the dispatch draft', async () => {
+  // The player's other realm 'other-1': its garrison and field army are sources of the picker like the open realm's.
+  function withOtherRealm(store: Awaited<ReturnType<typeof loadStoreModule>>) {
+    store.otherRealms = [
+      {
+        realmId: 'other-1',
+        name: 'Vik',
+        garrison: [{ unit: 'spearman', count: 5 }],
+        garrisonSpots: [LONGHOUSE_SPOT],
+        buildings: [],
+        availableFood: 123,
+        armies: [army('other-army', { settlementId: 'other-1' })],
+      },
+    ] as never;
+  }
+
+  it('another realm\'s home sends a support to the realm that owns the tapped hex, from its own settlement, without changing the open realm', async () => {
     const store = await loadStoreModule(true);
-    store.openSendPicker({ q: 4, r: 2 }, { mission: 'support', targetSettlementId: 'own-other-1', targetBuildingCoord: { q: 4, r: 2 } });
-    expect(store.sendPicker?.targetBuildingCoord).toEqual({ q: 4, r: 2 });
+    store.selectedSettlementId = 'home-1';
+    withOtherRealm(store);
+    store.openSendPicker({ q: 4, r: 2 }, { targetRealmId: 'home-1', targetBuildingCoord: { q: 4, r: 2 } });
 
-    store.selectSendSource('home');
+    store.selectSendSource('home:other-1');
 
-    expect(store.dispatchDraft?.mission).toBe('support');
-    expect(store.dispatchDraft?.targetBuildingCoord).toEqual({ q: 4, r: 2 });
+    expect(store.dispatchDraft).toMatchObject({
+      mission: 'support',
+      targetSettlementId: 'home-1',
+      targetBuildingCoord: { q: 4, r: 2 },
+      sourceRealmId: 'other-1',
+    });
+    expect(store.dispatchSource).toMatchObject({ realmId: 'other-1', availableFood: 123, garrison: [{ unit: 'spearman', count: 5 }] });
+    expect(store.selectedSettlementId).toBe('home-1');
+  });
+
+  it('the owning realm\'s own home is a plain move there', async () => {
+    const store = await loadStoreModule(true);
+    store.selectedSettlementId = 'home-1';
+    withOtherRealm(store);
+    store.openSendPicker({ q: 4, r: 2 }, { targetRealmId: 'home-1', targetBuildingCoord: { q: 4, r: 2 } });
+
+    store.selectSendSource('home:home-1');
+
+    expect(store.dispatchDraft).toMatchObject({ mission: 'move', route: [{ q: 4, r: 2 }], sourceRealmId: null });
+  });
+
+  it('another realm\'s field army gets a support field order at the garrison spot; the owning realm\'s army a move', async () => {
+    const store = await loadStoreModule(true);
+    store.selectedSettlementId = 'home-1';
+    store.armies = [army('own-army')] as never;
+    withOtherRealm(store);
+    store.openSendPicker({ q: 4, r: 2 }, { targetRealmId: 'home-1', targetBuildingCoord: { q: 1, r: 1 } });
+
+    store.selectSendSource('other-army');
+    expect(store.fieldOrderDraft).toMatchObject({
+      armyId: 'other-army',
+      mission: 'support',
+      targetSettlementId: 'home-1',
+      targetBuildingCoord: { q: 1, r: 1 },
+      route: [],
+    });
+
+    store.selectSendSource('own-army');
+    expect(store.fieldOrderDraft).toMatchObject({ armyId: 'own-army', mission: 'move', route: [{ q: 4, r: 2 }], targetSettlementId: null });
   });
 
   it('home on a plain move plots the tapped hex as the destination', async () => {
     const store = await loadStoreModule(true);
+    store.selectedSettlementId = 'home-1';
     store.openSendPicker({ q: 3, r: -2 });
 
-    store.selectSendSource('home');
+    store.selectSendSource('home:home-1');
 
     expect(store.dispatchDraft?.route).toEqual([{ q: 3, r: -2 }]);
   });
 
   it('a standing army is composed with every unit selected (splittable); a marching one moves whole', async () => {
     const store = await loadStoreModule(true);
+    store.selectedSettlementId = 'home-1';
     store.armies = [
       army('standing'),
       army('marching', { movement: { ...army('x').movement, arrivesAt: '2099-01-01T00:00:00Z' } }),
@@ -3138,6 +3459,7 @@ describe('useWorldStore send picker', () => {
   it('an attack names its target and leaves the route empty (the server derives the destination)', async () => {
     getSettlementView.mockReset().mockResolvedValue({ buildings: [] });
     const store = await loadStoreModule(true);
+    store.selectedSettlementId = 'home-1';
     store.armies = [army('a')] as never;
     store.openSendPicker({ q: 5, r: 1 }, { mission: 'attack', targetSettlementId: 'enemy-1' });
 
@@ -3149,12 +3471,13 @@ describe('useWorldStore send picker', () => {
   it('a retarget moves the target and re-composes the selected army\'s order for it', async () => {
     getSettlementView.mockReset().mockResolvedValue({ buildings: [] });
     const store = await loadStoreModule(true);
+    store.selectedSettlementId = 'home-1';
     store.armies = [army('a')] as never;
     store.openSendPicker({ q: 3, r: -2 });
     store.selectSendSource('a');
 
     store.retargetSendPicker({ q: 7, r: 0 });
-    expect(store.sendPicker).toEqual({ mission: 'move', coord: { q: 7, r: 0 }, targetSettlementId: null, targetBuildingCoord: null, selectedId: 'a' });
+    expect(store.sendPicker).toEqual({ mission: 'move', coord: { q: 7, r: 0 }, targetSettlementId: null, targetRealmId: null, targetBuildingCoord: null, selectedId: 'a' });
     expect(store.fieldOrderDraft).toMatchObject({ armyId: 'a', mission: 'move', route: [{ q: 7, r: 0 }] });
 
     store.retargetSendPicker({ q: 5, r: 1 }, { mission: 'attack', targetSettlementId: 'enemy-1' });
@@ -3164,6 +3487,7 @@ describe('useWorldStore send picker', () => {
 
   it('a retarget keeps the units the player picked, or drops the army when it cannot go', async () => {
     const store = await loadStoreModule(true);
+    store.selectedSettlementId = 'home-1';
     store.armies = [army('a')] as never;
     store.openSendPicker({ q: 3, r: -2 });
     store.selectSendSource('a');
@@ -3179,16 +3503,18 @@ describe('useWorldStore send picker', () => {
 
   it('a retarget with no army selected only moves the target', async () => {
     const store = await loadStoreModule(true);
+    store.selectedSettlementId = 'home-1';
     store.openSendPicker({ q: 3, r: -2 }, { mission: 'hunt' });
 
     store.retargetSendPicker({ q: 1, r: 1 });
 
-    expect(store.sendPicker).toEqual({ mission: 'move', coord: { q: 1, r: 1 }, targetSettlementId: null, targetBuildingCoord: null, selectedId: null });
+    expect(store.sendPicker).toEqual({ mission: 'move', coord: { q: 1, r: 1 }, targetSettlementId: null, targetRealmId: null, targetBuildingCoord: null, selectedId: null });
     expect(store.fieldOrderDraft).toBeNull();
   });
 
   it('unselecting drops the field order but keeps the picker open', async () => {
     const store = await loadStoreModule(true);
+    store.selectedSettlementId = 'home-1';
     store.armies = [army('a')] as never;
     store.openSendPicker({ q: 3, r: -2 });
     store.selectSendSource('a');
@@ -3201,6 +3527,7 @@ describe('useWorldStore send picker', () => {
 
   it('closing drops the order it was composing', async () => {
     const store = await loadStoreModule(true);
+    store.selectedSettlementId = 'home-1';
     store.armies = [army('a')] as never;
     store.openSendPicker({ q: 3, r: -2 });
     store.selectSendSource('a');
@@ -3213,6 +3540,7 @@ describe('useWorldStore send picker', () => {
 
   it('the unit count is clamped to what the army holds', async () => {
     const store = await loadStoreModule(true);
+    store.selectedSettlementId = 'home-1';
     store.armies = [army('a')] as never;
     store.openSendPicker({ q: 3, r: -2 });
     store.selectSendSource('a');
@@ -3227,6 +3555,7 @@ describe('useWorldStore send picker', () => {
 describe('useWorldStore confirmFieldOrder from the send picker', () => {
   async function composed(mission: 'move' | 'attack' = 'move') {
     const store = await loadStoreModule(false);
+    store.selectedSettlementId = 'home-1';
     fieldOrderArmy.mockReset().mockResolvedValue({});
     store.armies = [
       {
@@ -3326,6 +3655,157 @@ describe('useWorldStore confirmFieldOrder from the send picker', () => {
 
     expect(store.fieldOrderDraft?.error).toBe("No land route: mountains and wide rivers can't be crossed.");
     expect(store.sendPicker).not.toBeNull();
+  });
+});
+
+// The send picker lists the garrison and field armies of every realm the player owns: the store keeps them for the realms other than the
+// open one, and a dispatch from such a realm's garrison goes to that realm's own settlement.
+describe('useWorldStore other realms as send sources', () => {
+  // The own-settlements list is an authorized endpoint: the tests that read it run as a logged-in player (the module registry is reset per
+  // store load, so the auth store has to be the one loaded after it).
+  async function loggedIn() {
+    const { useAuthStore } = await import('./auth');
+    useAuthStore().user = { id: 'u1', userName: 'ragnar', role: 'player', status: 'active', displayName: null, isPremium: false, preferredLocale: null } as never;
+  }
+
+  function summary(id: string, realmId: string, name: string) {
+    return { id, realmId, name, mine: true };
+  }
+  function realmResponse(id: string, name: string, garrison: { unit: string; count: number }[]) {
+    return {
+      id,
+      name,
+      garrison,
+      garrisonSpots: [{ ...LONGHOUSE_SPOT, stacks: garrison }],
+      buildings: [],
+      resources: { available: { food: 77 } },
+    };
+  }
+
+  it('reads the garrison and army list of each other realm, one entry per realm, and skips the open one and its linked members', async () => {
+    const store = await loadStoreModule(false);
+    await loggedIn();
+    store.worldId = 'w1';
+    store.selectedSettlementId = 'open';
+    listMySettlements.mockReset().mockResolvedValue([
+      summary('open', 'open', 'Bjarnoy'),
+      summary('open-new', 'open', 'Bjarnoy'),
+      summary('far', 'far', 'Vik'),
+      summary('far-new', 'far', 'Vik'),
+    ]);
+    getSettlement.mockReset().mockImplementation(async (id: string) => realmResponse(id, 'Vik', [{ unit: 'spearman', count: 4 }]));
+    getSettlementArmies.mockReset().mockResolvedValue([{ id: 'fa' }]);
+    getArmy.mockReset().mockResolvedValue({ id: 'fa', settlementId: 'far', stacks: [] });
+
+    await store.refreshOtherRealms();
+
+    expect(getSettlement).toHaveBeenCalledTimes(1);
+    expect(getSettlement.mock.calls[0]![0]).toBe('far');
+    expect(store.otherRealms).toEqual([
+      {
+        realmId: 'far',
+        name: 'Vik',
+        garrison: [{ unit: 'spearman', count: 4 }],
+        garrisonSpots: [expect.objectContaining({ kind: 'longhouse' })],
+        buildings: [],
+        availableFood: 77,
+        armies: [{ id: 'fa', settlementId: 'far', stacks: [] }],
+      },
+    ]);
+    expect(store.sendRealms.map((r) => [r.realmId, r.current])).toEqual([['open', true], ['far', false]]);
+  });
+
+  it("keeps a realm's last snapshot when its read fails, and drops a realm the player no longer has", async () => {
+    const store = await loadStoreModule(false);
+    await loggedIn();
+    store.worldId = 'w1';
+    store.selectedSettlementId = 'open';
+    listMySettlements.mockReset().mockResolvedValue([summary('a', 'a', 'A'), summary('b', 'b', 'B')]);
+    getSettlement.mockReset().mockImplementation(async (id: string) => realmResponse(id, id, [{ unit: 'spearman', count: 1 }]));
+    getSettlementArmies.mockReset().mockResolvedValue([]);
+    await store.refreshOtherRealms();
+    // One read of the player's settlements feeds both the header's realm list and the other-realm snapshots.
+    expect(listMySettlements).toHaveBeenCalledTimes(1);
+    expect(store.realmList.map((r) => r.id)).toEqual(['a', 'b']);
+
+    getSettlement.mockReset().mockImplementation(async (id: string) => {
+      if (id === 'a') throw new Error('boom');
+      return realmResponse(id, id, [{ unit: 'spearman', count: 9 }]);
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await store.refreshOtherRealms();
+    expect(store.otherRealms.map((r) => [r.realmId, r.garrison[0]!.count])).toEqual([['a', 1], ['b', 9]]);
+
+    listMySettlements.mockReset().mockResolvedValue([summary('b', 'b', 'B')]);
+    await store.refreshOtherRealms();
+    warn.mockRestore();
+    expect(store.otherRealms.map((r) => r.realmId)).toEqual(['b']);
+  });
+
+  it('reads nothing for a visitor who is not logged in (the endpoint would 401)', async () => {
+    const store = await loadStoreModule(false);
+    store.worldId = 'w1';
+    store.selectedSettlementId = 'open';
+    listMySettlements.mockReset();
+
+    await store.refreshOtherRealms();
+
+    expect(listMySettlements).not.toHaveBeenCalled();
+    expect(store.otherRealms).toEqual([]);
+  });
+
+  it('reads nothing in demo mode', async () => {
+    const store = await loadStoreModule(true);
+    store.selectedSettlementId = 'open';
+    listMySettlements.mockReset();
+
+    await store.refreshOtherRealms();
+
+    expect(listMySettlements).not.toHaveBeenCalled();
+  });
+
+  it("a dispatch from another realm's garrison posts to that realm's settlement, with that realm's spots, and keeps the open realm", async () => {
+    const store = await loadStoreModule(false);
+    dispatchArmy.mockReset().mockResolvedValue({});
+    getSettlementArmies.mockReset().mockResolvedValue([]);
+    store.selectedSettlementId = 'open';
+    store.hud.garrisonSpots = [];
+    store.otherRealms = [
+      {
+        realmId: 'far',
+        name: 'Vik',
+        garrison: [{ unit: 'spearman', count: 4 }],
+        garrisonSpots: [{ ...LONGHOUSE_SPOT, q: 20, r: 20, stacks: [{ unit: 'spearman', count: 4 }] }],
+        buildings: [],
+        availableFood: 77,
+        armies: [],
+      },
+    ] as never;
+    // The refresh after the dispatch is not under test here.
+    vi.spyOn(store, 'refreshLiveSettlement').mockResolvedValue();
+    store.startDispatchAt({ q: 3, r: 3 }, { sourceRealmId: 'far' });
+    store.dispatchDraft!.unitCounts = { spearman: 2 };
+    store.dispatchDraft!.provisions = 5;
+
+    await store.confirmDispatch();
+
+    expect(dispatchArmy).toHaveBeenCalledTimes(1);
+    expect(dispatchArmy.mock.calls[0]![0]).toBe('far');
+    expect(dispatchArmy.mock.calls[0]![1].from).toEqual([{ spot: { q: 20, r: 20 }, units: [{ unit: 'spearman', count: 2 }] }]);
+    expect(store.selectedSettlementId).toBe('open');
+  });
+
+  it('refuses a dispatch whose source realm is gone instead of sending it from the open realm', async () => {
+    const store = await loadStoreModule(false);
+    dispatchArmy.mockReset().mockResolvedValue({});
+    store.selectedSettlementId = 'open';
+    store.startDispatchAt({ q: 3, r: 3 }, { sourceRealmId: 'gone' });
+    store.dispatchDraft!.unitCounts = { spearman: 2 };
+
+    await store.confirmDispatch();
+
+    expect(dispatchArmy).not.toHaveBeenCalled();
+    expect(store.dispatchDraft!.error).not.toBeNull();
   });
 });
 

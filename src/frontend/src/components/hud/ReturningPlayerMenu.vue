@@ -16,8 +16,8 @@
 // (WorldList.vue, `compact`, shared with WorldPickerView.vue's full-page
 // use) — two clicks. "Log in" stays reachable in the same single click that
 // opened the dropdown, just not the first thing the panel shows.
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
+import { computed, ref } from 'vue';
+import { useRouter, type RouteLocationRaw } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import WorldList from './WorldList.vue';
 import { useWorldStore } from '../../stores/world';
@@ -26,6 +26,8 @@ import HudMenuLocaleRow from './HudMenuLocaleRow.vue';
 import HudNavLink from './HudNavLink.vue';
 import { settingsLocation } from '../../lib/modalRoute';
 import { usePreloadRoute } from '../../composables/usePreloadRoute';
+import { barMenuHorizontal, useAnchoredMenu } from '../../composables/useAnchoredMenu';
+import { vPhoneHidden } from '../../composables/usePhoneLayer';
 import { introMounted } from '../../intro/introSignal';
 import { mountLandingIntro } from '../../intro/startLandingIntro';
 
@@ -57,15 +59,23 @@ const props = withDefaults(
 );
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
-const route = useRoute();
 const router = useRouter();
 const world = useWorldStore();
 
-const open = ref(false);
 // The "Name your jarl" row (and the trigger's label) lead to /register for an unclaimed realm:
 // loaded ahead so that row opens the form at once.
 usePreloadRoute('/register', () => props.unclaimedRealm);
 const rootEl = ref<HTMLDivElement | null>(null);
+const triggerEl = ref<HTMLButtonElement | null>(null);
+const panelEl = ref<HTMLElement | null>(null);
+// The panel is teleported (the bar hides under a phone layer, see usePhoneLayer) and hangs from the trigger.
+const { open, layer, style: panelStyle, side, isMobile, toggle, close } = useAnchoredMenu({
+  trigger: triggerEl,
+  root: rootEl,
+  panel: panelEl,
+  gap: 10,
+  horizontal: barMenuHorizontal(300),
+});
 
 // "Log in" carries the currently-joined world along as context (login↔world
 // linkage in the plan doc above): logging in from within a specific world's
@@ -82,14 +92,6 @@ const loginTarget = computed<RouteLocationRaw>(() => {
   return { path: '/login', query };
 });
 
-function toggle() {
-  open.value = !open.value;
-}
-
-function close() {
-  open.value = false;
-}
-
 function go(to: RouteLocationRaw) {
   close();
   router.push(to);
@@ -105,35 +107,12 @@ function goToSettings() {
   close();
   router.push(settingsLocation(router));
 }
-
-function onDocumentPointerDown(event: PointerEvent) {
-  if (!open.value) return;
-  const target = event.target as Node | null;
-  if (rootEl.value && target && !rootEl.value.contains(target)) close();
-}
-
-function onDocumentKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') close();
-}
-
-onMounted(() => {
-  document.addEventListener('pointerdown', onDocumentPointerDown, true);
-  document.addEventListener('keydown', onDocumentKeydown);
-});
-onBeforeUnmount(() => {
-  document.removeEventListener('pointerdown', onDocumentPointerDown, true);
-  document.removeEventListener('keydown', onDocumentKeydown);
-});
-
-// A navigation while the panel is open (e.g. the browser back button, or
-// some other control on the page) should close it same as clicking a row
-// would — it makes no sense pinned open over a different route.
-watch(() => route.fullPath, close);
 </script>
 
 <template>
   <div ref="rootEl" class="returning-player-menu">
     <button
+      ref="triggerEl"
       type="button"
       class="trigger"
       :class="{ 'is-nudging': nudging, 'trigger--chip': chip }"
@@ -165,8 +144,17 @@ watch(() => route.fullPath, close);
       <!-- Caller-provided corner badge (HudNav: the unread reports count). -->
       <slot name="trigger-badge" />
     </button>
-    <div v-if="open" class="panel menu" role="menu" data-testid="returning-player-menu">
-      <div class="notch" />
+    <Teleport to="body">
+    <div
+      v-if="open"
+      ref="panelEl"
+      v-phone-hidden="layer.hidden.value"
+      class="panel menu"
+      role="menu"
+      data-testid="returning-player-menu"
+      :style="panelStyle"
+    >
+      <div v-if="side === 'below' && !isMobile" class="notch" />
       <button
         v-if="unclaimedRealm"
         type="button"
@@ -220,6 +208,7 @@ watch(() => route.fullPath, close);
       <HudMenuLocaleRow />
       <WorldList compact />
     </div>
+    </Teleport>
     <slot name="nudge" />
   </div>
 </template>
@@ -322,12 +311,9 @@ html[data-hud-motion='reduced'] .trigger.is-nudging {
   border: 2px solid var(--shell);
 }
 .menu {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
+  position: fixed;
   z-index: 50;
-  width: 300px;
-  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
   max-height: 70vh;
   overflow-y: auto;
   padding: 8px;

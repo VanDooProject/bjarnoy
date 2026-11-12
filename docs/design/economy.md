@@ -264,6 +264,8 @@ play.
 - A linked realm's units eat from the shared food. When it runs out, the units with the highest upkeep across the whole realm starve first, until the shared food stops falling.
 - Leaderboards show a linked realm once, under the oldest settlement's name, with the members' scores added up; battle and trade reports use the realm's name.
 - A linked realm holds one shrine in total, like a settlement: while it holds one or more, no new shrine can be built in it. Settlements that each raised a shrine before they linked keep them all, and all of them keep working, so linking settlements is a way to combine favours.
+- **Switching between your realms.** In the settlement view, tapping a hex of another of your realms switches to it right away: the top bar shows its name, Longhouse level and stock, the queues and garrison are its own, and you can build there as at home. Clicking the realm name in the top bar centres the map on your realm; the arrow beside it lists your realms, and picking one switches to it and centres the map on it.
+- **Sending troops between your realms.** When you send troops, you can pick the home garrison of any of your realms or any of their armies in the field. Troops from the realm you send them to move there; troops from another of your realms go as support.
 - **Producers are limited only by territory:** every matching hex inside
   the claim can hold one.
 - **Rivers and bog creeks block space but pay for it.** A river hex can't
@@ -273,7 +275,8 @@ play.
   the same for bog-ore works. A river or creek running through a claim is a
   trade: fewer producer hexes, and a much stronger boost on the ones that are
   left.
-- **Which ground takes what.** Sand takes only towers and walls. Every other
+- **Which ground takes what.** Sand takes only towers, walls and the Longhouse of a settlement founded on the shore (it
+  is never placed anew, only levelled where it stands). Every other
   ordinary building (Smithy, Archery Range, Barracks, Siege Workshop and the
   rest) stands on grass only. A stream, a widening or a river spring takes no
   building. A full-width river hex takes only what has art for its shape:
@@ -453,6 +456,11 @@ under the river (grass, forest or sand).
 **Movement** (land armies; fleets are unaffected). Only standing bridges count (level 1
 or more): a foundation leaves the river shut. The bridge's price replaces the
 impassable wide river in `HexPathfinder.LandStepCost`; streams keep their own price.
+A build or raze order is applied when its owner's settlement is next settled, but the river opens
+or shuts for every army from the instant the order **completes**: a finished build order counts at
+the level it reaches (the price table below is by level), a finished raze at the level it leaves
+(0: no bridge). `WorldBridges.TimelineAsync` reads that, and route planning asks it for the
+instant it plans at, like the walls (`WorldPalisades.TimelineAsync`).
 
 | Level | Land army |
 |---|---|
@@ -628,7 +636,9 @@ their renown.
   - **Exactly once per settlement.** Each quest has a bit in the settlement's
     claimed-quests mask, set in the same save that pays the reward, so a
     double click or a retry gets a 409 (`AlreadyClaimed`), never a second
-    payment. A second settlement has its own list.
+    payment. Quests are enabled only on a player's first settlement in a world
+    (the oldest by founding time): any later settlement lists none, and claiming one there gets a 409
+    (`NotFirstSettlement`).
   - **Only standing buildings count.** Queued and under-construction orders do
     not; a producer is any building (other than the Longhouse) that yields
     wood, brick, food or iron of its own, so storage, towers and the

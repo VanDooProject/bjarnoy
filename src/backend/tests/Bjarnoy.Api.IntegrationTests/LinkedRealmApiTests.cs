@@ -12,6 +12,7 @@ using Bjarnoy.Infrastructure.Services;
 using Bjarnoy.Infrastructure.Services.PlotReservations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -62,8 +63,7 @@ public sealed class LinkedRealmApiTests : IAsyncLifetime
     {
         using var anonymous = _factory.CreateClient();
         var world = await _factory.CreateWorldAsync($"w-{Guid.CreateVersion7():N}"[..20], 21, 60, cancellationToken: Ct);
-        var islands = (await anonymous.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct))!
+        var islands = (await anonymous.GetFullIslandsAsync(world.Id, Ct))!
             .Where(i => i.StartPositions.Count > 0).ToList();
         Assert.True(islands.Count >= 2, "the world needs two islands with a start position");
 

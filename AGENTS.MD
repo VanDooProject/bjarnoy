@@ -332,6 +332,8 @@
 - that holds everywhere a choice comes up, not only mid-task: the open questions at the end of a plan or report, the
   `user decision` rows of the state table, a list of recommended options. Ask them with `AskUserQuestion` in the same turn,
   before handing back; writing "recommended option first" in prose instead is the thing this rule forbids
+- when an `AskUserQuestion` call comes back with questions unanswered or skipped (e.g. "User did not answer this question"),
+  ask them again with the tool once the message I sent instead is handled; a skipped question is still open, not declined
 - if u take screenshots always show the in chat to me too
 - for planning u can use a opus or fable subtask/subagent
 - artifacts that go through rounds (UX reviews, design options, motion

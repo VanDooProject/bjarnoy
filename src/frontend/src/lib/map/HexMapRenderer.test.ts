@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  MAX_ART_OVERHANG,
+  REBUILD_MOVE_THRESHOLD,
+  VISIBLE_RECT_MARGIN,
   armyMarkerColor,
   armyMarkerAt,
   armyTapSwallowed,
@@ -37,6 +40,7 @@ import {
   worldPawHalfSize,
   worldRiverColor,
 } from './HexMapRenderer';
+import { GIANT_MAX_NATIVE_H } from './giantTiles';
 import { StaticWorldModel } from './StaticWorldModel';
 import { PREVIEW_ISLAND_RADIUS } from './WorldModel';
 import type { RiverTile, Tile } from './types';
@@ -115,6 +119,13 @@ describe('worldLayerOrder', () => {
     expect(indexIn('settlement', 'water')).toBeLessThan(indexIn('settlement', 'terrainTop'));
   });
 
+  it('draws the river flow mesh right after the water mesh in both modes', () => {
+    // §4.4e: the river flow is its own mesh, drawn over the water mesh's beach foam and under everything after it.
+    for (const mode of ['world', 'settlement'] as const) {
+      expect(indexIn(mode, 'riverFlow')).toBe(indexIn(mode, 'water') + 1);
+    }
+  });
+
   it('puts the bog lake gust above the ground art and below the tall art in settlement mode', () => {
     // So lily pads, boats and the fish weir (terrainTop) draw over the gust.
     expect(indexIn('settlement', 'terrainBase')).toBeLessThan(indexIn('settlement', 'bogLake'));
@@ -151,7 +162,7 @@ describe('worldLayerOrder', () => {
     // strokes) — settlement mode draws rivers as sprite tile art baked into
     // terrainBase/terrainTop instead (riverTexturesFor), so it never adds
     // 'rivers' to its own order.
-    const expectedLength = { world: 12, settlement: 11 } as const;
+    const expectedLength = { world: 13, settlement: 12 } as const;
     for (const mode of ['world', 'settlement'] as const) {
       const order = worldLayerOrder(mode);
       expect(new Set(order).size).toBe(order.length);
@@ -1296,5 +1307,31 @@ describe('armyTapSwallowed', () => {
 
   it('keeps the tap on the marker while the send picker is open', () => {
     expect(armyTapSwallowed([marker('a'), marker('b', { pick: 'eligible' })])).toBe(true);
+  });
+});
+
+describe('terrain rebuild cadence', () => {
+  it('draws far enough past the viewport that no hex whose art reaches into view is undrawn before the next rebuild', () => {
+    // A hex is drawn when its grid position is in the visible rect, and its art reaches MAX_ART_OVERHANG past that position; the
+    // camera can move REBUILD_MOVE_THRESHOLD before the rect is recomputed.
+    expect(VISIBLE_RECT_MARGIN - REBUILD_MOVE_THRESHOLD).toBeGreaterThanOrEqual(MAX_ART_OVERHANG.x);
+    expect(VISIBLE_RECT_MARGIN - REBUILD_MOVE_THRESHOLD).toBeGreaterThanOrEqual(MAX_ART_OVERHANG.y);
+  });
+
+  // The vendored atlas manifests (a gitignored submodule: absent where it was not checked out, then the check is skipped).
+  const manifests = import.meta.glob('../../../vendor/bg_assets_hextile/atlas/*.json', { eager: true, import: 'default' }) as Record<
+    string,
+    { frames?: Record<string, { sourceSize?: { h: number } }> }
+  >;
+  const vendored = Object.keys(manifests).length > 0;
+
+  it.skipIf(!vendored)('the vendored giant parts are no taller than the overhang the margins allow for', () => {
+    const heights = Object.values(manifests).flatMap((m) =>
+      Object.entries(m.frames ?? {})
+        .filter(([name]) => /^giant[a-z]+_.*_part/.test(name))
+        .map(([, frame]) => frame.sourceSize?.h ?? 0),
+    );
+    expect(heights.length).toBeGreaterThan(0);
+    expect(Math.max(...heights)).toBeLessThanOrEqual(GIANT_MAX_NATIVE_H);
   });
 });

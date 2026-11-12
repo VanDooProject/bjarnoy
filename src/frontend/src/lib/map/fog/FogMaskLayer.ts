@@ -5,6 +5,7 @@
 // on how this replaces v1's per-hex blob/pattern-sprite fog entirely.
 import { BufferImageSource, GlProgram, Mesh, MeshGeometry, Shader, Texture, UniformGroup } from 'pixi.js';
 import { noiseLatticeTexture } from '../shaderNoise';
+import { hexToRgb01 } from '../shaderResources';
 import { FOG_FRAGMENT, FOG_VERTEX, MAX_ARMY_VISION_SOURCES } from './fogShader';
 import { ARMY_FOG_WHITE_MARGIN, ARMY_FOG_WHITE_OFFSET, FOG_MIST_OPAQUE_AT_RAMP, NOISE_REACH } from './fogRamp';
 
@@ -170,10 +171,6 @@ function fullscreenGeometry(): MeshGeometry {
     uvs: new Float32Array([0, 1, 1, 1, 1, 0, 0, 0]),
     indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
   });
-}
-
-function hexToRgb01(hex: number): [number, number, number] {
-  return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
 }
 
 export interface FogMaskLayerColors {

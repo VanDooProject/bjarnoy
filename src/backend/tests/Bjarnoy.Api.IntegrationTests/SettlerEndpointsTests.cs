@@ -11,6 +11,7 @@ using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -171,13 +172,12 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
     /// settlers require it) and grants a large resource stock so training is
     /// never blocked on cost.
     /// </summary>
-    private async Task<(Guid WorldId, SettlementResponse Settlement, AuthResponse Player, IslandResponse Island)>
+    private async Task<(Guid WorldId, SettlementResponse Settlement, AuthResponse Player, FullIslandResponse Island)>
         SetUpPlayerReadyToExpandAsync(HttpClient client)
     {
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         // Largest island available, not just the first with enough start
         // positions: the golden-path test needs enough landmass for an
         // overland-foundable hex to exist at all (see
@@ -406,6 +406,13 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
 
         Assert.Equal(1, renown!.SettlementCount);
         Assert.Equal(55_000, renown.RequiredForNextSettlement);
+
+        // The settlement list says which row is the camp: the flag, not the missing Longhouse level, tells.
+        var mine = await client.GetFromJsonAsync<List<SettlementSummary>>(
+            $"/api/v1/worlds/{worldId}/settlements/mine", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(2, mine!.Count);
+        Assert.True(mine.Single(r => r.Name == "Strandlager").IsBeachCamp);
+        Assert.False(mine.Single(r => r.Name != "Strandlager").IsBeachCamp);
     }
 
     [Fact]

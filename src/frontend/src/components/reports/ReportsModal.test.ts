@@ -21,8 +21,9 @@ vi.mock('../../config', async (importOriginal) => {
   return { ...actual, DEMO_MODE: false };
 });
 
-const { getWorldReports, getWorldTradeReports, getWorldFieldReports, getWorldCampReports } = vi.hoisted(() => ({
+const { getWorldReports, getWorldTradeReports, getWorldFieldReports, getWorldCampReports, getWorldArmyReports } = vi.hoisted(() => ({
   getWorldReports: vi.fn(),
+  getWorldArmyReports: vi.fn(),
   getWorldTradeReports: vi.fn(),
   getWorldFieldReports: vi.fn(),
   getWorldCampReports: vi.fn(),
@@ -32,7 +33,7 @@ vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
   return {
     ...actual,
-    api: { getWorldReports, getWorldTradeReports, getWorldFieldReports, getWorldCampReports },
+    api: { getWorldReports, getWorldTradeReports, getWorldFieldReports, getWorldCampReports, getWorldArmyReports },
   };
 });
 
@@ -100,6 +101,7 @@ beforeEach(() => {
   getWorldTradeReports.mockResolvedValue([]);
   getWorldFieldReports.mockResolvedValue([]);
   getWorldCampReports.mockResolvedValue([]);
+  getWorldArmyReports.mockResolvedValue([]);
   const player = usePlayerStore();
   player.settlementId = 'settlement-1';
   useWorldStore().worldId = 'world-1';

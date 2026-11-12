@@ -19,7 +19,8 @@ public static class Shoreline
     /// its six neighbours is <see cref="Terrain.Sea"/> — the hex a longship
     /// can beach a raiding party on. A sea hex is never itself a shoreline,
     /// even one entirely enclosed by land (a lagoon): "shoreline" means land a
-    /// fleet can reach, not water a fleet can reach.
+    /// fleet can reach, not water a fleet can reach. An
+    /// <see cref="Terrain.InlandLake"/> is not sea: a land hex bordering only an inland lake is no shoreline.
     /// </summary>
     public static bool IsShoreline(HexCoord coord, Func<HexCoord, Terrain> terrainAt)
     {

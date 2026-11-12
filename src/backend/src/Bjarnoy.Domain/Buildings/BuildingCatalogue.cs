@@ -645,7 +645,8 @@ public static class BuildingCatalogue
     /// <summary>Bog and lake hexes: what boosts a bog-ore works (the bog around it, its creeks and lakes) and a lake fishing hut (the lake).</summary>
     private static readonly IReadOnlySet<Terrain> BogOrLake = new HashSet<Terrain> { Terrain.Bog, Terrain.Lake };
 
-    private static readonly IReadOnlySet<Terrain> SeaOrLake = new HashSet<Terrain> { Terrain.Sea, Terrain.Lake };
+    /// <summary>The water a Fishing Hut counts: inland-lake water counts like the sea.</summary>
+    private static readonly IReadOnlySet<Terrain> FishingWater = new HashSet<Terrain> { Terrain.Sea, Terrain.Lake, Terrain.InlandLake };
 
     private static readonly IReadOnlySet<BogTileKind> PlainBogOnly = new HashSet<BogTileKind> { BogTileKind.Bog };
     private static readonly IReadOnlySet<BogTileKind> CreekOnly = new HashSet<BogTileKind> { BogTileKind.Creek };
@@ -669,7 +670,7 @@ public static class BuildingCatalogue
             // around it (rather than the land it backs onto) is what makes a
             // fishing spot better.
             // A lake Fishing Hut (on a half shore) counts the lake hexes around it the way the coastal one counts sea.
-            [BuildingType.FishingHut] = new(SeaOrLake, PerTilePercent: 0.10, CapPercent: 0.50),
+            [BuildingType.FishingHut] = new(FishingWater, PerTilePercent: 0.10, CapPercent: 0.50),
             // The bog around a bog-ore works: any bog hex (moss, shore, creek, spring, mouth) or lake water.
             [BuildingType.BogOreWorks] = new(BogOrLake, PerTilePercent: 0.10, CapPercent: 0.50),
             // Sawmill no longer has an entry here — it produces nothing of
@@ -794,7 +795,10 @@ public static class BuildingCatalogue
         // producer): +15 wood, +12 stone, +15 food, +2 iron per level.
         ProductionPerHour = new ResourceAmounts(Wood: 15, Stone: 12, Food: 15, Iron: 2) * level,
         StorageCapacity = ResourceAmounts.Uniform(250) * level,
-        AllowedTerrain = Grass,
+        // Grass, or the shore sand a settlement founded from the sea stands on (docs/design/skirmish/realm-takeover.md): the
+        // upgrade re-checks the hex, so a sand-founded Longhouse could not be levelled while this was grass only. The
+        // Longhouse is never placed anew (PlanBuild refuses a second one), so this only keeps the founded one upgradable.
+        AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Sand },
         // The settlement's own centre-disc claim radius at this longhouse
         // level — see Settlement.ClaimRadius, which reads this back. The
         // Longhouse only grows the realm until towers are available: 2 at
@@ -871,6 +875,8 @@ public static class BuildingCatalogue
         RequiresCoastalWater = true,
         // Also on a lake's half shore (three water edges), drawn with the lake art.
         LakeShoreKinds = HalfShoreOnly,
+        // And on an inland lake that borders land.
+        AlsoOnInlandLakeShore = true,
     };
 
     /// <summary>

@@ -5,7 +5,7 @@
     "goTo": "Go to {name}",
     "rename": "Rename…",
     "realms": "Your realms",
-    "current": "Current"
+    "longhouse": "Longhouse {level}"
   },
   "settlementRename": {
     "label": "Settlement name",
@@ -150,9 +150,10 @@
       "foundNeedsSettlers": "{have} / {need} settlers at home",
       "foundNeedsRenown": "Renown {total} / {required}",
       "foundRenownUnknown": "Checking your renown…",
+      "setUpCamp": "Set up camp",
+      "campNeedsBuilders": "{have} / {need} camp builders at home",
       "sendArmyHere": "Send army here",
       "attack": "Attack",
-      "support": "Support",
       "upgrade": "Upgrade",
       "notEnough": "Needs {resources}",
       "raze": "Raze",
@@ -189,7 +190,10 @@
       "razeTitle": "Raze to level {level}",
       "razeTitleRemove": "Tear down",
       "razeSubRemove": "{building} · Level 1 → gone",
-      "razeBadge": "CAN BE RAZED"
+      "razeBadge": "CAN BE RAZED",
+      "campTitle": "Set up a beach camp",
+      "campSub": "Two camp builders set it up",
+      "campBadge": "CAMP CAN GO HERE"
     },
     "tap": {
       "build": "Tap {name} again to build",
@@ -197,6 +201,7 @@
       "raze": "Tap {name} again to raze"
     },
     "errors": {
+      "couldNotSwitchRealm": "Could not switch to that realm.",
       "couldNotQueueBuild": "Could not queue that build.",
       "couldNotQueueUpgrade": "Could not queue that upgrade.",
       "couldNotQueueRaze": "Could not queue that raze."
@@ -385,15 +390,17 @@
     "supporting": "Supporting",
     "returning": "Returning",
     "inTransit": "In transit",
-    "hunting": "Hunting"
+    "hunting": "Hunting",
+    "cannotGetHome": "Cannot get home",
+    "starvesIn": "starves in {eta}",
+    "buildingCamp": "Building the camp, ready at {time}"
   },
   "garrisonSpots": {
     "longhouse": "Longhouse",
     "tower": "Tower",
     "dock": "Dock",
     "beachcamp": "Beach camp",
-    "from": "from {spots}",
-    "severalSpots": "These units stand at several spots. Sending from several spots at once is coming soon."
+    "from": "from {spots}"
   },
   "armyPanel": {
     "title": "Armies",
@@ -419,6 +426,7 @@
     "cancel": "Cancel",
     "sending": "Sending…",
     "confirmOrder": "Confirm order",
+    "campInstructions": "The last hex of the route is where the beach camp is set up. Two camp builders go, and you can add ships and escorts. It costs {cost} and takes {time} to build once the army is there.",
     "foundInstructions": "The last hex of the route is where the settlement is founded. Five settlers go, and you can add ships and escorts. With ships the convoy sails and lands on the last hex.",
     "dispatchInstructions": "Click hexes on the map to plot a route — the last click is the destination. {count} {hexWord} plotted.",
     "targetInstructions": "Choose a settlement to {mission}, then optionally click hexes on the map to plot a route there. {count} {waypointWord} plotted.",
@@ -465,13 +473,14 @@
   },
   "sendPicker": {
     "title": "{mission} → {target}",
+    "titleOwnRealm": "Send army → {target}",
     "close": "Close",
     "hex": "Hex ({q}, {r})",
-    "home": "Home",
-    "garrison": "Garrison",
     "units": "{count} unit | {count} units",
-    "standingAt": "Standing at ({q}, {r})",
-    "marchingTo": "Marching to ({q}, {r})",
+    "homeUnits": "Home · {count} unit | Home · {count} units",
+    "homeEmpty": "Home · no units",
+    "armyStandingAt": "Army · {count} unit at ({q}, {r}) | Army · {count} units at ({q}, {r})",
+    "armyMarchingTo": "Army · {count} unit marching to ({q}, {r}) | Army · {count} units marching to ({q}, {r})",
     "etaMinutes": "{minutes} min",
     "etaHours": "{hours} h {minutes} min",
     "wholeArmy": "Whole army moves.",

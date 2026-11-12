@@ -79,7 +79,8 @@
     "forest": "Forest",
     "mountain": "Mountain",
     "bog": "Bogland",
-    "lake": "Bog lake"
+    "lake": "Bog lake",
+    "inlandlake": "Inland lake"
   },
   "wastedTerrain": {
     "wasteland": "Wasteland",
@@ -99,6 +100,7 @@
     "support": "Support",
     "raid": "Raid",
     "found": "Found settlement",
+    "setupcamp": "Set up camp",
     "hunt": "Hunt"
   },
   "runes": {

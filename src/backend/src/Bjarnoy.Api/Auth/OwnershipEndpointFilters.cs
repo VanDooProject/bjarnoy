@@ -108,6 +108,34 @@ public sealed class CampReportOwnershipEndpointFilter : IEndpointFilter
 }
 
 /// <summary>
+/// The army-report sibling of <see cref="CampReportOwnershipEndpointFilter"/>: an army report belongs to the player
+/// (<c>ArmyReportEntity.OwnerId</c>/<c>UserId</c>, the same pair a settlement carries), not to a settlement, so only
+/// that player may read it. Fits <c>ArmyEndpoints.GetArmyReport</c>.
+/// </summary>
+public sealed class ArmyReportOwnershipEndpointFilter : IEndpointFilter
+{
+    public async ValueTask<object?> InvokeAsync(
+        EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(next);
+
+        var reportId = context.GetArgument<Guid>(0);
+
+        var reports = context.HttpContext.RequestServices.GetRequiredService<ArmyReportService>();
+        var report = await reports.GetAsync(reportId, context.HttpContext.RequestAborted);
+        if (report is null)
+        {
+            return await next(context);
+        }
+
+        return OwnershipGate.Owns(context.HttpContext, report.UserId, report.OwnerId)
+            ? await next(context)
+            : OwnershipGate.Refuse();
+    }
+}
+
+/// <summary>
 /// Refuses a settlement-mutating request with 403 unless the caller can prove
 /// they own the target settlement. See <see cref="OwnershipGate"/> for the
 /// actual rule; this filter only resolves the settlement id.
@@ -307,6 +335,6 @@ internal static class OwnershipGate
             : httpContext.Request.Headers[OwnerIdHeaderName].ToString();
     }
 
-    private static IResult Refuse() =>
+    internal static IResult Refuse() =>
         Results.Json(new AuthErrorResponse("not_owner"), statusCode: StatusCodes.Status403Forbidden);
 }

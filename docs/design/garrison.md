@@ -23,6 +23,13 @@
   army moves on together at the pace of its slowest unit. The walk to that hex and the wait count in the round-trip food
   check.
 - The home of such an army is the settlement's garrison spot nearest the hex where the groups met.
+- Until they meet, each group is its own army on the map; at the meeting hex it joins the groups waiting there.
+- If the routes share no hex before the target, the groups meet on the hex just before the target.
+- Passengers for a fleet who stand at a spot without ships walk to one of the fleet's docks and board there; those ships
+  sail once every passenger is aboard.
+- A group that is recalled, gets a new order, is split off or loses a fight before the meeting leaves the gathering; the
+  others go on without it. To call off the whole army, recall every group.
+- When the army leaves the meeting hex, its pace and food are those of the units that actually arrived.
 - Sending out: the send picker counts the units of all spots together. It takes each unit type from the spots nearest the
   target first, then from the next-nearest. The unit picker shows which spot the units come from.
 - Support: you can support a settlement only by choosing one of its garrison spots (its longhouse, a tower or a dock). The

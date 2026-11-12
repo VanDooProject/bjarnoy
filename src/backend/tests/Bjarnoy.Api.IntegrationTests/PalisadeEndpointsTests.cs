@@ -13,6 +13,7 @@ using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -42,7 +43,7 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
 
     private sealed record Player(SettlementResponse Settlement, AuthResponse Auth);
 
-    private static async Task<Player> FoundAsync(HttpClient client, Guid worldId, IslandResponse island, TileCoordinate plot, string name)
+    private static async Task<Player> FoundAsync(HttpClient client, Guid worldId, FullIslandResponse island, TileCoordinate plot, string name)
     {
         var ownerId = Unique("local-owner-");
         var settlement = await (await client.PostJsonAsync(
@@ -55,12 +56,11 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
         return new Player(settlement, auth);
     }
 
-    private async Task<(HttpClient Client, WorldEntity World, IslandResponse Island, Player Owner, HashSet<HexCoord> Rivers)> SetUpAsync()
+    private async Task<(HttpClient Client, WorldEntity World, FullIslandResponse Island, Player Owner, HashSet<HexCoord> Rivers)> SetUpAsync()
     {
         var client = _factory.CreateClient();
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.Where(i => i.StartPositions.Count > 3).OrderByDescending(i => i.TileCount).First();
         var owner = await FoundAsync(client, world.Id, island, island.StartPositions[0], "Ulf");
         var rivers = island.RiverTiles.Select(t => new HexCoord(t.Q, t.R)).ToHashSet();

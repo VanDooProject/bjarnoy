@@ -273,6 +273,20 @@ describe('buildingAllowedOnHex', () => {
     expect(buildingAllowedOnHex('fishinghut', { terrain: 'grass' })).toBe(false);
   });
 
+  it('only the Fishing Hut stands on an inland-lake hex, and only one beside land', () => {
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'inlandlake', isCoastalWater: true })).toBe(true);
+    for (const type of ['dockyard', 'shrineofnjord', 'palisade', 'palisadegate', 'farm', 'tower']) {
+      expect(buildingAllowedOnHex(type, { terrain: 'inlandlake', isCoastalWater: true }), type).toBe(false);
+    }
+    // An interior inland-lake hex takes nothing, the Fishing Hut included.
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'inlandlake' })).toBe(false);
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'inlandlake', isCoastalWater: false })).toBe(false);
+  });
+
+  it('is not buildable as an empty inland-lake hex', () => {
+    expect(tileIsBuildable({ terrain: 'inlandlake' })).toBe(false);
+  });
+
   it('the other water buildings never stand on the bog', () => {
     for (const type of ['dockyard', 'shrineofnjord']) {
       expect(buildingAllowedOnHex(type, { terrain: 'sea', isCoastalWater: true })).toBe(true);

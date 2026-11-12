@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
-import { api, ApiError, isSettlementNotFound, isWorldNotFound } from '../api/client';
+import { api, ApiError, isSettlementNotFound, isTerrainChunkNotFound, isWorldNotFound } from '../api/client';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { i18n } from '../i18n';
 import type {
@@ -8,6 +8,7 @@ import type {
   BuildOrderResponse,
   GuestArmySummary,
   IslandResponse,
+  IslandTerrainResponse,
   PlacedBuildingResponse,
   RuneInstanceResponse,
   SettlementSummary,
@@ -36,6 +37,7 @@ import {
   buildHuntDispatchRequest,
   buildFieldOrderRequest,
   buildFoundDispatchRequest,
+  buildCampDispatchRequest,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
   dispatchTargetCoord,
@@ -43,10 +45,11 @@ import {
   isHuntUnit,
   maxAffordableProvisions,
 } from '../lib/units/armyDispatch';
-import { SETTLERS_PER_FOUNDING } from '../lib/founding';
+import { CAMP_BUILDERS_PER_CAMP, SETTLERS_PER_FOUNDING } from '../lib/founding';
 import { isSandCampFamily, isWaterCampFamily } from '../lib/map/campPlacement';
 import { useUnitCatalogueStore } from './unitCatalogue';
 import { stackCounts } from '../lib/units/fieldOrderFeasibility';
+import { homeSourceId, isHomeSourceId, missionFor, type SendRealm } from '../lib/units/sendSources';
 import { allocateFromSpots, toDispatchFrom } from '../lib/units/garrisonSpots';
 import { DemoTradeError, WorldModel } from '../lib/map/WorldModel';
 import { evaluateDemoQuests, questBit } from '../lib/quests';
@@ -87,6 +90,29 @@ const LIVE_POLL_MS = 4000;
 // that discrete position from ever looking stale for long) rather than a
 // full websocket/animation loop, which the design doc explicitly defers.
 const ARMY_POLL_MS = 2000;
+
+/**
+ * What the send picker needs of one of the player's realms other than the open one: its home garrison (and the spots it stands at),
+ * the food a dispatch from it can load, its buildings (where a land army leaves from) and the armies it has out in the field.
+ */
+export interface SendPickerTarget {
+  mission?: 'attack' | 'hunt';
+  /** An attack's target settlement. */
+  targetSettlementId?: string;
+  /** A hex of the player's own realm: that realm moves there, its other realms go as support to the garrison spot `targetBuildingCoord`. */
+  targetRealmId?: string;
+  targetBuildingCoord?: AxialCoord;
+}
+
+export interface OtherRealmSnapshot {
+  realmId: string;
+  name: string;
+  garrison: UnitStackResponse[];
+  garrisonSpots: GarrisonSpotResponse[];
+  buildings: PlacedBuildingResponse[];
+  availableFood: number;
+  armies: ArmyResponse[];
+}
 
 // How long the camera has to sit still before a viewport that left the loaded
 // fog window triggers a refetch (map-fog-v2.md §3: chunks are fetched "as the
@@ -185,6 +211,8 @@ export const useWorldStore = defineStore('world', {
     otherBuildOrders: [] as OwnBuildOrders[],
     /** `Date.now()` at which `otherBuildOrders` was read: the base its `completesInSeconds` are measured from. */
     otherBuildOrdersFetchedAt: 0,
+    /** Live mode: the player's settlements in this world (`GET /worlds/{id}/settlements/mine`), the header's realm switcher reads them. */
+    myRealms: [] as SettlementSummary[],
     // Set by WorldMapView (`setWorldMapActive`) so `refreshWorldSettlements`
     // knows it's safe to paint every rival's territory — the world map is
     // the one legitimate place that shows the whole world, unlike the
@@ -317,6 +345,9 @@ export const useWorldStore = defineStore('world', {
     // `hud.garrison`/`hud.trainingQueue` above.
     armies: [] as ArmyResponse[],
     armiesFetchedAt: 0,
+    // The player's other realms (live mode, one row per realm besides the open one): the garrison and field armies the send picker
+    // offers as sources. Refetched on the same tick as `armies`; always empty in demo mode (one settlement).
+    otherRealms: [] as OtherRealmSnapshot[],
     // Issue #40 phase 4: guest (Support) armies currently stationed at this
     // settlement — the host's read-only view (`GET /settlements/{id}/guests`).
     // Refetched on the same tick as `armies` (see `refreshArmies` below)
@@ -354,7 +385,7 @@ export const useWorldStore = defineStore('world', {
       // optional waypoints — see `buildSupportDispatchRequest`.
       // 'hunt' targets a wildlife camp's hex (`targetCamp`); the route holds only intermediate waypoints.
       // 'found' is move-shaped (the route's last hex is where the settlement is founded) and carries the fixed five settlers.
-      mission: 'move' | 'attack' | 'support' | 'hunt' | 'found';
+      mission: 'move' | 'attack' | 'support' | 'hunt' | 'found' | 'setupcamp';
       targetSettlementId: string | null;
       targetCamp: { q: number; r: number } | null;
       // Issue #40 phase 5: the coordinate of a building within the target
@@ -365,6 +396,8 @@ export const useWorldStore = defineStore('world', {
       // picked one. Always `null` outside `mission: 'attack'` — a Move/Support
       // dispatch has no battle to apply it in (see `setDispatchMission`).
       targetBuildingCoord: { q: number; r: number } | null;
+      // The realm whose garrison the units leave from (an `otherRealms` entry); null is the open realm.
+      sourceRealmId: string | null;
     } | null,
     // Issue #156 phase 1: waypoint-editing state for an army already out in
     // the field, given a "move on"/"append goal" order — same click-to-plot
@@ -391,10 +424,12 @@ export const useWorldStore = defineStore('world', {
     // menu and which source (`'home'` or a field army's id) is selected. Selecting a field army composes its order in
     // `fieldOrderDraft`; selecting home hands over to a dispatch draft, which closes the picker. `null` while no picker is open.
     sendPicker: null as {
-      mission: 'move' | 'attack' | 'support' | 'hunt';
+      mission: 'move' | 'attack' | 'hunt';
       coord: AxialCoord;
       targetSettlementId: string | null;
-      // A support names the host's garrison spot (its longhouse, a tower or a dock) the army joins: the tapped hex.
+      // A hex of the player's own realm: that realm moves there, the player's other realms go as support to it (to the garrison spot
+      // `targetBuildingCoord`, which is the tapped spot or else the realm's centre).
+      targetRealmId: string | null;
       targetBuildingCoord: AxialCoord | null;
       selectedId: string | null;
     } | null,
@@ -521,6 +556,66 @@ export const useWorldStore = defineStore('world', {
      */
     isRealmSettlement: (state) => (settlementId: string | null | undefined): boolean =>
       !!settlementId && (settlementId === state.selectedSettlementId || state.linkedMemberIds.includes(settlementId)),
+    /** The player's realms, one row per realm (a linked group is one realm, named and levelled by its oldest member). */
+    realmList: (state): { id: string; name: string; level: number; q: number; r: number; isBeachCamp: boolean }[] => {
+      const byRealm = new Map<string, SettlementSummary>();
+      for (const s of state.myRealms) {
+        const key = s.realmId ?? s.id;
+        if (!byRealm.has(key) || s.id === key) byRealm.set(key, s);
+      }
+      return [...byRealm.entries()].map(([id, s]) => ({ id, name: s.name, level: s.longhouseLevel, q: s.q, r: s.r, isBeachCamp: s.isBeachCamp }));
+    },
+    /** The realm id (oldest linked member) of `settlementId` when it belongs to the local player, else null. */
+    ownRealmOf: (state) => (settlementId: string | null | undefined): string | null => {
+      if (!settlementId) return null;
+      const s = state.model.getSettlement(settlementId);
+      return s && state.ownerId && s.ownerId === state.ownerId ? (s.realmId ?? s.id) : null;
+    },
+    /**
+     * Every realm the player can send from, the open one first: its home garrison and the armies it has out in the field. The open
+     * realm reads the live HUD data, the others the snapshots `refreshOtherRealms` keeps.
+     */
+    sendRealms: (state): SendRealm[] => {
+      const open = state.selectedSettlementId;
+      if (!open) return [];
+      const realms: SendRealm[] = [
+        {
+          realmId: open,
+          name: state.model.getSettlement(open)?.name ?? state.hud.settlementName,
+          current: true,
+          garrison: state.hud.garrison,
+          armies: state.armies,
+        },
+      ];
+      for (const other of state.otherRealms) {
+        realms.push({ realmId: other.realmId, name: other.name, current: false, garrison: other.garrison, armies: other.armies });
+      }
+      return realms;
+    },
+    /** Where the open dispatch draft's units leave from: the open realm's HUD data or an other realm's snapshot; null when that realm is gone. */
+    dispatchSource: (state) => {
+      const draft = state.dispatchDraft;
+      if (!draft || !state.selectedSettlementId) return null;
+      if (!draft.sourceRealmId) {
+        return {
+          realmId: state.selectedSettlementId,
+          garrison: state.hud.garrison,
+          garrisonSpots: state.hud.garrisonSpots,
+          buildings: state.hud.buildings,
+          availableFood: state.hud.available.food,
+        };
+      }
+      const other = state.otherRealms.find((r) => r.realmId === draft.sourceRealmId);
+      return other
+        ? {
+            realmId: other.realmId,
+            garrison: other.garrison,
+            garrisonSpots: other.garrisonSpots,
+            buildings: other.buildings,
+            availableFood: other.availableFood,
+          }
+        : null;
+    },
   },
   actions: {
     /**
@@ -599,8 +694,22 @@ export const useWorldStore = defineStore('world', {
       this.model = markRaw(new WorldModel(world.seed, world.generation));
       this.model.setWastedRevealed(world.endbossTriggered);
       this.model.setFrozenEnabled(world.frozenIslesEnabled);
+      let terrain: IslandTerrainResponse[];
       try {
-        this.islands = await api.getIslands(world.id, this.callerOwnerId());
+        // The river and bog tiles are big and only change on a reseed, so they come separately (cached, chunked), in parallel
+        // with the island list.
+        const loadIslandsAndTerrain = () =>
+          Promise.all([api.getIslands(world.id, this.callerOwnerId()), api.getTerrainChunks(world.id)]);
+        let loaded;
+        try {
+          loaded = await loadIslandsAndTerrain();
+        } catch (err) {
+          // The world was reseeded between the chunk manifest and a chunk: the island list read next to it is stale as well,
+          // so read both again (once; a second miss is a real failure).
+          if (!isTerrainChunkNotFound(err)) throw err;
+          loaded = await loadIslandsAndTerrain();
+        }
+        [this.islands, terrain] = loaded;
       } catch (err) {
         if (!isWorldNotFound(err)) throw err;
         // The world resolved a moment ago (getWorld/newestWorld, just above)
@@ -622,9 +731,10 @@ export const useWorldStore = defineStore('world', {
       this.model.setIslands(
         this.islands.map((island) => ({ id: island.id, name: island.name, q: island.q, r: island.r })),
       );
+      const terrainById = new Map(terrain.map((island) => [island.id, island]));
       this.model.setRiverTiles(
         this.islands.flatMap((island) =>
-          island.riverTiles.map((tile) => ({
+          (terrainById.get(island.id)?.riverTiles ?? []).map((tile) => ({
             q: tile.q,
             r: tile.r,
             shape: tile.shape,
@@ -635,11 +745,11 @@ export const useWorldStore = defineStore('world', {
           })),
         ),
       );
-      // Server-generated bogland (see `IslandResponse.bogTiles`): bog moss, lakes, shores, creeks. It is
+      // Server-generated bogland (see `IslandTerrainResponse.bogTiles`): bog moss, lakes, shores, creeks. It is
       // terrain the seed alone cannot give, so it goes in before anything that reads terrain (giants, camps).
       this.model.setBogTiles(
         this.islands.flatMap((island) =>
-          (island.bogTiles ?? []).map((tile) => ({
+          (terrainById.get(island.id)?.bogTiles ?? []).map((tile) => ({
             q: tile.q,
             r: tile.r,
             kind: tile.kind,
@@ -647,6 +757,13 @@ export const useWorldStore = defineStore('world', {
             outDirection: tile.outDirection as TileOrientation | null,
             waterEdges: tile.waterEdges as TileOrientation[],
           })),
+        ),
+      );
+      // Water an island encloses that the bog did not fill (`IslandTerrainResponse.inlandLakeTiles`): drawn like the sea, not land. The API
+      // only lists a wasted island once the endboss has triggered, so a hidden one's lakes never get here.
+      this.model.setInlandLakeTiles(
+        this.islands.flatMap((island) =>
+          (terrainById.get(island.id)?.inlandLakeTiles ?? []).map((tile) => ({ q: tile.q, r: tile.r })),
         ),
       );
       // Server-generated 7-hex giant features (see `IslandResponse.giants`)
@@ -1262,6 +1379,20 @@ export const useWorldStore = defineStore('world', {
       const player = usePlayerStore();
       player.switchSettlement(settlementId);
       await this.restoreLiveSettlement(player.id, settlementId);
+      await this.refreshMyRealms();
+    },
+    /**
+     * Live mode: reloads the player's realms for the header switcher. Best-effort: a failed read keeps the last list. The one
+     * gate for every caller: an anonymous visitor (landing, onboarding) must never even attempt the request, because it 401s and
+     * the logged error surfaces as a console error that the e2e suites reject.
+     */
+    async refreshMyRealms() {
+      if (DEMO_MODE || !useAuthStore().isAuthenticated || !this.worldId || !this.selectedSettlementId) return;
+      try {
+        this.myRealms = await api.listMySettlements(this.worldId);
+      } catch {
+        // The switcher then simply shows what it had.
+      }
     },
     /**
      * Live mode: rehydrates `selectedSettlementId`/`WorldModel` after a page
@@ -1315,6 +1446,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.queue = [];
       this.applySettlementResponse(response);
       this.armies = [];
+      this.otherRealms = [];
       this.guestArmies = [];
       this.armiesFetchedAt = 0;
       this.guestArmiesFetchedAt = 0;
@@ -1379,6 +1511,7 @@ export const useWorldStore = defineStore('world', {
       this.islands = [];
       this.armies = [];
       this.armiesFetchedAt = 0;
+      this.otherRealms = [];
       this.guestArmies = [];
       this.foreignArmies = [];
       this.guestArmiesFetchedAt = 0;
@@ -1393,6 +1526,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.queue = [];
       this.otherBuildOrders = [];
       this.otherBuildOrdersFetchedAt = 0;
+      this.myRealms = [];
       this.hud.garrison = [];
       this.hud.garrisonSpots = [];
       this.hud.trainingQueue = [];
@@ -1660,6 +1794,8 @@ export const useWorldStore = defineStore('world', {
       if (this.selectedSettlementId !== id) return;
       this.armies = details;
       this.armiesFetchedAt = Date.now();
+      await this.refreshOtherRealms();
+      if (this.selectedSettlementId !== id) return;
       this.guestArmies = guests;
       this.guestArmiesFetchedAt = Date.now();
       // Hunts, ambushes and regrowth change camps; piggy-back the camp refresh on the army poll.
@@ -1672,6 +1808,46 @@ export const useWorldStore = defineStore('world', {
       if (this.selectedArmyId && !this.armies.some((a) => a.id === this.selectedArmyId)) {
         this.selectedArmyId = null;
       }
+    },
+    /**
+     * Live mode: reads the garrison and field armies of each of the player's realms other than the open one (the send picker lists
+     * them as sources), on the army poll. A realm whose read fails keeps its last snapshot; one that is gone drops out.
+     */
+    async refreshOtherRealms() {
+      if (DEMO_MODE || !useAuthStore().isAuthenticated || !this.worldId || !this.selectedSettlementId) return;
+      const open = this.selectedSettlementId;
+      // The one read of the player's settlements (gated like this one); a failed read keeps the last list.
+      await this.refreshMyRealms();
+      if (this.selectedSettlementId !== open) return;
+      const realms = this.realmList.filter((r) => r.id !== open);
+      const owner = this.ownerId ?? undefined;
+      const snapshots = await Promise.all(
+        realms.map(async ({ id: realmId, name }): Promise<OtherRealmSnapshot | null> => {
+          try {
+            const [settlement, summaries] = await Promise.all([api.getSettlement(realmId, owner), api.getSettlementArmies(realmId, owner)]);
+            const armies = await Promise.all(summaries.map((s) => api.getArmy(s.id, owner)));
+            return {
+              realmId,
+              name,
+              garrison: settlement.garrison,
+              garrisonSpots: settlement.garrisonSpots,
+              buildings: settlement.buildings,
+              availableFood: settlement.resources.available.food,
+              armies,
+            };
+          } catch (err) {
+            console.warn('realm refresh failed', realmId, err);
+            return this.otherRealms.find((r) => r.realmId === realmId) ?? null;
+          }
+        }),
+      );
+      // The open realm may have switched while the reads were in flight: that read is stale, the next poll has the right one.
+      if (this.selectedSettlementId !== open) return;
+      this.otherRealms = snapshots.filter((s): s is OtherRealmSnapshot => s !== null);
+    },
+    /** A field army of any of the player's realms (the open one's, or an other realm's the send picker lists). */
+    armyById(armyId: string): ArmyResponse | undefined {
+      return this.armies.find((a) => a.id === armyId) ?? this.otherRealms.flatMap((r) => r.armies).find((a) => a.id === armyId);
     },
     selectArmy(armyId: string) {
       this.selectedArmyId = armyId;
@@ -1722,7 +1898,7 @@ export const useWorldStore = defineStore('world', {
      */
     openSendPicker(
       coord: AxialCoord,
-      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string; targetBuildingCoord?: AxialCoord } = {},
+      opts: SendPickerTarget = {},
     ) {
       this.dispatchDraft = null;
       this.fieldOrderDraft = null;
@@ -1730,6 +1906,7 @@ export const useWorldStore = defineStore('world', {
         mission: opts.mission ?? 'move',
         coord: { q: coord.q, r: coord.r },
         targetSettlementId: opts.targetSettlementId ?? null,
+        targetRealmId: opts.targetRealmId ?? null,
         targetBuildingCoord: opts.targetBuildingCoord ? { q: opts.targetBuildingCoord.q, r: opts.targetBuildingCoord.r } : null,
         selectedId: null,
       };
@@ -1742,7 +1919,7 @@ export const useWorldStore = defineStore('world', {
      */
     retargetSendPicker(
       coord: AxialCoord,
-      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string; targetBuildingCoord?: AxialCoord } = {},
+      opts: SendPickerTarget = {},
       keepSelected = true,
     ) {
       const picker = this.sendPicker;
@@ -1750,6 +1927,7 @@ export const useWorldStore = defineStore('world', {
       picker.mission = opts.mission ?? 'move';
       picker.coord = { q: coord.q, r: coord.r };
       picker.targetSettlementId = opts.targetSettlementId ?? null;
+      picker.targetRealmId = opts.targetRealmId ?? null;
       picker.targetBuildingCoord = opts.targetBuildingCoord ? { q: opts.targetBuildingCoord.q, r: opts.targetBuildingCoord.r } : null;
       const id = picker.selectedId;
       if (!id) return;
@@ -1771,10 +1949,11 @@ export const useWorldStore = defineStore('world', {
       this.fieldOrderDraft = null;
     },
     /**
-     * Picks a source in the open picker: `null` unselects, `'home'` hands over to the dispatch flow for the home garrison (the
-     * picker closes, the dispatch draft is prefilled with the same mission and target the ring used to start), a field army's id
-     * composes its order in `fieldOrderDraft` — a standing army with every unit selected (the player trims it to split), a
-     * marching one whole.
+     * Picks a source in the open picker: `null` unselects, `home:<realmId>` hands over to the dispatch flow for that realm's garrison
+     * (the picker closes, the dispatch draft is prefilled with the mission and target that source has at the picker's target: a move
+     * for the realm that owns the hex, a support for the player's other realms), a field army's id composes its order in
+     * `fieldOrderDraft` — a standing army with every unit selected (the player trims it to split), a marching one whole. Neither
+     * changes the open realm.
      */
     selectSendSource(id: string | null) {
       const picker = this.sendPicker;
@@ -1784,39 +1963,47 @@ export const useWorldStore = defineStore('world', {
         this.fieldOrderDraft = null;
         return;
       }
-      if (id === 'home') {
+      const realms = this.sendRealms;
+      const target = {
+        mission: picker.mission,
+        coord: picker.coord,
+        campAtSea: false,
+        targetSettlementId: picker.targetSettlementId,
+        ownRealmId: picker.targetRealmId,
+        supportSpot: picker.targetBuildingCoord,
+      };
+      if (isHomeSourceId(id)) {
+        const realmId = realms.find((r) => homeSourceId(r.realmId) === id)?.realmId;
+        if (!realmId) return;
+        const where = missionFor(target, realmId);
         this.sendPicker = null;
         this.fieldOrderDraft = null;
-        this.startDispatchAt(
-          picker.coord,
-          picker.mission === 'move'
-            ? {}
-            : picker.mission === 'hunt'
-              ? { mission: 'hunt' }
-              : {
-                  mission: picker.mission,
-                  targetSettlementId: picker.targetSettlementId ?? undefined,
-                  targetBuildingCoord: picker.mission === 'support' ? picker.targetBuildingCoord ?? undefined : undefined,
-                },
-        );
+        this.startDispatchAt(picker.coord, {
+          mission: where.mission === 'move' ? undefined : (where.mission as 'attack' | 'support' | 'hunt'),
+          targetSettlementId: where.targetSettlementId ?? undefined,
+          targetBuildingCoord: where.targetBuildingCoord ?? undefined,
+          sourceRealmId: realmId === this.selectedSettlementId ? undefined : realmId,
+        });
         return;
       }
-      const army = this.armies.find((a) => a.id === id);
-      if (!army) return;
+      const realm = realms.find((r) => r.armies.some((a) => a.id === id));
+      const army = realm?.armies.find((a) => a.id === id);
+      if (!realm || !army) return;
+      const where = missionFor(target, realm.realmId);
       picker.selectedId = id;
       const standing = !isFieldOrderMidMarch(army, Date.now());
       this.fieldOrderDraft = {
         armyId: id,
-        route: picker.mission === 'move' || picker.mission === 'hunt' ? [{ q: picker.coord.q, r: picker.coord.r }] : [],
+        route: where.mission === 'move' || where.mission === 'hunt' ? [{ q: where.coord.q, r: where.coord.r }] : [],
         submitting: false,
         error: null,
-        mission: picker.mission,
-        targetSettlementId: picker.targetSettlementId,
-        targetBuildingCoord: picker.mission === 'support' ? picker.targetBuildingCoord : null,
+        mission: where.mission,
+        targetSettlementId: where.targetSettlementId,
+        targetBuildingCoord: where.targetBuildingCoord,
         units: standing ? stackCounts(army.stacks) : null,
       };
       if (picker.mission === 'hunt') this.dropNonHuntUnits();
-      if (picker.mission === 'attack' && picker.targetSettlementId) void this.loadDispatchTargetBuildings(picker.targetSettlementId);
+      if (where.mission === 'attack' && picker.targetSettlementId) void this.loadDispatchTargetBuildings(picker.targetSettlementId);
     },
     /**
      * A hunt takes land units against a land camp (a sand camp also ships, as their carriers), and against a camp at sea the ships and their passengers: the units of the
@@ -1835,7 +2022,7 @@ export const useWorldStore = defineStore('world', {
     /** Sets how many of one unit of the selected field army leave (a standing army's split), clamped to what the army holds. */
     setFieldOrderUnitCount(unit: string, count: number) {
       const draft = this.fieldOrderDraft;
-      const army = draft ? this.armies.find((a) => a.id === draft.armyId) : undefined;
+      const army = draft ? this.armyById(draft.armyId) : undefined;
       if (!draft?.units || !army) return;
       const max = army.stacks.find((s) => s.unit === unit)?.count ?? 0;
       draft.units[unit] = Math.min(max, Math.max(0, Math.floor(count)));
@@ -1890,7 +2077,7 @@ export const useWorldStore = defineStore('world', {
     async confirmFieldOrder() {
       const draft = this.fieldOrderDraft;
       if (!draft) return;
-      const army = this.armies.find((a) => a.id === draft.armyId);
+      const army = this.armyById(draft.armyId);
       // Every unit selected is the whole army: leave `units` out, so a stale stack count can never turn it into a split.
       const whole = !draft.units || !army || army.stacks.every((s) => (draft.units![s.unit] ?? 0) >= s.count);
       const request = buildFieldOrderRequest(draft.route, {
@@ -1923,7 +2110,7 @@ export const useWorldStore = defineStore('world', {
       }
     },
     /** Enters waypoint-editing mode for a fresh dispatch from the current settlement's garrison. */
-    startDispatch() {
+    startDispatch(sourceRealmId: string | null = null) {
       this.fieldOrderDraft = null;
       this.dispatchDraft = {
         unitCounts: {},
@@ -1935,6 +2122,7 @@ export const useWorldStore = defineStore('world', {
         targetSettlementId: null,
         targetCamp: null,
         targetBuildingCoord: null,
+        sourceRealmId,
       };
       this.dispatchTargetBuildings = null;
       this.dispatchTargetBuildingsFor = null;
@@ -1953,15 +2141,31 @@ export const useWorldStore = defineStore('world', {
      */
     startDispatchAt(
       coord: AxialCoord,
-      opts: { mission?: 'attack' | 'support' | 'hunt' | 'found'; targetSettlementId?: string; targetBuildingCoord?: AxialCoord } = {},
+      opts: {
+        mission?: 'attack' | 'support' | 'hunt' | 'found' | 'setupcamp';
+        targetSettlementId?: string;
+        targetBuildingCoord?: AxialCoord;
+        /** The realm whose garrison the units leave from; the open realm when left out. */
+        sourceRealmId?: string;
+      } = {},
     ) {
-      this.startDispatch();
+      this.startDispatch(opts.sourceRealmId ?? null);
       if (!this.dispatchDraft) return;
       if (opts.mission === 'found') {
         // The ring's "Send settlers" / "Land here": the tapped hex is the destination, five settlers go.
         this.dispatchDraft.mission = 'found';
         this.addWaypoint(coord);
         this.dispatchDraft.unitCounts = { settler: SETTLERS_PER_FOUNDING };
+        this.dispatchDraft.provisions = maxAffordableProvisions(
+          this.dispatchDraft.unitCounts,
+          useUnitCatalogueStore().byType,
+          this.hud.available.food,
+        );
+      } else if (opts.mission === 'setupcamp') {
+        // The ring's "Set up camp": the tapped hex is the camp's site, the two camp builders go.
+        this.dispatchDraft.mission = 'setupcamp';
+        this.addWaypoint(coord);
+        this.dispatchDraft.unitCounts = { campbuilder: CAMP_BUILDERS_PER_CAMP };
         this.dispatchDraft.provisions = maxAffordableProvisions(
           this.dispatchDraft.unitCounts,
           useUnitCatalogueStore().byType,
@@ -2067,6 +2271,8 @@ export const useWorldStore = defineStore('world', {
       if (!this.dispatchDraft) return;
       // A founding convoy's settlers are fixed at five; only its ships and escorts are picked.
       if (this.dispatchDraft.mission === 'found' && unit === 'settler') return;
+      // A camp army's builders are fixed at two likewise.
+      if (this.dispatchDraft.mission === 'setupcamp' && unit === 'campbuilder') return;
       this.dispatchDraft.unitCounts[unit] = Math.max(0, Math.floor(count));
     },
     setDispatchProvisions(provisions: number) {
@@ -2113,7 +2319,7 @@ export const useWorldStore = defineStore('world', {
      */
     dispatchSpotGroups(draft: Parameters<typeof dispatchTargetCoord>[0] & { unitCounts: Record<string, number> }) {
       const target = dispatchTargetCoord(draft, (id) => this.model.getSettlement(id));
-      return allocateFromSpots(this.hud.garrisonSpots, draft.unitCounts, target);
+      return allocateFromSpots(this.dispatchSource?.garrisonSpots ?? this.hud.garrisonSpots, draft.unitCounts, target);
     },
     /**
      * Sends the composed draft to the backend as a `move`, `attack`, or
@@ -2124,13 +2330,13 @@ export const useWorldStore = defineStore('world', {
      */
     async confirmDispatch() {
       const draft = this.dispatchDraft;
-      if (!draft || !this.selectedSettlementId) return;
-      const groups = this.dispatchSpotGroups(draft);
-      // Gathering an army from several spots is not possible yet: the dispatch is not attempted.
-      if (groups.length > 1) {
-        draft.error = i18n.global.t('hud.garrisonSpots.severalSpots');
+      const source = this.dispatchSource;
+      if (!draft) return;
+      if (!source) {
+        draft.error = i18n.global.t('common.errors.dispatchFailed');
         return;
       }
+      const groups = this.dispatchSpotGroups(draft);
       const from = toDispatchFrom(groups);
       const request =
         draft.mission === 'attack'
@@ -2147,11 +2353,13 @@ export const useWorldStore = defineStore('world', {
               ? buildHuntDispatchRequest(from, draft.route, draft.provisions, draft.targetCamp)
               : draft.mission === 'found'
                 ? buildFoundDispatchRequest(from, draft.route, draft.provisions)
-                : buildMoveDispatchRequest(from, draft.route, draft.provisions);
+                : draft.mission === 'setupcamp'
+                  ? buildCampDispatchRequest(from, draft.route, draft.provisions)
+                  : buildMoveDispatchRequest(from, draft.route, draft.provisions);
       if (!request) {
         if (Object.values(draft.unitCounts).every((c) => c <= 0)) {
           draft.error = i18n.global.t('common.errors.selectAtLeastOneUnit');
-        } else if ((draft.mission === 'move' || draft.mission === 'found') && draft.route.length === 0) {
+        } else if ((draft.mission === 'move' || draft.mission === 'found' || draft.mission === 'setupcamp') && draft.route.length === 0) {
           draft.error = i18n.global.t('common.errors.clickMapForDestination');
         } else if (draft.mission === 'hunt' && !draft.targetCamp) {
           draft.error = i18n.global.t('common.errors.chooseCampToHunt');
@@ -2165,7 +2373,8 @@ export const useWorldStore = defineStore('world', {
       draft.submitting = true;
       draft.error = null;
       try {
-        await api.dispatchArmy(this.selectedSettlementId, request, this.ownerId ?? undefined);
+        // The units leave the source realm's garrison; the open realm stays as it is.
+        await api.dispatchArmy(source.realmId, request, this.ownerId ?? undefined);
         this.dispatchDraft = null;
         this.dispatchTargetBuildings = null;
         this.dispatchTargetBuildingsFor = null;

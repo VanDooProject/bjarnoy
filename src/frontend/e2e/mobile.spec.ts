@@ -296,12 +296,12 @@ test.describe('mobile tutorial focus', { tag: '@g1' }, () => {
       await expectNoOverlap(settlement.banner, badge, 'demo badge covers the landfall banner');
     }
 
-    // Opening the ring on a guided hex hides the progress checklist so it
-    // doesn't fight the ring for the same strip of screen.
+    // Opening the ring on a guided hex hides the progress checklist (the phone layer stack: a layer shows alone over the
+    // map) so it doesn't fight the ring for the same strip of screen.
     const target = await settlement.findHex({ terrain: 'grass' });
     await settlement.clickHex(target);
     await settlement.ring.waitForOpen();
-    await expect(settlement.checklist).toHaveCount(0);
+    await expect(settlement.checklist).toBeHidden();
 
     // Closing the ring (Escape) brings the checklist straight back.
     await page.keyboard.press('Escape');

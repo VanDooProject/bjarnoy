@@ -43,6 +43,7 @@ import type {
   GuildResponse,
   GuildTreatyResponse,
   IslandResponse,
+  IslandTerrainResponse,
   JoinableWorldResponse,
   LeaderboardBoardResponse,
   PagedAdminActivityUsersResponse,
@@ -85,6 +86,8 @@ import type {
   SetUserStatusRequest,
   SetWorldRunStateRequest,
   SettlementResponse,
+  TerrainChunkManifestResponse,
+  TerrainChunkResponse,
   SettlementViewResponse,
   SlotRuneRequest,
   SettlementSummary,
@@ -108,6 +111,7 @@ import type {
   WorldMembershipResponse,
   WorldResponse,
   WorldSummaryResponse,
+  ArmyReportResponse,
   CampReportResponse,
   CampStateResponse,
   ForeignArmyResponse,
@@ -158,6 +162,14 @@ async function fetchOrThrow(method: string, path: string, init: RequestInit): Pr
  */
 export function isWorldNotFound(err: unknown): boolean {
   return err instanceof ApiError && err.problem?.error === 'world_not_found';
+}
+
+/**
+ * True for the 404 of a terrain chunk the world no longer has — see `WorldEndpoints.GetTerrainChunk`: the world was reseeded
+ * between reading the chunk manifest and the chunk, so the island list read next to it is stale too.
+ */
+export function isTerrainChunkNotFound(err: unknown): boolean {
+  return err instanceof ApiError && err.problem?.error === 'terrain_chunk_not_found';
 }
 
 /**
@@ -291,6 +303,15 @@ export const api = {
     }),
   getIslands: (worldId: string, ownerId?: string) =>
     request<IslandResponse[]>(`/worlds/${worldId}/islands`, { headers: ownerHeader(ownerId) }),
+  // The river and bog tiles of every island, in island order: the manifest says how many chunks there are, then all chunks are
+  // read in parallel. The server sends them gzipped and cached (revalidated by ETag), so a repeat visit costs 304s.
+  getTerrainChunks: async (worldId: string): Promise<IslandTerrainResponse[]> => {
+    const manifest = await request<TerrainChunkManifestResponse>(`/worlds/${worldId}/terrain-chunks`);
+    const chunks = await Promise.all(
+      manifest.chunks.map((info) => request<TerrainChunkResponse>(`/worlds/${worldId}/terrain-chunks/${info.index}`)),
+    );
+    return chunks.flatMap((chunk) => chunk.islands);
+  },
   // Cut to the *caller's* sight like /camps: an account-less player is identified by `X-Owner-Id` alone.
   getForeignArmies: (worldId: string, ownerId?: string) =>
     request<ForeignArmyResponse[]>(`/worlds/${worldId}/foreign-armies`, { headers: ownerHeader(ownerId) }),
@@ -741,6 +762,11 @@ export const api = {
     request<CampReportResponse>(`/camp-reports/${reportId}`, { headers: ownerHeader(ownerId) }),
   getWorldCampReports: (worldId: string, ownerId?: string) =>
     request<CampReportResponse[]>(`/worlds/${worldId}/camp-reports`, { headers: ownerHeader(ownerId) }),
+  // Army reports (army stuck / army starved) belong to the player: listed per world by the caller's own realm, no settlement id.
+  getArmyReport: (reportId: string, ownerId?: string) =>
+    request<ArmyReportResponse>(`/army-reports/${reportId}`, { headers: ownerHeader(ownerId) }),
+  getWorldArmyReports: (worldId: string, ownerId?: string) =>
+    request<ArmyReportResponse[]>(`/worlds/${worldId}/army-reports`, { headers: ownerHeader(ownerId) }),
   getMyLeaderboardRank: (
     worldId: string,
     scope: LeaderboardScope,

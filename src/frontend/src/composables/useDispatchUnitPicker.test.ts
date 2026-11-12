@@ -17,6 +17,28 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
 
 const rows = computed(() => ['settler', 'spearman', 'karve'].map((u) => ({ unit: u })));
 
+describe('useDispatchUnitPicker for a beach camp army', () => {
+  const campRows = computed(() => ['campbuilder', 'spearman', 'karve'].map((u) => ({ unit: u })));
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    useUnitCatalogueStore().definitions = [
+      unit({ type: 'campbuilder' }),
+      unit({ type: 'spearman' }),
+      unit({ type: 'karve', class: 'ship', cargoSlots: 0, shipSlots: 10 }),
+    ];
+    useWorldStore().startDispatchAt({ q: 4, r: -1 }, { mission: 'setupcamp' });
+  });
+
+  it('locks the camp builder row and leaves ships and land escorts selectable', () => {
+    const picker = useDispatchUnitPicker(campRows);
+    expect(picker.isCamp.value).toBe(true);
+    expect(picker.isRowSelectable('campbuilder')).toBe(false);
+    expect(picker.isRowSelectable('spearman')).toBe(true);
+    expect(picker.isRowSelectable('karve')).toBe(true);
+  });
+});
+
 describe('useDispatchUnitPicker for a founding convoy', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -68,17 +90,15 @@ describe('useDispatchUnitPicker with a garrison at several spots', () => {
     world.setDispatchUnitCount('spearman', 3);
     expect(picker.unitSourceText('spearman')).toBe('from Tower');
     expect(picker.unitSourceText('karve')).toBe('');
-    expect(picker.severalSpots.value).toBe(false);
     expect(picker.selectionSendable.value).toBe(true);
   });
 
-  it('is not sendable while the units come from several spots, and says where from', () => {
+  it('is sendable while the units come from several spots, and says where from', () => {
     const world = useWorldStore();
     const picker = useDispatchUnitPicker(rows);
     world.setDispatchUnitCount('spearman', 6);
     expect(picker.unitSourceText('spearman')).toBe('from Tower and Longhouse');
-    expect(picker.severalSpots.value).toBe(true);
-    expect(picker.selectionSendable.value).toBe(false);
+    expect(picker.selectionSendable.value).toBe(true);
   });
 });
 

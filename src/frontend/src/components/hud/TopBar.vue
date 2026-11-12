@@ -27,8 +27,10 @@ import { isHudBarAtBottom, isHudBarMounted, isHudRail, isSettlementBubbleShown }
 import { isHudDrawerPending } from '../../composables/hudDrawerPendingState';
 import { hudBarHeightPx, hudRailHeightPx, hudRailWidthPx, DEFAULT_HUD_BAR_HEIGHT } from '../../composables/hudBarHeight';
 import { useSettlementRename } from '../../composables/useSettlementRename';
+import { useHiddenUnderPhoneLayer, usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import { fadePopover } from '../../lib/hud/chipMotion';
 import { HUD_COMPACT_QUERY, HUD_RAIL_QUERY } from '../../lib/breakpoints';
+import { buildingName } from '../../i18n/catalogueNames';
 import SettlementMenu from './SettlementMenu.vue';
 import SettlementNameInput from './SettlementNameInput.vue';
 import SettlementRenameCard from './SettlementRenameCard.vue';
@@ -77,7 +79,7 @@ onMounted(() => { isHudBarMounted.value = true; });
 onBeforeUnmount(() => { isHudBarMounted.value = false; });
 
 /** Only the real settlement's name takes you back to it; a page that names itself via `title` has nothing to go back to. */
-const emit = defineEmits<{ (e: 'focus-home'): void }>();
+const emit = defineEmits<{ (e: 'focus-home'): void; (e: 'focus-realm', at: { q: number; r: number }): void }>();
 const nameTappable = computed(() => !props.title && !!world.hud.settlementName);
 
 const settlementName = computed(() => props.title || world.hud.settlementName || null);
@@ -97,12 +99,16 @@ const islandName = computed(() => {
   return world.model.listIslands().find((i) => i.id === settlement.islandId)?.name ?? null;
 });
 
+// A beach camp has no Longhouse level: the bar names what it is instead.
+const selectedIsCamp = computed(() => !!world.selectedSettlementId && world.model.isBeachCamp(world.selectedSettlementId));
+
 const caption = computed(() => {
   if (props.caption) return props.caption;
   // A caller that names the bar itself gets only the caption it asked for —
   // a docs page has no island or longhouse to report.
   if (props.title) return null;
-  const parts = [islandName.value?.toUpperCase(), `LONGHOUSE ${world.hud.level}`].filter(Boolean);
+  const kind = selectedIsCamp.value ? buildingName('beachcamp').toUpperCase() : `LONGHOUSE ${world.hud.level}`;
+  const parts = [islandName.value?.toUpperCase(), kind].filter(Boolean);
   return parts.length ? parts.join(' · ') : null;
 });
 
@@ -188,7 +194,7 @@ const settlementBubbleEditTop = computed(() => (isRail.value ? settlementBubbleT
 const bubbleEditing = computed(() => rename.editing && showSettlementBubble.value);
 const railJoined = computed(() => isChipLayout.value && showSettlementBubble.value && !isHudDrawerOpen.value);
 // Finding #13: only counts as "shown" once it's actually visible on screen —
-// the drawer hides it (`v-show="!isHudDrawerOpen"` below) without unmounting
+// the drawer hides it (`v-phone-hidden="hudHidden"` below) without unmounting
 // it, so a plain `showSettlementBubble` alone would keep DemoModeBadge.vue
 // pinned below a bubble the player can't currently see.
 // The bubble hides behind an open drawer: a half-typed name would be edited out of sight.
@@ -362,6 +368,10 @@ const drawer = useHudDrawer(
 // comment. Only one TopBar with a drawer is ever mounted at a time in
 // practice, so there's nothing to arbitrate between multiple writers.
 setHudDrawerCloseFn(drawer.close);
+// The pull-down drawer is a layer on the phone stack: the bar, its backdrop and the drawer hide when another layer
+// covers them; the settlement bubble hides like any HUD element (the open drawer counts as a layer).
+const layer = usePhoneLayer(drawer.isOpen, 'hud-drawer');
+const hudHidden = useHiddenUnderPhoneLayer();
 onBeforeUnmount(() => setHudDrawerCloseFn(null));
 // Finding #19: the grip's `aria-controls` needs a real id to point at, and a
 // stable one — a fresh string every render would just churn the attribute
@@ -458,11 +468,11 @@ const drawerStyle = computed(() => ({
 }));
 const backdropStyle = computed(() => {
   if (isRail.value) {
-    return { opacity: drawer.isOpen.value ? 0.6 : 0, pointerEvents: drawer.isOpen.value ? ('auto' as const) : ('none' as const) };
+    return { opacity: drawer.isOpen.value ? 1 : 0, pointerEvents: drawer.isOpen.value ? ('auto' as const) : ('none' as const) };
   }
   const openFraction = availableDrawerHeight.value > 0 ? Math.min(1, drawer.currentOffset() / availableDrawerHeight.value) : 0;
   return {
-    opacity: openFraction * 0.6,
+    opacity: openFraction,
     pointerEvents: openFraction > 0 ? ('auto' as const) : ('none' as const),
   };
 });
@@ -471,6 +481,7 @@ const backdropStyle = computed(() => {
 <template>
   <header
     ref="barRef"
+    v-phone-hidden="layer.hidden.value"
     class="hud-bar"
     :style="{ '--settlement-bubble-top': settlementBubbleTop }"
     :class="{
@@ -515,7 +526,13 @@ const backdropStyle = computed(() => {
         <div class="name-row">
           <button v-if="nameTappable" type="button" class="name name-btn" :title="t('hud.focusHome')" @click="emit('focus-home')">{{ settlementName }}</button>
           <span v-else class="name">{{ settlementName }}</span>
-          <SettlementMenu v-if="nameTappable" :name="settlementName" @focus-home="emit('focus-home')" @rename="rename.begin()" />
+          <SettlementMenu
+            v-if="nameTappable"
+            :name="settlementName"
+            @focus-home="emit('focus-home')"
+            @focus-realm="(at) => emit('focus-realm', at)"
+            @rename="rename.begin()"
+          />
         </div>
         <span v-if="caption" class="caption">{{ caption }}</span>
         <Transition :css="false" @enter="onRenameEnter" @leave="onRenameLeave">
@@ -590,7 +607,7 @@ const backdropStyle = computed(() => {
       'settlement-bubble--editing': bubbleEditing,
     }"
     :style="{ top: bubbleEditing ? settlementBubbleEditTop : settlementBubbleTop, left: settlementBubbleLeft }"
-    v-show="!isHudDrawerOpen"
+    v-phone-hidden="hudHidden"
   >
     <button
       type="button"
@@ -632,12 +649,19 @@ const backdropStyle = computed(() => {
     </template>
     <template v-else>
       <button type="button" class="bubble-name name-btn" :title="t('hud.focusHome')" @click="emit('focus-home')">{{ settlementName }}</button>
-      <span class="bubble-meta">{{ t('hud.realmPanel.levelShort', { level: world.hud.level }) }}</span>
-      <SettlementMenu :name="settlementName ?? ''" touch @focus-home="emit('focus-home')" @rename="rename.begin()" />
+      <span class="bubble-meta">{{ selectedIsCamp ? buildingName('beachcamp') : t('hud.realmPanel.levelShort', { level: world.hud.level }) }}</span>
+      <SettlementMenu
+        :name="settlementName ?? ''"
+        touch
+        @focus-home="emit('focus-home')"
+        @focus-realm="(at) => emit('focus-realm', at)"
+        @rename="rename.begin()"
+      />
     </template>
   </div>
   <div
     v-if="dragEnabled"
+    v-phone-hidden="layer.hidden.value"
     class="hud-drawer-backdrop"
     :class="{ 'hud-drawer-backdrop--bottom': barPosition === 'bottom' }"
     :style="backdropStyle"
@@ -647,6 +671,7 @@ const backdropStyle = computed(() => {
   <div
     v-if="dragEnabled"
     ref="drawerEl"
+    v-phone-hidden="layer.hidden.value"
     class="hud-drawer"
     :class="{
       'hud-drawer--bottom': barPosition === 'bottom',
@@ -1271,7 +1296,7 @@ const backdropStyle = computed(() => {
      never actually both open at once in practice — this is the defense in
      depth for the transition frame where they briefly could be. */
   z-index: 39;
-  background: #000;
+  background: var(--layer-backdrop);
   transition: opacity 120ms ease;
 }
 

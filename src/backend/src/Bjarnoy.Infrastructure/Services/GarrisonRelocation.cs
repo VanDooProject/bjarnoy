@@ -28,10 +28,11 @@ internal sealed class GarrisonRelocation(GameDbContext dbContext)
     internal sealed record Candidate(Guid SettlementId, GarrisonSpot Spot);
 
     public async Task<Routing> LoadRoutingAsync(
-        Guid worldId, double speedFactor, Func<HexCoord, Terrain> terrainAt, Guid userId, Guid settlementId, CancellationToken cancellationToken)
+        Guid worldId, double speedFactor, Func<HexCoord, Terrain> terrainAt, Guid userId, Guid settlementId, DateTimeOffset now,
+        CancellationToken cancellationToken)
     {
         var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, worldId, terrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, worldId, terrainAt, rivers.IsWide, now, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(userId, settlementId));
         return new Routing(terrainAt, speedFactor, rivers.IsRiver, rivers.IsWide, walls);
     }

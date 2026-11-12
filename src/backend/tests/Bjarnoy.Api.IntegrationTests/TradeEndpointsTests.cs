@@ -7,6 +7,7 @@ using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -56,8 +57,7 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     {
         var world = await _factory.CreateWorldAsync(Unique("w"), seed, radius, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
@@ -110,8 +110,7 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     private async Task<(SettlementResponse Settlement, string OwnerId)> FoundAdjacentAsync(
         HttpClient client, Guid worldId, SettlementResponse near)
     {
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         var islandId = islands!.First().Id;
         var coord = new HexCoord(near.Q + 1, near.R);
         var ownerId = Unique("owner");

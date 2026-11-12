@@ -159,6 +159,11 @@ const tocLinks = computed(() =>
         </template>
       </i18n-t>
       <p class="text">{{ $t('docs.founding.sea.ships') }}</p>
+      <i18n-t keypath="docs.founding.sea.camp" tag="p" class="text" scope="global">
+        <template #camp>
+          <DocsPageLink to="/docs/beach-camp">{{ $t('docs.founding.sea.campLink') }}</DocsPageLink>
+        </template>
+      </i18n-t>
     </section>
 
     <section id="renown" class="block">
