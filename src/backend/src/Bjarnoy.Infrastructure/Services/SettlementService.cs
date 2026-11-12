@@ -1662,12 +1662,7 @@ public sealed class SettlementService(
             return (null, false, false);
         }
 
-        var islands = await _dbContext.Islands
-            .AsNoTracking()
-            .Where(i => i.WorldId == worldId)
-            .Select(i => new { i.IsWasted, i.RiverTiles })
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-        var wasted = islands.Any(i => i.IsWasted && i.RiverTiles.Any(t => t.Q == coord.Q && t.R == coord.R));
+        var wasted = await WorldRivers.IsOnWastedIslandAsync(_dbContext, worldId, coord, cancellationToken).ConfigureAwait(false);
         return (tile.Shape, rivers.IsWide(coord), wasted);
     }
 
