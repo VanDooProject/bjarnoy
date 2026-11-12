@@ -2,7 +2,7 @@
 // DEMO_MODE), so `setFogMask` (HexMapRenderer.ts) never gets called via
 // `stores/world.ts`'s `fetchFogMask`, which early-returns under DEMO_MODE.
 // Left unaddressed, both fog layers stay on their default placeholder
-// texture (fully-unknown, opaque — see FogMaskLayer.ts) forever, blanketing
+// texture (fully-unknown, opaque — see FogField.ts) forever, blanketing
 // the whole viewport. This module bakes an equivalent mask directly from the
 // client-side `WorldModel`'s own already-computed per-hex state instead,
 // mirroring `FogMaskGenerator.Generate` (backend,

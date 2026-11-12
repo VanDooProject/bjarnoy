@@ -1139,7 +1139,7 @@ public sealed class SettlementService(
         // settlement's owning user (the anchor load includes Owner) — Anonymous
         // settlements are owned by SystemUserIds.Abandoned and are simply not
         // premium (issue #158).
-        var maxWaitingOrders = (session.Anchor.Owner?.IsPremium ?? false) ? Settlement.MaxWaitingOrders : 0;
+        var maxWaitingOrders = (session.Anchor.Owner?.IsPremiumAt(_timeProvider.GetUtcNow()) ?? false) ? Settlement.MaxWaitingOrders : 0;
 
         var terrain = sampler.TerrainAt(coord);
         var (riverShapeAt, onRiverTile) = await RiverSiteAsync(booking.WorldId, coord, cancellationToken)
@@ -1239,7 +1239,7 @@ public sealed class SettlementService(
         var booked = session.View(bookingId);
 
         // Same premium waiting-room gate as a build.
-        var maxWaitingOrders = (session.Anchor.Owner?.IsPremium ?? false) ? Settlement.MaxWaitingOrders : 0;
+        var maxWaitingOrders = (session.Anchor.Owner?.IsPremiumAt(_timeProvider.GetUtcNow()) ?? false) ? Settlement.MaxWaitingOrders : 0;
 
         var decision = booked.PlanRaze(
             coord, now, Guid.CreateVersion7(), session.SpeedFactor, maxWaitingOrders, Settlement.DefaultMaxOrdersPerHex);
@@ -1377,7 +1377,7 @@ public sealed class SettlementService(
             .Any(sampler.IsShoreline);
 
         var decision = settled.PlanTrain(
-            unitType, count, now, Guid.CreateVersion7, buildingCoord, split, settlement.Owner?.IsPremium ?? false,
+            unitType, count, now, Guid.CreateVersion7, buildingCoord, split, settlement.Owner?.IsPremiumAt(_timeProvider.GetUtcNow()) ?? false,
             hasShoreline, session.SpeedFactor);
 
         if (!decision.Accepted)
@@ -1474,6 +1474,14 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, settled.ClaimQuest(decision.Quest!, now));
+        if (decision.Quest!.PremiumDays > 0 && session.Anchor.Owner is { } owner)
+        {
+            // Stacks on whatever premium is left; real time, since premium is not part of the game clock.
+            var realNow = _timeProvider.GetUtcNow();
+            var from = owner.PremiumUntil is { } current && current > realNow ? current : realNow;
+            owner.PremiumUntil = from.AddDays(decision.Quest.PremiumDays);
+        }
+
         await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 

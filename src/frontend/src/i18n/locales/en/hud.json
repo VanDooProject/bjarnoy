@@ -603,6 +603,8 @@
   },
   "panelColumn": {
     "toggle": "Show or hide {panel}",
+    "constructionEmpty": "Nothing under construction",
+    "withCount": "{panel} ({count})",
     "collapse": "Collapse {panel}",
     "expand": "Expand {panel}"
   }

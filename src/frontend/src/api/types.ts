@@ -486,6 +486,8 @@ export interface QuestResponse {
   reward: ResourceLine;
   /** Counted progress toward the goal; null/absent for a quest without one. */
   progress?: { current: number; target: number } | null;
+  /** Days of premium the claim grants instead of resources (the register quest); 0/absent for a resource quest. */
+  premiumDays?: number;
 }
 
 /** One connected claim disc of a realm, exactly as the server resolves it. */
@@ -692,6 +694,8 @@ export interface TradeReportResponse {
   requestedAmount: number;
   guildTrade: boolean;
   travelHours: number;
+  /** The side the reading player traded on (a player's reports cover all their settlements); null when neither. */
+  viewerSide: 'poster' | 'acceptor' | null;
 }
 
 export interface CreateWorldRequest {
@@ -1413,6 +1417,8 @@ export interface LeaderboardBoardInfoResponse {
   reason: string | null;
   computedAt: string | null;
   entryCount: number | null;
+  /** The caller's rank on this board; `null` when anonymous, the board is dark, or the caller has no entry. */
+  myRank: number | null;
 }
 
 export interface WeeklyWindowResponse {
@@ -1866,6 +1872,8 @@ export interface BattleReportResponse {
   drowned: ArmyUnitStackResponse[];
   fireShipsBurned: number;
   fireSiege: BattleReportSiege | null;
+  /** The side the reading player fought on (a player's reports cover all their settlements); null when neither. */
+  viewerSide: 'attacker' | 'defender' | null;
 }
 
 // Issue #206 (frontend): in-flight field battles — army-vs-army interception
@@ -1905,6 +1913,8 @@ export interface FieldBattleReportResponse {
   seed: number;
   lootTaken: ResourceLine;
   lines: FieldBattleReportLine[];
+  /** The side the reading player fought on (a player's reports cover all their settlements); null when neither. */
+  viewerSide: 'sidea' | 'sideb' | null;
 }
 
 // Issue #40 phase 7 (frontend): the premium fight simulator. Mirrors

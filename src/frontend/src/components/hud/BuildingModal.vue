@@ -4,6 +4,7 @@
 // instant-build-on-click in SettlementView.vue with the mockup's full-screen
 // hex detail screen (Viking Realm.dc.html's `sel` overlay): art on the left,
 // name/level/description/action on the right.
+import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { Tile } from '../../lib/map/types';
@@ -37,6 +38,9 @@ const props = defineProps<{
   ownerLabel: string | null;
 }>();
 const emit = defineEmits<{ close: [] }>();
+
+// A layer on the phone stack: shows alone while mounted, hides under a layer opened above it.
+const layer = usePhoneLayer();
 
 // Issue #53: shrine slots by level, mirroring ShrineCatalogue.Slots.cs.
 function shrineSlotsFor(level: number): number {
@@ -246,7 +250,7 @@ const currentStats = computed(() =>
 </script>
 
 <template>
-  <div class="backdrop" @click.self="emit('close')">
+  <div v-phone-hidden="layer.hidden.value" class="backdrop" @click.self="emit('close')">
     <div class="modal panel">
       <div class="art">
         <AtlasSprite v-if="art?.kind === 'atlas'" :frame="art.frame" class="art-img" />
@@ -375,8 +379,7 @@ const currentStats = computed(() =>
   position: absolute;
   inset: 0;
   z-index: 40;
-  background: rgba(6, 12, 17, 0.86);
-  backdrop-filter: blur(8px);
+  background: var(--layer-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;

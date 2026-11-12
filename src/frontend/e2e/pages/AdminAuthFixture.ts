@@ -32,6 +32,7 @@ export interface SessionUser {
   role: string;
   status: string;
   displayName: string | null;
+  isPremium?: boolean;
 }
 
 export class AdminAuthFixture {
@@ -47,9 +48,9 @@ export class AdminAuthFixture {
   }
 
   /** Logs in as an ordinary player, by user name (leaderboard.spec.ts's own case). */
-  loginAsPlayer(userName: string): Promise<void> {
+  loginAsPlayer(userName: string, opts: { isPremium?: boolean } = {}): Promise<void> {
     return this.loginAs(
-      { id: 'user-1', userName, role: 'player', status: 'active', displayName: userName },
+      { id: 'user-1', userName, role: 'player', status: 'active', displayName: userName, isPremium: opts.isPremium ?? false },
       `seed-refresh-${userName}`,
     );
   }

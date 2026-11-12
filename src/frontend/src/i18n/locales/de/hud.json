@@ -603,6 +603,8 @@
   },
   "panelColumn": {
     "toggle": "{panel} ein- oder ausblenden",
+    "constructionEmpty": "Gerade wird nichts gebaut",
+    "withCount": "{panel} ({count})",
     "collapse": "{panel} einklappen",
     "expand": "{panel} ausklappen"
   }

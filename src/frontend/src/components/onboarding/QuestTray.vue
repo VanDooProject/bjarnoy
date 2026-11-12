@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import ResourceIcon from '../ResourceIcon.vue';
 // Onboarding quest tray in the settlement view (docs/design/economy.md
 // section 7). The landing page's found -> reindeer herder -> lumberjack checklist
 // (OnboardingChecklist.vue) hands off to the settlement view; from there
@@ -11,20 +10,19 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { apiErrorMessage } from '../../i18n/apiErrors';
-import { resourceName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
 import { questProgressKind, rewardOverflows } from '../../lib/quests';
 import { useQuests } from '../../composables/useQuests';
 import QuestIcon from './QuestIcon.vue';
+import QuestReward from './QuestReward.vue';
 import QuestProgress from './QuestProgress.vue';
+import { useHiddenUnderPhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
 import type { QuestResponse } from '../../api/types';
 
 const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const world = useWorldStore();
-
-const REWARD_KINDS = ['wood', 'stone', 'food'] as const;
 
 const { known, unclaimed, current, alsoReady, noticeKeys, hasNew, markSeen } = useQuests();
 const claimedCount = computed(() => known.value.length - unclaimed.value.length);
@@ -34,6 +32,7 @@ const claimedCount = computed(() => known.value.length - unclaimed.value.length)
 // something the player has not seen in the opened card yet: a quest that became
 // current, or one that became claimable.
 const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
+const hudHidden = useHiddenUnderPhoneLayer();
 const expanded = ref(false);
 const collapsed = computed(() => isCompact.value && !expanded.value);
 
@@ -98,6 +97,7 @@ async function claim(q: QuestResponse) {
   <button
     v-if="current && collapsed"
     key="strip"
+    v-phone-hidden="hudHidden"
     type="button"
     class="quest-toggle"
     data-testid="quest-toggle"
@@ -114,7 +114,7 @@ async function claim(q: QuestResponse) {
     </span>
     <span class="strip-chevron" aria-hidden="true" />
   </button>
-  <aside v-else-if="current" key="card" class="quest-tray" data-testid="quest-tray" :aria-label="t('quests.title')">
+  <aside v-else-if="current" key="card" v-phone-hidden="hudHidden" class="quest-tray" data-testid="quest-tray" :aria-label="t('quests.title')">
     <div class="quest-header" data-dock-handle>
       <span class="quest-heading">{{ t('quests.title') }}</span>
       <span class="quest-progress" data-testid="quest-progress">
@@ -145,11 +145,7 @@ async function claim(q: QuestResponse) {
       </button>
       <QuestProgress v-if="currentProgress" :kind="currentProgress.kind" :progress="currentProgress.progress" />
       <div class="quest-footer">
-        <span class="quest-reward" :aria-label="t('quests.rewardLabel')">
-          <span v-for="kind in REWARD_KINDS" :key="kind" class="reward-item" :title="resourceName(kind)">
-            <ResourceIcon :kind="kind" :size="14" />{{ current.reward[kind] }}
-          </span>
-        </span>
+        <QuestReward :quest="current" />
         <button
           v-if="current.completed"
           type="button"
@@ -171,11 +167,7 @@ async function claim(q: QuestResponse) {
       <div v-for="q in alsoReady" :key="q.id" class="quest-row" data-testid="quest-ready-row" :data-quest-id="q.id">
         <div class="quest-row-main">
           <div class="quest-row-title">{{ t(`quests.items.${q.id}.title`) }}</div>
-          <span class="quest-reward">
-            <span v-for="kind in REWARD_KINDS" :key="kind" class="reward-item" :title="resourceName(kind)">
-              <ResourceIcon :kind="kind" :size="14" />{{ q.reward[kind] }}
-            </span>
-          </span>
+          <QuestReward :quest="q" />
           <div v-if="overflows(q)" class="quest-note">{{ t('quests.overflowNote') }}</div>
         </div>
         <button type="button" class="claim-button" :disabled="busyId !== null" @click="claim(q)">
@@ -255,19 +247,6 @@ async function claim(q: QuestResponse) {
   justify-content: space-between;
   gap: 8px;
   margin-top: 8px;
-}
-.quest-reward {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-}
-.reward-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
 }
 .claim-button {
   flex: none;

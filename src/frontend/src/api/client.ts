@@ -403,8 +403,9 @@ export const api = {
     request<ShipmentResponse[]>(`/settlements/${settlementId}/shipments`, {
       headers: ownerHeader(ownerId),
     }),
-  getSettlementTradeReports: (settlementId: string, ownerId?: string) =>
-    request<TradeReportResponse[]>(`/settlements/${settlementId}/trade-reports`, {
+  // Reports belong to the player, not to a settlement: one list per world, across all the player's settlements.
+  getWorldTradeReports: (worldId: string, ownerId?: string) =>
+    request<TradeReportResponse[]>(`/worlds/${worldId}/trade-reports`, {
       headers: ownerHeader(ownerId),
     }),
   // The acting settlement is in the body and is ownership-checked
@@ -736,30 +737,31 @@ export const api = {
   getSettlementGuests: (settlementId: string, ownerId?: string) =>
     request<GuestArmySummary[]>(`/settlements/${settlementId}/guests`, { headers: ownerHeader(ownerId) }),
   // Issue #40 phase 3: battle reports. Mirrors ArmyEndpoints.cs's
-  // `/reports/{reportId}` and `/settlements/{settlementId}/reports` — the
-  // latter is a flat newest-first list, not paged (BattleReportService has
-  // no pagination), so the reports store just holds it as-is. `ownerId`
-  // proves ownership of either the attacking or the defending settlement —
-  // ReportOwnershipEndpointFilter accepts either.
+  // `/reports/{reportId}` and `/worlds/{worldId}/reports` — the latter is the
+  // player's flat newest-first list (one inbox across all their settlements),
+  // not paged (BattleReportService has no pagination), so the reports store
+  // just holds it as-is. `ownerId` is the caller's client-local id; the
+  // backend resolves the player's realm in the world from it (or the JWT), and
+  // ReportOwnershipEndpointFilter lets either party of a battle read it.
   getReport: (reportId: string, ownerId?: string) =>
     request<BattleReportResponse>(`/reports/${reportId}`, { headers: ownerHeader(ownerId) }),
-  getSettlementReports: (settlementId: string, ownerId?: string) =>
-    request<BattleReportResponse[]>(`/settlements/${settlementId}/reports`, { headers: ownerHeader(ownerId) }),
+  getWorldReports: (worldId: string, ownerId?: string) =>
+    request<BattleReportResponse[]>(`/worlds/${worldId}/reports`, { headers: ownerHeader(ownerId) }),
   // Issue #206: field battle reports (in-flight interception). Mirrors
   // ArmyEndpoints.cs's `/field-reports/{reportId}` and
-  // `/settlements/{settlementId}/field-reports` — same flat, unpaged shape
+  // `/worlds/{worldId}/field-reports` — same flat, unpaged shape
   // and same either-party `ownerId` rule as the battle-report endpoints above.
   getFieldReport: (reportId: string, ownerId?: string) =>
     request<FieldBattleReportResponse>(`/field-reports/${reportId}`, { headers: ownerHeader(ownerId) }),
-  getSettlementFieldReports: (settlementId: string, ownerId?: string) =>
-    request<FieldBattleReportResponse[]>(`/settlements/${settlementId}/field-reports`, {
+  getWorldFieldReports: (worldId: string, ownerId?: string) =>
+    request<FieldBattleReportResponse[]>(`/worlds/${worldId}/field-reports`, {
       headers: ownerHeader(ownerId),
     }),
   // Wildlife camp fights (hunt / ambush / tower attack) — `ArmyEndpoints`' camp-report routes.
   getCampReport: (reportId: string, ownerId?: string) =>
     request<CampReportResponse>(`/camp-reports/${reportId}`, { headers: ownerHeader(ownerId) }),
-  getSettlementCampReports: (settlementId: string, ownerId?: string) =>
-    request<CampReportResponse[]>(`/settlements/${settlementId}/camp-reports`, { headers: ownerHeader(ownerId) }),
+  getWorldCampReports: (worldId: string, ownerId?: string) =>
+    request<CampReportResponse[]>(`/worlds/${worldId}/camp-reports`, { headers: ownerHeader(ownerId) }),
   // Army reports (army stuck / army starved) belong to the player: listed per world by the caller's own realm, no settlement id.
   getArmyReport: (reportId: string, ownerId?: string) =>
     request<ArmyReportResponse>(`/army-reports/${reportId}`, { headers: ownerHeader(ownerId) }),

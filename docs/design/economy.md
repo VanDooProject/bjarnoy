@@ -166,7 +166,7 @@ has 3–8 stages per building, and each level maps onto a stage
 | Palisade | 3 |
 | Bridge | 4 |
 
-Construction slots: `max(2, LH)` → 2 at LH 1–2, then one more per level (10 at LH 10, 30 at LH 30). A Longhouse upgrade occupies 90 % of them, rounded down (min 1): 1 of 2 at LH 1–2, 9 of 10 at LH 10.
+Construction slots: `max(2, 1 + floor(LH / 2))` → 2 at LH 1–3 (level 1 is the exception), then one more every second level (3 at LH 4, 6 at LH 10, 11 at LH 20, 16 at LH 30). A Longhouse upgrade occupies 90 % of them, rounded down (min 1): 1 of 2 at LH 1–3, 5 of 6 at LH 10, 9 of 11 at LH 20.
 
 **What caps a building's level.** Most buildings can never be a higher level
 than the Longhouse (level `L` needs LH `max(unlock, L)`). The **resource producers** (Lumberjack, Quarry, Clay Brickworks,
@@ -651,10 +651,12 @@ for 4 check-ins and day 30.0 for 2 check-ins. Longhouse 10 is reached on day 4.1
 so renown binds the active player and the Longhouse the 4-check-ins player. Feasts multiply the day-30 renown by about
 2.7× for the active player and 3.3× for 4 check-ins.
 
-**With the build-time curves of §9** (same settings, simulated 2026-11): the 2nd settlement comes on day 16.3 for the active
-player with feasts (21.1 without), day 24.5 for 4 check-ins and day 34.5 for 2 check-ins. Longhouse 10 is reached on day 16.3
-(active) and day 24.5 (4 check-ins), Longhouse 30 on day 279 (active), so the Longhouse now binds the active player, not
-renown. The §1 targets above predate these curves and still need re-tuning (the Pacing bench has the knobs).
+**With the build-time curves of §9 and one builder slot every second Longhouse level** (construction-slots.md; same
+settings, simulated 2026-11): the 2nd settlement comes on day 10.0 for the active player with feasts (16.6 without), day
+17.0 for 4 check-ins and day 29.5 for 2 check-ins. Longhouse 10 is reached on day 9.9 (active, feasts), day 10.3 (active,
+no feasts) and day 16.9 (4 check-ins), Longhouse 30 on day 255 (active). Renown reaches 80 000 on day 9.4 for the active
+player with feasts, so the Longhouse 10 unlock binds every profile by about half a day, not renown as the §6 target above
+asks. Feasts multiply the day-30 renown by about 3.1× for the active player.
 
 Feasts are what lets an active player settle a week early. A casual player
 gains a few days at most, because the Longhouse 10 unlock is still ahead of
@@ -684,10 +686,11 @@ their renown.
   | 3 | First Storage House | a standing Storage House | 200 / 200 / 200 |
   | 4 | 6 producers built | 6 standing resource producers | 200 / 150 / 100 |
   | 5 | Longhouse 3 | Longhouse level 3 or more | 400 / 300 / 200 |
-  | 6 | Tower 3 | your highest Tower at level 3 or more (what the Barracks needs) | 400 / 300 / 200 |
-  | 7 | Longhouse 5 | Longhouse level 5 or more | 800 / 600 / 400 |
-  | 8 | Train 5 spearmen | 5 fighting land units at home (any type), stored once reached: it stays completed after the troops leave or die | 500 / 400 / 300 |
-  | 9 | Hunt a camp | an army sent to hunt a wildlife camp; unlocks once troops were trained (5 fighting land units were ever at home when it was sent), no claim needed | 400 / 300 / 300 |
+  | 6 | Name your jarl (register) | the settlement's owner has a registered account (`register`, bit 9); pays **14 days of Premium** instead of resources | - |
+  | 7 | Tower 3 | your highest Tower at level 3 or more (what the Barracks needs) | 400 / 300 / 200 |
+  | 8 | Longhouse 5 | Longhouse level 5 or more | 800 / 600 / 400 |
+  | 9 | Train 5 spearmen | 5 fighting land units at home (any type), stored once reached: it stays completed after the troops leave or die | 500 / 400 / 300 |
+  | 10 | Hunt a camp | an army sent to hunt a wildlife camp; unlocks once troops were trained (5 fighting land units were ever at home when it was sent), no claim needed | 400 / 300 / 300 |
 
   Rules:
 
@@ -703,6 +706,10 @@ their renown.
     payment. Quests are enabled only on a player's first settlement in a world
     (the oldest by founding time): any later settlement lists none, and claiming one there gets a 409
     (`NotFirstSettlement`).
+  - **The register quest.** A player who registered during onboarding sees it first, claimable at once; a player who
+    has not keeps it in the list before the Tower quest until they register (`Quests.For`). Claiming it adds 14 days
+    to the account's `PremiumUntil` (from the later of now and the current expiry); the permanent `IsPremium` flag
+    set by an admin is separate, and an account is premium while either holds.
   - **Only standing buildings count.** Queued and under-construction orders do
     not; a producer is any building (other than the Longhouse) that yields
     wood, brick, food or iron of its own, so storage, towers and the

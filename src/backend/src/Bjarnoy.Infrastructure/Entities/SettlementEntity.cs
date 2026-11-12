@@ -245,6 +245,7 @@ public class SettlementEntity
             : null,
         PendingFeastRenown = PendingFeastRenown,
         ClaimedQuests = ClaimedQuests,
+        OwnerRegistered = UserId != SystemUserIds.Abandoned,
         HuntStarted = HuntStarted,
         TroopsTrained = TroopsTrained,
         Runes =

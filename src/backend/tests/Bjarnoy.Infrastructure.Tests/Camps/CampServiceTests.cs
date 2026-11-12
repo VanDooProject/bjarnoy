@@ -256,7 +256,9 @@ public sealed class CampServiceTests : IDisposable
             db.Islands.Add(island);
             db.Users.Add(user);
             db.Settlements.Add(home);
-            db.CampReports.Add(CampReportEntity.FromDomain(report));
+            var reportEntity = CampReportEntity.FromDomain(report);
+            reportEntity.OwnerId = home.OwnerId;
+            db.CampReports.Add(reportEntity);
             await db.SaveChangesAsync(Ct);
         }
 
@@ -274,9 +276,9 @@ public sealed class CampServiceTests : IDisposable
         Assert.Equal([.. report.UnitLines.OrderBy(l => l.Type)], loaded.UnitLines);
         Assert.Equal(report.BeastLines, loaded.BeastLines);
 
-        var inbox = await service.GetForSettlementAsync(home.Id, Ct);
+        var inbox = await service.GetForOwnerAsync(world.Id, home.OwnerId, Ct);
         Assert.Equal(report.Id, Assert.Single(inbox).Id);
-        Assert.Empty(await service.GetForSettlementAsync(Guid.NewGuid(), Ct));
+        Assert.Empty(await service.GetForOwnerAsync(world.Id, "someone-else", Ct));
     }
 
     [Fact]

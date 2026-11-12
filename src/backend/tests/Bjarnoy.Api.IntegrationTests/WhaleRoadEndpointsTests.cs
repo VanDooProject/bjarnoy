@@ -155,9 +155,14 @@ public sealed class WhaleRoadEndpointsTests : IAsyncLifetime
             new DispatchArmyRequest([new(await client.SpotOfAsync(settlementId, Ct), [new UnitCountRequest(unit, count)])], null, new HexPointRequest(to.Q, to.R), provisions, mission),
             Ct);
 
-    private Task<List<CampReportResponse>?> CampReportsAsync(HttpClient client, Guid settlementId) =>
-        client.GetFromJsonAsync<List<CampReportResponse>>(
-            $"/api/v1/settlements/{settlementId}/camp-reports", SqliteApiFixture.StrictJson, Ct);
+    /// <summary>The camp reports of the player owning <paramref name="settlementId"/>, from the player's inbox of its world.</summary>
+    private async Task<List<CampReportResponse>?> CampReportsAsync(HttpClient client, Guid settlementId)
+    {
+        var settlement = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlementId}", SqliteApiFixture.StrictJson, Ct);
+        return await client.GetFromJsonAsync<List<CampReportResponse>>(
+            $"/api/v1/worlds/{settlement!.WorldId}/camp-reports", SqliteApiFixture.StrictJson, Ct);
+    }
 
     private async Task<CampStateResponse> CampAtAsync(HttpClient client, Guid worldId, HexCoord hex) =>
         (await client.GetFromJsonAsync<List<CampStateResponse>>(

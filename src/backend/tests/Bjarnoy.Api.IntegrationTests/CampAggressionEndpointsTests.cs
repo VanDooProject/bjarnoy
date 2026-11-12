@@ -180,9 +180,14 @@ public sealed class CampAggressionEndpointsTests : IAsyncLifetime
         return campHex;
     }
 
-    private Task<List<CampReportResponse>?> CampReportsAsync(HttpClient client, Guid settlementId) =>
-        client.GetFromJsonAsync<List<CampReportResponse>>(
-            $"/api/v1/settlements/{settlementId}/camp-reports", SqliteApiFixture.StrictJson, Ct);
+    /// <summary>The camp reports of the player owning <paramref name="settlementId"/>, from the player's inbox of its world.</summary>
+    private async Task<List<CampReportResponse>?> CampReportsAsync(HttpClient client, Guid settlementId)
+    {
+        var settlement = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlementId}", SqliteApiFixture.StrictJson, Ct);
+        return await client.GetFromJsonAsync<List<CampReportResponse>>(
+            $"/api/v1/worlds/{settlement!.WorldId}/camp-reports", SqliteApiFixture.StrictJson, Ct);
+    }
 
     private async Task<CampStateResponse> CampAtAsync(HttpClient client, Guid worldId, HexCoord hex) =>
         (await client.GetFromJsonAsync<List<CampStateResponse>>(

@@ -555,8 +555,18 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("AttackerArmyId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AttackerOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<Guid>("AttackerSettlementId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("DefenderOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<Guid>("DefenderSettlementId")
                         .HasColumnType("uuid");
@@ -636,11 +646,18 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("Winner")
                         .HasColumnType("integer");
 
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AttackerSettlementId");
 
                     b.HasIndex("DefenderSettlementId");
+
+                    b.HasIndex("WorldId", "AttackerOwnerId");
+
+                    b.HasIndex("WorldId", "DefenderOwnerId");
 
                     b.ToTable("battle_reports", (string)null);
                 });
@@ -761,6 +778,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<DateTimeOffset>("OccurredAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<int>("Seed")
                         .HasColumnType("integer");
 
@@ -784,9 +806,7 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SettlementId");
-
-                    b.HasIndex("WorldId");
+                    b.HasIndex("WorldId", "OwnerId");
 
                     b.ToTable("camp_reports", (string)null);
                 });
@@ -909,6 +929,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("SideAArmyId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("SideAOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<double>("SideAPower")
                         .HasColumnType("double precision");
 
@@ -920,6 +945,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<Guid>("SideBArmyId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("SideBOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<double>("SideBPower")
                         .HasColumnType("double precision");
@@ -933,11 +963,18 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("Winner")
                         .HasColumnType("integer");
 
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("SideASettlementId");
 
                     b.HasIndex("SideBSettlementId");
+
+                    b.HasIndex("WorldId", "SideAOwnerId");
+
+                    b.HasIndex("WorldId", "SideBOwnerId");
 
                     b.ToTable("field_battle_reports", (string)null);
                 });
@@ -1829,6 +1866,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AcceptorOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<Guid>("AcceptorSettlementId")
                         .HasColumnType("uuid");
 
@@ -1847,6 +1889,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("OfferedResource")
                         .HasColumnType("integer");
 
+                    b.Property<string>("PosterOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<Guid>("PosterSettlementId")
                         .HasColumnType("uuid");
 
@@ -1859,6 +1906,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<double>("TravelHours")
                         .HasColumnType("double precision");
 
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AcceptorSettlementId");
@@ -1867,6 +1917,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsUnique();
 
                     b.HasIndex("PosterSettlementId");
+
+                    b.HasIndex("WorldId", "AcceptorOwnerId");
+
+                    b.HasIndex("WorldId", "PosterOwnerId");
 
                     b.ToTable("trade_reports", (string)null);
                 });
@@ -2008,6 +2062,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<string>("PreferredLocale")
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
+
+                    b.Property<DateTimeOffset?>("PremiumUntil")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTimeOffset>("RenownSettledAt")
                         .HasColumnType("timestamp with time zone");
@@ -2409,12 +2466,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.CampReportEntity", b =>
                 {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
-                        .WithMany()
-                        .HasForeignKey("SettlementId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", null)
                         .WithMany()
                         .HasForeignKey("WorldId")
@@ -2742,15 +2793,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .WithMany()
                         .HasForeignKey("PosterSettlementId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TradeReportEntity", b =>
-                {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", null)
-                        .WithMany()
-                        .HasForeignKey("OfferId")
-                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
