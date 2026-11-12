@@ -2297,7 +2297,7 @@ export class HexMapRenderer {
   // Issue #159 part B: the composing-a-dispatch/field-order range tint —
   // every hex `setRangeOverlay` hands in, drawn as a translucent fill plus
   // an outline on the boundary edges (the edges whose neighbour isn't in the
-  // set), same "just stores data, drawn every tick" convention as
+  // set), static: drawn when `setRangeOverlay` stores new hexes (not per tick), unlike
   // `armyOverlay`. Sits directly below `highlightLayer` (both immediately
   // above `terrainTop.container` — see mount()'s addChild order) so it tints
   // the tile tops the way the hover/highlight layers do; fog sits above
@@ -3022,7 +3022,6 @@ export class HexMapRenderer {
     this.whiteMistLayer.setDebug(debug);
     this.blackFogLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed * waterDebugTuning.mapAnimationSpeed);
     this.whiteMistLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed * waterDebugTuning.mapAnimationSpeed);
-    this.drawRangeOverlay();
     this.drawHighlight();
   };
 
@@ -3060,7 +3059,7 @@ export class HexMapRenderer {
     this.cameraAnim = { from: { ...this.camera }, to: target, startedAt: performance.now(), durationMs };
   }
 
-  /** Issue #159 part B: a flat white wash over every hex in range — fill only, no outline. */
+  /** Issue #159 part B: a flat white wash over every hex in range — fill only, no outline. Static: redrawn only when `setRangeOverlay` changes the hexes. */
   private drawRangeOverlay() {
     this.rangeLayer.clear();
     const hexes = this.rangeOverlay;
@@ -6337,6 +6336,7 @@ export class HexMapRenderer {
    */
   setRangeOverlay(hexes: AxialCoord[] | null) {
     this.rangeOverlay = hexes && hexes.length > 0 ? hexes : null;
+    this.drawRangeOverlay();
   }
 
   /** The mouse in canvas px while it is over the map itself (not over a panel); null for touch and pen. HTML markers hit-test with it. */
