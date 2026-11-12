@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Bjarnoy.Migrations.PostgreSql.Migrations
 {
     [DbContext(typeof(GameDbContext))]
-    [Migration("20261112023051_ArmyGatherings")]
+    [Migration("20261112023640_ArmyGatherings")]
     partial class ArmyGatherings
     {
         /// <inheritdoc />
@@ -973,6 +973,12 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("BoardingQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("BoardingR")
+                        .HasColumnType("integer");
 
                     b.Property<DateTimeOffset>("DepartAt")
                         .HasColumnType("timestamp with time zone");

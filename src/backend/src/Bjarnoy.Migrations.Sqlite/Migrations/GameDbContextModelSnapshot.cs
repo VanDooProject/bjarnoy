@@ -966,6 +966,12 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("BoardingQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("BoardingR")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTimeOffset>("DepartAt")
                         .HasColumnType("TEXT");
 

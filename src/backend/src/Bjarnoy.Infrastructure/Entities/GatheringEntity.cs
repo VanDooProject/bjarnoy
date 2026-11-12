@@ -20,6 +20,11 @@ public class GatheringEntity
 
     public int HexR { get; set; }
 
+    /// <summary>The land hex beside a dock on the water where land groups board — <see cref="Gathering.BoardingHex"/>; both columns set or both null.</summary>
+    public int? BoardingQ { get; set; }
+
+    public int? BoardingR { get; set; }
+
     /// <summary>Game instant, not wall time.</summary>
     public DateTimeOffset DepartAt { get; set; }
 
@@ -52,6 +57,7 @@ public class GatheringEntity
         Id = Id,
         SettlementId = SettlementId,
         Hex = new HexCoord(HexQ, HexR),
+        BoardingHex = BoardingQ is { } boardingQ ? new HexCoord(boardingQ, BoardingR!.Value) : null,
         DepartAt = DepartAt,
         Mission = (ArmyMission)Mission,
         TargetSettlementId = TargetSettlementId,
@@ -68,6 +74,8 @@ public class GatheringEntity
         SettlementId = gathering.SettlementId,
         HexQ = gathering.Hex.Q,
         HexR = gathering.Hex.R,
+        BoardingQ = gathering.BoardingHex?.Q,
+        BoardingR = gathering.BoardingHex?.R,
         DepartAt = gathering.DepartAt,
         Mission = (int)gathering.Mission,
         TargetSettlementId = gathering.TargetSettlementId,

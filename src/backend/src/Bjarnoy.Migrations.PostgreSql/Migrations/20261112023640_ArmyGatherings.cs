@@ -25,6 +25,8 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     SettlementId = table.Column<Guid>(type: "uuid", nullable: false),
                     HexQ = table.Column<int>(type: "integer", nullable: false),
                     HexR = table.Column<int>(type: "integer", nullable: false),
+                    BoardingQ = table.Column<int>(type: "integer", nullable: true),
+                    BoardingR = table.Column<int>(type: "integer", nullable: true),
                     DepartAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     Mission = table.Column<int>(type: "integer", nullable: false),
                     TargetSettlementId = table.Column<Guid>(type: "uuid", nullable: true),

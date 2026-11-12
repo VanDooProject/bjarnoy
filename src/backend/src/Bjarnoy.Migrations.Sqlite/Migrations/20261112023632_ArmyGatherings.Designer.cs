@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Bjarnoy.Migrations.Sqlite.Migrations
 {
     [DbContext(typeof(GameDbContext))]
-    [Migration("20261112023037_ArmyGatherings")]
+    [Migration("20261112023632_ArmyGatherings")]
     partial class ArmyGatherings
     {
         /// <inheritdoc />
@@ -968,6 +968,12 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("TEXT");
+
+                    b.Property<int?>("BoardingQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("BoardingR")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTimeOffset>("DepartAt")
                         .HasColumnType("TEXT");

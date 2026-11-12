@@ -25,6 +25,8 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     SettlementId = table.Column<Guid>(type: "TEXT", nullable: false),
                     HexQ = table.Column<int>(type: "INTEGER", nullable: false),
                     HexR = table.Column<int>(type: "INTEGER", nullable: false),
+                    BoardingQ = table.Column<int>(type: "INTEGER", nullable: true),
+                    BoardingR = table.Column<int>(type: "INTEGER", nullable: true),
                     DepartAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     Mission = table.Column<int>(type: "INTEGER", nullable: false),
                     TargetSettlementId = table.Column<Guid>(type: "TEXT", nullable: true),

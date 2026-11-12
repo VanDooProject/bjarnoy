@@ -29,6 +29,15 @@ public sealed record Gathering
     /// <summary>The join hex the groups of this gathering walk to and merge on.</summary>
     public required HexCoord Hex { get; init; }
 
+    /// <summary>
+    /// The land hex next to <see cref="Hex"/> where land groups stand when <see cref="Hex"/> is a dock on the water (land troops cannot walk
+    /// onto the water; they board from the shore); <see langword="null"/> when every group stands on <see cref="Hex"/> itself.
+    /// </summary>
+    public HexCoord? BoardingHex { get; init; }
+
+    /// <summary>Whether a group standing on <paramref name="hex"/> is at this gathering.</summary>
+    public bool Stands(HexCoord hex) => hex == Hex || (BoardingHex is { } boarding && hex == boarding);
+
     /// <summary>Game instant the groups still standing on <see cref="Hex"/> merge and leave together.</summary>
     public required DateTimeOffset DepartAt { get; init; }
 
@@ -425,34 +434,48 @@ public sealed partial record Army
             }
 
             Walker? dock = null;
+            HexCoord? dockBoarding = null;
             List<RouteTimes>? passengerWalks = null;
             var bestHours = double.MaxValue;
             var failure = DispatchRejection.UnreachableLeg;
             foreach (var candidate in candidates)
             {
-                var walks = new List<RouteTimes>();
-                var latest = 0d;
-                var reachable = true;
-                foreach (var passengers in passengerGroups)
+                // A dock on the water cannot be walked onto: the passengers board from the land hex beside it, the one they reach soonest.
+                List<HexCoord> boardingHexes = terrainAt(candidate.Spot).IsTraversable(isLandUnit: true)
+                    ? [candidate.Spot]
+                    : [.. candidate.Spot.Neighbours().Where(n => terrainAt(n).IsTraversable(isLandUnit: true)).OrderBy(n => n.Q).ThenBy(n => n.R)];
+                if (boardingHexes.Count == 0)
                 {
-                    var (walk, rejection) = router.Search(passengers.Spot, candidate.Spot, isLandUnit: true);
-                    if (walk is null)
-                    {
-                        failure = rejection;
-                        reachable = false;
-                        break;
-                    }
-
-                    var times = router.Times(walk, ShipCargo.Pace(passengers.Units), isLandUnit: true);
-                    walks.Add(times);
-                    latest = Math.Max(latest, times.Hours);
+                    failure = DispatchRejection.UnreachableLeg;
                 }
 
-                if (reachable && latest < bestHours)
+                foreach (var boardingHex in boardingHexes)
                 {
-                    bestHours = latest;
-                    dock = candidate;
-                    passengerWalks = walks;
+                    var walks = new List<RouteTimes>();
+                    var latest = 0d;
+                    var reachable = true;
+                    foreach (var passengers in passengerGroups)
+                    {
+                        var (walk, rejection) = router.Search(passengers.Spot, boardingHex, isLandUnit: true);
+                        if (walk is null)
+                        {
+                            failure = rejection;
+                            reachable = false;
+                            break;
+                        }
+
+                        var times = router.Times(walk, ShipCargo.Pace(passengers.Units), isLandUnit: true);
+                        walks.Add(times);
+                        latest = Math.Max(latest, times.Hours);
+                    }
+
+                    if (reachable && latest < bestHours)
+                    {
+                        bestHours = latest;
+                        dock = candidate;
+                        dockBoarding = boardingHex == candidate.Spot ? null : boardingHex;
+                        passengerWalks = walks;
+                    }
                 }
             }
 
@@ -485,6 +508,7 @@ public sealed partial record Army
                     TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
                     TargetBuildingCoord = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetBuildingCoord : null,
                     TargetCampCoord = mission == ArmyMission.Hunt ? targetCampCoord : null,
+                    BoardingHex = dockBoarding,
                     Stops = planned.Stops!,
                     HomeSpot = planned.Home,
                 };
@@ -532,6 +556,7 @@ public sealed partial record Army
                     Hex = dock.Spot,
                     DepartAt = boardingDepartAt,
                     Mission = ArmyMission.Move,
+                    BoardingHex = dockBoarding,
                     Stops = [meeting.Join],
                     HomeSpot = dock.Spot,
                     ParentGatheringId = finalGathering.Id,

@@ -1192,6 +1192,7 @@ public sealed class ArmyService(
                 }
             }
 
+            var domainGathering = gathering.ToDomain();
             var standing = new List<ArmyEntity>();
             foreach (var member in members.Where(m => !IsGone(m)))
             {
@@ -1199,7 +1200,7 @@ public sealed class ArmyService(
                     {
                         Movement: { IsReturning: false, IsStranded: false } leg,
                     }
-                    && leg.Path[^1] == new HexCoord(gathering.HexQ, gathering.HexR) && departAt >= leg.ArrivesAt)
+                    && domainGathering.Stands(leg.Path[^1]) && departAt >= leg.ArrivesAt)
                 {
                     standing.Add(member);
                 }

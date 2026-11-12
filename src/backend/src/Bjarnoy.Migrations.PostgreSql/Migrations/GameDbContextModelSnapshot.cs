@@ -971,6 +971,12 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("BoardingQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("BoardingR")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset>("DepartAt")
                         .HasColumnType("timestamp with time zone");
 
