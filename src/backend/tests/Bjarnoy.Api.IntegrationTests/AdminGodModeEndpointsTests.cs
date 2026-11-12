@@ -736,7 +736,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
 
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-        db.Armies.Add(army);
+        db.AddArmyRows(army);
         await db.SaveChangesAsync(Ct);
 
         return army.Id;

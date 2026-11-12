@@ -11,7 +11,7 @@ namespace Bjarnoy.Infrastructure.Services;
 /// A foreign army a viewer sees marching: where it stands and the short stretch of its route ahead — nothing of its mission, target,
 /// units, provisions or the part of the route behind it.
 /// </summary>
-public sealed record ForeignArmy(Guid Id, Guid SettlementId, bool IsFleet, HexCoord Position, ForeignRouteStretch Stretch);
+public sealed record ForeignArmy(Guid Id, Guid? SettlementId, bool IsFleet, HexCoord Position, ForeignRouteStretch Stretch);
 
 /// <summary>
 /// "Foreign armies in sight" (<c>docs/design/map-fog-v2.md</c> §1g): the marching armies of other players that stand inside the
@@ -42,10 +42,8 @@ public sealed class ForeignArmyService(GameDbContext dbContext, ExploredAreaServ
 
         var candidates = await _dbContext.Armies
             .AsNoTracking()
-            .Include(a => a.Settlement)
             .Include(a => a.Stacks)
-            .Where(a => !a.AtHome && !a.IsSupporting && a.Settlement != null
-                && a.Settlement.WorldId == worldId && a.Settlement.OwnerId != viewerOwnerId)
+            .Where(a => !a.AtHome && !a.IsSupporting && a.WorldId == worldId && a.OwnerId != viewerOwnerId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         var seen = new List<ForeignArmy>();

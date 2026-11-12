@@ -440,7 +440,7 @@ public sealed class MigrationTests
                     Stacks = [new ArmyUnitStackEntity { ArmyId = id, UnitType = unit, Count = 1 }],
                 };
 
-                context.Armies.AddRange(
+                context.AddArmyRows(
                     Army(landArmy, UnitType.Spearman, supporting: false),
                     Army(fleetArmy, UnitType.Karve, supporting: false),
                     Army(guestFleet, UnitType.Karve, supporting: true));

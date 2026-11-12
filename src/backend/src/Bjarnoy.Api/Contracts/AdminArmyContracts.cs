@@ -34,19 +34,20 @@ public sealed record AdminEditArmyRequest(
 /// An army in the admin troop browser: the army itself, who owns it, and the
 /// loot (wood included) it is carrying home but has not deposited yet.
 /// </summary>
+/// <param name="SettlementName">The army's home settlement; <see langword="null"/> for an army without a home.</param>
+/// <param name="OwnerName">The home settlement's owner name; the owner's stable id for an army without a home.</param>
 public sealed record AdminArmyResponse(
-    ArmyResponse Army, Guid WorldId, string SettlementName, string OwnerName, ResourceAmountsResponse Loot)
+    ArmyResponse Army, Guid WorldId, string? SettlementName, string OwnerName, ResourceAmountsResponse Loot)
 {
     public static AdminArmyResponse From(ArmyEntity entity, DateTimeOffset gameNow)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        ArgumentNullException.ThrowIfNull(entity.Settlement);
 
         return new AdminArmyResponse(
             ArmyResponse.From(entity, gameNow),
-            entity.Settlement.WorldId,
-            entity.Settlement.Name,
-            entity.Settlement.OwnerName,
+            entity.WorldId,
+            entity.Settlement?.Name,
+            entity.Settlement?.OwnerName ?? entity.OwnerId,
             new ResourceAmountsResponse(entity.LootWood, entity.LootStone, entity.LootFood, entity.LootIron));
     }
 }

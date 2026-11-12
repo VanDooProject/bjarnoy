@@ -200,11 +200,9 @@ public sealed class RequestSettlementOwnershipEndpointFilter : IEndpointFilter
 }
 
 /// <summary>
-/// Refuses an army-mutating request with 403 unless the caller can prove they
-/// own the army's home settlement — an army has no owner of its own, only the
-/// settlement it was dispatched from (<see cref="ArmyEntity.SettlementId"/>),
-/// which stays the same for its whole life regardless of where it currently
-/// is. See <see cref="OwnershipGate"/> for the actual rule.
+/// Refuses an army-mutating request with 403 unless the caller is the army's owner (<see cref="ArmyEntity.UserId"/>, or for
+/// anonymous play <see cref="ArmyEntity.OwnerId"/>): the army carries its owner itself, so this holds for an army without a home
+/// too. Same JWT/header rule as <see cref="OwnershipGate.Owns"/>.
 /// </summary>
 /// <remarks>
 /// Reads the army id the same way <see cref="SettlementOwnershipEndpointFilter"/>
@@ -223,21 +221,18 @@ public sealed class ArmyOwnershipEndpointFilter : IEndpointFilter
         var armyId = context.GetArgument<Guid>(0);
 
         var armies = context.HttpContext.RequestServices.GetRequiredService<ArmyService>();
-        var settlementId = await armies.GetOwningSettlementIdAsync(
-            armyId, context.HttpContext.RequestAborted);
+        var owner = await armies.GetOwnerAsync(armyId, context.HttpContext.RequestAborted);
 
-        if (settlementId is null)
+        if (owner is null)
         {
             // No such army — let the endpoint's own NotFound handling answer,
             // rather than this filter answering for it.
             return await next(context);
         }
 
-        var realms = context.HttpContext.RequestServices.GetRequiredService<RealmDirectory>();
-        var refusal = await OwnershipGate.EnforceAsync(
-            context.HttpContext, settlementId.Value, realms, context.HttpContext.RequestAborted);
-
-        return refusal ?? await next(context);
+        return OwnershipGate.Owns(context.HttpContext, owner.Value.UserId, owner.Value.OwnerId)
+            ? await next(context)
+            : OwnershipGate.Refuse();
     }
 }
 

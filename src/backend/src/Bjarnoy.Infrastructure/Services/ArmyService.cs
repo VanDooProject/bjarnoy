@@ -39,6 +39,9 @@ public enum RecallOutcome
     /// </summary>
     NoRouteHome,
 
+    /// <summary>The army has no home to be recalled to (its beach camp was destroyed): <c>docs/design/troop-movement-range.md</c> §2a.</summary>
+    NoHome,
+
     Recalled,
 }
 
@@ -113,6 +116,9 @@ public sealed class ArmyService(
 
     /// <summary>Settlements a siege changed during the settle in progress; <see cref="SettleAndFoldAsync"/> reconciles their realm once the settle is saved.</summary>
     private readonly HashSet<Guid> _realmDirty = [];
+
+    /// <summary>The worlds a beach camp was destroyed in during this request (<see cref="DestroyCampAsync"/>): their realm cache is flushed after the save.</summary>
+    private readonly HashSet<Guid> _destroyedInWorlds = [];
     private readonly RenownService _renownService = renownService;
     private readonly AuthService _authService = authService;
     private readonly FieldBattleService _fieldBattleService = fieldBattleService;
@@ -439,8 +445,7 @@ public sealed class ArmyService(
         ArmyEntity? reportedEntity = null;
         foreach (var army in newArmies)
         {
-            var entity = new ArmyEntity { Id = army.Id, SettlementId = settlementId };
-            entity.ApplyDomain(army);
+            var entity = ArmyEntity.For(army, settlement);
             _dbContext.Armies.Add(entity);
             if (army.Id == reported.Id)
             {
@@ -528,25 +533,20 @@ public sealed class ArmyService(
     }
 
     /// <summary>
-    /// An army's home settlement id (<see cref="ArmyEntity.SettlementId"/>) —
-    /// unlike <see cref="GetAsync"/>, this is a bare id lookup with no
-    /// settling, for the ownership-authorization endpoint filter
-    /// (<c>Bjarnoy.Api.Auth.ArmyOwnershipEndpointFilter</c>): an army has no
-    /// owner of its own, only the settlement it was dispatched from, which
-    /// stays the same for its whole life regardless of where it currently is
-    /// or whether it has already folded home. Null if no such army row
-    /// exists (including one already folded back and deleted).
+    /// An army's owner (<see cref="ArmyEntity.UserId"/>, <see cref="ArmyEntity.OwnerId"/>) and world — unlike <see cref="GetAsync"/>, a
+    /// bare lookup with no settling, for the ownership-authorization endpoint filter (<c>Bjarnoy.Api.Auth.ArmyOwnershipEndpointFilter</c>).
+    /// The army carries its owner itself, so this also answers for an army without a home. Null if no such army row exists
+    /// (including one already folded back and deleted).
     /// </summary>
-    public async Task<Guid?> GetOwningSettlementIdAsync(
+    public async Task<(Guid UserId, string OwnerId, Guid WorldId)?> GetOwnerAsync(
         Guid armyId, CancellationToken cancellationToken = default)
     {
-        // SettlementId is never Guid.Empty (ArmyEntity.Id/SettlementId are
-        // both real generated ids), so a plain FirstOrDefaultAsync default
-        // (Guid?)null unambiguously means "no such army row".
-        return await _dbContext.Armies
+        var owner = await _dbContext.Armies
+            .AsNoTracking()
             .Where(a => a.Id == armyId)
-            .Select(a => (Guid?)a.SettlementId)
+            .Select(a => new { a.UserId, a.OwnerId, a.WorldId })
             .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        return owner is null ? null : (owner.UserId, owner.OwnerId, owner.WorldId);
     }
 
     /// <summary>
@@ -559,12 +559,12 @@ public sealed class ArmyService(
         Guid armyId, CancellationToken cancellationToken = default)
     {
         var army = await LoadArmyAsync(armyId, cancellationToken).ConfigureAwait(false);
-        if (army?.Settlement?.World is null)
+        if (army?.World is null)
         {
             return null;
         }
 
-        var clock = army.Settlement.World.ToClock();
+        var clock = army.World.ToClock();
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
         var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
@@ -576,17 +576,34 @@ public sealed class ArmyService(
         return outcome == ArmySettleOutcome.FoldedHome ? (null, clock) : (army, clock);
     }
 
-    /// <summary>Armies belonging to a settlement — home, in transit, and currently supporting elsewhere. Not settled on read; see <see cref="SettlementService.GetForWorldAsync"/> for the same reasoning.</summary>
-    public Task<List<ArmyEntity>> GetForSettlementAsync(Guid settlementId, CancellationToken cancellationToken = default) =>
-        _dbContext.Armies
+    /// <summary>
+    /// Armies belonging to a settlement — in transit, and currently supporting elsewhere — and the armies of its owner in its world
+    /// that have no home (<c>docs/design/troop-movement-range.md</c> §2a: they show in every realm's army list of that player). Not
+    /// settled on read; see <see cref="SettlementService.GetForWorldAsync"/> for the same reasoning.
+    /// </summary>
+    public async Task<List<ArmyEntity>> GetForSettlementAsync(Guid settlementId, CancellationToken cancellationToken = default)
+    {
+        var owner = await _dbContext.Settlements
+            .AsNoTracking()
+            .Where(s => s.Id == settlementId)
+            .Select(s => new { s.WorldId, s.OwnerId })
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (owner is null)
+        {
+            return [];
+        }
+
+        return await _dbContext.Armies
             .AsNoTracking()
             .Include(a => a.Settlement)
             .Include(a => a.Stacks)
             .Include(a => a.TargetSettlement)
             .Include(a => a.Gathering)
-            .Where(a => a.SettlementId == settlementId)
+            .Where(a => a.SettlementId == settlementId
+                || (a.SettlementId == null && a.WorldId == owner.WorldId && a.OwnerId == owner.OwnerId))
             .OrderBy(a => a.Id)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Guest (<see cref="ArmyMission.Support"/>) armies currently stationed at
@@ -620,7 +637,7 @@ public sealed class ArmyService(
             .ConfigureAwait(false);
 
         return isGuestHere
-            ? await RecallAsync(armyId, cancellationToken).ConfigureAwait(false)
+            ? await RecallCoreAsync(armyId, byHost: true, cancellationToken).ConfigureAwait(false)
             : new RecallResult(RecallOutcome.ArmyNotFound);
     }
 
@@ -632,15 +649,22 @@ public sealed class ArmyService(
     /// <see cref="RecallOutcome.NoRouteHome"/> when the army was actually
     /// recallable but no route home exists (issue #159 part A).
     /// </summary>
-    public async Task<RecallResult> RecallAsync(Guid armyId, CancellationToken cancellationToken = default)
+    public Task<RecallResult> RecallAsync(Guid armyId, CancellationToken cancellationToken = default) =>
+        RecallCoreAsync(armyId, byHost: false, cancellationToken);
+
+    /// <param name="byHost">
+    /// The host sends a guest away (<see cref="SendGuestHomeAsync"/>): a guest without a home then leaves the host's garrison and
+    /// stands on its spot's hex. Its own owner cannot recall an army without a home at all (<see cref="RecallOutcome.NoHome"/>).
+    /// </param>
+    private async Task<RecallResult> RecallCoreAsync(Guid armyId, bool byHost, CancellationToken cancellationToken)
     {
         var army = await LoadArmyAsync(armyId, cancellationToken).ConfigureAwait(false);
-        if (army?.Settlement?.World is null)
+        if (army?.World is null)
         {
             return new RecallResult(RecallOutcome.ArmyNotFound);
         }
 
-        var clock = army.Settlement.World.ToClock();
+        var clock = army.World.ToClock();
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
         var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
@@ -651,6 +675,23 @@ public sealed class ArmyService(
         }
 
         var domain = army.ToDomain();
+        if (!domain.HasHome)
+        {
+            if (byHost && domain.Location is ArmyLocation.Supporting { Spot: var guestSpot })
+            {
+                army.ApplyDomain(domain.Strand(now, guestSpot));
+                await SaveAsync(cancellationToken).ConfigureAwait(false);
+                return new RecallResult(RecallOutcome.Recalled, army);
+            }
+
+            if (outcome == ArmySettleOutcome.Updated)
+            {
+                await SaveAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return new RecallResult(RecallOutcome.NoHome, army);
+        }
+
         HexCoord? currentHex = null;
         if (domain.Location is ArmyLocation.Supporting supporting)
         {
@@ -693,12 +734,12 @@ public sealed class ArmyService(
     private async Task<Army?> PlanRecallAsync(
         ArmyEntity army, Army domain, DateTimeOffset at, HexCoord? currentHex, CancellationToken cancellationToken)
     {
-        var world = army.Settlement!.World!;
+        var world = army.World!;
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
-        var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, at, cancellationToken).ConfigureAwait(false))
-            .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
-        var home = army.Settlement.HomeHexFor(domain);
+        var rivers = await WorldRivers.IndexAsync(_dbContext, army.WorldId, cancellationToken).ConfigureAwait(false);
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.WorldId, sampler.TerrainAt, rivers.IsWide, at, cancellationToken).ConfigureAwait(false))
+            .ForOwner(army.WallOwnerKey);
+        var home = domain.Home;
 
         return domain.Recall(at, home, sampler.TerrainAt, currentHex, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls);
     }
@@ -713,12 +754,12 @@ public sealed class ArmyService(
         Guid armyId, HexCoord newTarget, CancellationToken cancellationToken = default)
     {
         var army = await LoadArmyAsync(armyId, cancellationToken).ConfigureAwait(false);
-        if (army?.Settlement?.World is null)
+        if (army?.World is null)
         {
             return new RetargetFoundingApiResult(RetargetFoundingRejection.NotAFoundingMission, ArmyNotFound: true);
         }
 
-        var clock = army.Settlement.World.ToClock();
+        var clock = army.World.ToClock();
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
         var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
@@ -728,15 +769,15 @@ public sealed class ArmyService(
             return new RetargetFoundingApiResult(RetargetFoundingRejection.NothingToRetarget);
         }
 
-        var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
-        var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, now, cancellationToken).ConfigureAwait(false))
-            .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.World, cancellationToken).ConfigureAwait(false);
+        var rivers = await WorldRivers.IndexAsync(_dbContext, army.WorldId, cancellationToken).ConfigureAwait(false);
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.WorldId, sampler.TerrainAt, rivers.IsWide, now, cancellationToken).ConfigureAwait(false))
+            .ForOwner(army.WallOwnerKey);
         var domain = army.ToDomain();
-        var home = army.Settlement.HomeHexFor(domain);
+        var home = domain.Home;
 
         var result = Army.RetargetFounding(
-            domain, newTarget, now, home, sampler.TerrainAt, army.Settlement.World.SpeedFactor,
+            domain, newTarget, now, home, sampler.TerrainAt, army.World.SpeedFactor,
             rivers.IsRiver, rivers.IsWide, walls);
         if (!result.Accepted)
         {
@@ -796,12 +837,12 @@ public sealed class ArmyService(
         CancellationToken cancellationToken = default)
     {
         var army = await LoadArmyAsync(armyId, cancellationToken).ConfigureAwait(false);
-        if (army?.Settlement?.World is null)
+        if (army?.World is null)
         {
             return new FieldOrderApiResult(FieldOrderRejection.NoActiveJourney, ArmyNotFound: true);
         }
 
-        var clock = army.Settlement.World.ToClock();
+        var clock = army.World.ToClock();
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
         var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
@@ -834,12 +875,12 @@ public sealed class ArmyService(
         var isPremium = callerUserId is { } userId
             && await _authService.GetIsPremiumAsync(userId, cancellationToken).ConfigureAwait(false) == true;
 
-        var worldId = army.Settlement.WorldId;
-        var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
+        var worldId = army.WorldId;
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.World, cancellationToken).ConfigureAwait(false);
         var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
         var walls = (await WorldBridges.RouteIndexAsync(_dbContext, worldId, sampler.TerrainAt, rivers.IsWide, now, cancellationToken).ConfigureAwait(false))
-            .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
-        var home = army.Settlement.HomeHexFor(domain);
+            .ForOwner(army.WallOwnerKey);
+        var home = domain.Home;
         var giants = await LoadGiantIndexAsync(worldId, cancellationToken).ConfigureAwait(false);
 
         HexCoord effectiveDestination;
@@ -882,7 +923,7 @@ public sealed class ArmyService(
 
         var result = Army.PlanFieldOrder(
             domain, waypoints, effectiveDestination, home, now, sampler.TerrainAt, isPremium,
-            army.Settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls,
+            army.World.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls,
             mission, targetSettlementId, targetBuildingCoord, targetClaimDiscs, targetCampCoord, targetCampIsWater, targetCampIsSand,
             giants, units, Guid.CreateVersion7(), targetSpots);
 
@@ -896,8 +937,7 @@ public sealed class ArmyService(
         {
             // A split: the entity that was ordered keeps standing with what stayed, the units that left are a new army.
             army.ApplyDomain(remainder);
-            left = new ArmyEntity { Id = result.Army!.Id, SettlementId = army.SettlementId };
-            left.ApplyDomain(result.Army);
+            left = army.Sibling(result.Army!);
             _dbContext.Armies.Add(left);
         }
         else
@@ -905,10 +945,10 @@ public sealed class ArmyService(
             army.ApplyDomain(result.Army!);
         }
 
-        if (mission == ArmyMission.Hunt && army.Settlement.TroopsTrained)
+        if (mission == ArmyMission.Hunt && army.Settlement is { TroopsTrained: true } homeSettlement)
         {
             // Onboarding quest hunt1, same rule as a hunt dispatched from home: starting a hunt counts.
-            army.Settlement.HuntStarted = true;
+            homeSettlement.HuntStarted = true;
         }
 
         await SaveAsync(cancellationToken).ConfigureAwait(false);
@@ -955,12 +995,12 @@ public sealed class ArmyService(
         CancellationToken cancellationToken = default)
     {
         var army = await LoadArmyAsync(armyId, cancellationToken).ConfigureAwait(false);
-        if (army?.Settlement?.World is null)
+        if (army?.World is null)
         {
             return new AdminArmyEditResult(AdminArmyEditOutcome.ArmyNotFound);
         }
 
-        var clock = army.Settlement.World.ToClock();
+        var clock = army.World.ToClock();
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
         // Settle first, exactly as GetAsync does: an army that has already
@@ -1005,18 +1045,18 @@ public sealed class ArmyService(
 
         if (teleportTo is { } destination)
         {
-            var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
-            var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
-            var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, now, cancellationToken).ConfigureAwait(false))
-            .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
-            var home = army.Settlement.HomeHexFor(domain);
+            var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.World, cancellationToken).ConfigureAwait(false);
+            var rivers = await WorldRivers.IndexAsync(_dbContext, army.WorldId, cancellationToken).ConfigureAwait(false);
+            var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.WorldId, sampler.TerrainAt, rivers.IsWide, now, cancellationToken).ConfigureAwait(false))
+            .ForOwner(army.WallOwnerKey);
+            var home = domain.Home;
 
             // An explicit provisions value is the admin's final word, so it is
             // carried into the new leg rather than being re-burned against the
             // leg this teleport is throwing away.
             var teleported = domain.TeleportTo(
                 destination, home, now, sampler.TerrainAt,
-                provisions is { } given ? Math.Max(0, given) : null, army.Settlement.World.SpeedFactor,
+                provisions is { } given ? Math.Max(0, given) : null, army.World.SpeedFactor,
                 rivers.IsRiver, rivers.IsWide, walls);
             if (teleported is null)
             {
@@ -1059,7 +1099,7 @@ public sealed class ArmyService(
             .Include(a => a.Stacks)
             .Include(a => a.TargetSettlement)
             .Include(a => a.Gathering)
-            .Where(a => a.Settlement!.WorldId == worldId)
+            .Where(a => a.WorldId == worldId)
             .OrderBy(a => a.Id)
             .ToListAsync(cancellationToken);
 
@@ -1098,7 +1138,7 @@ public sealed class ArmyService(
     {
         // Every gathering of the world whose departure has passed is resolved first, in departure order, whichever army is being settled:
         // a hostile army must meet the merged army on its way on, not stale groups still standing on the join hex.
-        var (resolvedDue, callerGone) = await ResolveDueGatheringsAsync(army.Settlement!.WorldId, now, army, cancellationToken).ConfigureAwait(false);
+        var (resolvedDue, callerGone) = await ResolveDueGatheringsAsync(army.WorldId, now, army, cancellationToken).ConfigureAwait(false);
         var outcome = callerGone
             ? ArmySettleOutcome.FoldedHome
             : await SettleAndFoldCoreAsync(army, now, cancellationToken).ConfigureAwait(false);
@@ -1109,11 +1149,19 @@ public sealed class ArmyService(
 
         // A siege that cut down a tower moved the defender's realm: save what the settle did, then bring the realm state of every
         // settlement of that player up to date, so buildings the tower chained in stop working at once.
-        if (_realmDirty.Count > 0)
+        if (_realmDirty.Count > 0 || _destroyedInWorlds.Count > 0)
         {
             var dirty = _realmDirty.ToList();
             _realmDirty.Clear();
             await SaveAsync(cancellationToken).ConfigureAwait(false);
+
+            // A destroyed camp's cached realm lookups are stale once its row is gone.
+            foreach (var worldId in _destroyedInWorlds)
+            {
+                RealmDirectory.InvalidateWorld(worldId);
+            }
+
+            _destroyedInWorlds.Clear();
             foreach (var settlementId in dirty)
             {
                 await _settlementService.ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
@@ -1283,13 +1331,13 @@ public sealed class ArmyService(
 
     /// <summary>The terrain, rivers and walls of the owner's routes at <paramref name="at"/>, as every route planned from a settle uses them.</summary>
     private async Task<(WorldEntity World, TerrainSampler Sampler, RiverIndex Rivers, WallRules? Walls)> RoutingAsync(
-        SettlementEntity settlement, DateTimeOffset at, CancellationToken cancellationToken)
+        ArmyEntity army, DateTimeOffset at, CancellationToken cancellationToken)
     {
-        var world = settlement.World!;
+        var world = army.World!;
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
-        var rivers = await WorldRivers.IndexAsync(_dbContext, settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, settlement.WorldId, sampler.TerrainAt, rivers.IsWide, at, cancellationToken).ConfigureAwait(false))
-            .ForOwner(WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id));
+        var rivers = await WorldRivers.IndexAsync(_dbContext, world.Id, cancellationToken).ConfigureAwait(false);
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, world.Id, sampler.TerrainAt, rivers.IsWide, at, cancellationToken).ConfigureAwait(false))
+            .ForOwner(army.WallOwnerKey);
         return (world, sampler, rivers, walls);
     }
 
@@ -1297,8 +1345,8 @@ public sealed class ArmyService(
     private async Task SendGroupHomeAsync(ArmyEntity member, DateTimeOffset at, CancellationToken cancellationToken)
     {
         var domain = member.ToDomain();
-        var (world, sampler, rivers, walls) = await RoutingAsync(member.Settlement!, at, cancellationToken).ConfigureAwait(false);
-        var home = domain.Recall(at, domain.HomeSpot, sampler.TerrainAt, null, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls);
+        var (world, sampler, rivers, walls) = await RoutingAsync(member, at, cancellationToken).ConfigureAwait(false);
+        var home = domain.Recall(at, domain.Home, sampler.TerrainAt, null, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls);
         member.ApplyDomain(home ?? domain.LeaveGathering());
     }
 
@@ -1320,7 +1368,7 @@ public sealed class ArmyService(
             _dbContext.Armies.Remove(other);
         }
 
-        var (world, sampler, rivers, walls) = await RoutingAsync(survivor.Settlement!, departAt, cancellationToken).ConfigureAwait(false);
+        var (world, sampler, rivers, walls) = await RoutingAsync(survivor, departAt, cancellationToken).ConfigureAwait(false);
 
         // A boarded fleet that sails to the sea meeting stands there until that meeting leaves.
         DateTimeOffset? parentDepartAt = null;
@@ -1342,7 +1390,7 @@ public sealed class ArmyService(
                 HomeSpot = domainGathering.HomeSpot,
                 Location = new ArmyLocation.InTransit(Movement.Stranded(departAt, domainGathering.Hex)),
             }).LeaveGathering();
-            departed = atJoin.Recall(departAt, domainGathering.HomeSpot, sampler.TerrainAt, null, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls)
+            departed = atJoin.Recall(departAt, atJoin.HasHome ? domainGathering.HomeSpot : null, sampler.TerrainAt, null, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls)
                 ?? atJoin.Strand(departAt, domainGathering.Hex);
             _logger.LogWarning(
                 "Gathering {GatheringId} cannot go on from {Hex}; the merged army {ArmyId} goes home.", gathering.Id, domainGathering.Hex, survivor.Id);
@@ -1436,20 +1484,20 @@ public sealed class ArmyService(
     /// The route rules of the world's wall timeline at any instant (<see cref="WallBlocking"/>), built once per request and world: the one
     /// rule set both <see cref="FindWallEncounterAsync"/> and <see cref="RerouteAroundWallAsync"/> use.
     /// </summary>
-    private async Task<WallBlocking> WallBlockingAsync(SettlementEntity settlement, CancellationToken cancellationToken)
+    private async Task<WallBlocking> WallBlockingAsync(WorldEntity world, CancellationToken cancellationToken)
     {
-        if (!_wallBlocking.TryGetValue(settlement.WorldId, out var blocking))
+        if (!_wallBlocking.TryGetValue(world.Id, out var blocking))
         {
-            var timeline = await WallTimelineAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
-            var sampler = await WorldTerrain.SamplerAsync(_dbContext, settlement.World!, cancellationToken).ConfigureAwait(false);
-            var rivers = await WorldRivers.IndexAsync(_dbContext, settlement.WorldId, cancellationToken).ConfigureAwait(false);
+            var timeline = await WallTimelineAsync(world.Id, cancellationToken).ConfigureAwait(false);
+            var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
+            var rivers = await WorldRivers.IndexAsync(_dbContext, world.Id, cancellationToken).ConfigureAwait(false);
 
             // Only a gate cares who the friends are, so a world without one skips the guild queries.
             var areFriends = timeline.Walls.Any(w => w.Wall.IsGate)
-                ? await WorldPalisades.FriendsAsync(_dbContext, settlement.WorldId, cancellationToken).ConfigureAwait(false)
+                ? await WorldPalisades.FriendsAsync(_dbContext, world.Id, cancellationToken).ConfigureAwait(false)
                 : null;
             blocking = new WallBlocking(timeline, sampler.TerrainAt, rivers.IsWide, areFriends);
-            _wallBlocking[settlement.WorldId] = blocking;
+            _wallBlocking[world.Id] = blocking;
         }
 
         return blocking;
@@ -1470,9 +1518,8 @@ public sealed class ArmyService(
             return null;
         }
 
-        var settlement = army.Settlement!;
-        var timeline = await WallTimelineAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var ownerKey = WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id);
+        var timeline = await WallTimelineAsync(army.WorldId, cancellationToken).ConfigureAwait(false);
+        var ownerKey = army.WallOwnerKey;
 
         // The timeline alone rules out what cannot block (an own gate, a half-open end nobody built beside since the route was planned),
         // so a route through such hexes only costs the one timeline read: terrain, rivers and guilds are read for a candidate only.
@@ -1482,7 +1529,7 @@ public sealed class ArmyService(
             return null;
         }
 
-        var blocking = await WallBlockingAsync(settlement, cancellationToken).ConfigureAwait(false);
+        var blocking = await WallBlockingAsync(army.World!, cancellationToken).ConfigureAwait(false);
         return WallEncounters.FindEarliest(
             movement, (hex, from, before) => blocking.FirstBlockingIn(hex, ownerKey, from, before, movement.PlannedAt, now), now);
     }
@@ -1494,17 +1541,16 @@ public sealed class ArmyService(
     /// </summary>
     private async Task<bool> RerouteAroundWallAsync(ArmyEntity army, WallEncounter encounter, CancellationToken cancellationToken)
     {
-        var settlement = army.Settlement!;
-        var world = settlement.World!;
+        var world = army.World!;
         var domain = army.ToDomain();
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
-        var rivers = await WorldRivers.IndexAsync(_dbContext, settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WallBlockingAsync(settlement, cancellationToken).ConfigureAwait(false)).IndexAt(encounter.At);
-        var bridges = await WorldBridges.IndexAsync(_dbContext, settlement.WorldId, sampler.TerrainAt, encounter.At, cancellationToken).ConfigureAwait(false);
-        var rules = new LandRouteIndex(walls, bridges).ForOwner(WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id));
+        var rivers = await WorldRivers.IndexAsync(_dbContext, world.Id, cancellationToken).ConfigureAwait(false);
+        var walls = (await WallBlockingAsync(world, cancellationToken).ConfigureAwait(false)).IndexAt(encounter.At);
+        var bridges = await WorldBridges.IndexAsync(_dbContext, world.Id, sampler.TerrainAt, encounter.At, cancellationToken).ConfigureAwait(false);
+        var rules = new LandRouteIndex(walls, bridges).ForOwner(army.WallOwnerKey);
 
         var result = domain.RerouteAroundWall(
-            encounter, settlement.HomeHexFor(domain), sampler.TerrainAt, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, rules);
+            encounter, domain.Home, sampler.TerrainAt, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, rules);
         if (SameMovement(domain, result.Army))
         {
             _logger.LogWarning(
@@ -1517,7 +1563,7 @@ public sealed class ArmyService(
 
         if (result.StuckAt is { } stuck)
         {
-            _armyReportService.Add(settlement, ArmyReportKind.Stuck, encounter.At, army.Id, stuck, domain.Mission, domain.Stacks);
+            _armyReportService.Add(army, ArmyReportKind.Stuck, encounter.At, army.Id, stuck, domain.Mission, domain.Stacks);
             _logger.LogInformation(
                 "Army {ArmyId} found the wall at {Wall} in its way at {At} and no way past it: it stops at {Hex}{Stranded}.",
                 army.Id, encounter.Hex, encounter.At, stuck, result.Army.CannotGetHome ? " and cannot get home" : string.Empty);
@@ -1557,9 +1603,10 @@ public sealed class ArmyService(
             return ArmySettleOutcome.Updated;
         }
 
-        // An army that cannot get home stands where it is until its food runs out (docs/design/troop-movement-range.md §2a). It
-        // has no outbound leg left to arrive on, so none of the mission arrivals below apply to it.
-        if (domain.CannotGetHome)
+        // A stranded army stands where it is until its food runs out (docs/design/troop-movement-range.md §2a). It has no
+        // outbound leg left to arrive on, so none of the mission arrivals below apply to it. (An army without a home that is
+        // carrying out a field order still arrives on its mission: only once it stops does it stand like this.)
+        if (domain.Location is ArmyLocation.InTransit { Movement.IsStranded: true })
         {
             // Still walking to the hex it stops on: a strong camp it passes on the way ambushes it like any marching army, up to the
             // instant it gets there (or starves on the way).
@@ -1607,7 +1654,7 @@ public sealed class ArmyService(
         // falls through to the ordinary settle below, which only turns it around once its provisions demand it).
         if (domain.Mission == ArmyMission.SetUpCamp
             && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } campTransit
-            && now >= campTransit.Movement.ArrivesAt + BeachCamp.ScaledBuildDuration(army.Settlement!.World!.SpeedFactor))
+            && now >= campTransit.Movement.ArrivesAt + BeachCamp.ScaledBuildDuration(army.World!.SpeedFactor))
         {
             return await ResolveCampAsync(army, domain, now, cancellationToken).ConfigureAwait(false);
         }
@@ -1623,6 +1670,14 @@ public sealed class ArmyService(
             && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } supportTransit
             && now >= supportTransit.Movement.ArrivesAt)
         {
+            // An army without a home sent to a garrison spot of its own owner folds in there: that spot is its new home (§2a).
+            if (!domain.HasHome
+                && await FindOwnSpotAsync(army, domain.TargetBuildingCoord!.Value, domain.Stacks, domain.TargetSettlementId, cancellationToken).ConfigureAwait(false) is { } ownHost)
+            {
+                await FoldIntoOwnSpotAsync(army, ownHost, domain, supportTransit.Movement.ArrivesAt, now, cancellationToken).ConfigureAwait(false);
+                return ArmySettleOutcome.FoldedHome;
+            }
+
             var supportArrival = Army.SettleSupportArrival(domain, now);
             army.ApplyDomain(supportArrival.Army);
 
@@ -1631,6 +1686,19 @@ public sealed class ArmyService(
                 army.Id, supportArrival.Army.TargetSettlementId);
 
             return ArmySettleOutcome.Updated;
+        }
+
+        // An army without a home that reaches a garrison spot of its owner on a move order folds in there: that spot is its new
+        // home (docs/design/troop-movement-range.md §2a).
+        if (!domain.HasHome
+            && domain.Mission == ArmyMission.Move
+            && domain.GatheringId is null
+            && domain.Location is ArmyLocation.InTransit { Movement: { IsReturning: false, IsStranded: false } homelessMove }
+            && now >= homelessMove.ArrivesAt
+            && await FindOwnSpotAsync(army, homelessMove.Path[^1], domain.Stacks, null, cancellationToken).ConfigureAwait(false) is { } ownSpot)
+        {
+            await FoldIntoOwnSpotAsync(army, ownSpot, domain, homelessMove.ArrivesAt, now, cancellationToken).ConfigureAwait(false);
+            return ArmySettleOutcome.FoldedHome;
         }
 
         // docs/design/ship-movement.md §2: a fleet's home is the last owned
@@ -1661,16 +1729,16 @@ public sealed class ArmyService(
         {
             var destination = moveTransit.Movement.Path[^1];
             var found = await FindDockyardSettlementAtAsync(
-                army.Settlement!.WorldId, army.SettlementId, destination, cancellationToken)
+                army.WorldId, army.SettlementId, destination, cancellationToken)
                 .ConfigureAwait(false);
 
             if (found is { Settlement: var dockyardSettlement, ByCentre: var byCentre })
             {
-                if (dockyardSettlement.OwnerId == army.Settlement.OwnerId)
+                if (dockyardSettlement.OwnerId == army.OwnerId)
                 {
                     // The fleet folds into the harbour spot it reached (a dock hex), or the settlement's own harbour spot
                     // when it landed on the centre; that spot is its new home.
-                    var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World!, cancellationToken).ConfigureAwait(false);
+                    var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.World!, cancellationToken).ConfigureAwait(false);
                     var spot = byCentre ? Army.FleetAnchor(dockyardSettlement.ToDomain(sampler.TerrainAt), sampler.TerrainAt) : destination;
                     await FoldIntoDockAsync(army, dockyardSettlement, spot, domain, moveTransit.Movement.ArrivesAt, now, cancellationToken).ConfigureAwait(false);
                     return ArmySettleOutcome.FoldedHome;
@@ -1721,7 +1789,7 @@ public sealed class ArmyService(
 
         army.WalkedLegs.AddRange(result.Walked);
         _armyReportService.Add(
-            army.Settlement!, ArmyReportKind.Starved, starvesAt, army.Id, where, domain.Mission, domain.Stacks);
+            army, ArmyReportKind.Starved, starvesAt, army.Id, where, domain.Mission, domain.Stacks);
         _dbContext.Armies.Remove(army);
 
         _logger.LogInformation(
@@ -1775,12 +1843,16 @@ public sealed class ArmyService(
         // its army's attack power — read-only here, so no write tracking is
         // needed even when the origin settlement is also the target of a
         // simultaneous attack from elsewhere.
-        var attackerEntity = await LoadSettlementAsync(armyEntity.SettlementId, cancellationToken).ConfigureAwait(false);
+        // An army without a home has no shrine behind it: no bonus.
+        var attackerEntity = armyEntity.SettlementId is { } attackerHomeId
+            ? await LoadSettlementAsync(attackerHomeId, cancellationToken).ConfigureAwait(false)
+            : null;
         var attackerSettlement = attackerEntity?.ToDomain();
         var landAttackBonusPercent = attackerSettlement?.AttackBonusPercent(UnitClass.Infantry) ?? 0;
         var shipAttackBonusPercent = attackerSettlement?.AttackBonusPercent(UnitClass.Ship) ?? 0;
 
-        var sampler = await WorldTerrain.SamplerAsync(_dbContext, attackerEntity!.World!, cancellationToken).ConfigureAwait(false);
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, armyEntity.World!, cancellationToken).ConfigureAwait(false);
+        var targetWasCamp = session.View(targetId).IsBeachCamp;
 
         var seed = Random.Shared.Next();
         var arrival = Army.SettleArrival(
@@ -1814,24 +1886,37 @@ public sealed class ArmyService(
         // The settle that follows eats with the guests the battle left, not the ones it started with.
         session.Store.SetGuests(targetId, session.GuestStacksOf(targetId));
 
-        // The loot left the pool at the battle instant; settle the group on from there to now and write every member back.
+        // A beach camp falls (docs/design/skirmish/beach-camp.md): an attack that leaves no troops in it destroys it without siege
+        // engines, and so does damage that takes its camp building down, the same way destroying a Longhouse ends a realm.
+        var campFalls = targetWasCamp
+            && (!arrival.DefenderSettlement.IsBeachCamp
+                || (domain.Mission == ArmyMission.Attack
+                    && SiegeResolver.EmptyCampFalls(
+                        arrival.DefenderSettlement, [.. arrival.DefenderSettlement.Garrison, .. session.GuestStacksOf(targetId)])));
+
+        // The loot left the pool at the battle instant; settle the group on from there to now and write every member back. A camp
+        // that fell is taken out of its group first: it is not written back, its own piles are lost.
         session.Apply(targetId, arrival.DefenderSettlement);
         if (now > battleInstant)
         {
             session.Store.SettleTo(now);
         }
 
+        var campEntity = session.EntityOf(targetId);
+        if (campFalls)
+        {
+            session.Drop(targetId);
+        }
+
         await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
 
         var report = BattleReport.From(
-            Guid.CreateVersion7(), movement.ArrivesAt, armyEntity.Id, armyEntity.SettlementId, targetId,
+            Guid.CreateVersion7(), movement.ArrivesAt, armyEntity.Id, armyEntity.SettlementId ?? Guid.Empty, targetId,
             domain.Stacks, arrival.Attack!, seed, wasRaid: domain.Mission == ArmyMission.Raid);
         var battleEntity = BattleReportEntity.FromDomain(report);
-        var attackerOwner = await ReportOwners.OfAsync(_dbContext, armyEntity.SettlementId, cancellationToken).ConfigureAwait(false);
-        var defenderOwner = await ReportOwners.OfAsync(_dbContext, targetId, cancellationToken).ConfigureAwait(false);
-        battleEntity.WorldId = attackerOwner.WorldId;
-        battleEntity.AttackerOwnerId = attackerOwner.OwnerId;
-        battleEntity.DefenderOwnerId = defenderOwner.OwnerId;
+        battleEntity.WorldId = armyEntity.WorldId;
+        battleEntity.AttackerOwnerId = armyEntity.OwnerId;
+        battleEntity.DefenderOwnerId = campEntity.OwnerId;
         _dbContext.BattleReports.Add(battleEntity);
 
         if (fireSiege.Applied)
@@ -1858,15 +1943,121 @@ public sealed class ArmyService(
             armyEntity.Id, targetId, battle.Winner, battle.AttackPower, battle.DefensePower,
             battle.AttackerSurvivors.Sum(s => s.Count));
 
+        ArmySettleOutcome outcome;
         if (arrival.Army is null)
         {
             // Wiped out — no return trip for zero units.
             armyEntity.RecordWalkedToEnd();
             _dbContext.Armies.Remove(armyEntity);
-            return ArmySettleOutcome.FoldedHome;
+            outcome = ArmySettleOutcome.FoldedHome;
+        }
+        else
+        {
+            outcome = await ApplyArmyOutcomeAsync(armyEntity, arrival.Army, now, cancellationToken).ConfigureAwait(false);
         }
 
-        return await ApplyArmyOutcomeAsync(armyEntity, arrival.Army, now, cancellationToken).ConfigureAwait(false);
+        if (campFalls)
+        {
+            await DestroyCampAsync(campEntity, session, battleInstant, cancellationToken).ConfigureAwait(false);
+        }
+
+        return outcome;
+    }
+
+    /// <summary>
+    /// Ends a beach camp that fell at <paramref name="at"/> (<c>docs/design/skirmish/beach-camp.md</c>): its troops out in the field get
+    /// the nearest garrison spot of their owner they can reach as their new home, or, reaching none, lose their home and stay where
+    /// they are until their food runs out (<c>docs/design/troop-movement-range.md</c> §2a); armies on their way to the camp go on to
+    /// its hex and stay there, as after a move order; guests standing in it are sent home; then the camp's row (and with it its
+    /// buildings, garrison and piles) is deleted. Its reports stay: they belong to the players. <paramref name="session"/> is the
+    /// camp's group, already written back without it. Does not save.
+    /// </summary>
+    private async Task DestroyCampAsync(SettlementEntity camp, LinkedGroupSession session, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        var campId = camp.Id;
+        var campHex = new HexCoord(camp.CentreQ, camp.CentreR);
+
+        // Before the row goes: the rehome reads the camp and the owner's other spots.
+        await RehomeArmiesAsync(campId, null, at, cancellationToken).ConfigureAwait(false);
+
+        var affected = await _dbContext.Armies
+            .Include(a => a.Stacks)
+            .Include(a => a.World)
+            .Where(a => a.SettlementId == campId || a.TargetSettlementId == campId)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (var army in affected.Where(a => !IsGone(a)))
+        {
+            var domain = army.ToDomain();
+
+            if (army.SettlementId == campId)
+            {
+                // Could reach none of its owner's spots: it has no home now and stays where it is at the instant the camp fell.
+                var standsOn = domain.Location switch
+                {
+                    ArmyLocation.InTransit { Movement: var m } => m.PositionAt(at),
+                    ArmyLocation.Supporting supporting => supporting.Spot,
+                    _ => campHex,
+                };
+                var homeless = (domain with { SettlementId = null }).LeaveGathering();
+                domain = domain.Location is ArmyLocation.InTransit { Movement.IsStranded: true }
+                    ? homeless
+                    : homeless.Strand(at, standsOn);
+            }
+
+            if (domain.TargetSettlementId == campId)
+            {
+                domain = domain.Location switch
+                {
+                    // A guest standing in the camp is sent home (or, with no way home, stays on the camp's hex).
+                    ArmyLocation.Supporting supporting =>
+                        await PlanRecallAsync(army, domain, at, supporting.Spot, cancellationToken).ConfigureAwait(false)
+                            ?? domain.Strand(at, supporting.Spot),
+                    // On its way there: it goes on to the camp's hex and stays there, as after a move order.
+                    ArmyLocation.InTransit { Movement: { IsReturning: false, IsStranded: false } } =>
+                        domain with { Mission = ArmyMission.Move, TargetSettlementId = null, TargetBuildingCoord = null },
+                    // On its way back from it, or stranded: the camp is only no longer its target.
+                    _ => domain with { TargetSettlementId = null, TargetBuildingCoord = null },
+                };
+            }
+
+            army.ApplyDomain(domain);
+        }
+
+        // Gatherings of the camp's own armies are called off (their groups left them above); a gathering of another player's
+        // army sent at the camp goes on to its hex as a move order.
+        var gatherings = await _dbContext.Gatherings
+            .Where(g => g.SettlementId == campId || g.TargetSettlementId == campId)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var gathering in gatherings)
+        {
+            if (gathering.SettlementId == campId)
+            {
+                _dbContext.Gatherings.Remove(gathering);
+            }
+            else
+            {
+                gathering.Mission = (int)ArmyMission.Move;
+                gathering.TargetSettlementId = null;
+                gathering.TargetBuildingQ = null;
+                gathering.TargetBuildingR = null;
+            }
+        }
+
+        _dbContext.Settlements.Remove(camp);
+
+        // The camp's claim and vision are gone from its owner's realm; the rest of the group is reconciled once this is saved.
+        _realmDirty.Remove(campId);
+        if (session.Members.FirstOrDefault() is { } survivor)
+        {
+            _realmDirty.Add(survivor.Id);
+        }
+
+        _destroyedInWorlds.Add(camp.WorldId);
+
+        _logger.LogInformation(
+            "Beach camp {CampId} at {Hex} fell at {At} and is gone; {Armies} army row(s) that pointed at it were rehomed, left without a home or redirected.",
+            campId, campHex, at, affected.Count);
     }
 
     /// <summary>
@@ -1881,7 +2072,7 @@ public sealed class ArmyService(
     {
         var movement = ((ArmyLocation.InTransit)domain.Location).Movement;
         var arrivesAt = movement.ArrivesAt;
-        var worldId = armyEntity.Settlement!.WorldId;
+        var worldId = armyEntity.WorldId;
 
         var found = domain.TargetCampCoord is { } coord
             ? await _campService.FindCampAsync(worldId, coord, arrivesAt, cancellationToken).ConfigureAwait(false)
@@ -1902,7 +2093,10 @@ public sealed class ArmyService(
         var garrison = state.GarrisonAt(camp, arrivesAt, realm.InsideRealm(camp.Coord));
         var effectiveLevel = state.EffectiveLevel(camp);
 
-        var attackerEntity = await LoadSettlementAsync(armyEntity.SettlementId, cancellationToken).ConfigureAwait(false);
+        // An army without a home has no shrine behind it: no attack bonus.
+        var attackerEntity = armyEntity.SettlementId is { } huntHomeId
+            ? await LoadSettlementAsync(huntHomeId, cancellationToken).ConfigureAwait(false)
+            : null;
         // Fleets hunting a water camp fight with the ship attack bonus; land armies, and the land troops a fleet puts ashore at a
         // sand camp, with the land one.
         var attackBonusPercent = attackerEntity?.ToDomain().AttackBonusPercent(domain.IsFleet && camp.IsWater ? UnitClass.Ship : UnitClass.Infantry) ?? 0;
@@ -1919,9 +2113,9 @@ public sealed class ArmyService(
 
         var report = CampReport.From(
             Guid.CreateVersion7(), worldId, CampReportKind.Hunt, arrivesAt, camp, effectiveLevel,
-            armyEntity.SettlementId, armyEntity.Id, domain.Stacks, garrison, plan, seed);
+            armyEntity.SettlementId ?? Guid.Empty, armyEntity.Id, domain.Stacks, garrison, plan, seed);
         var huntEntity = CampReportEntity.FromDomain(report);
-        huntEntity.OwnerId = (await ReportOwners.OfAsync(_dbContext, armyEntity.SettlementId, cancellationToken).ConfigureAwait(false)).OwnerId;
+        huntEntity.OwnerId = armyEntity.OwnerId;
         _dbContext.CampReports.Add(huntEntity);
 
         _logger.LogInformation(
@@ -2178,7 +2372,7 @@ public sealed class ArmyService(
             {
                 var (walkers, resources) = GarrisonRelocation.WithWalkFood(found.March, merged.Resources, now);
                 merged = merged with { Resources = resources };
-                relocation.AddArmy(walkers);
+                relocation.AddArmy(walkers, destinationEntity);
             }
             else
             {
@@ -2194,6 +2388,41 @@ public sealed class ArmyService(
     }
 
     /// <summary>
+    /// The garrison spot at <paramref name="hex"/> of a settlement the owner of <paramref name="army"/> holds (only of
+    /// <paramref name="settlementId"/> when given) that can hold <paramref name="stacks"/>, with that settlement loaded; or
+    /// <see langword="null"/>. Where an army without a home folds in.
+    /// </summary>
+    private async Task<(SettlementEntity Settlement, HexCoord Spot)?> FindOwnSpotAsync(
+        ArmyEntity army, HexCoord hex, IReadOnlyList<UnitStack> stacks, Guid? settlementId, CancellationToken cancellationToken)
+    {
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.World!, cancellationToken).ConfigureAwait(false);
+        var candidates = await new GarrisonRelocation(_dbContext)
+            .OwnerSpotsAsync(army.WorldId, army.OwnerId, sampler.TerrainAt, new Dictionary<Guid, Settlement>(), cancellationToken)
+            .ConfigureAwait(false);
+        var match = candidates.FirstOrDefault(c =>
+            c.Spot.Coord == hex && (settlementId is null || c.SettlementId == settlementId) && GarrisonRelocation.Fits(c.Spot, stacks));
+        if (match is null || await LoadSettlementAsync(match.SettlementId, cancellationToken).ConfigureAwait(false) is not { } settlement)
+        {
+            return null;
+        }
+
+        return (settlement, hex);
+    }
+
+    /// <summary>An army without a home folds into a garrison spot of its owner, which becomes its home: like coming home there.</summary>
+    private async Task FoldIntoOwnSpotAsync(
+        ArmyEntity armyEntity, (SettlementEntity Settlement, HexCoord Spot) target, Army arrived, DateTimeOffset arrivedAt, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var rehomed = arrived with { SettlementId = target.Settlement.Id, HomeSpot = target.Spot };
+        await FoldStacksIntoAsync(target.Settlement, target.Spot, armyEntity, rehomed, arrivedAt, now, cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Army {ArmyId}, which had no home, folded into the garrison spot {Spot} of settlement {SettlementId}: its new home.",
+            armyEntity.Id, target.Spot, target.Settlement.Id);
+    }
+
+    /// <summary>
     /// The settlement in <paramref name="worldId"/> a fleet that reached <paramref name="hex"/> docks at: one whose centre is
     /// there and that has a functioning Dockyard (<c>ByCentre</c>), or one with a Dockyard standing on that hex. Never
     /// <paramref name="excludeSettlementId"/> itself — the arriving fleet's own settlement of origin is not a docking target.
@@ -2201,7 +2430,7 @@ public sealed class ArmyService(
     /// resolves through battle instead — both need this same lookup first. <see langword="null"/> when there is none.
     /// </summary>
     private async Task<(SettlementEntity Settlement, bool ByCentre)?> FindDockyardSettlementAtAsync(
-        Guid worldId, Guid excludeSettlementId, HexCoord hex, CancellationToken cancellationToken)
+        Guid worldId, Guid? excludeSettlementId, HexCoord hex, CancellationToken cancellationToken)
     {
         var candidates = await _dbContext.Settlements
             .Include(s => s.World)
@@ -2302,6 +2531,7 @@ public sealed class ArmyService(
             .Include(a => a.Stacks)
             .Include(a => a.TargetSettlement)
             .Include(a => a.Gathering)
+            .Include(a => a.World)
             .Include(a => a.Settlement!).ThenInclude(s => s.World)
             .Include(a => a.Settlement!).ThenInclude(s => s.Owner)
             .Include(a => a.Settlement!).ThenInclude(s => s.Buildings)

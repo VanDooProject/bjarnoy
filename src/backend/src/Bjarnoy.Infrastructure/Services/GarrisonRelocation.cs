@@ -145,11 +145,10 @@ internal sealed class GarrisonRelocation(GameDbContext dbContext)
         return best;
     }
 
-    /// <summary>A new army row for <paramref name="army"/>, added to the context (not saved).</summary>
-    public ArmyEntity AddArmy(Army army)
+    /// <summary>A new army row for <paramref name="army"/> of the player who holds <paramref name="owner"/>, added to the context (not saved).</summary>
+    public ArmyEntity AddArmy(Army army, SettlementEntity owner)
     {
-        var entity = new ArmyEntity { Id = army.Id, SettlementId = army.SettlementId };
-        entity.ApplyDomain(army);
+        var entity = ArmyEntity.For(army, owner);
         _dbContext.Armies.Add(entity);
         return entity;
     }

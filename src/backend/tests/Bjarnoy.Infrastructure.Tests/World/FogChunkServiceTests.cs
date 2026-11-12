@@ -388,7 +388,7 @@ public class FogChunkServiceTests : IDisposable
         var settlement = AddSettlement(worldId, "player-1", 0, 0, level: 1);
         settlement.Buildings.Add(new PlacedBuildingEntity { Q = 1, R = 0, Type = BuildingType.OdinStatue, Level = 5 });
         // The army stands at (20, 0), far outside the settlement's own (5 + 10 = 15) explored ring.
-        _dbContext.Armies.Add(new ArmyEntity
+        _dbContext.AddArmyRows(new ArmyEntity
         {
             SettlementId = settlement.Id,
             Settlement = settlement,
@@ -426,7 +426,7 @@ public class FogChunkServiceTests : IDisposable
         // position is (9, 0) whenever "now" is evaluated. Level-1
         // ExploredRadius is 6, so (9, 0) is outside the settlement's own
         // ring — only the army's walked-ground contribution explains it.
-        _dbContext.Armies.Add(new ArmyEntity
+        _dbContext.AddArmyRows(new ArmyEntity
         {
             SettlementId = settlement.Id,
             Settlement = settlement,
@@ -644,7 +644,7 @@ public class FogChunkServiceTests : IDisposable
     {
         var worldId = AddWorld(40);
         var settlement = AddSettlement(worldId, "player-1", 0, 0, level: 1);
-        _dbContext.Armies.Add(new ArmyEntity
+        _dbContext.AddArmyRows(new ArmyEntity
         {
             SettlementId = settlement.Id,
             Settlement = settlement,
@@ -697,7 +697,7 @@ public class FogChunkServiceTests : IDisposable
     {
         var worldId = AddWorld(60);
         var settlement = AddSettlement(worldId, "player-1", 0, 0, level: 1);
-        _dbContext.Armies.Add(new ArmyEntity
+        _dbContext.AddArmyRows(new ArmyEntity
         {
             SettlementId = settlement.Id,
             Settlement = settlement,

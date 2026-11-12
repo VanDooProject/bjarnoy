@@ -186,7 +186,7 @@ public sealed class FieldBattleServiceTests : IDisposable
             settlementA, [(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Axeman, 10));
         var armyB = MakeInTransitArmy(
             settlementB, [(2, 0), (1, 0), (0, 0), (-1, 0), (-2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Spearman, 5));
-        db.Armies.AddRange(armyA, armyB);
+        db.AddArmyRows(armyA, armyB);
         await db.SaveChangesAsync(Ct);
 
         var service = new FieldBattleService(db, NullLogger<FieldBattleService>.Instance);
@@ -213,7 +213,7 @@ public sealed class FieldBattleServiceTests : IDisposable
             settlementA, [(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Axeman, 10));
         var armyB = MakeInTransitArmy(
             settlementB, [(2, 0), (1, 0), (0, 0), (-1, 0), (-2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Spearman, 5));
-        db.Armies.AddRange(armyA, armyB);
+        db.AddArmyRows(armyA, armyB);
         await db.SaveChangesAsync(Ct);
 
         var service = new FieldBattleService(db, NullLogger<FieldBattleService>.Instance);
@@ -242,7 +242,7 @@ public sealed class FieldBattleServiceTests : IDisposable
             settlementA, [(18, 0), (19, 0), (20, 0)], [0, 1, 2], T0, (UnitType.Axeman, 10));
         var armyB = MakeInTransitArmy(
             settlementB, [(20, 0)], [0], T0, (UnitType.Spearman, 5));
-        db.Armies.AddRange(armyA, armyB);
+        db.AddArmyRows(armyA, armyB);
         await db.SaveChangesAsync(Ct);
 
         var service = new FieldBattleService(db, NullLogger<FieldBattleService>.Instance);
@@ -269,7 +269,7 @@ public sealed class FieldBattleServiceTests : IDisposable
             settlementA, [(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Axeman, 10));
         var armyB = MakeInTransitArmy(
             settlementB, [(2, 0), (1, 0), (0, 0), (-1, 0), (-2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Spearman, 5));
-        db.Armies.AddRange(armyA, armyB);
+        db.AddArmyRows(armyA, armyB);
         await db.SaveChangesAsync(Ct);
 
         var service = new FieldBattleService(db, NullLogger<FieldBattleService>.Instance);
@@ -315,7 +315,7 @@ public sealed class FieldBattleServiceTests : IDisposable
         var armyB = MakeInTransitArmy(
             settlementB, [(2, 0), (1, 0), (0, 0), (-1, 0), (-2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Spearman, 5));
         armyB.FieldBattleImmuneUntil = immuneUntilHours is { } h ? T0 + TimeSpan.FromHours(h) : null;
-        db.Armies.AddRange(armyA, armyB);
+        db.AddArmyRows(armyA, armyB);
         await db.SaveChangesAsync(Ct);
 
         var service = new FieldBattleService(db, NullLogger<FieldBattleService>.Instance);
@@ -357,7 +357,7 @@ public sealed class FieldBattleServiceTests : IDisposable
         var armyB = MakeInTransitArmy(
             settlementB, [(2, 0), (1, 0), (0, 0), (-1, 0), (-2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Spearman, 5));
         armyB.Provisions = 1000;
-        db.Armies.AddRange(armyA, armyB);
+        db.AddArmyRows(armyA, armyB);
         await db.SaveChangesAsync(Ct);
 
         var service = new FieldBattleService(db, NullLogger<FieldBattleService>.Instance);
@@ -389,7 +389,7 @@ public sealed class FieldBattleServiceTests : IDisposable
         var armyB = MakeInTransitArmy(
             settlementB, [(2, 0), (1, 0), (0, 0), (-1, 0), (-2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Spearman, 5));
         armyB.LootFood = loserFood;
-        db.Armies.AddRange(armyA, armyB);
+        db.AddArmyRows(armyA, armyB);
         await db.SaveChangesAsync(Ct);
 
         var service = new FieldBattleService(db, NullLogger<FieldBattleService>.Instance);
@@ -425,7 +425,7 @@ public sealed class FieldBattleServiceTests : IDisposable
             settlementA, [(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Axeman, 10));
         var armyB = MakeInTransitArmy(
             settlementB, [(2, 0), (1, 0), (0, 0), (-1, 0), (-2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Axeman, 10));
-        db.Armies.AddRange(armyA, armyB);
+        db.AddArmyRows(armyA, armyB);
         await db.SaveChangesAsync(Ct);
 
         var service = new FieldBattleService(db, NullLogger<FieldBattleService>.Instance);
@@ -466,7 +466,7 @@ public sealed class FieldBattleServiceTests : IDisposable
             settlementA, [(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Axeman, 10));
         var armyB = MakeInTransitArmy(
             settlementB, [(2, 0), (1, 0), (0, 0), (-1, 0), (-2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Spearman, 5));
-        setupDb.Armies.AddRange(armyA, armyB);
+        setupDb.AddArmyRows(armyA, armyB);
         await setupDb.SaveChangesAsync(Ct);
 
         using var db1 = CreateContext();

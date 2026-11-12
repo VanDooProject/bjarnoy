@@ -78,7 +78,7 @@ public sealed class ForeignArmyEndpointsTests : IAsyncLifetime
             ? path
             : [.. Enumerable.Range(0, 9).Select(i => new HexPoint(viewer.Q - 9 + i, viewer.R))];
         var viewerArmy = Army(viewer.Id, viewerPath, elapsedHours, ArmyMission.Move, null);
-        db.Armies.AddRange(rivalArmy, viewerArmy);
+        db.AddArmyRows(rivalArmy, viewerArmy);
         await db.SaveChangesAsync(Ct);
 
         return new Scene(world.Id, viewer, viewerOwnerId, rival.Id, rivalArmy.Id, viewerArmy.Id);

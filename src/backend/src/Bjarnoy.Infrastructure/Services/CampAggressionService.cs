@@ -245,8 +245,8 @@ public sealed class CampAggressionService(
     {
         var candidates = await _dbContext.Armies
             .Include(a => a.Stacks)
-            .Where(a => a.Settlement!.WorldId == worldId
-                && a.Settlement.UserId == ownerId
+            .Where(a => a.WorldId == worldId
+                && a.UserId == ownerId
                 && !a.AtHome
                 && !a.IsSupporting
                 && !a.IsReturning)

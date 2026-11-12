@@ -229,7 +229,7 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
             var guestHome = await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == guestHomeSettlementId, Ct);
             army.HomeSpotQ = guestHome.CentreQ;
             army.HomeSpotR = guestHome.CentreR;
-            db.Armies.Add(army);
+            db.AddArmyRows(army);
             await db.SaveChangesAsync(Ct);
             return army.Id;
         });
@@ -313,7 +313,7 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         };
         return await WithDbAsync(async db =>
         {
-            db.Armies.Add(army);
+            db.AddArmyRows(army);
             await db.SaveChangesAsync(Ct);
             return army.Id;
         });
