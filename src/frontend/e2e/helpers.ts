@@ -111,7 +111,7 @@ export async function clickHudMenuEntry(page: Page, label: string): Promise<void
   const account = page.getByTestId('account-menu-trigger');
   const trigger = (await account.isVisible()) ? account : page.getByTestId('returning-player-trigger');
   await trigger.click();
-  await page.locator('.hud-nav [role="menuitem"]', { hasText: label }).click();
+  await page.locator('[role="menu"] [role="menuitem"]', { hasText: label }).click();
 }
 
 /**

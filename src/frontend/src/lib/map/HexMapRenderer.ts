@@ -40,7 +40,7 @@ import {
 } from './markerOcclusion';
 import { Application, Container, Graphics, GraphicsContext, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
-import { axialToOddQ, coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
+import { axialToOddQ, coordKey, hexesInRadius, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
 import { DIAL_FINISH_MS, DIAL_REJECT_MS, retainFinishingDials, rejectDialAt, type ConstructionDial } from './constructionDial';
@@ -49,7 +49,7 @@ import { atlasPageCount } from './atlasManifests';
 import { attachFramePacing } from './framePacing';
 import { insetBorderCorners, splitBorderEdges } from './realmBorderEdges';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
-import { drawsAsSea, TILE_ORIENTATIONS, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
+import { drawsAsSea, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { buildingName } from '../../i18n/catalogueNames';
@@ -64,7 +64,8 @@ import { WaterLayer } from './water/WaterLayer';
 import { WaterDryLayer, entriesWorldBounds, maskEntries, type DryEntry } from './water/waterDryMask';
 import { BogLakeLayer } from './water/BogLakeLayer';
 import { LAKE_FRAME_RE } from './water/dryMaskCore';
-import { RiverFlowLayer, riverFlowOf, type RiverFlowEntry } from './water/riverFlowLayer';
+import { RiverFlowLayer, type RiverFlowEntry } from './water/riverFlowLayer';
+import { createRiverFlowEntrySource } from './water/riverFlowEntries';
 import { waterDebugFlags, waterDebugTuning, waterPerfStats } from './water/waterDebug';
 import type { TerrainLookup, WaterMask } from './water/waterMask';
 import { WaterMaskBaker } from './water/waterMaskBaker';
@@ -101,10 +102,11 @@ import {
   topTextureFor,
   unloadAnimAtlases,
   unloadPackAnimAtlases,
+  type RiverArt,
   type TileAnimClip,
   type TileTextures,
 } from './textures';
-import { giantCrop, giantFootprintOutline } from './giantTiles';
+import { GIANT_MAX_RISE_NATIVE, giantCrop, giantFootprintOutline } from './giantTiles';
 import type { GiantFamily } from './giantPlacement';
 import { bogEdgeShapes, bogEdgesOf, isBogGround, type BogEdgeShape } from './bogEdge';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
@@ -947,11 +949,57 @@ const TILE_TOPFACE_Y_OFFSET = TILE_W * TILE_ART_TOPFACE_Y_FRAC;
 // consider a hex "visible" — shared so the two agree on exactly the same
 // rect every rebuild.
 //
-// This also covers giant tiles (giantTiles.ts), whose top parts rise above
-// their own hex's canvas: the tallest shipped part (giantmountain, 692 native
-// px) rises 392 native px = TILE_W * 392 / 200 ≈ 329 world units, inside
-// this margin. A taller giant would need this widened.
-const VISIBLE_RECT_MARGIN = TILE_W * 2;
+// A hex is drawn when its grid position lies in the rect, but its art reaches past
+// that box (MAX_ART_OVERHANG), and the terrain is only rebuilt once the camera has
+// moved REBUILD_MOVE_THRESHOLD. So between two rebuilds a hex the rect left out
+// can come into view: the margin minus the threshold must cover the overhang, or a
+// hex at the viewport edge could be undrawn right before the next rebuild (asserted
+// in HexMapRenderer.test.ts). This also covers giant tiles (giantTiles.ts), whose
+// top parts rise above their own hex's canvas by up to GIANT_MAX_RISE_NATIVE.
+export const VISIBLE_RECT_MARGIN = TILE_W * 4;
+export const REBUILD_MOVE_THRESHOLD = TILE_W * 1.25;
+/**
+ * The farthest any hex art reaches past its grid position (`isoGridPosition`'s top-left of the hex's box), per axis: sideways a whole
+ * tile width, and vertically either above it (the art starts `TILE_TOPFACE_Y_OFFSET` higher, a giant part by its extra height more)
+ * or below it (the rest of the canvas).
+ */
+export const MAX_ART_OVERHANG = {
+  x: TILE_W,
+  y: Math.max(TILE_TOPFACE_Y_OFFSET + (TILE_W * GIANT_MAX_RISE_NATIVE) / TILE_ART_NATIVE_W, TILE_CANVAS_H - TILE_TOPFACE_Y_OFFSET),
+};
+// The water mask's own bake window around the viewport (unchanged by the terrain margin above).
+const WATER_MASK_VIEW_MARGIN = TILE_W * 2;
+
+/** The odd-q columns and rows `coordsInRect` scans for a world rect (a hex of slack on each side). */
+function hexBoundsOfRect(rect: { minX: number; minY: number; maxX: number; maxY: number }) {
+  const colPitch = TILE_W * 0.75;
+  return {
+    colMin: Math.floor(rect.minX / colPitch) - 1,
+    colMax: Math.ceil(rect.maxX / colPitch) + 1,
+    rowMin: Math.floor(rect.minY / TILE_H) - 1,
+    rowMax: Math.ceil(rect.maxY / TILE_H) + 1,
+  };
+}
+
+/** Whether `c` lies within bounds from `hexBoundsOfRect`, the same test `coordsInRect`'s loops make. */
+function hexInBounds(c: AxialCoord, b: ReturnType<typeof hexBoundsOfRect>): boolean {
+  const row = c.r + (c.q - (c.q & 1)) / 2;
+  return c.q >= b.colMin && c.q <= b.colMax && row >= b.rowMin && row <= b.rowMax;
+}
+
+/** What a hex's terrain art is, decided once by `terrainArtPlanAt`. */
+type TerrainArtPlan =
+  | { kind: 'giant'; tile: Tile }
+  | { kind: 'river'; river: RiverTile }
+  // A camp, endgame site, wall (`animated: false`), river building or plain tile (`plain`).
+  | { kind: 'art'; tile: Tile; art?: RiverArt; animated: boolean; plain?: boolean };
+
+/** A hex's base art, and the top half that comes with it rather than from the plan (a river's top, a legacy split's top). */
+interface BaseArt {
+  texture: Texture;
+  crop?: { nativeY: number; nativeH: number };
+  top?: { texture: Texture; crop?: { nativeY: number; nativeH: number } };
+}
 
 // The flat top-face diamond (isoTopPoints) spans world-y 0..TILE_H from the
 // tile's grid origin, so its own vertical centre is TILE_H/2 — NOT
@@ -2153,8 +2201,8 @@ export class HexMapRenderer {
   private bogLakeLoadStarted = false;
   // The world rect the current water mask was baked over — `null` until the
   // first bake. Re-baked only when the viewport leaves it (§2.2), not per
-  // rebuild: a rebuild happens on every 0.4-tile camera move, the mask's own
-  // margin is three tiles.
+  // rebuild: a rebuild happens on every REBUILD_MOVE_THRESHOLD of camera move, the mask's own
+  // margin is WATER_MASK_VIEW_MARGIN.
   private waterMaskRegionBuilt: WaterMaskRegion | null = null;
   /**
    * Whether `worldModel.isWastedRevealed()` was true for the bake that
@@ -3953,7 +4001,7 @@ export class HexMapRenderer {
       // and a rebuild re-syncs every visible terrain/border sprite, real
       // per-rebuild cost under software rendering, paid several times over
       // across a single gesture. visibleCoords already renders a
-      // TILE_W*2 margin past the viewport edge, so there's slack to spend:
+      // VISIBLE_RECT_MARGIN past the viewport edge, so there's slack to spend:
       // throttle rebuilds to once per DRAG_REBUILD_THROTTLE_MS instead of
       // firing on every threshold-crossing frame. Each gesture still ends
       // with one forced, fully up-to-date rebuild — onPointerUp's when a drag
@@ -3971,7 +4019,7 @@ export class HexMapRenderer {
     const prev = this.lastBuiltCamera;
     if (!prev) return true;
     const moved = Math.hypot(this.camera.x - prev.x, this.camera.y - prev.y);
-    return moved > TILE_W * 0.4 || Math.abs(this.camera.zoom - prev.zoom) / prev.zoom > 0.08;
+    return moved > REBUILD_MOVE_THRESHOLD || Math.abs(this.camera.zoom - prev.zoom) / prev.zoom > 0.08;
   }
 
   /** Every hex axial coord whose grid position falls within `rect` (world-space). */
@@ -3979,11 +4027,7 @@ export class HexMapRenderer {
     rect: { minX: number; minY: number; maxX: number; maxY: number },
     clipSources: FogSource[] | null,
   ): AxialCoord[] {
-    const colPitch = TILE_W * 0.75;
-    const colMin = Math.floor(rect.minX / colPitch) - 1;
-    const colMax = Math.ceil(rect.maxX / colPitch) + 1;
-    const rowMin = Math.floor(rect.minY / TILE_H) - 1;
-    const rowMax = Math.ceil(rect.maxY / TILE_H) + 1;
+    const { colMin, colMax, rowMin, rowMax } = hexBoundsOfRect(rect);
     // What the scan would have been without the clip — counted, not walked.
     fogPerfStats.viewportHexCount = (colMax - colMin + 1) * (rowMax - rowMin + 1);
     const out: AxialCoord[] = [];
@@ -4388,7 +4432,7 @@ export class HexMapRenderer {
       return;
     }
     this.waterMaskDirty = false;
-    const region = waterMaskRegion(visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN), TILE_W);
+    const region = waterMaskRegion(visibleWorldRect(this.camera, this.viewport, WATER_MASK_VIEW_MARGIN), TILE_W);
     // Timed rather than estimated: the bake is one isoPixelToAxial per texel
     // plus three distance transforms, and it is the only CPU work this
     // feature does — everything else it costs is on the GPU, where this
@@ -4597,6 +4641,84 @@ export class HexMapRenderer {
     return isPastTerrainCullOf(q, r, fogSources, this.options.worldModel.getFogCoverage(), this.armyCullSources);
   }
 
+  /** The base and top art of a river hex (see riverTexturesFor), resolved from the world alone. */
+  private riverTexturesAt(c: AxialCoord, river: RiverTile) {
+    const { worldModel } = this.options;
+    // Only a Mouth's orientation actually needs this (see
+    // riverTexturesFor/mouthOrientationOf) — skip the neighbour scan
+    // for every other shape.
+    const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
+    // Likewise, only a Spring's art actually branches on this.
+    const springShape = river.shape === 'spring' ? worldModel.springShapeAt(c) : undefined;
+    // Only straight/bend/bend60 (and never a wasted/lava tile — see
+    // riverTexturesFor) actually draw a variant.
+    const riverVariant = river.wasted ? 'plain' : worldModel.riverVariantAt(c, river.shape);
+    return riverTexturesFor(this.textures!, river, seaDirection, springShape, riverVariant);
+  }
+
+  /**
+   * Which art a hex draws, decided in one place: `rebuildTerrain` derives its base and top sprites from it, and the river flow
+   * (see `baseArtOf`) reads the base of hexes outside the viewport too, so the two can never disagree. Resolved from the world alone.
+   * The order of the branches is the order of precedence:
+   * - a giant replaces only the hex's top (its base stays the plain ground's);
+   * - a wildlife camp draws its guarded art on the ground's base (a river camp brings its own river base); a camp whose art cannot
+   *   be resolved falls through and draws as plain ground;
+   * - an Utgard wall piece or a Jötun watchtower draws its server-resolved piece at its current level;
+   * - a wall hex (palisade or gate) draws the piece its wall neighbours decide, without an animated top;
+   * - a Sawmill/Crop Mill on a river tile draws its building+river composite instead of the plain river art;
+   * - a river hex draws its river art;
+   * - anything else draws the plain tile.
+   */
+  private terrainArtPlanAt(c: AxialCoord, tile: Tile, river: RiverTile | undefined): TerrainArtPlan {
+    const { worldModel } = this.options;
+    const textures = this.textures!;
+    if (tile.giant) return { kind: 'giant', tile };
+    if (drawnCampOf(tile)) {
+      const campArt = campArtFor(textures, tile, river);
+      if (campArt) return { kind: 'art', tile: { ...tile, orientation: campArt.orientation }, art: campArt.riverArt, animated: true };
+    }
+    const endgame = endgameDrawTile(tile);
+    if (endgame) return { kind: 'art', tile: endgame.tile, art: endgame.art, animated: true };
+    if (tile.buildingType === 'palisade' || tile.buildingType === 'palisadegate') {
+      const art = palisadeArtFor({
+        wallNeighbours: worldModel.wallNeighbourFlags(c),
+        coastalWater: tile.terrain === 'sea',
+        gate: tile.buildingType === 'palisadegate',
+      });
+      return { kind: 'art', tile, art, animated: false };
+    }
+    const riverArt = river && tile.buildingType ? riverBuildingArtFor(tile.buildingType, river) : undefined;
+    if (riverArt) return { kind: 'art', tile, art: riverArt, animated: true };
+    if (river) return { kind: 'river', river };
+    return { kind: 'art', tile, animated: true, plain: true };
+  }
+
+  /**
+   * The base art of a planned hex (see `terrainArtPlanAt`), plus the top it comes with when it is not drawn from the plan alone: a
+   * river's top, or the top half of a code-side legacy split.
+   */
+  private baseArtOf(c: AxialCoord, plan: TerrainArtPlan): BaseArt {
+    const textures = this.textures!;
+    switch (plan.kind) {
+      case 'giant':
+        return { texture: baseTextureFor(textures, plan.tile) };
+      case 'river': {
+        const { base, top } = this.riverTexturesAt(c, plan.river);
+        return { texture: base, top: { texture: top } };
+      }
+      case 'art': {
+        const texture = baseTextureFor(textures, plan.tile, plan.art);
+        // No `top` half in the pack for this family, and its art rises above the top face: cut it in code (legacyTileSplit.ts) so
+        // the overhanging part sits in terrainTop, above the water mesh, instead of being painted over by it.
+        if (plan.plain && waterDebugFlags.legacyTileSplit && LEGACY_TALL_KEYS.has(textureKeyFor(plan.tile)) && !topTextureFor(textures, plan.tile)) {
+          const split = splitLegacyTexture(texture);
+          return { texture: split.base.texture, crop: split.base, top: { texture: split.top.texture, crop: split.top } };
+        }
+        return { texture };
+      }
+    }
+  }
+
   private rebuildTerrain(coords: AxialCoord[], fogActive: boolean) {
     fogPerfStats.terrainDrawnCount = 0;
     fogPerfStats.terrainCulledCount = 0;
@@ -4641,27 +4763,25 @@ export class HexMapRenderer {
       // Tile itself, so a tile cached before that fetch lands never goes
       // stale (see WorldModel.setRiverTiles).
       const river = worldModel.getRiverTile(c.q, c.r);
-
       const key = coordKey(c);
-      // A giant tile (see giantTiles.ts) replaces only this hex's *top*
-      // sprite — its base stays whatever grass/forest-turned-grass art
-      // baseTextureFor would already draw. No real backend/live-mode
-      // interaction to worry about here (giants are demo-only, never
-      // rivers/buildings — WorldModel.canPlaceGiant already refuses those),
-      // so this is checked ahead of the river/sawmill branches below.
-      if (tile.giant) {
-        baseEntries.set(key, { texture: baseTextureFor(textures, tile), coord: c });
+      const plan = this.terrainArtPlanAt(c, tile, river);
+      const base = this.baseArtOf(c, plan);
+      baseEntries.set(key, { texture: base.texture, coord: c, crop: base.crop });
+      if (base.top) {
+        topEntries.set(key, { texture: base.top.texture, coord: c, crop: base.top.crop });
+      } else if (plan.kind === 'giant') {
+        // A giant tile (see giantTiles.ts) replaces only this hex's *top* sprite.
         // A giant on a wasted island's own anchor tile renders with that
         // family's dedicated wasted art variant if the vendored pack has
         // one (today just giantvolcano_wasted) — falls back to the plain
         // family when the wasted variant's frames haven't loaded, the same
         // graceful-degradation contract giantTopTextureFor itself already
         // has for a family with no art at all.
-        const giantFamily = giantArtFamilyFor(tile.giant.family, tile.wasted ?? false);
+        const giantFamily = giantArtFamilyFor(tile.giant!.family, tile.wasted ?? false);
         const giantAnim =
-          giantTopAnimFor(textures, giantFamily, tile.giant.orientation, tile.giant.part) ??
-          (giantFamily !== tile.giant.family
-            ? giantTopAnimFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part)
+          giantTopAnimFor(textures, giantFamily, tile.giant!.orientation, tile.giant!.part) ??
+          (giantFamily !== tile.giant!.family
+            ? giantTopAnimFor(textures, tile.giant!.family, tile.giant!.orientation, tile.giant!.part)
             : undefined);
         // A giant part with an animated clip but no static frame of its own
         // (shouldn't normally happen — every part ships both — but cheap to
@@ -4669,9 +4789,9 @@ export class HexMapRenderer {
         // static texture/crop source, same sourceSize height as a real
         // static frame would have.
         const giantTexture =
-          giantTopTextureFor(textures, giantFamily, tile.giant.orientation, tile.giant.part) ??
-          (giantFamily !== tile.giant.family
-            ? giantTopTextureFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part)
+          giantTopTextureFor(textures, giantFamily, tile.giant!.orientation, tile.giant!.part) ??
+          (giantFamily !== tile.giant!.family
+            ? giantTopTextureFor(textures, tile.giant!.family, tile.giant!.orientation, tile.giant!.part)
             : undefined) ??
           giantAnim?.textures[0];
         if (giantTexture) {
@@ -4681,103 +4801,12 @@ export class HexMapRenderer {
           // rather than throwing or showing a placeholder.
           topEntries.set(key, { texture: giantTexture, coord: c, crop: giantCrop(giantTexture.height), anim: giantAnim });
         }
-        fogPerfStats.terrainDrawnCount++;
-        continue;
+      } else if (plan.kind === 'art') {
+        const top = topTextureFor(textures, plan.tile, plan.art);
+        if (top) topEntries.set(key, { texture: top, coord: c, anim: plan.animated ? topAnimFor(textures, plan.tile, plan.art) : undefined });
       }
-      // A wildlife camp (see campPlacement.ts) is an animated topping on the hex's own
-      // ground: the ground's base, the camp's guarded (level 1) art on top, its tile
-      // rotation mapped onto the rotations that art ships (campArtFor). A river camp
-      // (bears, otters) stands on its river tile and brings its own river base with it. A camp
-      // whose art cannot be resolved (a river camp off a straight river) falls through
-      // and draws as plain ground.
-      if (drawnCampOf(tile)) {
-        const campArt = campArtFor(textures, tile, river);
-        if (campArt) {
-          const campTile = { ...tile, orientation: campArt.orientation };
-          baseEntries.set(key, { texture: baseTextureFor(textures, campTile, campArt.riverArt), coord: c });
-          const campTop = topTextureFor(textures, campTile, campArt.riverArt);
-          if (campTop) {
-            topEntries.set(key, { texture: campTop, coord: c, anim: topAnimFor(textures, campTile, campArt.riverArt) });
-          }
-          fogPerfStats.terrainDrawnCount++;
-          continue;
-        }
-      }
-      // An Utgard wall piece or a Jötun watchtower (a wasted island's endgame sites) draws its server-resolved piece and camera at its
-      // current level, on the hex's own ground (the sea end brings its own coastal base).
-      const endgame = endgameDrawTile(tile);
-      if (endgame) {
-        baseEntries.set(key, { texture: baseTextureFor(textures, endgame.tile, endgame.art), coord: c });
-        const siteTop = topTextureFor(textures, endgame.tile, endgame.art);
-        if (siteTop) topEntries.set(key, { texture: siteTop, coord: c, anim: topAnimFor(textures, endgame.tile, endgame.art) });
-        fogPerfStats.terrainDrawnCount++;
-        continue;
-      }
-      // A wall hex (palisade or gate) draws the piece and camera its wall neighbours decide (palisadeArtFor), on its own ground (on
-      // coastal water, the sea end brings its own base). The whole visible region is re-resolved on every rebuild, so a hex whose
-      // neighbour was just placed or razed comes out with its new piece.
-      if (tile.buildingType === 'palisade' || tile.buildingType === 'palisadegate') {
-        const wallArt = palisadeArtFor({
-          wallNeighbours: worldModel.wallNeighbourFlags(c),
-          coastalWater: tile.terrain === 'sea',
-          gate: tile.buildingType === 'palisadegate',
-        });
-        baseEntries.set(key, { texture: baseTextureFor(textures, tile, wallArt), coord: c });
-        const wallTop = topTextureFor(textures, tile, wallArt);
-        if (wallTop) topEntries.set(key, { texture: wallTop, coord: c });
-        fogPerfStats.terrainDrawnCount++;
-        continue;
-      }
-      // A Sawmill/Crop Mill is built directly on a river tile
-      // (WorldModel.placeBuilding mirrors BuildingCatalogue's
-      // RequiresRiverShape) — its building+river composite art replaces the
-      // plain river art the `river` branch below would otherwise draw, so
-      // this has to be checked first. riverBuildingArtFor resolves both the
-      // art family *and* orientation from the river tile itself, not
-      // tile.orientation's random per-hex hash, so the channel lines up
-      // with the neighbouring river tiles' own art.
-      const riverArt = river && tile.buildingType ? riverBuildingArtFor(tile.buildingType, river) : undefined;
-      if (riverArt) {
-        baseEntries.set(key, { texture: baseTextureFor(textures, tile, riverArt), coord: c });
-        const topTexture = topTextureFor(textures, tile, riverArt);
-        if (topTexture) {
-          topEntries.set(key, { texture: topTexture, coord: c, anim: topAnimFor(textures, tile, riverArt) });
-        }
-        fogPerfStats.terrainDrawnCount++;
-        continue;
-      }
-      if (river) {
-        // Only a Mouth's orientation actually needs this (see
-        // riverTexturesFor/mouthOrientationOf) — skip the neighbour scan
-        // for every other shape.
-        const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
-        // Likewise, only a Spring's art actually branches on this.
-        const springShape = river.shape === 'spring' ? worldModel.springShapeAt(c) : undefined;
-        // Only straight/bend/bend60 (and never a wasted/lava tile — see
-        // riverTexturesFor) actually draw a variant.
-        const riverVariant = river.wasted ? 'plain' : worldModel.riverVariantAt(c, river.shape);
-        const riverTextures = riverTexturesFor(textures, river, seaDirection, springShape, riverVariant);
-        baseEntries.set(key, { texture: riverTextures.base, coord: c });
-        topEntries.set(key, { texture: riverTextures.top, coord: c });
-        continue;
-      }
-      const baseTexture = baseTextureFor(textures, tile);
-      const topTexture = topTextureFor(textures, tile);
-      if (topTexture) {
-        baseEntries.set(key, { texture: baseTexture, coord: c });
-        topEntries.set(key, { texture: topTexture, coord: c, anim: topAnimFor(textures, tile) });
-      } else if (waterDebugFlags.legacyTileSplit && LEGACY_TALL_KEYS.has(textureKeyFor(tile))) {
-        // No `top` half in the pack for this family, and its art rises above
-        // the top face — cut it in code (legacyTileSplit.ts) so the overhanging
-        // part sits in terrainTop, above the water mesh, instead of being
-        // painted over by it.
-        const split = splitLegacyTexture(baseTexture);
-        baseEntries.set(key, { texture: split.base.texture, coord: c, crop: split.base });
-        topEntries.set(key, { texture: split.top.texture, coord: c, crop: split.top });
-      } else {
-        baseEntries.set(key, { texture: baseTexture, coord: c });
-      }
-      fogPerfStats.terrainDrawnCount++;
+      // A river hex has never counted as drawn here (its own top is the river's).
+      if (plan.kind !== 'river') fogPerfStats.terrainDrawnCount++;
     }
 
     this.syncSpriteLayer(this.terrainBase, baseEntries);
@@ -4793,31 +4822,28 @@ export class HexMapRenderer {
     };
     this.waterDryEntries = maskEntries(baseEntries.values(), (c) => drawsAsSea(worldModel.getTile(c.q, c.r).terrain), artOrigin);
     this.bogLakeEntries = maskEntries(baseEntries.values(), (_c, texture) => LAKE_FRAME_RE.test(texture.label ?? ''), artOrigin);
+    // The flow cells drawn are the hexes within the water mask's own window of the viewport; their neighbours and downstream chain come
+    // from the same source whether in view or not. A hex drawn this rebuild reuses the base art it was drawn with (a legacy split's
+    // cropped base draws no flow); any other hex resolves it from its plan, the same one `rebuildTerrain` uses.
+    const flowSource = createRiverFlowEntrySource(
+      { getRiverTile: (q, r) => worldModel.getRiverTile(q, r), getBog: (q, r) => worldModel.getTile(q, r).bog, seaFacingDirectionOf: (c, d) => worldModel.seaFacingDirectionOf(c, d) },
+      (c) => {
+        const drawn = baseEntries.get(coordKey(c));
+        const base = drawn ?? this.baseArtOf(c, this.terrainArtPlanAt(c, worldModel.getTile(c.q, c.r), worldModel.getRiverTile(c.q, c.r)));
+        return base.crop ? undefined : base.texture;
+      },
+      artOrigin,
+    );
+    // The terrain is only rebuilt every REBUILD_MOVE_THRESHOLD of camera movement, so the flow cells reach that much further
+    // than the mask's view margin: a river hex whose art scrolls into view before the next rebuild already has its flow.
+    const flowBounds = hexBoundsOfRect(
+      visibleWorldRect(this.camera, this.viewport, WATER_MASK_VIEW_MARGIN + REBUILD_MOVE_THRESHOLD),
+    );
     this.riverFlowEntries = [];
-    const flowCoords = new Map<string, RiverFlowEntry>();
-    const entryCoords: { entry: RiverFlowEntry; coord: AxialCoord }[] = [];
     for (const { texture, coord, crop } of baseEntries.values()) {
-      if (!texture || crop) continue;
-      const river = worldModel.getRiverTile(coord.q, coord.r);
-      const seaDirection = river?.shape === 'mouth' ? worldModel.seaFacingDirectionOf(coord, river.inDirections[0]) : null;
-      const flow = riverFlowOf(river, worldModel.getTile(coord.q, coord.r).bog, seaDirection);
-      if (!flow) continue;
-      const grid = isoGridPosition(coord, TILE_W, TILE_H);
-      const entry = { texture, x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET, ...flow };
-      this.riverFlowEntries.push(entry);
-      flowCoords.set(coordKey(coord), entry);
-      entryCoords.push({ entry, coord });
-    }
-    // The neighbouring river hex behind each in and out edge, so a cell can measure the distance to the bank on both sides of a seam.
-    for (const { entry, coord } of entryCoords) {
-      const around = neighbors(coord);
-      const neighbours: NonNullable<RiverFlowEntry['neighbours']> = [];
-      for (const direction of new Set([entry.outDirection, ...entry.inDirections])) {
-        const next = around[TILE_ORIENTATIONS.indexOf(direction)];
-        const other = next ? flowCoords.get(coordKey(next)) : undefined;
-        if (other) neighbours.push({ direction, name: other.texture.label ?? '', x: other.x, y: other.y });
-      }
-      entry.neighbours = neighbours;
+      if (!texture || crop || !hexInBounds(coord, flowBounds)) continue;
+      const entry = flowSource.entryAt(coord);
+      if (entry) this.riverFlowEntries.push(entry);
     }
     this.refreshWaterDry();
     this.refreshBogLake();
@@ -5035,7 +5061,7 @@ export class HexMapRenderer {
     }
     const drawStart = performance.now();
     // Live zoom rather than the one the points were placed at: a rebuild only
-    // happens every 0.4 tiles of camera movement, so a wheel zoom crosses the
+    // happens every REBUILD_MOVE_THRESHOLD of camera movement, so a wheel zoom crosses the
     // fade band over many frames that share one placement.
     const strokePx = WAVE_STROKE * this.camera.zoom;
     const fade = Math.min(
@@ -5086,13 +5112,12 @@ export class HexMapRenderer {
       const isNew = !sprite;
       // Snapshot this hex's *previous* frame — texture, box, overlay — before
       // any of it gets overwritten below, so a transitioned rebuild can spawn
-      // a ghost of exactly what used to be here. Cheap to always capture
-      // (a few field reads) even when no transition is pending, rather than
-      // threading an extra "do we need this" branch through the update logic
-      // that follows.
+      // a ghost of exactly what used to be here. The box and overlay are only
+      // read while a transition is pending; a pan rebuild skips them.
+      const inTransition = !!transition && transition.durationMs > 0;
       const prevTexture = sprite?.texture;
-      const prevBox = sprite ? { x: sprite.position.x, y: sprite.position.y, width: sprite.width, height: sprite.height, zIndex: sprite.zIndex } : undefined;
-      const prevOverlay = isTopLayer ? this.topAnimState.get(key)?.overlay : undefined;
+      const prevBox = sprite && inTransition ? { x: sprite.position.x, y: sprite.position.y, width: sprite.width, height: sprite.height, zIndex: sprite.zIndex } : undefined;
+      const prevOverlay = isTopLayer && inTransition ? this.topAnimState.get(key)?.overlay : undefined;
       const prevOverlayBox = prevOverlay
         ? { texture: prevOverlay.texture, x: prevOverlay.position.x, y: prevOverlay.position.y, width: prevOverlay.width, height: prevOverlay.height, zIndex: prevOverlay.zIndex }
         : undefined;
@@ -5107,10 +5132,10 @@ export class HexMapRenderer {
       } else {
         sprite.texture = texture;
       }
-      sprite.width = TILE_W;
-      sprite.height = crop ? (TILE_W * crop.nativeH) / TILE_ART_NATIVE_W : TILE_CANVAS_H;
       const grid = isoGridPosition(coord, TILE_W, TILE_H);
       const cropOffsetY = crop ? (TILE_W * crop.nativeY) / TILE_ART_NATIVE_W : 0;
+      sprite.width = TILE_W;
+      sprite.height = crop ? (TILE_W * crop.nativeH) / TILE_ART_NATIVE_W : TILE_CANVAS_H;
       sprite.position.set(grid.x, grid.y - TILE_TOPFACE_Y_OFFSET + cropOffsetY);
       sprite.zIndex = isoDepthKey(coord);
       if (isNew) layer.container.addChild(sprite);

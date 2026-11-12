@@ -30,14 +30,22 @@ interface BoardInfo {
   reason: string | null;
   computedAt: string | null;
   entryCount: number | null;
+  myRank: number | null;
 }
 
-const directoryFixture: { boards: BoardInfo[]; weeklyWindows: [] } = {
+const WEEK_1 = '2026-07-01T00:00:00Z';
+const WEEK_2 = '2026-07-08T00:00:00Z';
+
+const directoryFixture: { boards: BoardInfo[]; weeklyWindows: { periodStart: string; periodEnd: string }[] } = {
   boards: [
-    { scope: 'user', category: 'score', available: true, reason: null, computedAt: '2026-08-01T00:00:00Z', entryCount: 3 },
-    { scope: 'guild', category: 'score', available: false, reason: 'noGuildSystemYet', computedAt: null, entryCount: null },
+    { scope: 'user', category: 'score', available: true, reason: null, computedAt: '2026-08-01T00:00:00Z', entryCount: 3, myRank: 2 },
+    { scope: 'user', category: 'weeklyScoreGained', available: true, reason: null, computedAt: '2026-08-01T00:00:00Z', entryCount: 3, myRank: null },
+    { scope: 'guild', category: 'score', available: false, reason: 'noGuildSystemYet', computedAt: null, entryCount: null, myRank: null },
   ],
-  weeklyWindows: [],
+  weeklyWindows: [
+    { periodStart: WEEK_1, periodEnd: WEEK_2 },
+    { periodStart: WEEK_2, periodEnd: '2026-07-15T00:00:00Z' },
+  ],
 };
 
 function scoreEntry(rank: number) {
@@ -65,6 +73,25 @@ async function mockLeaderboardApi(
   await page.route(`**/api/v1/worlds/${WORLD_ID}/leaderboards`, (route: Route) =>
     route.fulfill({ json: directoryFixture }),
   );
+  await page.route(`**/api/v1/worlds/${WORLD_ID}/settlements/mine`, (route: Route) => route.fulfill({ json: [] }));
+  // The weekly board: the current board is the newest closed window; naming a window returns that one.
+  await page.route(new RegExp(`/api/v1/worlds/${WORLD_ID}/leaderboards/user/weeklyScoreGained(\\?.*)?$`), (route: Route) => {
+    const periodStart = new URL(route.request().url()).searchParams.get('periodStart') ?? WEEK_2;
+    return route.fulfill({
+      json: {
+        scope: 'user',
+        category: 'weeklyScoreGained',
+        available: true,
+        reason: null,
+        isFinal: true,
+        periodStart,
+        periodEnd: null,
+        computedAt: '2026-08-01T00:00:00Z',
+        items: [scoreEntry(1)],
+        nextAfterRank: null,
+      },
+    });
+  });
   // Anchored regex, not a glob: a glob `**/leaderboards/user/score*` would
   // also swallow `.../score/me` (its own, more specific route below), and
   // relying on registration order between the two call sites instead is
@@ -96,7 +123,7 @@ async function gotoLeaderboards(page: Page) {
   await page.goto('/leaderboards');
   // The directory fetch is async even against a mocked, instant response —
   // wait for the real tabs to render rather than a fixed sleep.
-  await page.getByRole('button', { name: 'Score' }).first().waitFor();
+  await page.getByRole('navigation', { name: 'Boards' }).getByRole('button', { name: 'Score' }).first().waitFor();
 }
 
 test.describe('leaderboards', { tag: '@g2' }, () => {
@@ -118,12 +145,12 @@ test.describe('leaderboards', { tag: '@g2' }, () => {
     // exactly like the profile modal — not a full-page navigation.
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('heading', { name: 'Leaderboards' })).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Leaderboards', level: 1 })).toBeVisible();
     // The settlement map underneath is still mounted, not swapped out.
     await expect(page.locator('canvas')).toBeVisible();
 
     // Closing returns to a bare /settlement with no modal left behind.
-    await dialog.locator('.close-button').click();
+    await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
@@ -139,10 +166,10 @@ test.describe('leaderboards', { tag: '@g2' }, () => {
     await mockLeaderboardApi(page, { first: { items: [scoreEntry(1), scoreEntry(2)], nextAfterRank: null } });
     await gotoLeaderboards(page);
 
-    // Two "Score" tabs: one per scope group (Players, Guilds) per
-    // categoryLabels/scopeLabels in LeaderboardView.vue.
-    const tabs = page.getByRole('button', { name: 'Score' });
+    // Two "Score" boards in the rail: one per scope group (Players, Guilds), and the caller's rank on the live one.
+    const tabs = page.getByRole('navigation', { name: 'Boards' }).getByRole('button', { name: 'Score' }).filter({ hasNotText: 'Weekly' });
     await expect(tabs).toHaveCount(2);
+    await expect(tabs.first()).toContainText('#2');
 
     // The first board in the directory (user/score, live) is auto-selected
     // on mount — a real table with the mocked rows.
@@ -156,7 +183,7 @@ test.describe('leaderboards', { tag: '@g2' }, () => {
     // table — it's opted-out of the live-board fetch entirely.
     await tabs.nth(1).click();
     await expect(board.table).toHaveCount(0);
-    await expect(page.getByText('Unlocks once guilds exist.')).toBeVisible();
+    await expect(page.locator('.locked')).toHaveText('Unlocks once guilds exist.');
   });
 
   test('"Load more" appends further rows and disappears once the board is exhausted', async ({ page }) => {
@@ -200,7 +227,8 @@ test.describe('leaderboards', { tag: '@g2' }, () => {
     // that, unlike glob's `?` (exactly one char).
     await page.route(`**/api/v1/worlds/${WORLD_ID}/leaderboards/user/score/me*`, (route: Route) =>
       route.fulfill({
-        json: { myRank: 7, items: [scoreEntry(6), scoreEntry(7), scoreEntry(8)] },
+        // Rank 7 is the logged-in player (AdminAuthFixture.loginAsPlayer's `user-1`), which is what marks the own row.
+        json: { myRank: 7, items: [scoreEntry(6), { ...scoreEntry(7), subjectId: 'user-1' }, scoreEntry(8)] },
       }),
     );
     await gotoLeaderboards(page);
@@ -215,6 +243,65 @@ test.describe('leaderboards', { tag: '@g2' }, () => {
     const board = new AdminTablePage(page);
     await expect(page.getByText('Player 7')).toBeVisible();
     await expect(board.rows).toHaveCount(3);
-    await expect(board.myRow).toContainText('Player 7');
+    await expect(board.myRow).toContainText('Player 7 · yours');
+  });
+  test('marks the player own row on the board', async ({ page, adminAuth }) => {
+    // `loginAsPlayer` is `user-1`, which `scoreEntry(1)` carries as its subject id.
+    await mockLeaderboardApi(page, { first: { items: [scoreEntry(1), scoreEntry(2)], nextAfterRank: null } });
+    await adminAuth.loginAsPlayer('e2e-player');
+    await gotoLeaderboards(page);
+
+    await expect(new AdminTablePage(page).myRow).toHaveCount(1);
+    await expect(new AdminTablePage(page).myRow).toContainText('Player 1 · yours');
+  });
+
+  test('the week stepper is locked for a free player and steps through the weeks for a premium one', async ({ page, adminAuth }) => {
+    await mockLeaderboardApi(page, { first: { items: [scoreEntry(1)], nextAfterRank: null } });
+    await adminAuth.loginAsPlayer('e2e-player');
+    await gotoLeaderboards(page);
+    await page.getByRole('navigation', { name: 'Boards' }).getByRole('button', { name: 'Weekly score gained' }).click();
+
+    await expect(page.getByTestId('week-earlier')).toBeDisabled();
+    await expect(page.getByTestId('week-premium-note')).toHaveText('Premium: the last 4 weeks');
+    await expect(page.getByText('Final', { exact: true })).toBeVisible();
+  });
+
+  test('a premium player can step to the earlier week', async ({ page, adminAuth }) => {
+    await mockLeaderboardApi(page, { first: { items: [scoreEntry(1)], nextAfterRank: null } });
+    await adminAuth.loginAsPlayer('e2e-player', { isPremium: true });
+    await gotoLeaderboards(page);
+    await page.getByRole('navigation', { name: 'Boards' }).getByRole('button', { name: 'Weekly score gained' }).click();
+
+    const earlier = page.getByTestId('week-earlier');
+    await expect(earlier).toBeEnabled();
+    await expect(page.getByTestId('week-premium-note')).toHaveCount(0);
+    const request = page.waitForRequest((r) => r.url().includes('weeklyScoreGained?periodStart='));
+    await earlier.click();
+    expect(new URL((await request).url()).searchParams.get('periodStart')).toContain('2026-07-01');
+    await expect(page.locator('.week-label')).toContainText('Week of');
+  });
+});
+
+test.describe('leaderboards on a phone', { tag: '@g2' }, () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test('lists the boards first, drills into one, and the back chevron returns to the list before closing', async ({ page }) => {
+    await mockLeaderboardApi(page, { first: { items: [scoreEntry(1), scoreEntry(2)], nextAfterRank: null } });
+    await page.addInitScript((worldId) => localStorage.setItem('bjarnoy.worldId', worldId), WORLD_ID);
+    await page.goto('/leaderboards');
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.locator('.mobile-title')).toHaveText('Leaderboards');
+    await expect(dialog.getByRole('navigation')).toHaveCount(0);
+    await dialog.getByRole('button', { name: /^Score/ }).first().click();
+    await expect(dialog.locator('.mobile-title')).toHaveText('Players · Score');
+    await expect(dialog.getByText('Player 2')).toBeVisible();
+
+    await dialog.locator('.back-button').click();
+    await expect(dialog.locator('.mobile-title')).toHaveText('Leaderboards');
+    await expect(dialog.getByText('Player 2')).toHaveCount(0);
+
+    await dialog.locator('.back-button').click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 });

@@ -177,7 +177,7 @@ export function buildingArt(type: string, level = 1): ArtRef | undefined {
 /**
  * `buildingArt` for a building standing on `tile`: a Fishing Hut on a bog lake's half shore is the lake hut
  * (`fisherhut_lake`), a Hammer Forge on a creek bend the bend mill (`hammerschmiede_bend`; the river mill is the
- * placeholder art for now), a tower on sand, forest or plain bog moss the stave tower made for that ground. Everything else is `buildingArt`.
+ * placeholder art for now), a tower on sand, forest or plain bog moss the stave tower made for that ground, a Longhouse on sand the beach longhouse. Everything else is `buildingArt`.
  */
 export function buildingArtOnTile(
   type: string,
@@ -187,6 +187,7 @@ export function buildingArtOnTile(
   if (type === 'tower' && tile.bog?.kind === 'bog') return buildingArtByFamily('stavetower_bog', level);
   if (type === 'tower' && tile.terrain === 'forest') return buildingArtByFamily('stavetower_forest', level);
   if (type === 'tower' && tile.terrain === 'sand') return buildingArtByFamily('stavetower_sand', level);
+  if (type === 'longhouse' && tile.terrain === 'sand') return buildingArtByFamily('greathall_sand', level);
   if (type === 'fishinghut' && tile.bog?.kind === 'half') return buildingArtByFamily('fisherhut_lake', level);
   if (type === 'hammerschmiede' && tile.bog?.kind === 'creek') {
     const straight =

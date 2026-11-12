@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  MAX_ART_OVERHANG,
+  REBUILD_MOVE_THRESHOLD,
+  VISIBLE_RECT_MARGIN,
   armyMarkerColor,
   armyMarkerAt,
   armyTapSwallowed,
@@ -37,6 +40,7 @@ import {
   worldPawHalfSize,
   worldRiverColor,
 } from './HexMapRenderer';
+import { GIANT_MAX_NATIVE_H } from './giantTiles';
 import { StaticWorldModel } from './StaticWorldModel';
 import { PREVIEW_ISLAND_RADIUS } from './WorldModel';
 import type { RiverTile, Tile } from './types';
@@ -1303,5 +1307,31 @@ describe('armyTapSwallowed', () => {
 
   it('keeps the tap on the marker while the send picker is open', () => {
     expect(armyTapSwallowed([marker('a'), marker('b', { pick: 'eligible' })])).toBe(true);
+  });
+});
+
+describe('terrain rebuild cadence', () => {
+  it('draws far enough past the viewport that no hex whose art reaches into view is undrawn before the next rebuild', () => {
+    // A hex is drawn when its grid position is in the visible rect, and its art reaches MAX_ART_OVERHANG past that position; the
+    // camera can move REBUILD_MOVE_THRESHOLD before the rect is recomputed.
+    expect(VISIBLE_RECT_MARGIN - REBUILD_MOVE_THRESHOLD).toBeGreaterThanOrEqual(MAX_ART_OVERHANG.x);
+    expect(VISIBLE_RECT_MARGIN - REBUILD_MOVE_THRESHOLD).toBeGreaterThanOrEqual(MAX_ART_OVERHANG.y);
+  });
+
+  // The vendored atlas manifests (a gitignored submodule: absent where it was not checked out, then the check is skipped).
+  const manifests = import.meta.glob('../../../vendor/bg_assets_hextile/atlas/*.json', { eager: true, import: 'default' }) as Record<
+    string,
+    { frames?: Record<string, { sourceSize?: { h: number } }> }
+  >;
+  const vendored = Object.keys(manifests).length > 0;
+
+  it.skipIf(!vendored)('the vendored giant parts are no taller than the overhang the margins allow for', () => {
+    const heights = Object.values(manifests).flatMap((m) =>
+      Object.entries(m.frames ?? {})
+        .filter(([name]) => /^giant[a-z]+_.*_part/.test(name))
+        .map(([, frame]) => frame.sourceSize?.h ?? 0),
+    );
+    expect(heights.length).toBeGreaterThan(0);
+    expect(Math.max(...heights)).toBeLessThanOrEqual(GIANT_MAX_NATIVE_H);
   });
 });
