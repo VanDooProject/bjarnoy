@@ -112,7 +112,7 @@ has 3–8 stages per building, and each level maps onto a stage
 | Palisade | 3 |
 | Bridge | 4 |
 
-Construction slots: `max(2, LH)` → 2 at LH 1–2, then one more per level (10 at LH 10, 30 at LH 30). A Longhouse upgrade occupies 90 % of them, rounded down (min 1): 1 of 2 at LH 1–2, 9 of 10 at LH 10.
+Construction slots: `max(2, 1 + floor(LH / 2))` → 2 at LH 1–3 (level 1 is the exception), then one more every second level (3 at LH 4, 6 at LH 10, 11 at LH 20, 16 at LH 30). A Longhouse upgrade occupies 90 % of them, rounded down (min 1): 1 of 2 at LH 1–3, 5 of 6 at LH 10, 9 of 11 at LH 20.
 
 **What caps a building's level.** Most buildings can never be a higher level
 than the Longhouse (level `L` needs LH `max(unlock, L)`), and Storage Houses

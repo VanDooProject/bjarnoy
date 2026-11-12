@@ -36,10 +36,16 @@ public sealed class ConstructionSlotTests
     [Theory]
     [InlineData(1, 2)]
     [InlineData(2, 2)]
-    [InlineData(3, 3)]
-    [InlineData(4, 4)]
-    [InlineData(10, 10)]
-    [InlineData(30, 30)]
+    [InlineData(3, 2)]
+    [InlineData(4, 3)]
+    [InlineData(5, 3)]
+    [InlineData(6, 4)]
+    [InlineData(7, 4)]
+    [InlineData(8, 5)]
+    [InlineData(9, 5)]
+    [InlineData(10, 6)]
+    [InlineData(20, 11)]
+    [InlineData(30, 16)]
     public void Construction_slots_follow_the_longhouse_level_formula(int longhouseLevel, int expectedSlots)
     {
         var settlement = Found(longhouseLevel);
@@ -59,19 +65,30 @@ public sealed class ConstructionSlotTests
     [InlineData(2, 1)]
     [InlineData(3, 2)]
     [InlineData(5, 4)]
-    [InlineData(10, 9)]
-    [InlineData(30, 27)]
+    [InlineData(6, 5)]
+    [InlineData(11, 9)]
+    [InlineData(16, 14)]
     public void A_longhouse_upgrade_occupies_90_percent_of_the_slots_rounded_down(int slots, int expectedCost)
     {
         Assert.Equal(expectedCost, Settlement.LonghouseSlotCost(slots));
     }
 
+    [Theory]
+    [InlineData(10, 5)]
+    [InlineData(20, 9)]
+    public void A_longhouse_upgrade_at_level_costs_90_percent_of_that_levels_slots(int longhouseLevel, int expectedCost)
+    {
+        var settlement = Found(longhouseLevel);
+
+        Assert.Equal(expectedCost, Settlement.LonghouseSlotCost(settlement.ConstructionSlots));
+    }
+
     [Fact]
     public void A_longhouse_upgrade_needs_90_percent_of_the_slots_free_and_blocks_most_of_the_rest()
     {
-        // Longhouse level 3 has 3 slots; an upgrade occupies floor(0.9 * 3) = 2.
+        // Longhouse level 4 has 3 slots; an upgrade occupies floor(0.9 * 3) = 2.
         // Two other builds occupy two slots, so only one is free.
-        var settlement = Found(3);
+        var settlement = Found(4);
         var first = settlement.PlanBuild(
             BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
         Assert.True(first.Accepted);

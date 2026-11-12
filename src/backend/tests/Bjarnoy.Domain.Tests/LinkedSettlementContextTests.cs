@@ -46,8 +46,8 @@ public sealed class LinkedSettlementContextTests
     {
         var s = Found(10);
 
-        Assert.Equal(10, s.OwnConstructionSlots);
-        Assert.Equal(10, s.ConstructionSlots);
+        Assert.Equal(6, s.OwnConstructionSlots);
+        Assert.Equal(6, s.ConstructionSlots);
     }
 
     [Fact]
