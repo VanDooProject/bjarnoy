@@ -24,12 +24,23 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
+/** Settings status texts that show the device flag itself (informational, not a motion check). */
+const SHOWS_DEVICE_FLAG = ['components/settings/AnimationPreferences.vue', 'components/docs/AnimationPausedNote.vue'];
+
 describe('reduced-motion checks', () => {
   it('never query prefers-reduced-motion directly outside the settings that resolve it', () => {
     const offenders = sourceFiles(SRC)
       .map((path) => relative(SRC, path).split('\\').join('/'))
       .filter((rel) => !rel.startsWith('test/') && !ALLOWED.some((allowed) => allowed.test(rel)))
       .filter((rel) => DIRECT_QUERY.some((query) => query.test(readFileSync(join(SRC, rel), 'utf8'))));
+    expect(offenders).toEqual([]);
+  });
+
+  it('never read the cached device flag animationPreference.reducedMotion as a motion check', () => {
+    const offenders = sourceFiles(SRC)
+      .map((path) => relative(SRC, path).split('\\').join('/'))
+      .filter((rel) => !rel.startsWith('test/') && !ALLOWED.some((allowed) => allowed.test(rel)) && !SHOWS_DEVICE_FLAG.includes(rel))
+      .filter((rel) => /animationPreference\.reducedMotion\b/.test(readFileSync(join(SRC, rel), 'utf8')));
     expect(offenders).toEqual([]);
   });
 });
