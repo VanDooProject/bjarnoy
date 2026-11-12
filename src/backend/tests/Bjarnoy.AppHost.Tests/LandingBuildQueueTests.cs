@@ -149,10 +149,8 @@ public class LandingBuildQueueTests(AppHostFixture fixture)
         await Assertions.Expect(statusCard.GetByText("Construction")).ToBeVisibleAsync();
         await Assertions.Expect(page.Locator(".status-row-time")).ToBeVisibleAsync();
 
-        // The guidance pointer moves on as soon as the guided building is queued, not when it finishes: while the
-        // Reindeer Herder is still under construction it already asks for the Lumberjack. It used to stay on the
-        // herder's hex ("Now build here"), where the ring offered the herder again and the server refused it with
-        // AlreadyQueuedOnHex.
+        // The onboarding does not wait for the construction: while the Reindeer Herder is still being built (the
+        // server sends it as a level-0 foundation) its checklist step is ticked and the pointer asks for the Lumberjack.
         await Assertions.Expect(page.GetByTestId("guidance-pointer")).ToContainTextAsync("One more");
         await Assertions.Expect(page.Locator("[data-testid=\"onboarding-checklist\"] .step").Nth(1)).ToHaveClassAsync(new System.Text.RegularExpressions.Regex(@"\bdone\b"));
 

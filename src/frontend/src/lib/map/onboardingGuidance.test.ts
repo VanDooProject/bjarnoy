@@ -86,6 +86,14 @@ describe('guidedTypesStarted', () => {
     expect(nextGuidedType(guidedTypesStarted(['longhouse', 'reindeerherder'], [order('lumberjack')]))).toBeNull();
   });
 
+  it('lists only guided types, each once, so a queued Longhouse upgrade does not read as a guided step', () => {
+    expect(guidedTypesStarted(['longhouse'], [order('longhouse')])).toEqual([]);
+    expect(guidedTypesStarted(['longhouse', 'reindeerherder'], [order('reindeerherder'), order('lumberjack')])).toEqual([
+      'reindeerherder',
+      'lumberjack',
+    ]);
+  });
+
   it('does not count a raze order', () => {
     expect(nextGuidedType(guidedTypesStarted(['longhouse'], [order('reindeerherder', 'raze')]))).toBe('reindeerherder');
   });

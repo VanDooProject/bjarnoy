@@ -552,7 +552,7 @@ const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
 // the instant they do (the ring/note/pointer take over telling the story),
 // so it never overlaps the completion banner.
 const showLandfallBanner = computed(
-  () => player.hasFoundedSettlement && world.hud.placedBuildingTypes.length <= 1 && !ringScreen.value,
+  () => player.hasFoundedSettlement && pointerStartedTypes.value.length === 0 && !ringScreen.value,
 );
 
 // The single animated pointer: which hex (or, with the ring open, which
@@ -625,7 +625,7 @@ const pointerTarget = computed(() => {
   // Right after founding (only the longhouse is down) vs. one guided
   // building already placed — matches the mockup's frame 2 vs. frame 4
   // copy/angle.
-  const oneDone = pointerStartedTypes.value.length > 1;
+  const oneDone = pointerStartedTypes.value.length > 0;
   const remainingType = pointerGuidedType.value;
   return {
     mode: 'hex' as const,

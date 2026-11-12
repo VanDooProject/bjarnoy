@@ -5,6 +5,7 @@
 // the same way ringLayout.ts's geometry is tested apart from RingMenu.vue.
 import { hexDistance, hexesInRadius, type AxialCoord } from '../hex/coords';
 import type { BuildOrderResponse } from '../../api/types';
+import { hexTakesNoOrder } from '../hud/pendingBuild';
 import type { Terrain, Tile } from './types';
 
 /** The two buildings the onboarding guides the player toward (highlighted in the map's build ring, never enforced there). */
@@ -86,17 +87,19 @@ export function nextGuidedType(placedTypes: readonly Tile['buildingType'][]): Gu
 export type GuidedQueueOrder = Pick<BuildOrderResponse, 'q' | 'r' | 'building' | 'kind'>;
 
 /**
- * The building types the pointer treats as done: those standing (`placedTypes`, a confirmed order's level-0 foundation
- * included) plus those with a build order in `queue`, the optimistic one the server has not answered yet included. So
- * the pointer moves on at the click. The checklist reads `placedTypes` only (`deriveOnboardingGuidance`): a refused
- * order must not tick a step or complete the onboarding. Feed this to `nextGuidedType` for the pointer's step.
+ * The guided building types the pointer treats as done, in `GUIDED_BUILD_TYPES` order and each once: those standing
+ * (`placedTypes`, a confirmed order's level-0 foundation included) plus those with a build order in `queue`, the
+ * optimistic one the server has not answered yet included. So the pointer moves on at the click. The checklist reads
+ * `placedTypes` only (`deriveOnboardingGuidance`): a refused order must not tick a step or complete the onboarding.
+ * Feed this to `nextGuidedType` for the pointer's step.
  */
 export function guidedTypesStarted(
   placedTypes: readonly Tile['buildingType'][],
   queue: readonly GuidedQueueOrder[],
-): Tile['buildingType'][] {
-  const queued = queue.filter((o) => (o.kind ?? 'build') === 'build').map((o) => o.building as Tile['buildingType']);
-  return [...placedTypes, ...queued];
+): GuidedBuildType[] {
+  const started = new Set<string | undefined>(placedTypes);
+  for (const o of queue) if ((o.kind ?? 'build') === 'build') started.add(o.building);
+  return GUIDED_BUILD_TYPES.filter((type) => started.has(type));
 }
 
 /**
@@ -168,7 +171,7 @@ export function guidedBuildTarget(
     (c) => world.getTile(c.q, c.r).terrain,
     (c) =>
       isRealm(world.getTile(c.q, c.r).ownerId) &&
-      !queue.some((o) => o.q === c.q && o.r === c.r) &&
+      !hexTakesNoOrder(queue, c, 1) &&
       world.hexTakesBuilding(c, type),
   );
 }
