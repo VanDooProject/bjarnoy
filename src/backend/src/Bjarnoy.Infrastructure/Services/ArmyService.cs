@@ -132,7 +132,55 @@ public sealed class ArmyService(
     {
         var armies = _dbContext.ChangeTracker.Entries<ArmyEntity>().Select(e => e.Entity).ToList();
         await _exploredAreaService.StageWalkedLegsAsync(armies, cancellationToken).ConfigureAwait(false);
+        await RemoveEmptyGatheringsAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Deletes every gathering this save leaves with no group: the last group left it (recalled, new order, split off, lost a fight,
+    /// destroyed) so nothing is left to meet and nothing continues. A boarding gathering feeding a sea meeting keeps that meeting alive,
+    /// and one that was deleted here may leave its meeting empty in turn.
+    /// </summary>
+    private async Task RemoveEmptyGatheringsAsync(CancellationToken cancellationToken)
+    {
+        var tracked = _dbContext.ChangeTracker.Entries<ArmyEntity>().ToList();
+        var candidates = new Queue<Guid>(tracked
+            .Where(e => e.State is EntityState.Modified or EntityState.Deleted)
+            .Select(e => e.OriginalValues.GetValue<Guid?>(nameof(ArmyEntity.GatheringId)))
+            .OfType<Guid>()
+            .Distinct());
+        if (candidates.Count == 0)
+        {
+            return;
+        }
+
+        var trackedIds = tracked.Select(e => e.Entity.Id).ToHashSet();
+        var removed = new HashSet<Guid>();
+        while (candidates.TryDequeue(out var id))
+        {
+            if (removed.Contains(id))
+            {
+                continue;
+            }
+
+            var hasTrackedGroup = tracked.Any(e => e.State != EntityState.Deleted && e.Entity.GatheringId == id);
+            var hasStoredGroup = await _dbContext.Armies.AnyAsync(a => a.GatheringId == id && !trackedIds.Contains(a.Id), cancellationToken).ConfigureAwait(false);
+            var hasFeeder = await _dbContext.Gatherings.AnyAsync(g => g.ParentGatheringId == id && !removed.Contains(g.Id), cancellationToken).ConfigureAwait(false);
+            if (hasTrackedGroup || hasStoredGroup || hasFeeder)
+            {
+                continue;
+            }
+
+            if (await _dbContext.Gatherings.FirstOrDefaultAsync(g => g.Id == id, cancellationToken).ConfigureAwait(false) is { } empty)
+            {
+                removed.Add(id);
+                _dbContext.Gatherings.Remove(empty);
+                if (empty.ParentGatheringId is { } parent)
+                {
+                    candidates.Enqueue(parent);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -1072,6 +1120,173 @@ public sealed class ArmyService(
     private async Task<ArmySettleOutcome> SettleAndFoldCoreAsync(
         ArmyEntity army, DateTimeOffset now, CancellationToken cancellationToken)
     {
+        // A group of a gathering whose departure has passed merges with the groups standing at the join hex first; the settle then
+        // goes on with the merged army (which may be the next gathering's group, for a boarded fleet).
+        var gatheringResolved = false;
+        for (var round = 0; round < MaxGatheringsPerSettle && army.GatheringId is { } gatheringId && !_resolvingGatherings.Contains(gatheringId); round++)
+        {
+            var gathering = await _dbContext.Gatherings.FirstOrDefaultAsync(g => g.Id == gatheringId, cancellationToken).ConfigureAwait(false);
+            if (gathering is null || now < gathering.DepartAt)
+            {
+                break;
+            }
+
+            gatheringResolved = true;
+            if (await ResolveGatheringAsync(gathering, army, cancellationToken).ConfigureAwait(false))
+            {
+                return ArmySettleOutcome.FoldedHome;
+            }
+        }
+
+        var outcome = await SettleWithWallsAsync(army, now, cancellationToken).ConfigureAwait(false);
+        return outcome == ArmySettleOutcome.NoChange && gatheringResolved ? ArmySettleOutcome.Updated : outcome;
+    }
+
+    /// <summary>At most this many gatherings are resolved in one settle (a boarding gathering, then the sea meeting it joins).</summary>
+    private const int MaxGatheringsPerSettle = 3;
+
+    /// <summary>Gatherings being resolved right now: their members are settled to the departure without resolving the gathering again.</summary>
+    private readonly HashSet<Guid> _resolvingGatherings = [];
+
+    /// <summary>
+    /// Resolves <paramref name="gathering"/> at its departure instant (<c>docs/design/garrison.md</c>, "Training, sending out, losing a spot"):
+    /// every group is settled to <see cref="GatheringEntity.DepartAt"/> first (interception up to then still applies), the groups still
+    /// standing on the join hex merge into one army (the settled <paramref name="caller"/> if it is one of them, else the one that arrived
+    /// first; the others are removed), which leaves on the gathering's order with the units that actually arrived and the food they have
+    /// left. A group that is not standing there any more leaves the gathering and is not touched otherwise. A boarding gathering is
+    /// resolved in front of the sea meeting it feeds. Saves what it changed.
+    /// </summary>
+    /// <returns>True when <paramref name="caller"/> no longer exists afterwards.</returns>
+    private async Task<bool> ResolveGatheringAsync(GatheringEntity gathering, ArmyEntity? caller, CancellationToken cancellationToken)
+    {
+        _resolvingGatherings.Add(gathering.Id);
+        try
+        {
+            var departAt = gathering.DepartAt;
+
+            // The boarding that feeds this gathering is resolved in front of it: its merged ships are a group of this one.
+            var feeders = await _dbContext.Gatherings
+                .Where(g => g.ParentGatheringId == gathering.Id && !_resolvingGatherings.Contains(g.Id))
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            var callerGone = false;
+            foreach (var feeder in feeders)
+            {
+                if (feeder.DepartAt <= departAt)
+                {
+                    callerGone |= await ResolveGatheringAsync(feeder, caller, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            var members = await ArmiesForSettle().Where(a => a.GatheringId == gathering.Id).OrderBy(a => a.Id)
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            if (caller is not null && caller.GatheringId == gathering.Id && !members.Contains(caller) && !IsGone(caller))
+            {
+                members.Add(caller);
+            }
+
+            foreach (var member in members)
+            {
+                if (!IsGone(member))
+                {
+                    await SettleAndFoldCoreAsync(member, departAt, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            var standing = new List<ArmyEntity>();
+            foreach (var member in members.Where(m => !IsGone(m)))
+            {
+                if (member.GatheringId == gathering.Id && member.ToDomain().Location is ArmyLocation.InTransit
+                    {
+                        Movement: { IsReturning: false, IsStranded: false } leg,
+                    }
+                    && leg.Path[^1] == new HexCoord(gathering.HexQ, gathering.HexR) && departAt >= leg.ArrivesAt)
+                {
+                    standing.Add(member);
+                }
+                else if (member.GatheringId == gathering.Id)
+                {
+                    // Not on the join hex when the army leaves (held up on the way, turned home): it goes on alone.
+                    member.GatheringId = null;
+                }
+            }
+
+            if (standing.Count > 0)
+            {
+                await DepartGatheringAsync(gathering, standing, caller, departAt, cancellationToken).ConfigureAwait(false);
+            }
+
+            _dbContext.Gatherings.Remove(gathering);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
+
+            return callerGone || (caller is not null && IsGone(caller));
+        }
+        finally
+        {
+            _resolvingGatherings.Remove(gathering.Id);
+        }
+    }
+
+    private bool IsGone(ArmyEntity army) => _dbContext.Entry(army).State is EntityState.Deleted or EntityState.Detached;
+
+    /// <summary>Merges the groups standing on the join hex into one army and puts it on the way of <paramref name="gathering"/>'s order.</summary>
+    private async Task DepartGatheringAsync(
+        GatheringEntity gathering, List<ArmyEntity> standing, ArmyEntity? caller, DateTimeOffset departAt, CancellationToken cancellationToken)
+    {
+        var survivor = (caller is not null && standing.Contains(caller) ? caller : null)
+            ?? standing.OrderBy(a => ((ArmyLocation.InTransit)a.ToDomain().Location).Movement.ArrivesAt).ThenBy(a => a.Id).First();
+        var group = standing.OrderBy(a => a == survivor ? 0 : 1).ThenBy(a => a.Id).ToList();
+
+        var merged = Army.MergeGatheringMembers([.. group.Select(a => a.ToDomain())], departAt);
+        foreach (var other in group.Where(a => a != survivor))
+        {
+            other.RecordWalkedToEnd();
+            survivor.WalkedLegs.AddRange(other.WalkedLegs);
+            other.WalkedLegs.Clear();
+            _dbContext.Armies.Remove(other);
+        }
+
+        var settlement = survivor.Settlement!;
+        var world = settlement.World!;
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
+        var rivers = await WorldRivers.IndexAsync(_dbContext, settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, settlement.WorldId, sampler.TerrainAt, rivers.IsWide, departAt, cancellationToken).ConfigureAwait(false))
+            .ForOwner(WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id));
+
+        // A boarded fleet that sails to the sea meeting stands there at least until that meeting leaves.
+        DateTimeOffset? notBefore = null;
+        if (gathering.ParentGatheringId is { } parentId)
+        {
+            notBefore = (await _dbContext.Gatherings.AsNoTracking().FirstOrDefaultAsync(g => g.Id == parentId, cancellationToken).ConfigureAwait(false))?.DepartAt;
+        }
+
+        var domainGathering = gathering.ToDomain();
+        var departed = Army.PlanGatheringDeparture(
+            merged, domainGathering, departAt, sampler.TerrainAt, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls, notBefore);
+        if (departed is null)
+        {
+            // A wall closed every way on since the order was given: the merged army goes home from the join hex (or, with no way
+            // home either, stays there and starves like any army that cannot get home).
+            var atJoin = merged with
+            {
+                HomeSpot = domainGathering.HomeSpot,
+                GatheringId = null,
+                Location = new ArmyLocation.InTransit(Movement.Stranded(departAt, domainGathering.Hex)),
+            };
+            departed = atJoin.Recall(departAt, domainGathering.HomeSpot, sampler.TerrainAt, null, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls)
+                ?? atJoin.Strand(departAt, domainGathering.Hex);
+            _logger.LogWarning(
+                "Gathering {GatheringId} found no way on from {Hex}; the merged army {ArmyId} goes home.", gathering.Id, domainGathering.Hex, survivor.Id);
+        }
+
+        survivor.ApplyDomain(departed);
+        _logger.LogInformation(
+            "Gathering {GatheringId} left {Hex} at {At}: {Groups} group(s) merged into army {ArmyId}.",
+            gathering.Id, domainGathering.Hex, departAt, group.Count, survivor.Id);
+    }
+
+    private async Task<ArmySettleOutcome> SettleWithWallsAsync(
+        ArmyEntity army, DateTimeOffset now, CancellationToken cancellationToken)
+    {
         var changed = false;
         for (var round = 0; round < MaxWallEncountersPerSettle; round++)
         {
@@ -1370,6 +1585,7 @@ public sealed class ArmyService(
         // instead (never Support — nothing here establishes host consent).
         if (domain.Mission == ArmyMission.Move
             && domain.IsFleet
+            && domain.GatheringId is null
             && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } moveTransit
             && now >= moveTransit.Movement.ArrivesAt)
         {
@@ -2000,6 +2216,10 @@ public sealed class ArmyService(
     }
 
     private Task<ArmyEntity?> LoadArmyAsync(Guid armyId, CancellationToken cancellationToken) =>
+        ArmiesForSettle().FirstOrDefaultAsync(a => a.Id == armyId, cancellationToken);
+
+    /// <summary>Armies with everything a settle needs loaded: its stacks, target, gathering and home settlement with its world, owner and garrison.</summary>
+    private IQueryable<ArmyEntity> ArmiesForSettle() =>
         _dbContext.Armies
             .Include(a => a.Stacks)
             .Include(a => a.TargetSettlement)
@@ -2010,8 +2230,7 @@ public sealed class ArmyService(
             .Include(a => a.Settlement!).ThenInclude(s => s.Queue)
             .Include(a => a.Settlement!).ThenInclude(s => s.Garrison)
             .Include(a => a.Settlement!).ThenInclude(s => s.TrainingQueue)
-            .Include(a => a.Settlement!).ThenInclude(s => s.Runes)
-            .FirstOrDefaultAsync(a => a.Id == armyId, cancellationToken);
+            .Include(a => a.Settlement!).ThenInclude(s => s.Runes);
 
     /// <summary>Writes the session back and saves when settling changed anything: a real change worth keeping even if the request was refused.</summary>
     private async Task SaveIfChangedAsync(LinkedGroupSession session, CancellationToken cancellationToken)
