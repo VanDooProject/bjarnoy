@@ -14,7 +14,7 @@
 // would compute, with no extra request.
 import type { AxialCoord } from '../../hex/coords';
 import { axialToOddQ, oddQToAxial } from '../../hex/coords';
-import type { FogMaskPlacement } from './FogMaskLayer';
+import type { FogMaskPlacement } from './FogField';
 
 export interface MaskTexel {
   u: number;
