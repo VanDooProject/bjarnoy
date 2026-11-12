@@ -7,13 +7,14 @@ using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
+using Bjarnoy.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
 /// <summary>
-/// Inland lakes through HTTP, the EF model and the persisted island column: the server serves them, and only the Fishing Hut may
+/// Inland lakes through HTTP, the EF model and the persisted island column: the server serves them with the terrain chunks, and only the Fishing Hut may
 /// stand on an inland-lake hex beside land (<c>docs/design/world-generation-rules.md</c>). The compact test worlds hold no inland
 /// lake, so the island's column is written straight, like the generator would have stored it.
 /// </summary>
@@ -39,13 +40,12 @@ public sealed class InlandLakeEndpointsTests : IAsyncLifetime
     /// A settlement at Longhouse 20 with an inland lake beside it: <c>shore</c> touches the settlement's land, <c>interior</c> sits
     /// in the middle of the lake with water on all six sides.
     /// </summary>
-    private async Task<(HttpClient Client, WorldEntity World, SettlementResponse Settlement, IslandResponse Island, Dictionary<string, HexCoord> Hexes)> SetUpAsync()
+    private async Task<(HttpClient Client, WorldEntity World, SettlementResponse Settlement, FullIslandResponse Island, Dictionary<string, HexCoord> Hexes)> SetUpAsync()
     {
         var client = _factory.CreateClient();
         var world = await _factory.CreateWorldAsync(Unique("w"), seed: 21, radius: 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
-        var island = islands!.First(i => i.StartPositions.Count > 0);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
+        var island = islands.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
         var response = await client.PostJsonAsync(
@@ -75,7 +75,7 @@ public sealed class InlandLakeEndpointsTests : IAsyncLifetime
             await db.SaveChangesAsync(Ct);
         }
 
-        WorldTerrain.Invalidate(world.Id);
+        WorldIslandCaches.Invalidate(world.Id);
         return (client, world, settlement, island, hexes);
     }
 
@@ -114,15 +114,14 @@ public sealed class InlandLakeEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task The_islands_endpoint_serves_the_stored_inland_lake_tiles()
+    public async Task The_terrain_chunks_serve_the_stored_inland_lake_tiles()
     {
         var (client, world, _, island, hexes) = await SetUpAsync();
         using var _ = client;
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
-        var served = islands!.Single(i => i.Id == island.Id).InlandLakeTiles;
+        var served = islands.Single(i => i.Id == island.Id).InlandLakeTiles;
         Assert.Equal(8, served.Count);
         Assert.Contains(new TileCoordinate(hexes["shore"].Q, hexes["shore"].R), served);
         Assert.Contains(new TileCoordinate(hexes["interior"].Q, hexes["interior"].R), served);

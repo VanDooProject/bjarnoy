@@ -253,17 +253,17 @@ export interface IslandResponse {
   utgardWalls?: UtgardWallResponse[];
   /** The Jötun watchtowers of a wasted island with Utgard (empty otherwise). */
   jotunTowers?: JotunTowerResponse[];
-  /** Water this island encloses that the bog did not fill (empty when it has none) — drawn like the sea, see `drawsAsSea`. */
-  inlandLakeTiles: TileCoordinate[];
   /** True for a wasted island — only ever present once the world's endboss has triggered (hidden before that). */
   wasted: boolean;
 }
 
-/** Mirrors `IslandTerrainResponse`: one island's river and bog tiles (empty lists when it has none). */
+/** Mirrors `IslandTerrainResponse`: one island's river, bog and inland-lake tiles (empty lists when it has none). */
 export interface IslandTerrainResponse {
   id: string;
   riverTiles: RiverTileResponse[];
   bogTiles: BogTileResponse[];
+  /** Water this island encloses that the bog did not fill (empty when it has none) — drawn like the sea, see `drawsAsSea`. */
+  inlandLakeTiles: TileCoordinate[];
 }
 
 /** Mirrors `TerrainChunkResponse`: the terrain of a fixed range of islands, in island index order. */

@@ -6,7 +6,7 @@ namespace Bjarnoy.TestSupport;
 
 /// <summary>
 /// An island with everything a test usually wants to know about it: the slim <c>/islands</c> entry plus its start positions and its
-/// river and bog tiles, which the API serves from <c>/start-positions</c> and <c>/terrain-chunks</c>.
+/// river, bog and inland-lake tiles, which the API serves from <c>/start-positions</c> and <c>/terrain-chunks</c>.
 /// </summary>
 public sealed record FullIslandResponse(
     Guid Id,
@@ -22,7 +22,8 @@ public sealed record FullIslandResponse(
     IReadOnlyList<CampResponse> Camps,
     IReadOnlyList<BogTileResponse> BogTiles,
     IReadOnlyList<UtgardWallResponse> UtgardWalls,
-    IReadOnlyList<JotunTowerResponse> JotunTowers);
+    IReadOnlyList<JotunTowerResponse> JotunTowers,
+    IReadOnlyList<TileCoordinate> InlandLakeTiles);
 
 public static class FullIslands
 {
@@ -68,6 +69,7 @@ public static class FullIslands
             i.Camps,
             terrain.TryGetValue(i.Id, out var t2) ? t2.BogTiles : [],
             i.UtgardWalls,
-            i.JotunTowers))];
+            i.JotunTowers,
+            terrain.TryGetValue(i.Id, out var t3) ? t3.InlandLakeTiles : []))];
     }
 }

@@ -54,7 +54,7 @@ public class FleetShoreAttackTests
     {
         // (13,0) is an inland lake between grass at (12,0) and (14,0): not sea, so neither it nor its banks is a shoreline.
         Terrain Lake(HexCoord c) => c == new HexCoord(13, 0) ? Terrain.InlandLake : Strait(c);
-        DispatchDecision SendOn(HexCoord target) => Army.PlanDispatch(
+        DispatchDecision SendOn(HexCoord target) => TestArmy.PlanDispatch(
             Attacker(), [new UnitStack(UnitType.Karve, 5)], 100, [], TargetCentre, T0,
             Guid.CreateVersion7(), Lake, ArmyMission.Attack, Guid.CreateVersion7(),
             targetBuildingCoord: target, targetClaimDiscs: [(TargetCentre, ClaimRadius)]);

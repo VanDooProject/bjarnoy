@@ -1639,13 +1639,14 @@ describe('useWorldStore bootstrapLiveWorld', () => {
         r: 0,
         tileCount: 10,
         startPositions: [],
-        riverTiles: [],
         giants: [],
         camps: [],
-        bogTiles: [],
-        inlandLakeTiles: [{ q: 700, r: 700 }],
         wasted: false,
       },
+    ]);
+    // The lakes ride with the terrain chunks, matched to the island by id, like the bog tiles.
+    getTerrainChunks.mockReset().mockResolvedValue([
+      { id: 'island-1', riverTiles: [], bogTiles: [], inlandLakeTiles: [{ q: 700, r: 700 }] },
     ]);
 
     await store.bootstrapLiveWorld();
