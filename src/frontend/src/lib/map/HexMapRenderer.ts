@@ -1800,6 +1800,7 @@ export function clampAnimationDeltaMs(deltaMs: number, maxMs = 100): number {
 /** One child of the camera-transformed `world` container — see `worldLayerOrder`. */
 export type WorldLayerName =
   | 'water'
+  | 'riverFlow'
   | 'bogLake'
   | 'terrainBase'
   | 'bogEdges'
@@ -1835,6 +1836,9 @@ export type WorldLayerName =
  * anything that existed, so the coastline's sea/land occlusion is exactly what
  * it was.
  *
+ * `riverFlow` (the river flow's own mesh, water-shader.md §4.4e) follows `water` directly in both modes, so it draws over the
+ * water mesh's beach foam. It only has anything to draw in settlement mode.
+ *
  * Note what is deliberately *not* here: `terrainBase` is not split into sea and
  * land halves with the mesh between them. Every tile in the pack, water
  * included, has a 68px skirt below its top face, and a land tile's skirt reaches
@@ -1854,8 +1858,8 @@ export function worldLayerOrder(mode: 'world' | 'settlement'): WorldLayerName[] 
   // The bog lake gust sits right on the ground art it shades, under `bogEdges`: the bog edge fringe paints moss over the rim of a lake
   // tile, and the lake mask (baked from the tile art alone) can't know that, so anything drawn later has to cover the gust, not take it.
   return mode === 'world'
-    ? ['water', 'terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'rivers', ...rest]
-    : ['terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'water', ...rest];
+    ? ['water', 'riverFlow', 'terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'rivers', ...rest]
+    : ['terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'water', 'riverFlow', ...rest];
 }
 
 /**
@@ -2673,6 +2677,7 @@ export class HexMapRenderer {
   private layersByName(): Record<WorldLayerName, Container> {
     return {
       water: this.waterLayer.mesh,
+      riverFlow: this.waterLayer.river.mesh,
       bogLake: this.bogLakeLayer.mesh,
       terrainBase: this.terrainBase.container,
       bogEdges: this.bogEdgeLayer,

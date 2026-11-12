@@ -115,6 +115,13 @@ describe('worldLayerOrder', () => {
     expect(indexIn('settlement', 'water')).toBeLessThan(indexIn('settlement', 'terrainTop'));
   });
 
+  it('draws the river flow mesh right after the water mesh in both modes', () => {
+    // §4.4e: the river flow is its own mesh, drawn over the water mesh's beach foam and under everything after it.
+    for (const mode of ['world', 'settlement'] as const) {
+      expect(indexIn(mode, 'riverFlow')).toBe(indexIn(mode, 'water') + 1);
+    }
+  });
+
   it('puts the bog lake gust above the ground art and below the tall art in settlement mode', () => {
     // So lily pads, boats and the fish weir (terrainTop) draw over the gust.
     expect(indexIn('settlement', 'terrainBase')).toBeLessThan(indexIn('settlement', 'bogLake'));
@@ -151,7 +158,7 @@ describe('worldLayerOrder', () => {
     // strokes) — settlement mode draws rivers as sprite tile art baked into
     // terrainBase/terrainTop instead (riverTexturesFor), so it never adds
     // 'rivers' to its own order.
-    const expectedLength = { world: 12, settlement: 11 } as const;
+    const expectedLength = { world: 13, settlement: 12 } as const;
     for (const mode of ['world', 'settlement'] as const) {
       const order = worldLayerOrder(mode);
       expect(new Set(order).size).toBe(order.length);

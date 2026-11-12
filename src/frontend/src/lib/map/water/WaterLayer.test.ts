@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BufferImageSource, Texture } from 'pixi.js';
-import { RIVER_NOISE_PER_TILE, RIVER_SPEED_TURNS_PER_SECOND, WaterLayer } from './WaterLayer';
+import { WaterLayer } from './WaterLayer';
+import { RIVER_NOISE_PER_TILE, RIVER_SPEED_TURNS_PER_SECOND } from './riverFlowMesh';
 import { RIPPLE_WAVELENGTH_TEXELS } from './riverFlow';
-import { RIVER_DRIFT, WATER_FRAGMENT } from './waterShader';
+import { RIVER_DRIFT, RIVER_FRAGMENT } from './riverShader';
+import { WATER_FRAGMENT } from './waterShader';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
 import { FOAM_REACH_TILES, type WaterMask } from './waterMask';
 import { waterMaskRegion } from './waterMaskLayout';
@@ -35,6 +37,14 @@ function maskOver(minX: number, minY: number, maxX: number, maxY: number): Water
     taint: new Uint8Array(region.width * region.height),
     noFoam: new Uint8Array(region.width * region.height),
   };
+}
+
+function riverUniformsOf(layer: WaterLayer): Record<string, unknown> {
+  return (layer.river.mesh.shader!.resources.riverUniforms as { uniforms: Record<string, unknown> }).uniforms;
+}
+
+function flowTexture(): Texture {
+  return new Texture({ source: new BufferImageSource({ resource: new Uint8Array([128, 128, 255, 255]), width: 1, height: 1 }) });
 }
 
 function uniformsOf(layer: WaterLayer): Record<string, unknown> {
@@ -297,14 +307,23 @@ describe('WaterLayer', () => {
     expect(resources.uWaterDry).toBe(placeholder);
   });
 
+  it('keeps the river code out of the water shader, in its own shader that reads the water mask', () => {
+    // The river flow is drawn by its own mesh (riverFlowMesh.ts) so the shader every water and land pixel runs does not carry it.
+    expect(WATER_FRAGMENT).not.toMatch(/uRiver|uShowRiverFlow|riverOverlay/);
+    expect(RIVER_FRAGMENT).toContain('uniform sampler2D uRiverFlow;');
+    expect(RIVER_FRAGMENT).toContain('uniform sampler2D uWaterMask;');
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
+    expect(layer.mesh.shader!.resources.uRiverFlow).toBeUndefined();
+    expect(layer.river.mesh.shader!.resources.uRiverFlow).toBeDefined();
+  });
+
   it('binds the "no river" placeholder until a river flow texture is set, and the given texture after', () => {
     const layer = new WaterLayer('settlement', TILE_W, TILE_H);
-    const resources = layer.mesh.shader!.resources as Record<string, unknown>;
+    const resources = layer.river.mesh.shader!.resources as Record<string, unknown>;
     const placeholder = resources.uRiverFlow;
     expect(placeholder).toBeDefined();
-    expect(WATER_FRAGMENT).toContain('uniform sampler2D uRiverFlow;');
 
-    const texture = new Texture({ source: new BufferImageSource({ resource: new Uint8Array([128, 128, 255, 255]), width: 1, height: 1 }) });
+    const texture = flowTexture();
     layer.setRiverFlowTexture(texture);
     expect(resources.uRiverFlow).toBe(texture.source);
 
@@ -313,19 +332,90 @@ describe('WaterLayer', () => {
 
     // (f) The shader reads the texture with its own UVs: the river cells' box, as an origin and 1 / size.
     layer.setRiverFlowTexture(texture, { minX: 100, minY: 20, maxX: 160, maxY: 80 });
-    const rect = Array.from(uniformsOf(layer).uRiverRect as Float32Array);
+    const rect = Array.from(riverUniformsOf(layer).uRiverRect as Float32Array);
     expect(rect.slice(0, 2)).toEqual([100, 20]);
     expect(rect[2]).toBeCloseTo(1 / 60, 6);
     expect(rect[3]).toBeCloseTo(1 / 60, 6);
     layer.setRiverFlowTexture(null);
-    expect(Array.from(uniformsOf(layer).uRiverRect as Float32Array)).toEqual([0, 0, 1, 1]);
+    expect(Array.from(riverUniformsOf(layer).uRiverRect as Float32Array)).toEqual([0, 0, 1, 1]);
 
     // The stream function texture is bound with the texture, and falls back to the placeholder without it.
-    const psiTexture = new Texture({ source: new BufferImageSource({ resource: new Uint8Array([128, 128, 255, 255]), width: 1, height: 1 }) });
+    const psiTexture = flowTexture();
     layer.setRiverFlowTexture(texture, { minX: 0, minY: 0, maxX: 2, maxY: 2 }, psiTexture);
     expect(resources.uRiverPsi).toBe(psiTexture.source);
     layer.setRiverFlowTexture(texture, { minX: 0, minY: 0, maxX: 2, maxY: 2 });
     expect(resources.uRiverPsi).toBe(placeholder);
+  });
+
+  it('puts the river quad on the flow texture\'s rect and gives it the mask and the mask\'s rect', () => {
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
+    const mask = maskOver(-400, -250, 600, 350);
+    const { minX, minY, maxX, maxY } = mask.region.rect;
+    layer.setMask(mask);
+    layer.setRiverFlowTexture(flowTexture(), { minX: 100, minY: 20, maxX: 160, maxY: 80 });
+    expect(Array.from(layer.river.mesh.geometry.getBuffer('aPosition').data.slice(0, 8))).toEqual([100, 20, 160, 20, 160, 80, 100, 80]);
+    // The river shader samples the very mask the water shader does, at the mask's own UVs.
+    expect(layer.river.mesh.shader!.resources.uWaterMask).toBe(layer.mesh.shader!.resources.uWaterMask);
+    const maskRect = Array.from(riverUniformsOf(layer).uMaskRect as Float32Array);
+    expect(maskRect.slice(0, 2)).toEqual([minX, minY]);
+    expect(maskRect[2]).toBeCloseTo(1 / (maxX - minX), 9);
+    expect(maskRect[3]).toBeCloseTo(1 / (maxY - minY), 9);
+  });
+
+  it('shows the river mesh only with a river texture, a baked mask, the flag and an unsuppressed water layer', () => {
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
+    layer.tick(0);
+    expect(layer.river.mesh.visible).toBe(false);
+
+    layer.setMask(maskOver(-400, -250, 600, 350));
+    layer.tick(16);
+    expect(layer.river.mesh.visible).toBe(false); // no river texture yet
+
+    layer.setRiverFlowTexture(flowTexture(), { minX: 0, minY: 0, maxX: 60, maxY: 60 });
+    layer.tick(32);
+    expect(layer.mesh.visible).toBe(true);
+    expect(layer.river.mesh.visible).toBe(true);
+
+    layer.setSuppressed(true);
+    layer.tick(48);
+    expect(layer.river.mesh.visible).toBe(false);
+    layer.setSuppressed(false);
+
+    waterDebugFlags.riverFlow = false;
+    layer.tick(64);
+    expect(layer.river.mesh.visible).toBe(false);
+    waterDebugFlags.showRiverFlow = true; // the debug view draws without the look switched on
+    layer.tick(80);
+    expect(layer.river.mesh.visible).toBe(true);
+
+    waterDebugFlags.water = false;
+    layer.tick(96);
+    expect(layer.river.mesh.visible).toBe(false);
+    waterDebugFlags.water = true;
+
+    layer.setRiverFlowTexture(null);
+    layer.tick(112);
+    expect(layer.river.mesh.visible).toBe(false);
+  });
+
+  it('runs the river on the water layer\'s clock, frozen with it', () => {
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
+    const u = riverUniformsOf(layer);
+    layer.tick(1000);
+    layer.tick(2000);
+    expect(u.uTime).toBeCloseTo(1, 6);
+    layer.setFrozen(true);
+    layer.tick(6000);
+    expect(u.uTime).toBeCloseTo(1, 6);
+    layer.setFrozen(false);
+    layer.tick(6500);
+    expect(u.uTime).toBeCloseTo(1.5, 6);
+  });
+
+  it('destroys the river mesh with the layer', () => {
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
+    layer.destroy();
+    expect(layer.river.mesh.destroyed).toBe(true);
   });
 
   it('carries the specks and patches at the ripples\' speed times the gain measured on the clips (within 10 %)', () => {
@@ -343,9 +433,8 @@ describe('WaterLayer', () => {
 
   it('maps the river flow flags and knobs onto their uniforms', () => {
     const layer = new WaterLayer('settlement', TILE_W, TILE_H);
-    const u = uniformsOf(layer);
+    const u = riverUniformsOf(layer);
     layer.tick(0);
-    expect(u.uRiverFlowOn).toBe(1);
     expect(u.uShowRiverFlow).toBe(0);
     const alpha = u.uRiverAlpha as number;
     const speed = u.uRiverSpeed as number;
@@ -357,7 +446,6 @@ describe('WaterLayer', () => {
     waterDebugTuning.riverSpeed = 0.5;
     waterDebugTuning.riverArc = 2;
     layer.tick(16);
-    expect(u.uRiverFlowOn).toBe(0);
     expect(u.uShowRiverFlow).toBe(1);
     // The default look is the cartoon bands with the flow streaks over them at a quarter of their alpha.
     expect(u.uRiverStyle).toBe(4);

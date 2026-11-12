@@ -1090,6 +1090,16 @@ default cartoon bands with faint flow streaks over them (§ Looks below). Covere
 the creek mouth of a bog lake. Not covered: lava streams (`wasted` rivers), frozen rivers, plain bog lakes (§4.4d) and the world
 map (it binds 1x1 textures of zeros). Which way the water runs comes from the tile data and the art; the marks come from the shader.
 
+**Own mesh and shader.** The river marks are not part of the water shader. `RiverFlowMesh` (`riverFlowMesh.ts`, owned by `WaterLayer`
+as `river`) draws them with their own fragment shader (`RIVER_FRAGMENT`, `riverShader.ts`) on a quad over the river flow texture's world
+rect only, as the layer `riverFlow` directly after `water` in `worldLayerOrder`. Why: the river code (the looks, the phase and psi
+lookups) is large, and inside the water shader every water and land pixel of the screen paid for it, although river pixels are a small
+share. In the software renderer, leaving the river call out of the water shader cut the frame time by about 30 %. The river shader reads the water
+mask itself (same texture, with the mask's rect as `uMaskRect`) and draws only where the mask says land, as before; it shares `hash`/`noise`
+(`NOISE_LATTICE_GLSL`) and `fbm` (`WATER_FBM_GLSL`) with the water shader, and runs on the water layer's clock, flags, suppression and
+freeze. The water mesh no longer knows rivers: on a river pixel it draws what it draws on any land pixel (the beach foam within its short land
+reach, which the river-mouth no-foam field already clears around a mouth), and the river overlay is drawn over that.
+
 **Water pixels: by colour, at build time.** `build/waterDryMasks.ts` (`buildRiverWaterMasks`, packed by `packMaskAtlas`) serves
 `virtual:river-water-masks`: one half-resolution mask cell per frame, one grey+alpha PNG, the data shape of §4.4b.
 `riverMaskCore.ts` decides per full-resolution pixel: opaque and `b > r + 40 && b >= g`. River and creek water is navy (about
@@ -1207,7 +1217,7 @@ edge), so the lake end of the hex is still.
 - Motion. Dashes ride the fast phase, so they move at the crests' speed by construction. Specks and patches are carried by a
   drift (`riverDrift`, `riverLobes`): two layers of a hashed grid half a cycle apart, each shifted along the flow and faded by a triangle that is
   zero when it resets (a continuous noise field cross-faded this way shows no net motion). Speed in world units per second =
-  `shift * rate / (grid * uRiverScale)`, `RIVER_DRIFT` in `waterShader.ts`; `gain` is the factor the recorded clips needed on top of
+  `shift * rate / (grid * uRiverScale)`, `RIVER_DRIFT` in `riverShader.ts`; `gain` is the factor the recorded clips needed on top of
   the ripples' `0.8 * 12 texels * 1.68` so the visible marks match the crests, checked in `WaterLayer.test.ts`.
 
 **Debug views.** `showRiverFlow` colours the river by the static ripple phase (hue `theta`, brightness the intensity): it shows
@@ -1233,12 +1243,13 @@ sampler2D uWaterMask
 sampler2D uWaterTaint              taint field (§4.4c), single channel
 sampler2D uWaterNoFoam             river-mouth no-foam field, single channel; foam *= 1 - it
 sampler2D uWaterDry                art dry mask (§4.4b), render texture over the mask's rect; alpha is the mask; caustics and foam *= 1 - it
+(river shader, `RIVER_FRAGMENT`, own mesh: the uniforms below up to `uRiverScale`, plus `uWaterMask`, `uMaskRect` (the mask's rect, as `uRiverRect`), `uNearSpan`, `uGroundSquash`, `uTime`)
 sampler2D uRiverFlow               river flow field (§4.4e), render texture over the river cells' own rect; rg cos/sin of the ripple phase, b distance to the bank, a where the hex has flow
 sampler2D uRiverPsi                stream function (§4.4e), same rect and UVs as uRiverFlow; b psi, r g the cell's lane mapping, a where the hex has flow
 vec4  uRiverRect                   the river textures' world rect: (minX, minY, 1 / width, 1 / height)
 float uRiverStyle                  0 ripple arcs, 1 toon strands, 2 cartoon bands, 3 flow streaks, 4 bands + streaks (the default)
 float uRiverStreakMix              style 4: the streaks' alpha over the bands (0.25)
-float uRiverFlowOn, uShowRiverFlow 0/1: the river overlay; debug: colour the river by ripple phase
+float uShowRiverFlow               0/1 debug: colour the river by ripple phase (the river overlay itself is on while its mesh is visible: `riverFlow`)
 float uRiverSpeed, uRiverArc       ripple phase rotation, radians per second; periods the crests lag at the banks (style 0)
 float uRiverAlpha, uRiverScale;  vec3 uRiverColor   overlay opacity; noise cells per world unit; crest colour
 vec3  uTaintShallowColor, uTaintDeepColor, uTaintFoamColor
@@ -1397,7 +1408,7 @@ navigation, which is the whole reason it exists — see its header).
   are `isLand` true, so no foam appears along a riverbank and no waves appear
   on a river. Correct by construction, and deliberately so — the river water
   itself is painted. The only thing the shader adds to it is the moving ripples
-  of §4.4e, drawn in the land branch of the fragment shader.
+  of §4.4e, drawn by their own mesh over the land (§4.4e).
 - **Coastal water tiles** keep their painted shoreline in the settlement view;
   the shader's foam animates *over* it, anchored to the same coastline,
   because both derive from the same `isCoastalWater`/`isLand` terrain.

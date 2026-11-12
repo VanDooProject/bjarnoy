@@ -7,6 +7,7 @@ import { noiseLatticeTexture } from '../shaderNoise';
 import { FOAM_REACH_TILES, NEAR_SPAN_TILES, groundSquash, type WaterMask } from './waterMask';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
 import { WATER_FRAGMENT, WATER_VERTEX } from './waterShader';
+import { RiverFlowMesh } from './riverFlowMesh';
 
 /** Which view this layer is drawing for — decides whether the sea body term is available at all (§4.1). */
 export type WaterMode = 'world' | 'settlement';
@@ -265,18 +266,6 @@ const CAUSTIC_BLOB_SOFT = 0.18;
 const CAUSTIC_BLOB_ALPHA = 0.42;
 const CAUSTIC_BLOB_COLOR = 0x0d1728;
 
-/**
- * River ripples (docs/design/water-shader.md §4.4e). The crests slide `RIVER_SPEED_TURNS_PER_SECOND` whole ripple periods per
- * second towards the out edge (a period is about `RIPPLE_WAVELENGTH_TEXELS` texels, an eighth of a tile). The noise that breaks
- * the crests into pieces has `RIVER_NOISE_PER_TILE` cells per tile.
- */
-export const RIVER_COLOR = 0xcce9ff;
-export const RIVER_ALPHA = 0.5;
-export const RIVER_NOISE_PER_TILE = 6;
-export const RIVER_SPEED_TURNS_PER_SECOND = 0.8;
-/** How many periods the crests lag at the banks (at 1x of the debug knob), so a crest bows downstream in the middle. */
-const RIVER_ARC_PERIODS = 0.35;
-
 function hexToRgb01(hex: number): [number, number, number] {
   return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
 }
@@ -322,15 +311,6 @@ export function placeholderDryTexture(): Texture {
   return sharedPlaceholderDryTexture;
 }
 
-let sharedPlaceholderRiverFlowTexture: Texture | null = null;
-/** A 1x1 "no river here" flow texture (alpha 0, which is what the shader reads), bound in world mode and before the flow cells are ready. */
-function placeholderRiverFlowTexture(): Texture {
-  sharedPlaceholderRiverFlowTexture ??= new Texture({
-    source: new BufferImageSource({ resource: new Uint8Array([0, 0, 0, 0]), width: 1, height: 1 }),
-  });
-  return sharedPlaceholderRiverFlowTexture;
-}
-
 let sharedPlaceholderNoFoamTexture: Texture | null = null;
 /** A 1x1 "foam everywhere" (field = 0) texture, for the same reason `placeholderTexture` exists — a frame drawn before the first bake gets ordinary foam. */
 function placeholderNoFoamTexture(): Texture {
@@ -342,6 +322,8 @@ function placeholderNoFoamTexture(): Texture {
 
 export class WaterLayer {
   readonly mesh: Mesh<MeshGeometry, Shader>;
+  /** The river flow, drawn by its own mesh above this one (worldLayerOrder) instead of by this shader. */
+  readonly river: RiverFlowMesh;
   private readonly uniforms: UniformGroup;
   private readonly geometry: MeshGeometry;
   // Not readonly: setMode() rewrites this (and the three foam uniforms baked
@@ -385,7 +367,6 @@ export class WaterLayer {
     const [taintDeepR, taintDeepG, taintDeepB] = hexToRgb01(TAINT_DEEP_COLOR);
     const [taintFoamR, taintFoamG, taintFoamB] = hexToRgb01(TAINT_FOAM_COLOR);
     const [blobR, blobG, blobB] = hexToRgb01(CAUSTIC_BLOB_COLOR);
-    const [riverR, riverG, riverB] = hexToRgb01(RIVER_COLOR);
 
     this.uniforms = new UniformGroup({
       uTime: { value: 0, type: 'f32' },
@@ -438,17 +419,6 @@ export class WaterLayer {
       uCausticBlobSoft: { value: CAUSTIC_BLOB_SOFT, type: 'f32' },
       uCausticBlobAlpha: { value: CAUSTIC_BLOB_ALPHA, type: 'f32' },
       uCausticBlobColor: { value: new Float32Array([blobR, blobG, blobB]), type: 'vec3<f32>' },
-      uRiverFlowOn: { value: 0, type: 'f32' },
-      uShowRiverFlow: { value: 0, type: 'f32' },
-      uRiverStyle: { value: 0, type: 'f32' },
-      // The river flow texture's own world rect: (minX, minY, 1 / width, 1 / height).
-      uRiverRect: { value: new Float32Array([0, 0, 1, 1]), type: 'vec4<f32>' },
-      uRiverSpeed: { value: RIVER_SPEED_TURNS_PER_SECOND * 2 * Math.PI, type: 'f32' },
-      uRiverArc: { value: RIVER_ARC_PERIODS, type: 'f32' },
-      uRiverStreakMix: { value: 0.4, type: 'f32' },
-      uRiverAlpha: { value: RIVER_ALPHA, type: 'f32' },
-      uRiverColor: { value: new Float32Array([riverR, riverG, riverB]), type: 'vec3<f32>' },
-      uRiverScale: { value: RIVER_NOISE_PER_TILE / tileWidth, type: 'f32' },
       // What the mask's far channel is normalised over, so the shader can decode
       // G back into tile widths the same way uNearSpan decodes R.
       uFarReach: { value: FOAM_REACH_TILES, type: 'f32' },
@@ -478,8 +448,6 @@ export class WaterLayer {
           uWaterTaint: placeholderTaintTexture().source,
           uWaterNoFoam: placeholderNoFoamTexture().source,
           uWaterDry: placeholderDryTexture().source,
-          uRiverFlow: placeholderRiverFlowTexture().source,
-          uRiverPsi: placeholderRiverFlowTexture().source,
           uNoiseLattice: noiseLatticeTexture().source,
         },
       }),
@@ -488,6 +456,7 @@ export class WaterLayer {
     // sit directly over every hex, army marker and waypoint pin under it.
     this.mesh.eventMode = 'none';
     this.mesh.visible = false;
+    this.river = new RiverFlowMesh(tileWidth, tileHeight);
   }
 
   /**
@@ -587,6 +556,8 @@ export class WaterLayer {
       this.mesh.shader!.resources.uWaterNoFoam = this.noFoamTexture.source;
     }
 
+    this.river.setMask(this.texture!.source, mask.region.rect);
+
     const { minX, minY, maxX, maxY } = mask.region.rect;
     const positions = this.geometry.getBuffer('aPosition');
     positions.data.set([minX, minY, maxX, minY, maxX, maxY, minX, maxY]);
@@ -604,15 +575,11 @@ export class WaterLayer {
   }
 
   /**
-   * Binds the river flow texture (`RiverFlowLayer.texture`) and the world rect it covers (`RiverFlowLayer.rect`, its own,
-   * not the water mask's). `null` goes back to the 1x1 "no river" texture. The texture is owned by the caller, not
-   * destroyed here.
+   * Hands the river flow texture (`RiverFlowLayer.texture`), its psi texture and the world rect it covers (`RiverFlowLayer.rect`,
+   * its own, not the water mask's) to the river mesh. `null` hides it. The textures are owned by the caller, not destroyed here.
    */
   setRiverFlowTexture(texture: Texture | null, rect: { minX: number; minY: number; maxX: number; maxY: number } | null = null, psi: Texture | null = null): void {
-    this.mesh.shader!.resources.uRiverFlow = (texture ?? placeholderRiverFlowTexture()).source;
-    this.mesh.shader!.resources.uRiverPsi = (texture && psi ? psi : placeholderRiverFlowTexture()).source;
-    const r = texture && rect ? rect : { minX: 0, minY: 0, maxX: 1, maxY: 1 };
-    this.uniforms.uniforms.uRiverRect = new Float32Array([r.minX, r.minY, 1 / (r.maxX - r.minX), 1 / (r.maxY - r.minY)]);
+    this.river.setRiverFlowTexture(texture, rect, psi);
   }
 
   /**
@@ -687,16 +654,10 @@ export class WaterLayer {
     u.uFoamWidth = waterDebugTuning.foamWidthHexes * (this.mode === 'world' ? FOAM_WIDTH_WORLD_SCALE : 1);
     u.uFoamSurge = waterDebugTuning.foamSurge;
     u.uShowMask = waterDebugFlags.showWaterMask ? 1 : 0;
-    // River flow is a settlement-view effect: the world map draws no tile art, so there is no flow texture to read there.
-    u.uRiverFlowOn = waterDebugFlags.riverFlow ? 1 : 0;
-    u.uShowRiverFlow = waterDebugFlags.showRiverFlow ? 1 : 0;
-    u.uRiverStyle = waterDebugFlags.riverStyle;
-    u.uRiverAlpha = RIVER_ALPHA * waterDebugTuning.riverBrightness;
-    u.uRiverSpeed = RIVER_SPEED_TURNS_PER_SECOND * 2 * Math.PI * waterDebugTuning.riverSpeed;
-    u.uRiverArc = RIVER_ARC_PERIODS * waterDebugTuning.riverArc;
-    u.uRiverStreakMix = waterDebugTuning.riverStreakMix;
-
-    this.mesh.visible = waterDebugFlags.water && this.hasMask && !this.suppressed;
+    const drawing = waterDebugFlags.water && this.hasMask && !this.suppressed;
+    this.mesh.visible = drawing;
+    // River flow is a settlement-view effect: the world map draws no tile art, so it never has a flow texture there.
+    this.river.tick(this.clock, drawing);
   }
 
   /**
@@ -725,5 +686,6 @@ export class WaterLayer {
     this.retiredNoFoamTexture?.destroy(true);
     this.noFoamTexture?.destroy(true);
     this.mesh.destroy();
+    this.river.destroy();
   }
 }
