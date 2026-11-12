@@ -1,18 +1,16 @@
 // @vitest-environment jsdom
 // Pixi's GlProgram probes a throwaway canvas for the max fragment precision
-// as it compiles, so constructing a real FogMaskLayer needs a DOM.
+// as it compiles, so constructing a real FogField needs a DOM.
 import { describe, expect, it } from 'vitest';
 import type { UniformGroup } from 'pixi.js';
-import { FogMaskLayer } from './FogMaskLayer';
+import { FogField } from './FogField';
 import { MAX_ARMY_VISION_SOURCES } from './fogShader';
 
-const COLORS = { scoutedColor: 0x102030, unexploredColor: 0xe9f0f4, scoutedAlpha: 0.5 };
-
-function fogUniformsOf(layer: FogMaskLayer): UniformGroup {
-  return layer.mesh.shader!.resources.fogUniforms as UniformGroup;
+function fogUniformsOf(field: FogField): UniformGroup {
+  return (field as unknown as { uniforms: UniformGroup }).uniforms;
 }
 
-describe('FogMaskLayer army vision sources', () => {
+describe('FogField army vision sources', () => {
   // Regression: the uniform was declared without `size`, which Pixi defaults
   // to 1. A size-1 vec2 syncs via gl.uniform2f(v[0], v[1]), so only the first
   // point reached the GPU and every other slot of the shader's
@@ -21,13 +19,13 @@ describe('FogMaskLayer army vision sources', () => {
   // read slot 1 as world origin and punch a reveal disc into the fog there,
   // far from any army.
   it('declares as many array slots as the shader reads', () => {
-    const layer = new FogMaskLayer('unknown', COLORS);
+    const layer = new FogField();
 
     expect(fogUniformsOf(layer).uniformStructures.uArmyVisionSources.size).toBe(MAX_ARMY_VISION_SOURCES);
   });
 
   it('uploads every source, not just the first', () => {
-    const layer = new FogMaskLayer('unknown', COLORS);
+    const layer = new FogField();
 
     layer.setArmyVisionSources(
       [
@@ -44,7 +42,7 @@ describe('FogMaskLayer army vision sources', () => {
   });
 
   it('uploads one radius per source, in the same slot order', () => {
-    const layer = new FogMaskLayer('unknown', COLORS);
+    const layer = new FogField();
 
     layer.setArmyVisionSources(
       [
@@ -60,7 +58,7 @@ describe('FogMaskLayer army vision sources', () => {
   });
 
   it('declares one radius slot per source slot', () => {
-    const layer = new FogMaskLayer('unknown', COLORS);
+    const layer = new FogField();
 
     expect(fogUniformsOf(layer).uniformStructures.uArmyVisionRadii.size).toBe(MAX_ARMY_VISION_SOURCES);
   });
@@ -68,7 +66,7 @@ describe('FogMaskLayer army vision sources', () => {
   // The ramps are per source now: the uniform only carries the offsets and margins relative to a source's own radius, so
   // it no longer moves with any one army's vision.
   it('keeps the ramp offsets and margins relative to each source radius', () => {
-    const layer = new FogMaskLayer('unknown', COLORS);
+    const layer = new FogField();
     const ramp = () => Array.from(fogUniformsOf(layer).uniforms.uArmyRamp as Float32Array);
     const before = ramp();
 
@@ -81,7 +79,7 @@ describe('FogMaskLayer army vision sources', () => {
   // The shader loops to uArmyVisionCount, so a count past the array length
   // would read slots that were never written — the same (0, 0) disc again.
   it('clamps the count to the array length', () => {
-    const layer = new FogMaskLayer('unknown', COLORS);
+    const layer = new FogField();
     const points = Array.from({ length: MAX_ARMY_VISION_SOURCES + 3 }, (_, i) => ({ x: i, y: i, radiusHexes: 2 }));
 
     layer.setArmyVisionSources(points, { x: 1, y: 1 });

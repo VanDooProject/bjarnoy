@@ -10,10 +10,13 @@
 // name Pixi's own macro layer expects (`#define finalColor gl_FragColor`) —
 // any other name leaves a stray `out` declaration that fails to compile.
 //
-// One shared fragment shader for both fog tiers (§4's "one layer that draws
-// two passes") — `uTier` (0 = out-of-sight/black, 1 = unknown/white) picks
-// which channel a given FogMaskLayer instance outputs, so the sampling/edge
-// math (identical for both tiers) is written once, not duplicated.
+// The mask/noise/army/edge math lives in ONE pass, FOG_FIELD_FRAGMENT, run by
+// FogField into a world-anchored render texture: R = out-of-sight (dark)
+// tier alpha, G = unknown (white mist) tier alpha. Both tiers' colours are
+// constants (uScoutedColor x uScoutedAlpha, uUnexploredColor), so the two
+// stage quads (FogMaskLayer) are cheap composites, FOG_COMPOSITE_FRAGMENT,
+// that only sample that texture and tint it. The two quads exist because
+// markerLayer sits between them (dark fog under markers, mist over them).
 //
 // §1c's live army-granted vision: `uArmyVisionSources` is a small, bounded
 // (MAX_ARMY_VISION_SOURCES) array of world-space points, uploaded fresh every
@@ -87,7 +90,7 @@ void main() {
  */
 export const MAX_ARMY_VISION_SOURCES = 8;
 
-export const FOG_FRAGMENT = `
+export const FOG_FIELD_FRAGMENT = `
 precision highp float;
 
 in vec2 vUV;
@@ -97,9 +100,9 @@ uniform sampler2D uMask;
 uniform sampler2D uMaskPrev;
 
 uniform float uMaskBlend;
-uniform vec2 uViewport;
-uniform vec2 uCameraPos;
-uniform float uZoom;
+// The world rectangle this render covers: vUV (0..1, top-down) maps onto it.
+uniform vec2 uFieldOrigin;
+uniform vec2 uFieldSize;
 uniform vec2 uWorldToMaskScale;
 uniform vec2 uWorldToMaskOffset;
 // The placement uMaskPrev was uploaded with: the mask is a chunk window that
@@ -107,10 +110,6 @@ uniform vec2 uWorldToMaskOffset;
 // different place than the one fading in (see FogMaskLayer.setMaskTexture).
 uniform vec2 uWorldToMaskScalePrev;
 uniform vec2 uWorldToMaskOffsetPrev;
-uniform float uTier;
-uniform vec3 uScoutedColor;
-uniform vec3 uUnexploredColor;
-uniform float uScoutedAlpha;
 // Where each tier's ramp turns over, in ramp units (0 = at the ring, 1 = the
 // generator's full margin — 10 hexes for unknown, 2 for out-of-sight). x is
 // where the tier starts showing at all, y where it saturates.
@@ -324,8 +323,7 @@ vec4 sampleMask(sampler2D tex, vec2 uv) {
 }
 
 void main() {
-  vec2 screen = vUV * uViewport;
-  vec2 world = (screen - uViewport * 0.5) / uZoom + uCameraPos;
+  vec2 world = uFieldOrigin + vUV * uFieldSize;
   vec2 maskUV = world * uWorldToMaskScale + uWorldToMaskOffset;
 
   if (uShowRaw > 0.5) {
@@ -336,9 +334,7 @@ void main() {
   // uMaskPrev only matters while a reveal cross-fade is actually running
   // (§2.6), which is a few hundred milliseconds after a mask swap and never
   // again — the steady state is uMaskBlend == 1, where the mix is the
-  // identity and the second fetch is a full-viewport texture read thrown
-  // away. uMaskBlend is a uniform, so this branch is uniform across the
-  // draw, not per-pixel divergence.
+  // identity and the second fetch is a texture read thrown away.
   vec4 m = sampleMask(uMask, maskUV);
   if (uMaskBlend < 1.0) {
     vec2 maskUVPrev = world * uWorldToMaskScalePrev + uWorldToMaskOffsetPrev;
@@ -348,69 +344,87 @@ void main() {
   // §1c: a live army's real-time vision only ever reveals — min() with the
   // troop's own ramps (armyRamps) pulls each channel toward 0 (fully
   // explored/visible), never pushes it up, and it is applied to the blended
-  // mask above (uMask/uMaskPrev already mixed into m), so it can't leak into
-  // what gets cross-faded from/to on the next mask swap. Applied before the
-  // tier/band selection below so the troop's ramp opens the edge-noise
-  // window exactly like the village's, rather than being shaped separately.
+  // mask above, so it can't leak into what gets cross-faded from/to on the
+  // next mask swap. Applied before the tier/band selection below so the
+  // troop's ramp opens the edge-noise window exactly like the village's.
   vec2 army = armyRamps(world);
   m.r = min(m.r, army.x);
   m.g = min(m.g, army.y);
 
   // uShowEffective dumps right here — after the troop ramps above have landed
-  // but before tier/band selection reshapes it into an edge — so it's a
-  // direct read on what troops are actually doing to the mask, which uShowRaw
-  // (returning above, before this min()) structurally can't show.
+  // but before tier/band selection reshapes it into an edge.
   if (uShowEffective > 0.5) {
     finalColor = vec4(m.r, m.g, m.b, 1.0);
     return;
   }
 
-  // This quad draws one tier, so it reads one channel and one set of edge
-  // parameters. uTier is a uniform, so these select without divergence —
-  // and evaluating both tiers here would mean every pixel of the dark quad
-  // paying for a mist alpha it then discards.
-  //
   // The dark tier is a full underlay, deliberately unmasked by the mist —
   // see §1's "the two tiers are nested, not adjacent": never-scouted ground
   // is also out of sight, so wherever the mist applies the dark tint
   // applies too, and the mist quad above simply covers it up where it is
-  // opaque. The G ramp saturating a couple of hexes past the visible ring
-  // and staying saturated to the edge of the world is that underlay, not an
-  // unbounded-tint bug; the dark band you see is the window where the mist
-  // has not gone fully opaque yet, whose width UNKNOWN_EDGE
-  // (FogMaskLayer.ts) sets. Masking this by 1 minus the mist, or bounding it
-  // to the explored ring, deletes the underlay — §1 says why not.
-  bool dark = uTier < 0.5;
-  float raw = dark ? m.g : m.r;
-  vec2 edge = dark ? uOutOfSightEdge : uUnknownEdge;
-  float reach = dark ? uNoiseReach.y : uNoiseReach.x;
-  float noiseAmp = dark ? uEdgeNoise.y : uEdgeNoise.x;
-  float seedAmp = dark ? uSeedJitter.y : uSeedJitter.x;
-  float softness = dark ? uEdgeSoftness.y : uEdgeSoftness.x;
-
-  float band = edgeBand(raw, edge.x, reach);
+  // opaque. Masking this by 1 minus the mist, or bounding it to the explored
+  // ring, deletes the underlay — §1 says why not.
+  float rawDark = m.g;
+  float rawMist = m.r;
+  float bandDark = edgeBand(rawDark, uOutOfSightEdge.x, uNoiseReach.y);
+  float bandMist = edgeBand(rawMist, uUnknownEdge.x, uNoiseReach.x);
 
   // Everything the cloud field feeds is multiplied by band, which is zero
-  // across solid mist and across clear ground alike — most of any frame,
-  // and nearly all of a zoomed-out one. Skipping it there isn't an
-  // optimisation of the maths, it's declining to do work with no effect:
-  // two multi-octave fbm evaluations, tens of hashes per pixel, over a
-  // full-screen quad, twice a frame for the two tiers. Left unconditional
-  // it is enough to stall a software renderer's main thread — the same
-  // hazard §2.5 documents for v1's per-frame BlurFilter, which is what its
-  // half-res pass exists to bound.
+  // across solid mist and across clear ground alike — most of any frame.
+  // Skipping it there is declining to do work with no effect: two
+  // multi-octave fbm evaluations, tens of hashes per pixel.
   vec2 clouds = vec2(0.5, 1.0); // neutral: no displacement, no thinning
-  if (band > 0.0) {
+  if (bandDark > 0.0 || bandMist > 0.0) {
     clouds = cloudLayers(world);
   }
 
-  float alpha = tierAlpha(raw, edge, band, noiseAmp, seedAmp, softness, clouds, m.b - 0.5);
+  float seed = m.b - 0.5;
+  float alphaDark = tierAlpha(rawDark, uOutOfSightEdge, bandDark, uEdgeNoise.y, uSeedJitter.y, uEdgeSoftness.y, clouds, seed);
+  float alphaMist = tierAlpha(rawMist, uUnknownEdge, bandMist, uEdgeNoise.x, uSeedJitter.x, uEdgeSoftness.x, clouds, seed);
+  finalColor = vec4(alphaDark, alphaMist, 0.0, 1.0);
+}
+`;
 
-  if (dark) {
-    alpha *= uScoutedAlpha;
+/**
+ * The stage quads' fragment shader: samples the field texture (FogField) at the
+ * pixel's world position and tints the tier's alpha with its constant colour,
+ * premultiplied. The debug views (raw / effective mask) are written straight
+ * into the field's RGB by FOG_FIELD_FRAGMENT and shown as-is.
+ */
+export const FOG_COMPOSITE_FRAGMENT = `
+precision highp float;
+
+in vec2 vUV;
+out vec4 finalColor;
+
+uniform sampler2D uField;
+uniform vec2 uViewport;
+uniform vec2 uCameraPos;
+uniform float uZoom;
+uniform vec2 uFieldOrigin;
+uniform vec2 uFieldSize;
+uniform float uDebugView;
+uniform float uTier;
+uniform vec3 uScoutedColor;
+uniform vec3 uUnexploredColor;
+uniform float uScoutedAlpha;
+
+void main() {
+  vec2 screen = vUV * uViewport;
+  vec2 world = (screen - uViewport * 0.5) / uZoom + uCameraPos;
+  vec2 f = (world - uFieldOrigin) / uFieldSize;
+  // The field is drawn through a clip-space quad, so its first texel row is its bottom edge: flip v.
+  vec4 field = texture(uField, vec2(f.x, 1.0 - f.y));
+
+  if (uDebugView > 0.5) {
+    finalColor = vec4(field.rgb, 1.0);
+    return;
+  }
+  if (uTier < 0.5) {
+    float alpha = field.r * uScoutedAlpha;
     finalColor = vec4(uScoutedColor * alpha, alpha);
   } else {
-    finalColor = vec4(uUnexploredColor * alpha, alpha);
+    finalColor = vec4(uUnexploredColor * field.g, field.g);
   }
 }
 `;
