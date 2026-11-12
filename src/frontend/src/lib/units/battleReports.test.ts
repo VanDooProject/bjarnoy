@@ -70,6 +70,35 @@ describe('reportSummaryLine', () => {
   });
 });
 
+describe('reportSummaryLine for a fleet', () => {
+  const fleet = {
+    ...baseReport,
+    shipFight: {
+      attackerLines: [{ unit: 'fireship', sent: 30, lost: 4, survived: 26 }],
+      defenderLines: [{ unit: 'longship', lost: 2, survived: 0 }],
+    },
+    drowned: [{ count: 20 }],
+    fireShipsBurned: 10,
+  };
+
+  it('counts both fights, the burned Fire Ships as losses, and names the drowned', () => {
+    expect(reportSummaryLine(fleet, 'attacker')).toBe('19 lost, 26 survived, 20 drowned, 70 looted');
+  });
+
+  it('counts each unit once: lost plus survived is what was sent, burned Fire Ships included', () => {
+    // 15 land units sent (5 lost, 10 survived) and 30 Fire Ships sent (4 lost in the ship fight, 26 survived, 10 of those burned).
+    expect(reportSummaryLine(fleet, 'attacker')).toContain('19 lost, 26 survived');
+  });
+
+  it("counts the defender's ships and land units together and never the drowned", () => {
+    expect(reportSummaryLine(fleet, 'defender')).toBe('10 lost, 2 survived');
+  });
+
+  it('reads as before when the report has no ship fight', () => {
+    expect(reportSummaryLine({ ...baseReport, shipFight: null, drowned: [], fireShipsBurned: 0 }, 'attacker')).toBe('5 lost, 10 survived, 70 looted');
+  });
+});
+
 describe('sideFor', () => {
   it('identifies the attacker side', () => {
     expect(sideFor(baseReport, 'atk')).toBe('attacker');

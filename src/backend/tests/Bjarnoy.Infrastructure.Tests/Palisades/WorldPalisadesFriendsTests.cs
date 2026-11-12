@@ -88,7 +88,7 @@ public sealed class WorldPalisadesFriendsTests : IDisposable
         db.Settlements.Add(settlement);
         await db.SaveChangesAsync(Ct);
 
-        var index = await WorldPalisades.IndexAsync(db, world.Id, _ => Terrain.Grass, _ => false, Ct);
+        var index = await WorldPalisades.IndexAsync(db, world.Id, _ => Terrain.Grass, _ => false, DateTimeOffset.UtcNow, Ct);
 
         bool Opens(UserEntity walker) => index.ForOwner(walker.Id)!.FriendlyGate(GateHex);
         Assert.True(Opens(owner));

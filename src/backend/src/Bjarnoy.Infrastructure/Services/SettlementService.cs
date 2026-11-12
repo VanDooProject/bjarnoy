@@ -80,6 +80,16 @@ public sealed record ClaimQuestResult(
     public bool Accepted => Rejection == QuestRejection.None && !SettlementNotFound && !WorldPaused && Settlement is not null;
 }
 
+/// <summary>Outcome of renaming a settlement.</summary>
+public sealed record RenameSettlementResult(
+    bool SettlementNotFound = false,
+    bool WorldPaused = false,
+    SettlementEntity? Settlement = null,
+    GameClock? Clock = null)
+{
+    public bool Accepted => !SettlementNotFound && !WorldPaused && Settlement is not null;
+}
+
 public sealed record TrainResult(
     TrainRejection Rejection,
     IReadOnlyList<TrainingOrder>? Orders = null,
@@ -492,19 +502,7 @@ public sealed class SettlementService(
         double speedFactor,
         CancellationToken cancellationToken = default)
     {
-        // No tile-membership index exists per hex (see IslandEntity's
-        // remarks) — the nearest island by centre is a reasonable, purely
-        // decorative approximation (island name/grouping only; nothing
-        // gameplay-relevant reads a settlement's IslandId today beyond that).
-        var islands = await _dbContext.Islands
-            .Where(i => i.WorldId == worldId)
-            .Select(i => new { i.Id, i.CentreQ, i.CentreR })
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-
-        var islandId = islands
-            .OrderBy(i => coord.DistanceTo(new HexCoord(i.CentreQ, i.CentreR)))
-            .Select(i => i.Id)
-            .FirstOrDefault();
+        var islandId = await NearestIslandIdAsync(worldId, coord, cancellationToken).ConfigureAwait(false);
 
         var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
         production *= speedFactor;
@@ -526,7 +524,8 @@ public sealed class SettlementService(
             Name = name,
             Centre = coord,
             Buildings = [new PlacedBuilding(coord, BuildingType.Longhouse, 1)],
-            Garrison = startingGarrison,
+            // The convoy's escort stands at the new longhouse, the only spot a new settlement has.
+            SpotStacks = [.. startingGarrison.Select(g => new SpotStack(coord, g.Type, g.Count))],
             Resources = ResourcePool.Create(BuildingCatalogue.FoundingStock, production, capacity, now),
         });
 
@@ -545,13 +544,92 @@ public sealed class SettlementService(
     }
 
     /// <summary>
+    /// The island whose centre is nearest <paramref name="coord"/>: no tile-membership index exists per hex (see IslandEntity's
+    /// remarks), so a settlement founded off a start position gets the nearest island by centre — a purely decorative
+    /// approximation (island name/grouping only; nothing gameplay-relevant reads a settlement's IslandId beyond that).
+    /// </summary>
+    private async Task<Guid> NearestIslandIdAsync(Guid worldId, HexCoord coord, CancellationToken cancellationToken)
+    {
+        var islands = await _dbContext.Islands
+            .Where(i => i.WorldId == worldId)
+            .Select(i => new { i.Id, i.CentreQ, i.CentreR })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return islands
+            .OrderBy(i => coord.DistanceTo(new HexCoord(i.CentreQ, i.CentreR)))
+            .Select(i => i.Id)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Sets up a beach camp from a camp-builder army that has stood on its site for the whole build time
+    /// (<c>ArmyService.ResolveCampAsync</c> has re-checked the site): a one-hex settlement with a <see cref="BuildingType.BeachCamp"/>
+    /// at its centre and no Longhouse. <paramref name="garrison"/> is what came along (the camp builders are used up) and
+    /// <paramref name="food"/> the army's leftover provisions, which become the camp's food pile (clamped to its capacity). The
+    /// camp's cost was in the army's loot and is consumed. Like a founded settlement it joins the player's linked realm.
+    /// </summary>
+    public async Task<SettlementEntity> FoundCampFromConvoyAsync(
+        Guid worldId,
+        HexCoord coord,
+        Guid userId,
+        string ownerName,
+        string ownerId,
+        string name,
+        IReadOnlyList<UnitStack> garrison,
+        double food,
+        DateTimeOffset completedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var islandId = await NearestIslandIdAsync(worldId, coord, cancellationToken).ConfigureAwait(false);
+
+        // A camp produces nothing, so no speed factor on the (zero) production; it stores BuildingCatalogue.BeachCampStorage of each.
+        var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.BeachCamp, 1)]);
+
+        var settlement = new SettlementEntity
+        {
+            WorldId = worldId,
+            IslandId = islandId,
+            Name = name,
+            OwnerName = ownerName,
+            OwnerId = ownerId,
+            UserId = userId,
+            FoundedAt = completedAt,
+        };
+
+        settlement.ApplyDomain(new Settlement
+        {
+            Id = settlement.Id,
+            Name = name,
+            Centre = coord,
+            Buildings = [new PlacedBuilding(coord, BuildingType.BeachCamp, 1)],
+            SpotStacks = [.. garrison.Select(s => new SpotStack(coord, s.Type, s.Count))],
+            Resources = ResourcePool.Create(new ResourceAmounts(0, 0, Math.Max(0, food), 0), production, capacity, completedAt),
+        });
+
+        _dbContext.Settlements.Add(settlement);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        // The camp may touch one of the player's realms: it then joins their shared stock.
+        await ReconcileRealmAsync(settlement.Id, cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Beach camp {Name} ({Id}) set up at {Coord} for user {UserId}.",
+            name, settlement.Id, coord, userId);
+
+        return settlement;
+    }
+
+    /// <summary>
     /// How many settlements <paramref name="userId"/> already holds in
-    /// <paramref name="worldId"/> — the "existing settlement count" both
-    /// <c>Settlers.RenownThresholds.AllowsAnotherSettlement</c> and
-    /// <c>Settlers.Founding.CostMultiplier</c> scale against (issue #55 §3/§4).
+    /// <paramref name="worldId"/> — the "existing settlement count"
+    /// <c>Settlers.RenownThresholds.AllowsAnotherSettlement</c> scales against (issue #55 §3). Beach camps (a
+    /// <see cref="BuildingType.BeachCamp"/> at the centre) do not count towards the renown limit.
     /// </summary>
     public Task<int> GetSettlementCountAsync(Guid userId, Guid worldId, CancellationToken cancellationToken = default) =>
-        _dbContext.Settlements.CountAsync(s => s.UserId == userId && s.WorldId == worldId, cancellationToken);
+        _dbContext.Settlements.CountAsync(
+            s => s.UserId == userId && s.WorldId == worldId
+                && !s.Buildings.Any(b => b.Type == BuildingType.BeachCamp && b.Q == s.CentreQ && b.R == s.CentreR),
+            cancellationToken);
 
     /// <summary>
     /// Every claimed settlement in <paramref name="worldId"/> — yours or
@@ -612,7 +690,7 @@ public sealed class SettlementService(
             return null;
         }
 
-        if (session.WriteBack())
+        if (await session.WriteBackAsync(cancellationToken).ConfigureAwait(false))
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -676,7 +754,7 @@ public sealed class SettlementService(
         // The grant goes into the linked realm's shared stock.
         var settled = session.View(settlementId);
         session.Apply(settlementId, settled with { Resources = settled.Resources.Adjust(delta, session.Now) });
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -721,7 +799,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, result.Settlement!);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
@@ -749,7 +827,7 @@ public sealed class SettlementService(
 
         var granted = session.View(settlementId).GrantRune(new RuneInstance { Id = Guid.CreateVersion7(), Type = type, Rarity = rarity });
         session.Apply(settlementId, granted);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -789,7 +867,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, result.Settlement!);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return new RuneResult(RuneOutcome.Applied, session.Anchor, session.Clock);
@@ -822,7 +900,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, result.Settlement!);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return new RuneResult(RuneOutcome.Applied, session.Anchor, session.Clock);
@@ -855,7 +933,7 @@ public sealed class SettlementService(
 
         session.Store.SettleTo(session.Now);
 
-        if (session.WriteBack())
+        if (await session.WriteBackAsync(cancellationToken).ConfigureAwait(false))
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -910,7 +988,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, result.Settlement!);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
@@ -944,7 +1022,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, result.Settlement!);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
@@ -963,6 +1041,7 @@ public sealed class SettlementService(
     /// </summary>
     public async Task<AdminGarrisonEditServiceResult> AdjustGarrisonAsync(
         Guid settlementId,
+        HexCoord spot,
         UnitType unitType,
         int delta,
         CancellationToken cancellationToken = default)
@@ -974,7 +1053,7 @@ public sealed class SettlementService(
         }
 
         var result = session.View(settlementId).AdjustGarrison(
-            unitType, delta, session.Now, session.SpeedFactor, session.GuestStacksOf(settlementId), session.TerrainAt);
+            spot, unitType, delta, session.Now, session.SpeedFactor, session.GuestStacksOf(settlementId), session.TerrainAt);
 
         if (!result.Accepted)
         {
@@ -983,7 +1062,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, result.Settlement!);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -1062,7 +1141,7 @@ public sealed class SettlementService(
         var maxWaitingOrders = (session.Anchor.Owner?.IsPremium ?? false) ? Settlement.MaxWaitingOrders : 0;
 
         var terrain = sampler.TerrainAt(coord);
-        var riverShapeAt = await RiverShapeAtAsync(booking.WorldId, coord, cancellationToken)
+        var (riverShapeAt, onRiverTile) = await RiverSiteAsync(booking.WorldId, coord, cancellationToken)
             .ConfigureAwait(false);
         // A bridge is the one building that stands on a wide river: it needs the raw tile (a stream's shape too, so PlanBuild can name
         // the stream), whether the tile is wide, and whether its island is a wasted one.
@@ -1106,7 +1185,8 @@ public sealed class SettlementService(
                 : null,
             isWideRiverAt: bridgeSite.IsWide,
             onWastedIsland: bridgeSite.OnWastedIsland,
-            realm: session.Store.Realm);
+            realm: session.Store.Realm,
+            onRiverTile: onRiverTile);
 
         if (!decision.Accepted)
         {
@@ -1118,12 +1198,63 @@ public sealed class SettlementService(
         }
 
         session.Apply(bookingId, booked.Enqueue(decision.Order!, now));
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Settlement {Id} queued {Type} level {Level} at {Coord} (booked on {BookingId}), completing {CompletesAt}.",
             settlementId, type, decision.Order!.TargetLevel, coord, bookingId, decision.Order.CompletesAt);
+
+        return new BuildResult(BuildRejection.None, decision.Order);
+    }
+
+    /// <summary>
+    /// Queues a raze of one level of the building on <paramref name="coord"/> (<c>docs/design/construction-slots.md</c>,
+    /// "Razing"): free, takes construction slots and goes through the queue like a build.
+    /// </summary>
+    public async Task<BuildResult> RazeBuildingLevelAsync(
+        Guid settlementId,
+        HexCoord coord,
+        CancellationToken cancellationToken = default)
+    {
+        // Settled first, like QueueBuildAsync: a build that finished a minute ago must free its slot and count for the level
+        // the raze takes off.
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
+        {
+            return new BuildResult(BuildRejection.UnknownBuildingLevel);
+        }
+
+        if (!session.Clock.AllowsCommands)
+        {
+            return new BuildResult(BuildRejection.None, null, WorldPaused: true);
+        }
+
+        var now = session.Now;
+
+        // Booked on the linked-realm member that holds the building, so the raze runs on the member whose hex it is.
+        var bookingId = session.Store.BookingMemberFor(settlementId, coord);
+        var booked = session.View(bookingId);
+
+        // Same premium waiting-room gate as a build.
+        var maxWaitingOrders = (session.Anchor.Owner?.IsPremium ?? false) ? Settlement.MaxWaitingOrders : 0;
+
+        var decision = booked.PlanRaze(
+            coord, now, Guid.CreateVersion7(), session.SpeedFactor, maxWaitingOrders, Settlement.DefaultMaxOrdersPerHex);
+
+        if (!decision.Accepted)
+        {
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
+            return new BuildResult(decision.Rejection);
+        }
+
+        session.Apply(bookingId, booked.Enqueue(decision.Order!, now));
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Settlement {Id} queued a raze of {Type} level {Level} at {Coord} (booked on {BookingId}), completing {CompletesAt}.",
+            settlementId, decision.Order!.Type, decision.Order.LevelInWork, coord, bookingId, decision.Order.CompletesAt);
 
         return new BuildResult(BuildRejection.None, decision.Order);
     }
@@ -1161,7 +1292,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(owner, decision.Settlement!);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Settlement {Id} cancelled build order {OrderId}.", settlementId, orderId);
@@ -1188,12 +1319,12 @@ public sealed class SettlementService(
         var settled = session.View(settlementId);
         if (!settled.Buildings.Any(b => b.Coord == coord && b.Type == BuildingType.Tower))
         {
-            session.WriteBack();
+            await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
             return false;
         }
 
         session.Apply(settlementId, settled.BurnTower(coord, now, session.SpeedFactor, session.GuestStacksOf(settlementId), session.TerrainAt));
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         return true;
     }
 
@@ -1243,20 +1374,9 @@ public sealed class SettlementService(
             .Where(coord => Territory.Claims(discs, coord, trainGiants))
             .Any(sampler.IsShoreline);
 
-        // Settler training escalates per settlement the owning player
-        // already holds (issue #55 §4) — every other unit type trains at the
-        // catalogue's flat cost (multiplier 1.0).
-        var costMultiplier = 1.0;
-        if (unitType == UnitType.Settler)
-        {
-            var existingSettlementCount = await GetSettlementCountAsync(settlement.UserId, settlement.WorldId, cancellationToken)
-                .ConfigureAwait(false);
-            costMultiplier = Founding.CostMultiplier(existingSettlementCount);
-        }
-
         var decision = settled.PlanTrain(
             unitType, count, now, Guid.CreateVersion7, buildingCoord, split, settlement.Owner?.IsPremium ?? false,
-            hasShoreline, costMultiplier, session.SpeedFactor);
+            hasShoreline, session.SpeedFactor);
 
         if (!decision.Accepted)
         {
@@ -1268,7 +1388,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, settled.EnqueueTraining(decision.Orders, now));
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -1305,7 +1425,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, settled.StartFeast(decision.Feast!, now));
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -1336,6 +1456,11 @@ public sealed class SettlementService(
             return new ClaimQuestResult(QuestRejection.None, WorldPaused: true);
         }
 
+        if (settlementId != session.FirstSettlementId)
+        {
+            return new ClaimQuestResult(QuestRejection.NotFirstSettlement);
+        }
+
         var now = session.Now;
         var settled = session.View(settlementId);
 
@@ -1347,12 +1472,40 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, settled.ClaimQuest(decision.Quest!, now));
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Settlement {Id} claimed quest {Quest}.", settlementId, decision.Quest!.Id);
 
         return new ClaimQuestResult(QuestRejection.None, Settlement: session.Anchor, Clock: session.Clock);
+    }
+
+    /// <summary>
+    /// Renames a settlement: the owner may do so any time, free, and names need not be unique. The caller passes the
+    /// already trimmed and length-checked name; only the display name changes, nothing is settled or charged.
+    /// </summary>
+    public async Task<RenameSettlementResult> RenameAsync(
+        Guid settlementId, string name, CancellationToken cancellationToken = default)
+    {
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        var settlement = session?.Members.FirstOrDefault(m => m.Id == settlementId);
+        if (session is null || settlement is null)
+        {
+            return new RenameSettlementResult(SettlementNotFound: true);
+        }
+
+        if (!session.Clock.AllowsCommands)
+        {
+            return new RenameSettlementResult(WorldPaused: true);
+        }
+
+        settlement.Name = name;
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Settlement {Id} was renamed.", settlementId);
+
+        return new RenameSettlementResult(Settlement: settlement, Clock: session.Clock);
     }
 
     /// <summary>
@@ -1412,7 +1565,7 @@ public sealed class SettlementService(
             }
 
             session.Store.Rerate(newFactor);
-            session.WriteBack();
+            await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
             handled.UnionWith(session.Members.Select(m => m.Id));
         }
 
@@ -1468,15 +1621,15 @@ public sealed class SettlementService(
         (await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false)).TerrainAt;
 
     /// <summary>
-    /// The shape of the river tile standing on <paramref name="coord"/>
-    /// itself, or <see langword="null"/> if there is none there — the
-    /// Sawmill's buildability rule (see
-    /// <see cref="BuildingDefinition.RequiresRiverShape"/>: it's built
-    /// directly on a river tile). Rivers are generated once per island and
-    /// persisted (<see cref="IslandEntity.RiverTiles"/>), not derivable from
-    /// the seed the way plain terrain is, so this needs a query.
+    /// What the river on <paramref name="coord"/> itself means for a build there: the shape of the river tile when it is a full-width
+    /// river (<see langword="null"/> otherwise: the Sawmill's buildability rule, see
+    /// <see cref="BuildingDefinition.RequiresRiverShape"/>: it's built directly on a river tile, and only a river-width tile has the art),
+    /// and whether any river tile of any width stands there (<see cref="Settlement.PlanBuild"/>'s <c>onRiverTile</c>: a stream or a
+    /// widening takes no building at all). Rivers are generated once per island and persisted (<see cref="IslandEntity.RiverTiles"/>), not
+    /// derivable from the seed the way plain terrain is, so this needs a query.
     /// </summary>
-    private async Task<RiverTileShape?> RiverShapeAtAsync(Guid worldId, HexCoord coord, CancellationToken cancellationToken)
+    private async Task<(RiverTileShape? BuildableShape, bool OnRiverTile)> RiverSiteAsync(
+        Guid worldId, HexCoord coord, CancellationToken cancellationToken)
     {
         var riverTileLists = await _dbContext.Islands
             .Where(i => i.WorldId == worldId)
@@ -1488,13 +1641,11 @@ public sealed class SettlementService(
         {
             if (tile.Q == coord.Q && tile.R == coord.R)
             {
-                // Stream and widening tiles are not buildable river: the Sawmill/Crop
-                // Mill art is river width, so a stream hex reads as "no river here".
-                return tile.Width == (int)RiverWidth.River ? (RiverTileShape)tile.Shape : null;
+                return (tile.Width == (int)RiverWidth.River ? (RiverTileShape)tile.Shape : null, true);
             }
         }
 
-        return null;
+        return (null, false);
     }
 
     /// <summary>
@@ -1511,12 +1662,7 @@ public sealed class SettlementService(
             return (null, false, false);
         }
 
-        var islands = await _dbContext.Islands
-            .AsNoTracking()
-            .Where(i => i.WorldId == worldId)
-            .Select(i => new { i.IsWasted, i.RiverTiles })
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-        var wasted = islands.Any(i => i.IsWasted && i.RiverTiles.Any(t => t.Q == coord.Q && t.R == coord.R));
+        var wasted = await WorldRivers.IsOnWastedIslandAsync(_dbContext, worldId, coord, cancellationToken).ConfigureAwait(false);
         return (tile.Shape, rivers.IsWide(coord), wasted);
     }
 
@@ -1567,7 +1713,7 @@ public sealed class SettlementService(
     /// <summary>
     /// Every giant across every island of <paramref name="worldId"/> (the
     /// territory rule), built into one lookup — mirrors
-    /// <see cref="RiverShapeAtAsync"/>'s own whole-world scan, and
+    /// <see cref="RiverSiteAsync"/>'s own whole-world scan, and
     /// <c>ArmyService.LoadGiantIndexAsync</c> for the same reason.
     /// </summary>
     public Task<IGiantIndex> LoadGiantIndexAsync(Guid worldId, CancellationToken cancellationToken = default) =>
@@ -1606,7 +1752,7 @@ public sealed class SettlementService(
     /// <summary>Writes the session back and saves when settling (or a refused request) changed anything: a real change worth keeping.</summary>
     private async Task SaveIfChangedAsync(LinkedGroupSession session, CancellationToken cancellationToken)
     {
-        if (session.WriteBack())
+        if (await session.WriteBackAsync(cancellationToken).ConfigureAwait(false))
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }

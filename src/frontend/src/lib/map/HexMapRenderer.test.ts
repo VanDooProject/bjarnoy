@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  armyMarkerColor,
+  armyMarkerAt,
+  armyTapSwallowed,
+  armyVisionEntryOf,
+  grantsArmyVision,
+  type ArmyOverlayMarker,
   previewGroundCoords,
   attentionPulseFrame,
   clampAnimationDeltaMs,
@@ -1206,5 +1212,89 @@ describe('worldCampMarkers', () => {
   it('keeps the paw readable when zoomed far out and bounded when zoomed in', () => {
     expect(worldPawHalfSize(0.01)).toBeGreaterThanOrEqual(8);
     expect(worldPawHalfSize(100)).toBeLessThanOrEqual(14);
+  });
+});
+
+describe('foreign army markers', () => {
+  const own: ArmyOverlayMarker = {
+    id: 'own',
+    position: { q: 0, r: 0 },
+    selected: false,
+    returning: false,
+    isFleet: false,
+    visionRadius: 2,
+    movement: { path: [{ q: 0, r: 0 }], cumulativeHours: [0], edgeHours: [0], departedAtMs: 0, arrivesAtMs: 1 },
+  };
+  const foreign: ArmyOverlayMarker = { ...own, id: 'foreign', foreign: true, color: 0x4fd17a };
+
+  it('draws a foreign army in its owner colour, never the gold/returning colours of our own', () => {
+    expect(armyMarkerColor(foreign)).toBe(0x4fd17a);
+    expect(armyMarkerColor({ ...foreign, returning: true })).toBe(0x4fd17a);
+    expect(armyMarkerColor(own)).not.toBe(armyMarkerColor({ ...own, returning: true }));
+  });
+
+  it('reads as a rival when the foreign marker carries no colour', () => {
+    expect(armyMarkerColor({ ...foreign, color: undefined })).toBe(0xe2705f);
+  });
+
+  it('lifts our fog only for our own marching armies, never for a foreign one', () => {
+    expect(grantsArmyVision(own)).toBe(true);
+    expect(grantsArmyVision({ ...own, movement: undefined })).toBe(false);
+    expect(grantsArmyVision(foreign)).toBe(false);
+  });
+
+  it('gives every marching army a vision source with its own radius, taken from the army as the backend sent it', () => {
+    const fleet = { ...own, id: 'fleet', isFleet: true, visionRadius: 16 };
+    const catapults = { ...own, id: 'catapults', visionRadius: 1 };
+    const point = { x: 10, y: 20, hexes: [{ q: 1, r: 2 }, { q: 2, r: 2 }] };
+
+    expect(armyVisionEntryOf(fleet, point)).toEqual({ x: 10, y: 20, radiusHexes: 16, hexes: point.hexes });
+    expect(armyVisionEntryOf(catapults, point)).toEqual({ x: 10, y: 20, radiusHexes: 1, hexes: point.hexes });
+  });
+
+  it('gives no vision source to an army that is not marching or is foreign', () => {
+    const point = { x: 0, y: 0, hexes: [{ q: 0, r: 0 }] };
+
+    expect(armyVisionEntryOf({ ...own, movement: undefined }, point)).toBeNull();
+    expect(armyVisionEntryOf(foreign, point)).toBeNull();
+  });
+});
+
+describe('armyMarkerAt', () => {
+  const marker = (id: string, extra: Partial<ArmyOverlayMarker> = {}): ArmyOverlayMarker => ({
+    id, position: { q: 0, r: 0 }, selected: false, returning: false, isFleet: true, visionRadius: 1, ...extra,
+  });
+  const centre = (p: { x: number; y: number }) => p;
+  const placed = [{ id: 'a', x: 100, y: 100 }, { id: 'b', x: 110, y: 100 }];
+
+  it('hits the nearest own marker when no picker is open', () => {
+    expect(armyMarkerAt([marker('a'), marker('b')], placed, { x: 108, y: 100 }, centre)).toBe('b');
+  });
+
+  it('misses outside the tap radius', () => {
+    expect(armyMarkerAt([marker('a')], placed, { x: 200, y: 200 }, centre)).toBeNull();
+  });
+
+  it('ignores foreign markers when no picker is open', () => {
+    expect(armyMarkerAt([marker('a', { foreign: true })], placed, { x: 100, y: 100 }, centre)).toBeNull();
+  });
+
+  it('only hits pick markers while the send picker is open', () => {
+    const armies = [marker('a'), marker('b', { pick: 'ineligible' })];
+    expect(armyMarkerAt(armies, placed, { x: 100, y: 100 }, centre)).toBe('b');
+  });
+});
+
+describe('armyTapSwallowed', () => {
+  const marker = (id: string, extra: Partial<ArmyOverlayMarker> = {}): ArmyOverlayMarker => ({
+    id, position: { q: 0, r: 0 }, selected: false, returning: false, isFleet: true, visionRadius: 1, ...extra,
+  });
+
+  it('lets a marker tap reach the tile below when no send picker is open', () => {
+    expect(armyTapSwallowed([marker('a'), marker('b')])).toBe(false);
+  });
+
+  it('keeps the tap on the marker while the send picker is open', () => {
+    expect(armyTapSwallowed([marker('a'), marker('b', { pick: 'eligible' })])).toBe(true);
   });
 });

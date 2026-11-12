@@ -8,6 +8,7 @@ using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.World;
 using Microsoft.Extensions.DependencyInjection;
 using SkiaSharp;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -41,8 +42,7 @@ public sealed class FogChunkEndpointsTests : IAsyncLifetime
         var owner = Unique("owner");
 
         using var client = _factory.CreateClient();
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
         var response = await client.PostJsonAsync(

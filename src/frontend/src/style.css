@@ -120,6 +120,10 @@
    ("Visual language") so the real app matches the design brainstorms. */
 :root {
   --gold: #ffc55c;
+  /* Realm colours: own, same guild, guild with a peace treaty (any other realm is --rival). Mirror lib/map/realmColours.ts — keep in sync. */
+  --realm-own: #3f7fe8;
+  --realm-guild: #4fd17a;
+  --realm-treaty: #9b5cf0;
   --rival: #e2705f;
   --shell: #0b1116;
   --panel-bg: rgba(10, 20, 27, 0.92);
@@ -128,10 +132,14 @@
   --muted: #8fa3af;
   --muted-2: #7d909c;
 
-  --wood: #c98b4b;
-  --stone: #9aa7ad;
-  --food: #8fc35a;
-  --iron: #6f8fa8;
+  /* Resource palette: lightness steps evenly (brick darkest, iron lightest) so
+     the resources stay apart in grey and for colour-blind players; each also
+     has its own pictogram (`ResourceIcon.vue`). */
+  --wood: #c47a36;
+  --stone: #a84a32;
+  --food: #9ed05f;
+  --iron: #cbd5dc;
+  --pop: #6fb0e0;
   /* Shrines have no resource of their own to borrow a colour from, but the
      ring menu tints each build category and its buildings by category — see
      `Tile Menu 2a`. */
@@ -139,6 +147,16 @@
   /* The water build category (fishing hut, dockyard) — a blue distinct from
      the resource palette above, since it isn't one of the four resources. */
   --water: #5aa8c9;
+
+  /* Build categories: one tint each, shared by the build ring (category and
+     building bubbles) and the docs tech tree. Lifted so a rim reads on the
+     dark bubble; no two categories share a hue, none is error-red. */
+  --cat-resource: #a8d870;
+  --cat-military: #d3dce2;
+  --cat-defense: #8fb8d8;
+  --cat-logistics: #e88fb4;
+  --cat-religion: #c7aaf0;
+  --cat-water: var(--water);
 
   --sans: 'Outfit', system-ui, 'Segoe UI', Roboto, sans-serif;
   color-scheme: dark;
@@ -262,4 +280,37 @@ html[data-hud-motion='reduced'] .floating-art-shadow {
 }
 .docs-map-canvas:active {
   cursor: grabbing;
+}
+
+/* The HUD's status cards (build queue, training queue, armies, expansion; issue #16): sharp corners and a header row with an
+   uppercase label and a count. One shared rule because Vue scoped styles don't leak: a panel that only carried the class got
+   no box at all. Each panel's own scoped style sets where it sits (left/right/top/bottom) and, if it differs, its width. */
+.status-card {
+  position: absolute;
+  z-index: 10;
+  width: 240px;
+  padding: 14px 15px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 0;
+}
+.status-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.status-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.status-card-count {
+  font-size: 12px;
+  color: var(--muted);
 }

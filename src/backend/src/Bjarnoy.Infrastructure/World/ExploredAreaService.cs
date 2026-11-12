@@ -1,4 +1,5 @@
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -26,6 +27,10 @@ public readonly record struct ExploredDisc(HexCoord Centre, int Radius);
 /// directly by <see cref="ExploredAreaService.ExploredAmongAsync"/>, so nothing
 /// ever materialises "the explored set" of a world.
 /// </param>
+/// <param name="LiveArmyDiscs">
+/// The ground each in-transit army of the owner sees right now: the disc around its current hex (not the trail it walked).
+/// Together with the settlement and tower sources' visible rings this is <see cref="SightDiscs"/>.
+/// </param>
 /// <param name="MergedChunks">
 /// When the area was loaded with <c>persist: true</c>: the post-merge state of
 /// every chunk the <paramref name="Discs"/> touch — what the database holds
@@ -39,8 +44,55 @@ public sealed record ExploredArea(
     IReadOnlyList<SettlementEntity> Settlements,
     IReadOnlyList<FogVisionSource> VisionSources,
     IReadOnlyList<ExploredDisc> Discs,
+    IReadOnlyList<ExploredDisc> LiveArmyDiscs,
     IReadOnlyDictionary<FogChunkCoord, ExploredChunkData> MergedChunks)
 {
+    /// <summary>
+    /// What the owner sees right now (<c>docs/design/map-fog-v2.md</c> §1g): the visible rings of the settlement and tower sources plus
+    /// the live disc of every marching army.
+    /// </summary>
+    public IReadOnlyList<SightDisc> SightDiscs =>
+    [
+        .. VisionSources.Select(v => new SightDisc(v.Coord, v.VisibleRadius)),
+        .. LiveArmyDiscs.Select(d => new SightDisc(d.Centre, d.Radius)),
+    ];
+
+    /// <summary>
+    /// Whether <paramref name="hex"/> is ground the owner sees now, for the part of the visible area that needs no stored history
+    /// (<c>docs/design/map-fog-v2.md</c> §1h): inside one of the current explored discs, or within
+    /// <see cref="FogVisionRadii.SourceMistOpaqueMargin"/> (straight-line) of a current settlement or tower explored ring, or within
+    /// <see cref="FogVisionRadii.ArmyMistOpaqueMargin"/> of a live army's vision radius, where the fog is not yet fully opaque.
+    /// Stored explored ground is not covered here (it needs the stored chunks): <see cref="ExploredAreaService.VisibleAmongAsync"/> adds
+    /// the <see cref="FogVisionRadii.ArmyMistOpaqueMargin"/> around it.
+    /// </summary>
+    public bool IsVisibleNow(HexCoord hex)
+    {
+        if (InCurrentDiscs(hex))
+        {
+            return true;
+        }
+
+        foreach (var source in VisionSources)
+        {
+            if (HexCoord.EuclideanDistance(source.Coord, hex)
+                <= source.ExploredRadius + FogVisionRadii.SourceMistOpaqueMargin + FogVisionRadii.ReachEpsilon)
+            {
+                return true;
+            }
+        }
+
+        foreach (var army in LiveArmyDiscs)
+        {
+            if (HexCoord.EuclideanDistance(army.Centre, hex)
+                <= army.Radius + FogVisionRadii.ArmyMistOpaqueMargin + FogVisionRadii.ReachEpsilon)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public MaskBounds Bounds => FogMaskLayout.WorldBounds(WorldRadius);
 
     /// <summary>Whether <paramref name="hex"/> lies inside one of the owner's current discs (no persisted history consulted).</summary>
@@ -62,8 +114,10 @@ public sealed record ExploredArea(
 /// The shared source of truth behind a player's fog of war: which ground in a
 /// world they have actually explored, per <c>docs/design/map-fog-v2.md</c>
 /// §1e. Every fog-gated read — the fog chunks (<see cref="FogChunkService"/>),
-/// <c>GET /settlements/{id}/view</c> and <c>GET /worlds/{worldId}/settlements</c>
-/// — shares this one computation of "which hexes has this owner explored"
+/// <c>GET /settlements/{id}/view</c>, <c>GET /worlds/{worldId}/settlements</c>
+/// and the world's rival walls and buildings (a rival's building hex is delivered when it lies in the visible area, §1h:
+/// <see cref="ExploredAreaService.VisibleAmongAsync"/>; its towers and Longhouse when any hex of their claim disc does) — shares this
+/// one computation of "which hexes has this owner explored"
 /// rather than reimplementing it, which would both duplicate the ring/tower/
 /// army-vision logic and risk the readings of "explored" drifting apart.
 /// </summary>
@@ -73,7 +127,7 @@ public sealed record ExploredArea(
 /// chunks (<see cref="PlayerExploredChunkEntity"/>, <see cref="PersistedExploredBitset"/>),
 /// one row per touched chunk, a fully explored chunk stored as a flag — OR
 /// the discs they explore from right now (settlement and tower rings,
-/// in-transit armies at <see cref="FogVisionRadii.ArmyVisionRadiusHexes"/>).
+/// in-transit armies at <see cref="FogVisionRadii.ArmyVisionRadius"/>).
 /// Nothing here iterates the world or builds a set of it: writes group the
 /// current discs' hexes by chunk and touch only those rows, reads fetch only
 /// the chunks asked for.
@@ -103,12 +157,11 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerId);
 
-        var radius = await _dbContext.Worlds
-            .Where(w => w.Id == worldId)
-            .Select(w => (int?)w.Radius)
-            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        var world = await _dbContext.Worlds
+            .AsNoTracking()
+            .FirstOrDefaultAsync(w => w.Id == worldId, cancellationToken).ConfigureAwait(false);
 
-        if (radius is null)
+        if (world is null)
         {
             return null;
         }
@@ -131,7 +184,9 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
                 && a.Settlement.WorldId == worldId && a.Settlement.OwnerId == ownerId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
+        // Row timestamps below are bookkeeping and stay wall time; army movement times are game time.
         var now = _timeProvider.GetUtcNow();
+        var gameNow = world.ToClock().ToGameTime(now);
         var sources = new List<FogVisionSource>();
         var discs = new List<ExploredDisc>();
         var ravensBySettlement = new Dictionary<Guid, int>();
@@ -150,7 +205,7 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
             ravensBySettlement[settlement.Id] = ravens;
             var centre = new HexCoord(settlement.CentreQ, settlement.CentreR);
             // A settlement whose Longhouse is destroyed sees nothing around its centre (no source, no explored disc).
-            if (FogVisionRadii.ToVisionSource(centre, level, ravens) is { } centreSource)
+            if (FogVisionRadii.ToVisionSource(centre, level, ravens, domain.IsBeachCamp) is { } centreSource)
             {
                 sources.Add(centreSource);
                 discs.Add(new ExploredDisc(centre, centreSource.ExploredRadius));
@@ -169,20 +224,34 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
             }
         }
 
+        // Every hex an army has crossed on its active leg counts, not only the one it stands on: a poll that comes
+        // late (server restart, closed browser) must not leave gaps in the trail. Hexes are deduped per radius, so
+        // overlapping armies of one realm cost one disc per hex.
+        var armyHexes = new HashSet<(HexCoord Hex, int Radius)>();
+        var liveArmyDiscs = new List<ExploredDisc>();
         foreach (var armyEntity in travellingArmies)
         {
             var home = new HexCoord(armyEntity.Settlement!.CentreQ, armyEntity.Settlement.CentreR);
-            var position = armyEntity.ToDomain().PositionAt(home, now);
             // The army's origin settlement's Ravens widen its walked-ground reveal too.
-            var armyRavens = ravensBySettlement.GetValueOrDefault(armyEntity.SettlementId);
-            discs.Add(new ExploredDisc(position, FogVisionRadii.ArmyVisionRadius(armyRavens)));
+            var domainArmy = armyEntity.ToDomain();
+            var armyRadius = FogVisionRadii.ArmyVisionRadius(domainArmy.Stacks, ravensBySettlement.GetValueOrDefault(armyEntity.SettlementId));
+            var reached = domainArmy.HexesReachedBy(home, gameNow);
+            foreach (var hex in reached)
+            {
+                armyHexes.Add((hex, armyRadius));
+            }
+
+            // The last hex reached is where the army stands now: what it sees right now.
+            liveArmyDiscs.Add(new ExploredDisc(reached[^1], armyRadius));
         }
+
+        discs.AddRange(armyHexes.Select(h => new ExploredDisc(h.Hex, h.Radius)));
 
         var merged = persist
             ? await MergeAndSaveAsync(worldId, ownerId, discs, now, cancellationToken).ConfigureAwait(false)
             : new Dictionary<FogChunkCoord, ExploredChunkData>();
 
-        return new ExploredArea(worldId, ownerId, radius.Value, settlements, sources, discs, merged);
+        return new ExploredArea(worldId, ownerId, world.Radius, settlements, sources, discs, liveArmyDiscs, merged);
     }
 
     /// <summary>
@@ -233,6 +302,181 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
             }
         }
 
+        explored.UnionWith(await StoredExploredAmongAsync(area, remaining, cancellationToken).ConfigureAwait(false));
+        return explored;
+    }
+
+    /// <summary>
+    /// Which of <paramref name="candidates"/> lie in the owner's visible area (<c>docs/design/map-fog-v2.md</c> §1h): their stored
+    /// explored ground plus what they see now, widened to where the fog is not yet fully opaque: <see cref="ExploredArea.IsVisibleNow"/>
+    /// for the current sources, and <see cref="FogVisionRadii.ArmyMistOpaqueMargin"/> (straight-line) around every stored explored hex,
+    /// where the fog fades out from stored ground the way it does from a marching army. The gate for another realm's buildings. One
+    /// stored-chunk read covers every candidate the current sources do not answer.
+    /// </summary>
+    public async Task<HashSet<HexCoord>> VisibleAmongAsync(
+        ExploredArea area, IEnumerable<HexCoord> candidates, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(area);
+        ArgumentNullException.ThrowIfNull(candidates);
+
+        var visible = new HashSet<HexCoord>();
+        var remaining = new HashSet<HexCoord>();
+        foreach (var hex in candidates)
+        {
+            if (area.IsVisibleNow(hex))
+            {
+                visible.Add(hex);
+            }
+            else
+            {
+                remaining.Add(hex);
+            }
+        }
+
+        visible.UnionWith(await StoredVisibleAmongAsync(area, remaining, cancellationToken).ConfigureAwait(false));
+        return visible;
+    }
+
+    /// <summary>
+    /// For each group of hexes (in the order given), the first one in the owner's visible area (see <see cref="VisibleAmongAsync"/>),
+    /// or <see langword="null"/> when none is. Walks each group only up to its first visible hex, answers from the current sources
+    /// first and reads the stored chunks once for everything left, so a whole realm's claim discs cost one query.
+    /// </summary>
+    public async Task<HexCoord?[]> FirstVisibleAmongAsync(
+        ExploredArea area, IReadOnlyList<IReadOnlyList<HexCoord>> orderedGroups, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(area);
+        ArgumentNullException.ThrowIfNull(orderedGroups);
+
+        var first = new HexCoord?[orderedGroups.Count];
+        var pending = new List<int>();
+        for (var i = 0; i < orderedGroups.Count; i++)
+        {
+            foreach (var hex in orderedGroups[i])
+            {
+                if (area.IsVisibleNow(hex))
+                {
+                    first[i] = hex;
+                    break;
+                }
+            }
+
+            if (first[i] is null)
+            {
+                pending.Add(i);
+            }
+        }
+
+        if (pending.Count == 0)
+        {
+            return first;
+        }
+
+        // Only a group with no hex visible by current sources reaches here, so none of these hexes is answered by them. One read of the
+        // stored chunks any hex's neighbourhood touches; a group none of whose chunks the owner has a row for is skipped without walking its hexes.
+        var chunksOf = pending.ToDictionary(i => i, i => orderedGroups[i].SelectMany(NeighbourhoodChunks).ToHashSet());
+        var rows = await LoadChunkRowsAsync(
+            area.WorldId, area.OwnerId, chunksOf.Values.SelectMany(c => c), tracked: false, cancellationToken).ConfigureAwait(false);
+        var data = rows.ToDictionary(r => r.Key, r => ToData(r.Value));
+        foreach (var i in pending)
+        {
+            if (!chunksOf[i].Any(data.ContainsKey))
+            {
+                continue;
+            }
+
+            foreach (var hex in orderedGroups[i])
+            {
+                if (IsNearStored(hex, data))
+                {
+                    first[i] = hex;
+                    break;
+                }
+            }
+        }
+
+        return first;
+    }
+
+    /// <summary>
+    /// The straight-line offsets (nearest first) within which a stored explored hex makes a hex visible: the mist is not fully opaque
+    /// that far from it (<see cref="FogVisionRadii.ArmyMistOpaqueMargin"/>, the same as a marching army's, which is the ramp the mask bakes
+    /// around stored ground).
+    /// </summary>
+    private static readonly IReadOnlyList<HexOffset> StoredVisionOffsets =
+        HexOffsets.Within(FogVisionRadii.ArmyMistOpaqueMargin + FogVisionRadii.ReachEpsilon);
+
+    private static readonly int StoredVisionSteps =
+        HexOffsets.ReachSteps(FogVisionRadii.ArmyMistOpaqueMargin + FogVisionRadii.ReachEpsilon);
+
+    /// <summary>
+    /// Every chunk a stored explored hex within the visibility margin of <paramref name="hex"/> can lie in: the texel box around it
+    /// (u +- steps, v +- 2 x steps, since an axial offset is the texel delta (dq, 2dr + dq)).
+    /// </summary>
+    private static IEnumerable<FogChunkCoord> NeighbourhoodChunks(HexCoord hex)
+    {
+        var texel = FogMaskLayout.ToTexel(hex);
+        var min = FogChunkLayout.ChunkOf(new MaskTexel(texel.U - StoredVisionSteps, texel.V - (2 * StoredVisionSteps)));
+        var max = FogChunkLayout.ChunkOf(new MaskTexel(texel.U + StoredVisionSteps, texel.V + (2 * StoredVisionSteps)));
+        for (var v = min.V; v <= max.V; v++)
+        {
+            for (var u = min.U; u <= max.U; u++)
+            {
+                yield return new FogChunkCoord(u, v);
+            }
+        }
+    }
+
+    /// <summary>Whether any hex within the visibility margin of <paramref name="hex"/> (itself included) is explored in <paramref name="data"/>.</summary>
+    private static bool IsNearStored(HexCoord hex, IReadOnlyDictionary<FogChunkCoord, ExploredChunkData> data)
+    {
+        foreach (var (offset, _) in StoredVisionOffsets)
+        {
+            var target = hex + offset;
+            var chunk = FogChunkLayout.ChunkOf(target);
+            if (data.TryGetValue(chunk, out var chunkData) && PersistedExploredBitset.Contains(chunk, chunkData, target))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The candidates within the visibility margin of the owner's stored explored ground; the current sources are the caller's business.</summary>
+    private async Task<HashSet<HexCoord>> StoredVisibleAmongAsync(
+        ExploredArea area, HashSet<HexCoord> remaining, CancellationToken cancellationToken)
+    {
+        var visible = new HashSet<HexCoord>();
+        if (remaining.Count == 0)
+        {
+            return visible;
+        }
+
+        var rows = await LoadChunkRowsAsync(
+            area.WorldId, area.OwnerId, remaining.SelectMany(NeighbourhoodChunks), tracked: false, cancellationToken).ConfigureAwait(false);
+        if (rows.Count == 0)
+        {
+            return visible;
+        }
+
+        var data = rows.ToDictionary(r => r.Key, r => ToData(r.Value));
+        foreach (var hex in remaining)
+        {
+            if (IsNearStored(hex, data))
+            {
+                visible.Add(hex);
+            }
+        }
+
+        return visible;
+    }
+
+    /// <summary>The candidates that lie in the owner's stored explored chunks; the current sources are the caller's business.</summary>
+    private async Task<HashSet<HexCoord>> StoredExploredAmongAsync(
+        ExploredArea area, HashSet<HexCoord> remaining, CancellationToken cancellationToken)
+    {
+        var explored = new HashSet<HexCoord>();
         if (remaining.Count == 0)
         {
             return explored;
@@ -330,20 +574,122 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
     }
 
     /// <summary>
-    /// ORs the discs' hexes into the stored chunks and saves what grew.
+    /// ORs <paramref name="discs"/> into the owner's stored chunks and saves what grew (see <see cref="StageDiscsAsync"/>).
     /// Returns the post-merge state of every touched chunk.
     /// </summary>
+    public Task<Dictionary<FogChunkCoord, ExploredChunkData>> MergeDiscsAsync(
+        Guid worldId, string ownerId, IReadOnlyList<ExploredDisc> discs, CancellationToken cancellationToken = default)
+        => MergeAndSaveAsync(worldId, ownerId, discs, _timeProvider.GetUtcNow(), cancellationToken);
+
+    /// <summary>
+    /// Like <see cref="MergeDiscsAsync"/> but only tracks the grown or new chunk rows on the context — the caller's own
+    /// <c>SaveChanges</c> (inside its unit of work) persists them together with its other changes. A concurrent first insert
+    /// of the same chunk then surfaces as a unique violation that <see cref="ConcurrentWriteExecutor"/> retries.
+    /// </summary>
+    public async Task<Dictionary<FogChunkCoord, ExploredChunkData>> StageDiscsAsync(
+        Guid worldId, string ownerId, IReadOnlyList<ExploredDisc> discs, CancellationToken cancellationToken = default)
+        => (await StageAsync(worldId, ownerId, discs, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false)).Merged;
+
+    /// <summary>
+    /// Stages the ground every given army walked on the legs it finished (<see cref="ArmyEntity.WalkedLegs"/>, filled by
+    /// <see cref="ArmyEntity.ApplyDomain"/> and <see cref="ArmyEntity.RecordWalkedToEnd"/>) as explored, at the army vision
+    /// radius incl. its origin settlement's Ravens, and clears the lists. Call it right before the save that persists those armies.
+    /// </summary>
+    public async Task StageWalkedLegsAsync(IEnumerable<ArmyEntity> armies, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(armies);
+
+        var walking = armies.Where(a => a.WalkedLegs.Count > 0).ToList();
+        if (walking.Count == 0)
+        {
+            return;
+        }
+
+        var settlementIds = walking.Select(a => a.SettlementId).Distinct().ToList();
+        var settlements = await _dbContext.Settlements
+            .AsNoTracking()
+            .Include(s => s.Buildings)
+            .Where(s => settlementIds.Contains(s.Id))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var byOwner = new Dictionary<(Guid WorldId, string OwnerId), HashSet<(HexCoord Hex, int Radius)>>();
+        foreach (var army in walking)
+        {
+            var settlement = settlements.FirstOrDefault(s => s.Id == army.SettlementId);
+            if (settlement is not null)
+            {
+                var radius = FogVisionRadii.ArmyVisionRadius(
+                    army.Stacks.Select(s => new UnitStack(s.UnitType, s.Count)), settlement.ToDomain().VisionBonusRings);
+                var key = (settlement.WorldId, settlement.OwnerId);
+                if (!byOwner.TryGetValue(key, out var hexes))
+                {
+                    byOwner[key] = hexes = [];
+                }
+
+                foreach (var hex in army.WalkedLegs.SelectMany(l => l.Hexes))
+                {
+                    hexes.Add((hex, radius));
+                }
+            }
+
+            army.WalkedLegs.Clear();
+        }
+
+        foreach (var ((worldId, ownerId), hexes) in byOwner)
+        {
+            await StageDiscsAsync(worldId, ownerId, [.. hexes.Select(h => new ExploredDisc(h.Hex, h.Radius))], cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
     private async Task<Dictionary<FogChunkCoord, ExploredChunkData>> MergeAndSaveAsync(
         Guid worldId,
         string ownerId,
-        List<ExploredDisc> discs,
+        IReadOnlyList<ExploredDisc> discs,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var (merged, inserting) = await StageAsync(worldId, ownerId, discs, now, cancellationToken).ConfigureAwait(false);
+
+        if (!_dbContext.ChangeTracker.HasChanges())
+        {
+            return merged;
+        }
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (inserting && !_dbContext.UnitOfWorkActive
+            && (ConcurrentWriteExecutor.IsExploredChunkInsertRace(ex) || !ConcurrentWriteExecutor.IsRetryable(ex)))
+        {
+            // Two concurrent fog requests for a new player both saw no row
+            // for a chunk and both inserted; the primary key let one win.
+            // The loser's bits are the same ground (the store only ever
+            // grows and both were computed from the same inputs), so
+            // dropping this save loses nothing — the next poll merges into
+            // the winner's row. `merged` above is what this request reports.
+            foreach (var entry in _dbContext.ChangeTracker.Entries<PlayerExploredChunkEntity>().ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+        }
+
+        return merged;
+    }
+
+    /// <summary>ORs the discs' hexes into the tracked chunk rows (adding rows where there are none); nothing is saved.</summary>
+    private async Task<(Dictionary<FogChunkCoord, ExploredChunkData> Merged, bool Inserting)> StageAsync(
+        Guid worldId,
+        string ownerId,
+        IReadOnlyList<ExploredDisc> discs,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         var merged = new Dictionary<FogChunkCoord, ExploredChunkData>();
         if (discs.Count == 0)
         {
-            return merged;
+            return (merged, false);
         }
 
         var wanted = PersistedExploredBitset.GroupByChunk(
@@ -381,30 +727,7 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
             row.UpdatedAt = now;
         }
 
-        if (!_dbContext.ChangeTracker.HasChanges())
-        {
-            return merged;
-        }
-
-        try
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (DbUpdateException ex) when (inserting && !ConcurrentWriteExecutor.IsRetryable(ex))
-        {
-            // Two concurrent fog requests for a new player both saw no row
-            // for a chunk and both inserted; the primary key let one win.
-            // The loser's bits are the same ground (the store only ever
-            // grows and both were computed from the same inputs), so
-            // dropping this save loses nothing — the next poll merges into
-            // the winner's row. `merged` above is what this request reports.
-            foreach (var entry in _dbContext.ChangeTracker.Entries<PlayerExploredChunkEntity>().ToList())
-            {
-                entry.State = EntityState.Detached;
-            }
-        }
-
-        return merged;
+        return (merged, inserting);
     }
 
     private async Task<Dictionary<FogChunkCoord, PlayerExploredChunkEntity>> LoadChunkRowsAsync(

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
+import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, hexOccupant, cropAllowedHere, formatBuildTime, formatMissingResources, scaledBuildSeconds, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
+
+describe('scaledBuildSeconds', () => {
+  it('divides the catalogue time by the world speed factor and applies Odin\'s Wisdom', () => {
+    expect(scaledBuildSeconds(600, 1, 1)).toBe(600);
+    expect(scaledBuildSeconds(600, 1, 4)).toBe(150);
+    expect(scaledBuildSeconds(600, 0.9, 2)).toBeCloseTo(270);
+  });
+});
 
 describe('formatBuildTime', () => {
   it('renders the level-1 catalogue durations the way the design card shows them', () => {
@@ -171,7 +179,7 @@ describe('formatMissingResources', () => {
   it('lists every short resource, in wood/stone/food/iron order', () => {
     const cost = { wood: 100, stone: 50, food: 30, iron: 10 };
     const stock = { wood: 0, stone: 0, food: 0, iron: 0 };
-    expect(formatMissingResources(cost, stock)).toBe('100 Wood, 50 Stone, 30 Food, 10 Iron');
+    expect(formatMissingResources(cost, stock)).toBe('100 Wood, 50 Brick, 30 Food, 10 Iron');
   });
 
   it('is empty when the stock already covers the cost', () => {
@@ -367,5 +375,63 @@ describe('newPlacementDisabled', () => {
     expect(newPlacementDisabled('quarry')).toBe(true);
     for (const type of ['lumberjack', 'claybrickworks', 'bogoreworks', 'farm', 'tower']) expect(newPlacementDisabled(type), type).toBe(false);
     expect(buildingAllowedOnHex('quarry', { terrain: 'mountain' })).toBe(true);
+  });
+});
+
+describe('buildingAllowedOnHex — the catalogue\'s terrain per building', () => {
+  it('puts the military buildings on grass only; sand takes the tower and the walls', () => {
+    for (const type of ['siegeworkshop', 'barracks', 'archeryrange', 'smithy']) {
+      expect(buildingAllowedOnHex(type, { terrain: 'grass' }), type).toBe(true);
+      expect(buildingAllowedOnHex(type, { terrain: 'sand' }), type).toBe(false);
+    }
+    for (const type of ['tower', 'palisade', 'palisadegate']) expect(buildingAllowedOnHex(type, { terrain: 'sand' }), type).toBe(true);
+  });
+
+  it('keeps the lake Fishing Hut on a bog lake\'s half shore only', () => {
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'bog', bog: { kind: 'half' } })).toBe(true);
+    for (const kind of ['bog', 'lake', 'inlet', 'shore', 'mouth', 'creek', 'creekspring'] as const) {
+      expect(buildingAllowedOnHex('fishinghut', { terrain: 'bog', bog: { kind } }), kind).toBe(false);
+    }
+  });
+});
+
+describe('riverBuildingAllowedHere — no ordinary building on a river hex', () => {
+  it('refuses everything but the river buildings and the bridge on a river tile of any width or shape', () => {
+    for (const shape of ['straight', 'bend', 'bend60', 'spring', 'confluence', 'mouth']) {
+      for (const width of ['river', 'stream', 'widen', 'riverstream']) {
+        for (const type of ['farm', 'tower', 'storagehouse', 'palisade', 'palisadegate', 'smithy']) {
+          expect(riverBuildingAllowedHere(type, shape, 'plain', width), `${type} on ${shape}/${width}`).toBe(false);
+        }
+      }
+    }
+    expect(riverBuildingAllowedHere('farm', undefined)).toBe(true);
+    expect(riverBuildingAllowedHere('tower', undefined)).toBe(true);
+  });
+
+  it('gives a stream, a widening or a spring none of the river buildings either', () => {
+    for (const width of ['stream', 'widen', 'riverstream']) {
+      for (const type of ['sawmill', 'cropmill', 'bridge']) expect(riverBuildingAllowedHere(type, 'straight', 'plain', width), `${type}/${width}`).toBe(false);
+    }
+    expect(riverBuildingAllowedHere('sawmill', 'spring', 'plain', 'river')).toBe(false);
+  });
+});
+
+describe('hexOccupant', () => {
+  const camp = (family: string, empty?: boolean) => ({ camp: { family, empty } });
+  it('names what holds a hex against every building', () => {
+    expect(hexOccupant({})).toBeUndefined();
+    expect(hexOccupant({ giant: {} })).toBe('giant');
+    expect(hexOccupant(camp('wolfden'))).toBe('camp');
+    expect(hexOccupant(camp('wolfden', true))).toBeUndefined();
+    expect(hexOccupant(camp('fenrirbrood'))).toBe('fenrirBrood');
+    expect(hexOccupant(camp('fenrirbrood', true))).toBe('fenrirBrood');
+    expect(hexOccupant({ utgardWall: {} })).toBe('endgameSite');
+    expect(hexOccupant({ jotunTower: {} })).toBe('endgameSite');
+  });
+
+  it('keeps the building modal off an empty giant or endgame hex, but not off a building standing there', () => {
+    expect(tileIsBuildable({ terrain: 'grass', giant: {} })).toBe(false);
+    expect(tileIsBuildable({ terrain: 'grass', jotunTower: {} })).toBe(false);
+    expect(tileIsBuildable({ terrain: 'grass', camp: { family: 'wolfden', empty: true }, buildingType: 'farm' })).toBe(true);
   });
 });

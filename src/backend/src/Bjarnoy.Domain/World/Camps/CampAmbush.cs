@@ -14,10 +14,11 @@ public static class CampAmbush
     /// <remarks>
     /// <para>
     /// The route is walked in time order: the active leg's <see cref="Movement.Path"/> from
-    /// <see cref="Movement.DepartedAt"/> by <see cref="Movement.CumulativeHours"/> and, for an outbound
+    /// <see cref="Movement.DepartedAt"/> by <see cref="Movement.EdgeHours"/> (an army is on a hex from crossing its edge) and, for an outbound
     /// movement, the precomputed <see cref="Movement.ReturnPath"/> from <see cref="Movement.TurnAroundAt"/>
-    /// by <see cref="Movement.ReturnCumulativeHours"/> (a returning movement already is its return leg).
-    /// An army that is turned around by hand or retreating on an immune leg (<see cref="Movement.RetreatImmune"/>) is never ambushed.
+    /// by <see cref="Movement.ReturnEdgeHours"/> (a returning movement already is its return leg).
+    /// An army fleeing a lost field battle is not ambushed while it is protected (<see cref="Movement.FieldBattleImmuneUntil"/>): an entry
+    /// at an instant before that is skipped, one after it counts.
     /// </para>
     /// <para>
     /// A camp is entered at the first hex of a stretch inside its guard range (distance at most
@@ -43,22 +44,17 @@ public static class CampAmbush
         ArgumentNullException.ThrowIfNull(camps);
         ArgumentNullException.ThrowIfNull(insideRealm);
 
-        if (movement.RetreatImmune)
-        {
-            return null;
-        }
-
         var steps = new List<(HexCoord Hex, DateTimeOffset At)>();
         for (var i = 0; i < movement.Path.Count; i++)
         {
-            steps.Add((movement.Path[i], movement.DepartedAt + TimeSpan.FromHours(movement.CumulativeHours[i])));
+            steps.Add((movement.Path[i], movement.DepartedAt + TimeSpan.FromHours(movement.EdgeHours[i])));
         }
 
         if (!movement.IsReturning)
         {
             for (var i = 0; i < movement.ReturnPath.Count; i++)
             {
-                steps.Add((movement.ReturnPath[i], movement.TurnAroundAt + TimeSpan.FromHours(movement.ReturnCumulativeHours[i])));
+                steps.Add((movement.ReturnPath[i], movement.TurnAroundAt + TimeSpan.FromHours(movement.ReturnEdgeHours[i])));
             }
         }
 
@@ -82,7 +78,7 @@ public static class CampAmbush
                 var entered = inRange && !wasInRange;
                 wasInRange = inRange;
 
-                if (!entered || at <= from)
+                if (!entered || at <= from || movement.IsFieldBattleImmuneAt(at))
                 {
                     continue;
                 }

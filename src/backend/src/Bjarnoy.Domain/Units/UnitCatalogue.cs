@@ -37,6 +37,7 @@ public static class UnitCatalogue
         [UnitType.Thrall] = new UnitDefinition
         {
             Type = UnitType.Thrall,
+            VisionRadius = 3,
             Class = UnitClass.Civilian,
             Attack = 0,
             Defense = 2,
@@ -44,7 +45,7 @@ public static class UnitCatalogue
             CarryCapacity = 60,
             FoodCarryCapacity = 20,
             CargoSlots = 1,
-            UpkeepPerHour = 1,
+            UpkeepPerHour = 0.25,
             TrainingCost = new ResourceAmounts(Wood: 60, Stone: 30, Food: 25, Iron: 0),
             TrainingDuration = TimeSpan.FromMinutes(10),
             RequiredLonghouseLevel = 1,
@@ -53,14 +54,15 @@ public static class UnitCatalogue
         [UnitType.Spearman] = new UnitDefinition
         {
             Type = UnitType.Spearman,
+            VisionRadius = 2,
             Class = UnitClass.Infantry,
             Attack = 15,
             Defense = 35,
             Speed = 4,
             CarryCapacity = 20,
-            FoodCarryCapacity = 10,
+            FoodCarryCapacity = 24,
             CargoSlots = 1,
-            UpkeepPerHour = 1,
+            UpkeepPerHour = 0.25,
             TrainingCost = new ResourceAmounts(Wood: 80, Stone: 40, Food: 20, Iron: 40),
             TrainingDuration = TimeSpan.FromMinutes(15),
             RequiredLonghouseLevel = 5,
@@ -69,14 +71,15 @@ public static class UnitCatalogue
         [UnitType.Axeman] = new UnitDefinition
         {
             Type = UnitType.Axeman,
+            VisionRadius = 2,
             Class = UnitClass.Infantry,
             Attack = 40,
             Defense = 15,
             Speed = 4,
             CarryCapacity = 30,
-            FoodCarryCapacity = 10,
+            FoodCarryCapacity = 40,
             CargoSlots = 2,
-            UpkeepPerHour = 1,
+            UpkeepPerHour = 0.5,
             TrainingCost = new ResourceAmounts(Wood: 100, Stone: 30, Food: 20, Iron: 60),
             TrainingDuration = TimeSpan.FromMinutes(20),
             RequiredLonghouseLevel = 6,
@@ -85,14 +88,15 @@ public static class UnitCatalogue
         [UnitType.Bowman] = new UnitDefinition
         {
             Type = UnitType.Bowman,
+            VisionRadius = 2,
             Class = UnitClass.Infantry,
             Attack = 30,
             Defense = 30,
             Speed = 4,
             CarryCapacity = 15,
-            FoodCarryCapacity = 10,
+            FoodCarryCapacity = 40,
             CargoSlots = 2,
-            UpkeepPerHour = 1,
+            UpkeepPerHour = 0.5,
             TrainingCost = new ResourceAmounts(Wood: 90, Stone: 60, Food: 20, Iron: 50),
             TrainingDuration = TimeSpan.FromMinutes(20),
             RequiredLonghouseLevel = 9,
@@ -101,14 +105,15 @@ public static class UnitCatalogue
         [UnitType.Berserker] = new UnitDefinition
         {
             Type = UnitType.Berserker,
+            VisionRadius = 2,
             Class = UnitClass.Infantry,
             Attack = 70,
             Defense = 20,
             Speed = 5,
             CarryCapacity = 25,
-            FoodCarryCapacity = 10,
+            FoodCarryCapacity = 64,
             CargoSlots = 4,
-            UpkeepPerHour = 2,
+            UpkeepPerHour = 1,
             TrainingCost = new ResourceAmounts(Wood: 150, Stone: 60, Food: 30, Iron: 120),
             TrainingDuration = TimeSpan.FromMinutes(35),
             RequiredLonghouseLevel = 20,
@@ -118,6 +123,7 @@ public static class UnitCatalogue
         [UnitType.Provisioner] = new UnitDefinition
         {
             Type = UnitType.Provisioner,
+            VisionRadius = 2,
             Class = UnitClass.Civilian,
             Attack = 0,
             Defense = 5,
@@ -125,7 +131,7 @@ public static class UnitCatalogue
             CarryCapacity = 20,
             FoodCarryCapacity = 150,
             CargoSlots = 2,
-            UpkeepPerHour = 1,
+            UpkeepPerHour = 0.25,
             TrainingCost = new ResourceAmounts(Wood: 90, Stone: 40, Food: 30, Iron: 20),
             TrainingDuration = TimeSpan.FromMinutes(20),
             RequiredLonghouseLevel = 10,
@@ -134,6 +140,7 @@ public static class UnitCatalogue
         [UnitType.Settler] = new UnitDefinition
         {
             Type = UnitType.Settler,
+            VisionRadius = 2,
             Class = UnitClass.Civilian,
             Attack = 0,
             Defense = 3,
@@ -145,19 +152,38 @@ public static class UnitCatalogue
             CarryCapacity = 0,
             FoodCarryCapacity = 40,
             CargoSlots = 1,
-            UpkeepPerHour = 1,
-            // Base cost before Bjarnoy.Domain.Settlers.SettlerCostScaling's
-            // per-existing-settlement multiplier (issue #55 §4) — deliberately
-            // steep even at the base rate, mirroring Travian's settlers being
-            // one of the most expensive units in the game.
+            UpkeepPerHour = 0.25,
+            // Flat price, the same for every settlement a player holds (only the
+            // renown asked for the next settlement escalates) — deliberately
+            // steep, mirroring Travian's settlers being one of the most
+            // expensive units in the game.
             TrainingCost = new ResourceAmounts(Wood: 120, Stone: 90, Food: 60, Iron: 60),
             TrainingDuration = TimeSpan.FromMinutes(24),
+            RequiredLonghouseLevel = 10,
+            RequiredBuildingType = BuildingType.CartWorkshop,
+        },
+        [UnitType.CampBuilder] = new UnitDefinition
+        {
+            Type = UnitType.CampBuilder,
+            VisionRadius = 2,
+            Class = UnitClass.Civilian,
+            Attack = 0,
+            Defense = 3,
+            Speed = 4,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 40,
+            CargoSlots = 1,
+            UpkeepPerHour = 0.25,
+            // Flat price like the Settler's, but far cheaper: a camp is a stopgap base, not a new realm.
+            TrainingCost = new ResourceAmounts(Wood: 80, Stone: 40, Food: 40, Iron: 20),
+            TrainingDuration = TimeSpan.FromMinutes(12),
             RequiredLonghouseLevel = 10,
             RequiredBuildingType = BuildingType.CartWorkshop,
         },
         [UnitType.Catapult] = new UnitDefinition
         {
             Type = UnitType.Catapult,
+            VisionRadius = 1,
             Class = UnitClass.Siege,
             Attack = 10,
             Defense = 10,
@@ -165,7 +191,7 @@ public static class UnitCatalogue
             CarryCapacity = 0,
             FoodCarryCapacity = 0,
             CargoSlots = 10,
-            UpkeepPerHour = 3,
+            UpkeepPerHour = 1.5,
             // Placeholder balance figure (issue #40 phase 5): with the design
             // doc's levelsDestroyed = floor(sqrt(survivingSiegePower/2))
             // formula, 40 siege power per catapult means ~4-5 surviving
@@ -183,6 +209,7 @@ public static class UnitCatalogue
         [UnitType.Ram] = new UnitDefinition
         {
             Type = UnitType.Ram,
+            VisionRadius = 1,
             Class = UnitClass.Siege,
             Attack = 10,
             Defense = 30,
@@ -190,7 +217,7 @@ public static class UnitCatalogue
             CarryCapacity = 0,
             FoodCarryCapacity = 0,
             CargoSlots = 10,
-            UpkeepPerHour = 3,
+            UpkeepPerHour = 1.5,
             // Same siege power as the catapult (the same SiegeResolver.LevelsDestroyed), more staying power, slower. It
             // is the wall breaker: walls and towers, nothing else; the catapult covers the rest.
             SiegePower = 40,
@@ -204,18 +231,15 @@ public static class UnitCatalogue
         [UnitType.Karve] = new UnitDefinition
         {
             Type = UnitType.Karve,
+            VisionRadius = 6,
             Class = UnitClass.Ship,
             Attack = 5,
             Defense = 30,
             Speed = 8,
             CarryCapacity = 200,
-            FoodCarryCapacity = 100,
+            FoodCarryCapacity = 600,
             ShipSlots = 10,
-            UpkeepPerHour = 2,
-            // Starting value, to be tuned: a won fleet attack damages the building it was sent at by
-            // SiegeResolver.LevelsDestroyed over the surviving ships' summed SiegePower (catapult: 40).
-            SiegePower = 10,
-            SiegeTargets = SiegeTargets.Walls | SiegeTargets.Towers | SiegeTargets.Buildings,
+            UpkeepPerHour = 1.5,
             TrainingCost = new ResourceAmounts(Wood: 250, Stone: 100, Food: 40, Iron: 100),
             TrainingDuration = TimeSpan.FromMinutes(45),
             RequiredLonghouseLevel = 8,
@@ -224,20 +248,37 @@ public static class UnitCatalogue
         [UnitType.Longship] = new UnitDefinition
         {
             Type = UnitType.Longship,
+            VisionRadius = 4,
             Class = UnitClass.Ship,
             Attack = 60,
             Defense = 40,
             Speed = 10,
             CarryCapacity = 80,
-            FoodCarryCapacity = 60,
+            FoodCarryCapacity = 320,
             ShipSlots = 20,
-            UpkeepPerHour = 3,
-            // Starting value, to be tuned (see Karve).
-            SiegePower = 20,
-            SiegeTargets = SiegeTargets.Walls | SiegeTargets.Towers | SiegeTargets.Buildings,
+            UpkeepPerHour = 2,
             TrainingCost = new ResourceAmounts(Wood: 400, Stone: 200, Food: 60, Iron: 220),
             TrainingDuration = TimeSpan.FromHours(1.5),
             RequiredLonghouseLevel = 20,
+            RequiredUnitType = UnitType.Karve,
+            RequiredBuildingType = BuildingType.Dockyard,
+        },
+        [UnitType.FireShip] = new UnitDefinition
+        {
+            Type = UnitType.FireShip,
+            VisionRadius = 6,
+            Class = UnitClass.Ship,
+            // Starting values, to be tuned. No attack and no slots: ten Fire Ships burn one building level in the water.
+            Attack = 0,
+            Defense = 25,
+            Speed = 8,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 200,
+            ShipSlots = 0,
+            UpkeepPerHour = 5,
+            TrainingCost = new ResourceAmounts(Wood: 300, Stone: 60, Food: 40, Iron: 80),
+            TrainingDuration = TimeSpan.FromMinutes(40),
+            RequiredLonghouseLevel = 12,
             RequiredUnitType = UnitType.Karve,
             RequiredBuildingType = BuildingType.Dockyard,
         },

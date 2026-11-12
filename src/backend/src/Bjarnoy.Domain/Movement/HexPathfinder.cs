@@ -106,11 +106,21 @@ public static class HexPathfinder
     /// </summary>
     public const double HalfOpenEndCost = 3.0;
 
+    /// <summary>
+    /// Extra cost, on top of the base 1.0, of leaving a wide-river hex whose bridge is gone (burnt, or no longer one this army may cross)
+    /// while the army stands on it: 1.0 + this = 12 per hex left, so a stranded army wades out slowly rather than being stuck
+    /// (<c>docs/design/troop-movement-range.md</c> section 5, "A step is billed half and half").
+    /// </summary>
+    public const double BurntBridgeLeaveCost = 11.0;
+
     /// <summary>Extra cost, on top of the base 1.0 step, of crossing a wide river over a level-1 bridge (the causeway): slower than any terrain, quicker than wading a stream.</summary>
     public const double CausewayCrossingCost = 5.0;
 
     /// <summary>Extra cost, on top of the base 1.0 step, of crossing a wide river over a level-2 bridge (the footbridge).</summary>
     public const double FootbridgeCrossingCost = 3.0;
+
+    /// <summary>Extra cost, on top of the base 1.0 step, of crossing a wide river over a level-3 (king's) or level-4 (guarded) bridge: a little slower than grass, whatever ground lies under the river.</summary>
+    public const double KingsBridgeCrossingCost = 0.5;
 
     /// <summary>The cost of entering a land terrain, or <see langword="null"/> for one a land army cannot enter (sea, lakes).</summary>
     internal static double? LandTerrainCostOf(Terrain terrain) =>
@@ -128,7 +138,7 @@ public static class HexPathfinder
         HexCoord hex, Func<HexCoord, Terrain> terrainAt, Func<HexCoord, bool>? isRiver,
         Func<HexCoord, bool>? isWideRiver, Func<HexCoord, bool>? blocked,
         Func<HexCoord, bool>? friendlyGate = null, Func<HexCoord, bool>? halfOpen = null,
-        Func<HexCoord, double?>? bridgeCost = null)
+        Func<HexCoord, double?>? bridgeCost = null, bool leaving = false)
     {
         var terrain = terrainAt(hex);
         if (!LandTerrainCost.TryGetValue(terrain, out var cost))
@@ -142,7 +152,9 @@ public static class HexPathfinder
             if (isWideRiver is not null && isWideRiver(hex))
             {
                 // A wide river is shut unless a bridge stands on it that this army may cross (the bridge's own price).
-                return bridgeCost?.Invoke(hex);
+                // Leaving it is never shut: with no bridge left the army wades out at 1.0 + BurntBridgeLeaveCost.
+                var bridge = bridgeCost?.Invoke(hex);
+                return leaving ? bridge ?? 1.0 + BurntBridgeLeaveCost : bridge;
             }
 
             return 1.0 + RiverCrossingCost + (halfOpen is not null && halfOpen(hex) ? HalfOpenEndCost : 0.0);
@@ -158,7 +170,7 @@ public static class HexPathfinder
             return cost + HalfOpenEndCost;
         }
 
-        if (blocked is not null && blocked(hex) && !(friendlyGate is not null && friendlyGate(hex)))
+        if (!leaving && blocked is not null && blocked(hex) && !(friendlyGate is not null && friendlyGate(hex)))
         {
             return null;
         }
@@ -167,14 +179,39 @@ public static class HexPathfinder
     }
 
     /// <summary>
+    /// What a land army pays to <em>leave</em> a hex, or <see langword="null"/> if it never could stand there (sea, lakes, a plain
+    /// mountain). Same precedence as <see cref="LandStepCost"/> (the enter price) with two differences: a <paramref name="blocked"/> hex
+    /// is not shut (a palisade built under the army is left at its ground or stream price) and a wide river with no crossable bridge
+    /// costs <c>1.0 + <see cref="BurntBridgeLeaveCost"/></c>. For every hex the enter price accepts, both prices are equal.
+    /// </summary>
+    private static double? LandLeaveCost(
+        HexCoord hex, Func<HexCoord, Terrain> terrainAt, Func<HexCoord, bool>? isRiver,
+        Func<HexCoord, bool>? isWideRiver, Func<HexCoord, bool>? blocked,
+        Func<HexCoord, bool>? friendlyGate = null, Func<HexCoord, bool>? halfOpen = null,
+        Func<HexCoord, double?>? bridgeCost = null) =>
+        LandStepCost(hex, terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost, leaving: true);
+
+    /// <summary>The price of a fleet's land endpoint (a harbour or beaching hex): 1.0, except sand, which a fleet runs up onto at <see cref="FleetSandCost"/>.</summary>
+    private static double FleetLandEndpointCost(Terrain terrain) => terrain == Terrain.Sand ? FleetSandCost : 1.0;
+
+    /// <summary>What a fleet pays for a sand hex at either end of its route (a beach to land on or push off from): twice a sea hex.</summary>
+    public const double FleetSandCost = 2.0;
+
+    /// <summary>The leave price of a fleet's hex: the sea table, with the land-endpoint fallback (<see cref="FleetLandEndpointCost"/>).</summary>
+    private static double SeaLeaveCost(IReadOnlyDictionary<Terrain, double> costTable, Terrain terrain) =>
+        costTable.TryGetValue(terrain, out var cost) ? cost : FleetLandEndpointCost(terrain);
+
+    /// <summary>
     /// Hard cap on nodes a single search may expand. A world is unbounded, so
     /// without this, "no route exists" (e.g. an island cut off by sea) would
     /// otherwise search forever outward looking for one. Combined with the
     /// bounding box in <see cref="FindPath"/>, this is a belt-and-braces
-    /// bound, not the primary defence — a plausible in-game dispatch is at
-    /// most a few hundred hexes.
+    /// bound, not the primary defence. A plausible dispatch is a few hundred
+    /// hexes, but a long sea route that has to detour around land can need
+    /// ~100k expansions (a 534-hex fleet route against a 345-hex straight
+    /// distance took 93k), so the cap sits well above that.
     /// </summary>
-    private const int MaxExpandedNodes = 20_000;
+    private const int MaxExpandedNodes = 250_000;
 
     /// <summary>
     /// Finds the cheapest route from <paramref name="from"/> to
@@ -246,6 +283,18 @@ public static class HexPathfinder
         HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt, bool isLandUnit,
         Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null,
         Func<HexCoord, bool>? blocked = null, Func<HexCoord, bool>? friendlyGate = null,
+        Func<HexCoord, bool>? halfOpen = null, Func<HexCoord, double?>? bridgeCost = null) =>
+        Search(from, to, terrainAt, isLandUnit, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost).Path;
+
+    /// <summary>
+    /// <see cref="FindPath"/> with the reason for a missing route: <see cref="PathSearch.LimitReached"/> is
+    /// <see langword="true"/> when the search gave up at <see cref="MaxExpandedNodes"/> instead of proving that
+    /// no route exists, i.e. the trip is too long to plan rather than cut off.
+    /// </summary>
+    public static PathSearch Search(
+        HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt, bool isLandUnit,
+        Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null,
+        Func<HexCoord, bool>? blocked = null, Func<HexCoord, bool>? friendlyGate = null,
         Func<HexCoord, bool>? halfOpen = null, Func<HexCoord, double?>? bridgeCost = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
@@ -259,12 +308,12 @@ public static class HexPathfinder
         // endpoints are deliberately exempt from the sea-only rule.
         if (isLandUnit && (!costTable.ContainsKey(terrainAt(from)) || !costTable.ContainsKey(terrainAt(to))))
         {
-            return null;
+            return new PathSearch(null, false);
         }
 
         if (from == to)
         {
-            return [from];
+            return new PathSearch([from], false);
         }
 
         // A bounding box around the two endpoints, padded generously — the
@@ -278,12 +327,12 @@ public static class HexPathfinder
 
         bool InBounds(HexCoord c) => c.Q >= qMin && c.Q <= qMax && c.R >= rMin && c.R <= rMax;
 
-        var open = new PriorityQueue<HexCoord, double>();
+        var open = new PriorityQueue<HexCoord, OpenKey>();
         var gScore = new Dictionary<HexCoord, double> { [from] = 0 };
         var cameFrom = new Dictionary<HexCoord, HexCoord>();
         var closed = new HashSet<HexCoord>();
 
-        open.Enqueue(from, Heuristic(from, to));
+        open.Enqueue(from, OpenKey.For(from, 0, from, to));
         var expanded = 0;
 
         while (open.TryDequeue(out var current, out _))
@@ -295,12 +344,12 @@ public static class HexPathfinder
 
             if (current == to)
             {
-                return Reconstruct(cameFrom, current);
+                return new PathSearch(Reconstruct(cameFrom, current), false);
             }
 
             if (++expanded > MaxExpandedNodes)
             {
-                return null;
+                return new PathSearch(null, true);
             }
 
             foreach (var neighbour in current.Neighbours())
@@ -314,24 +363,35 @@ public static class HexPathfinder
                 // even when the goal itself is land (a beaching/harbor hex —
                 // see the isLandUnit remarks above); every other hex still
                 // has to pass the ordinary cost-table check.
-                double stepCost;
+                // A step is billed half at the hex it leaves, half at the hex it enters.
+                double enterCost;
+                double leaveCost;
                 if (isLandUnit)
                 {
-                    if (LandStepCost(neighbour, terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost) is not { } landCost)
+                    if (LandStepCost(neighbour, terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost) is not { } landCost
+                        || LandLeaveCost(current, terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost) is not { } landLeave)
                     {
                         continue;
                     }
 
-                    stepCost = landCost;
+                    enterCost = landCost;
+                    leaveCost = landLeave;
                 }
-                else if (neighbour == to)
+                else
                 {
-                    stepCost = costTable.TryGetValue(terrainAt(neighbour), out var seaCost) ? seaCost : 1.0;
+                    if (neighbour == to)
+                    {
+                        enterCost = costTable.TryGetValue(terrainAt(neighbour), out var seaCost) ? seaCost : FleetLandEndpointCost(terrainAt(neighbour));
+                    }
+                    else if (!costTable.TryGetValue(terrainAt(neighbour), out enterCost))
+                    {
+                        continue;
+                    }
+
+                    leaveCost = SeaLeaveCost(costTable, terrainAt(current));
                 }
-                else if (!costTable.TryGetValue(terrainAt(neighbour), out stepCost))
-                {
-                    continue;
-                }
+
+                var stepCost = (leaveCost + enterCost) / 2.0;
 
                 var tentativeG = gScore[current] + stepCost;
                 if (gScore.TryGetValue(neighbour, out var existingG) && tentativeG >= existingG)
@@ -341,11 +401,11 @@ public static class HexPathfinder
 
                 gScore[neighbour] = tentativeG;
                 cameFrom[neighbour] = current;
-                open.Enqueue(neighbour, tentativeG + Heuristic(neighbour, to));
+                open.Enqueue(neighbour, OpenKey.For(neighbour, tentativeG, from, to));
             }
         }
 
-        return null;
+        return new PathSearch(null, false);
     }
 
     /// <summary>
@@ -355,6 +415,36 @@ public static class HexPathfinder
     /// distance never overestimates the cheapest possible route.
     /// </summary>
     private static double Heuristic(HexCoord a, HexCoord b) => a.DistanceTo(b);
+
+    /// <summary>
+    /// Open-set order, ascending: f = g + h, then h (of two equal-f hexes the one further along
+    /// the route goes first, which stops a uniform-cost sea from expanding every tied hex side by
+    /// side), then the hex's distance from the straight start-to-goal line (axial cross product,
+    /// so open-water routes follow that line), then q and r so the order never depends on heap
+    /// internals. The TS twin (<c>findPath</c> in hexPath.ts) uses the same order.
+    /// </summary>
+    private readonly record struct OpenKey(double F, double H, long LineDeviation, int Q, int R) : IComparable<OpenKey>
+    {
+        public static OpenKey For(HexCoord n, double g, HexCoord from, HexCoord to)
+        {
+            double h = Heuristic(n, to);
+            long deviation = Math.Abs(
+                ((long)(n.Q - from.Q) * (to.R - from.R)) - ((long)(n.R - from.R) * (to.Q - from.Q)));
+            return new OpenKey(g + h, h, deviation, n.Q, n.R);
+        }
+
+        public int CompareTo(OpenKey other)
+        {
+            int c = F.CompareTo(other.F);
+            if (c != 0) return c;
+            c = H.CompareTo(other.H);
+            if (c != 0) return c;
+            c = LineDeviation.CompareTo(other.LineDeviation);
+            if (c != 0) return c;
+            c = Q.CompareTo(other.Q);
+            return c != 0 ? c : R.CompareTo(other.R);
+        }
+    }
 
     private static IReadOnlyList<HexCoord> Reconstruct(Dictionary<HexCoord, HexCoord> cameFrom, HexCoord current)
     {
@@ -413,7 +503,31 @@ public static class HexPathfinder
         IReadOnlyList<HexCoord> path, Func<HexCoord, Terrain> terrainAt, double hexesPerHour, bool isLandUnit = true,
         double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null,
         Func<HexCoord, bool>? blocked = null, Func<HexCoord, bool>? friendlyGate = null, Func<HexCoord, bool>? halfOpen = null,
-        Func<HexCoord, double?>? bridgeCost = null)
+        Func<HexCoord, double?>? bridgeCost = null) =>
+        Schedule(path, terrainAt, hexesPerHour, isLandUnit, speedFactor, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost).Hours;
+
+    /// <summary>
+    /// Game-hours at which the army crosses the edge into each hex of <paramref name="path"/>: the same length as the path,
+    /// <c>[0]</c> is 0 and <c>[i]</c> is <c>CumulativeHours[i-1]</c> plus half of the leave price of <c>path[i-1]</c>, so the marker
+    /// moves at the speed of the hex under it and the army counts as standing on <c>path[i]</c> from this moment. Same parameters as
+    /// <see cref="CumulativeHours"/>.
+    /// </summary>
+    public static IReadOnlyList<double> EdgeHours(
+        IReadOnlyList<HexCoord> path, Func<HexCoord, Terrain> terrainAt, double hexesPerHour, bool isLandUnit = true,
+        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null,
+        Func<HexCoord, bool>? blocked = null, Func<HexCoord, bool>? friendlyGate = null, Func<HexCoord, bool>? halfOpen = null,
+        Func<HexCoord, double?>? bridgeCost = null) =>
+        Schedule(path, terrainAt, hexesPerHour, isLandUnit, speedFactor, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost).Edges;
+
+    /// <summary>
+    /// The one pricing of a path both <see cref="CumulativeHours"/> and <see cref="EdgeHours"/> read: each step costs
+    /// (leave price of the hex left + enter price of the hex entered) / 2, and the edge is crossed after half the leave price.
+    /// </summary>
+    private static (IReadOnlyList<double> Hours, IReadOnlyList<double> Edges) Schedule(
+        IReadOnlyList<HexCoord> path, Func<HexCoord, Terrain> terrainAt, double hexesPerHour, bool isLandUnit,
+        double speedFactor, Func<HexCoord, bool>? isRiver, Func<HexCoord, bool>? isWideRiver,
+        Func<HexCoord, bool>? blocked, Func<HexCoord, bool>? friendlyGate, Func<HexCoord, bool>? halfOpen,
+        Func<HexCoord, double?>? bridgeCost)
     {
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(terrainAt);
@@ -435,29 +549,41 @@ public static class HexPathfinder
         var costTable = CostTable(isLandUnit);
         var effectiveHexesPerHour = hexesPerHour * speedFactor;
         var hours = new double[path.Count];
+        var edges = new double[path.Count];
         for (var i = 1; i < path.Count; i++)
         {
-            // Mirrors FindPath's own beaching/harbor exemption: a fleet's
-            // very last hex (an Attack/Support target's or its own home
-            // settlement's land centre — see FindPath's isLandUnit remarks)
-            // charges the same flat fallback cost FindPath itself used to
-            // reach it, rather than the double.PositiveInfinity every other
+            // Mirrors FindPath's own beaching/harbor exemption: a fleet's land endpoint (its home
+            // settlement's centre, an Attack/Support target's centre) charges the flat 1.0 fallback on
+            // both the leave and the enter side (2.0 on sand, see FleetSandCost), rather than the double.PositiveInfinity every other
             // impassable hex gets.
-            double stepCost;
+            double enterCost;
+            double leaveCost;
             if (isLandUnit)
             {
-                stepCost = LandStepCost(path[i], terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost) ?? double.PositiveInfinity;
+                enterCost = LandStepCost(path[i], terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost) ?? double.PositiveInfinity;
+                leaveCost = LandLeaveCost(path[i - 1], terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost) ?? double.PositiveInfinity;
             }
             else
             {
-                stepCost = costTable.TryGetValue(terrainAt(path[i]), out var cost)
+                enterCost = costTable.TryGetValue(terrainAt(path[i]), out var cost)
                     ? cost
-                    : i == path.Count - 1 ? 1.0 : double.PositiveInfinity;
+                    : i == path.Count - 1 ? FleetLandEndpointCost(terrainAt(path[i])) : double.PositiveInfinity;
+                leaveCost = costTable.TryGetValue(terrainAt(path[i - 1]), out var leave)
+                    ? leave
+                    : i == 1 ? FleetLandEndpointCost(terrainAt(path[i - 1])) : double.PositiveInfinity;
             }
 
-            hours[i] = hours[i - 1] + (stepCost / effectiveHexesPerHour);
+            edges[i] = hours[i - 1] + (leaveCost / 2.0 / effectiveHexesPerHour);
+            hours[i] = hours[i - 1] + ((leaveCost + enterCost) / 2.0 / effectiveHexesPerHour);
         }
 
-        return hours;
+        return (hours, edges);
     }
 }
+
+/// <summary>The outcome of <see cref="HexPathfinder.Search"/>: the route, or why there is none.</summary>
+/// <param name="Path">The route, or <see langword="null"/> when none was found.</param>
+/// <param name="LimitReached">
+/// <see langword="true"/> when the search stopped at the node cap, so a route may exist but is too long to plan.
+/// </param>
+public readonly record struct PathSearch(IReadOnlyList<HexCoord>? Path, bool LimitReached);

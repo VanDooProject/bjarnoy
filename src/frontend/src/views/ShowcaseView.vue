@@ -17,6 +17,7 @@ import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import { hexDistance } from '../lib/hex/coords';
 import { WorldModel } from '../lib/map/WorldModel';
+import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import {
   buildShowcaseVillage,
   SHOWCASE_PREVIEW_RADIUS,
@@ -68,13 +69,19 @@ function buildShowcase(worldSeed: number) {
   return { model: markRaw(model), center };
 }
 
-const showcase = ref(buildShowcase(seed.value));
-const heroModel = computed(() => showcase.value.model);
+// Built once the building catalogue has loaded: the village is placed under the catalogue's own terrain rules (`lib/map/placementRules.ts`).
+const showcase = ref<ReturnType<typeof buildShowcase> | null>(null);
+const heroModel = computed(() => showcase.value!.model);
 // The village site on the generated island: the "one view" frame previews it.
-const islandCenter = computed(() => showcase.value.center);
+const islandCenter = computed(() => showcase.value!.center);
 // The hero map is capped to the village island and a margin of sea (see showcaseWorldFrame): the camera starts
 // fitted to that disc and can neither leave nor zoom out of it.
 const worldFrame = computed(() => showcaseWorldFrame(heroModel.value, islandCenter.value));
+
+onMounted(async () => {
+  await useBuildingCatalogueStore().load();
+  showcase.value = buildShowcase(seed.value);
+});
 
 // useHexMapRenderer captures its options once at mount (see
 // SettlementCanvas.vue's own comment on `mode`) — a `:key="seed"` on the
@@ -90,7 +97,7 @@ function reroll() {
 const heroCanvas = ref<InstanceType<typeof WorldMapCanvas> | null>(null);
 type HeroHookWindow = { __showcaseHero?: () => unknown };
 onMounted(() => {
-  (window as HeroHookWindow).__showcaseHero = () => ({ renderer: heroCanvas.value?.renderer, frame: worldFrame.value });
+  (window as HeroHookWindow).__showcaseHero = () => ({ renderer: heroCanvas.value?.renderer, frame: showcase.value ? worldFrame.value : undefined });
 });
 onUnmounted(() => {
   delete (window as HeroHookWindow).__showcaseHero;
@@ -180,6 +187,7 @@ const ENGINEERING: EngineeringCard[] = [
         <div class="hero-map">
           <div class="map-frame frame">
             <WorldMapCanvas
+              v-if="showcase"
               ref="heroCanvas"
               :key="seed"
               :world-model="heroModel"
@@ -201,6 +209,7 @@ const ENGINEERING: EngineeringCard[] = [
       <section id="one-view" class="one-view">
         <div class="one-view-frame frame">
           <SettlementCanvas
+            v-if="showcase"
             :key="seed"
             :world-model="heroModel"
             :player-id="PLAYER_ID"

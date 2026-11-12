@@ -1,5 +1,4 @@
 {
-  "backToList": "← Reports",
   "demoModeHint": "Reports require the live backend and aren't wired up in demo mode.",
   "noSettlement": "Found a settlement first to have any reports.",
   "trade": {
@@ -16,9 +15,20 @@
     "battle": "Battle",
     "field": "Field",
     "trade": "Trade",
-    "camp": "Camps"
+    "camp": "Camps",
+    "army": "Armies"
   },
   "noReports": "No reports yet.",
   "simulatorHint": "Want to test a fight without risking real troops?",
-  "simulatorLink": "Try the fight simulator →"
+  "simulatorLink": "Try the fight simulator →",
+  "army": {
+    "kind": {
+      "stuck": "Army stuck",
+      "starved": "Army starved"
+    },
+    "stuck": "Army stuck: a wall blocks its way. It stopped at {hex}.",
+    "starved": "Army starved at {hex}. Its food ran out and it could not get home.",
+    "lost": "Troops lost",
+    "inArmy": "Troops in the army"
+  }
 }

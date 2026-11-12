@@ -17,6 +17,14 @@
 // field or arrives without it) drifts away from the authoritative position
 // on mixed terrain.
 //
+// A step is billed half and half (half the leave price of the hex left, half
+// the enter price of the hex entered), so inside one leg the marker moves at
+// two speeds: `edgeHours[i + 1]`, the moment the army crosses the shared edge
+// into the next hex, splits the leg — the time from the centre to the edge
+// covers the first half of the distance, the time from the edge to the next
+// centre the second half. The marker therefore moves at the speed of the hex
+// under it and switches hex exactly where the backend's `PositionAt` does.
+//
 // Pure and dependency-free, like the rest of lib/units — the renderer calls
 // it once per army per frame, and its tests can pin `now` to a number
 // instead of mocking a clock.
@@ -54,6 +62,22 @@ function usableSchedule(path: readonly AxialCoord[], cumulativeHours: readonly n
 }
 
 /**
+ * Whether the edge-crossing schedule can be trusted: same length as the path, starting at 0, and every edge lies between the centres of the two
+ * hexes it separates. Anything else (a movement serialised before the backend exposed the field, or a hand-built fixture) splits
+ * each leg's time at its midpoint, which moves the marker at one even speed across the leg.
+ */
+function usableEdges(schedule: readonly number[], edgeHours: readonly number[] | undefined): number[] {
+  if (edgeHours && edgeHours.length === schedule.length && edgeHours[0] === 0) {
+    let valid = true;
+    for (let i = 1; i < schedule.length; i++) {
+      if (!(edgeHours[i] >= schedule[i - 1] && edgeHours[i] <= schedule[i])) valid = false;
+    }
+    if (valid) return [...edgeHours];
+  }
+  return schedule.map((h, i) => (i === 0 ? 0 : (schedule[i - 1] + h) / 2));
+}
+
+/**
  * Interpolates a position along `path` for the instant `nowMs`.
  *
  * `departedAtMs`/`arrivesAtMs` are wall-clock (the API's ISO instants) while
@@ -67,6 +91,7 @@ function usableSchedule(path: readonly AxialCoord[], cumulativeHours: readonly n
 export function routeProgressAt(
   path: readonly AxialCoord[],
   cumulativeHours: readonly number[] | undefined,
+  edgeHours: readonly number[] | undefined,
   departedAtMs: number,
   arrivesAtMs: number,
   nowMs: number,
@@ -77,6 +102,7 @@ export function routeProgressAt(
   }
 
   const schedule = usableSchedule(path, cumulativeHours);
+  const edges = usableEdges(schedule, edgeHours);
   const total = schedule[schedule.length - 1];
   const span = arrivesAtMs - departedAtMs;
   // A zero/negative span (a route with no travel time, or clocks that
@@ -96,10 +122,17 @@ export function routeProgressAt(
     if (schedule[i] > elapsed) break;
     leg = i;
   }
-  // Guard the (schedule-permitted) zero-length leg: two hexes with the same
-  // cumulative hour would otherwise divide by zero.
-  const legSpan = schedule[leg + 1] - schedule[leg];
-  const t = legSpan > 0 ? (elapsed - schedule[leg]) / legSpan : 0;
+  // The first half of the leg's distance is covered between the centre and the edge, the second half between the edge and the next
+  // centre. Guard the (schedule-permitted) zero-length halves: equal hours would otherwise divide by zero.
+  const edge = edges[leg + 1];
+  let t: number;
+  if (elapsed < edge) {
+    const span1 = edge - schedule[leg];
+    t = span1 > 0 ? (0.5 * (elapsed - schedule[leg])) / span1 : 0;
+  } else {
+    const span2 = schedule[leg + 1] - edge;
+    t = span2 > 0 ? 0.5 + (0.5 * (elapsed - edge)) / span2 : 0.5;
+  }
   return {
     from: path[leg],
     to: path[leg + 1],

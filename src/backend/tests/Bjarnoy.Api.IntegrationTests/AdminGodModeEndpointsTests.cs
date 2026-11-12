@@ -10,6 +10,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -102,8 +103,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
     {
         var world = await _factory.CreateWorldAsync(Unique("w"), seed, radius, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
@@ -151,7 +151,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Forbidden, queue.StatusCode);
 
         var garrison = await playerWriting.PostJsonAsync(
-            $"/api/v1/admin/settlements/{settlement.Id}/garrison", new AdjustGarrisonRequest("thrall", 5), Ct);
+            $"/api/v1/admin/settlements/{settlement.Id}/garrison", new AdjustGarrisonRequest("thrall", settlement.Spot(), 5), Ct);
         Assert.Equal(HttpStatusCode.Forbidden, garrison.StatusCode);
 
         var world = await playerWriting.PostJsonAsync(
@@ -497,7 +497,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
 
         var created = await client.PostJsonAsync(
             $"/api/v1/admin/settlements/{settlement.Id}/garrison",
-            new AdjustGarrisonRequest("spearman", 12), Ct);
+            new AdjustGarrisonRequest("spearman", settlement.Spot(), 12), Ct);
 
         Assert.Equal(HttpStatusCode.OK, created.StatusCode);
         var withTroops = await created.ReadStrictAsync<SettlementResponse>(Ct);
@@ -505,11 +505,25 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
 
         var removed = await client.PostJsonAsync(
             $"/api/v1/admin/settlements/{settlement.Id}/garrison",
-            new AdjustGarrisonRequest("spearman", -12), Ct);
+            new AdjustGarrisonRequest("spearman", settlement.Spot(), -12), Ct);
 
         Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
         var emptied = await removed.ReadStrictAsync<SettlementResponse>(Ct);
         Assert.DoesNotContain(emptied.Garrison, s => s.Unit == "spearman");
+    }
+
+    [Fact]
+    public async Task Creating_troops_at_a_hex_that_is_no_garrison_spot_is_refused()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var nowhere = await client.PostJsonAsync(
+            $"/api/v1/admin/settlements/{settlement.Id}/garrison",
+            new AdjustGarrisonRequest("spearman", new HexPointRequest(settlement.Q + 1, settlement.R), 3), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, nowhere.StatusCode);
     }
 
     [Fact]
@@ -521,12 +535,12 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
 
         var unknown = await client.PostJsonAsync(
             $"/api/v1/admin/settlements/{settlement.Id}/garrison",
-            new AdjustGarrisonRequest("dragon", 1), Ct);
+            new AdjustGarrisonRequest("dragon", settlement.Spot(), 1), Ct);
         Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
 
         var tooMany = await client.PostJsonAsync(
             $"/api/v1/admin/settlements/{settlement.Id}/garrison",
-            new AdjustGarrisonRequest("thrall", -1), Ct);
+            new AdjustGarrisonRequest("thrall", settlement.Spot(), -1), Ct);
         Assert.Equal(HttpStatusCode.BadRequest, tooMany.StatusCode);
     }
 
@@ -541,7 +555,8 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
 
         var listed = await client.GetFromJsonAsync<List<AdminArmyResponse>>(
             $"/api/v1/admin/armies?worldId={worldId}", SqliteApiFixture.StrictJson, Ct);
-        Assert.Single(listed!, a => a.Army.Id == armyId);
+        var plantedEntry = Assert.Single(listed!, a => a.Army.Id == armyId);
+        Assert.Equal(0, plantedEntry.Loot.Wood);
 
         var retimed = await client.PatchJsonAsync(
             $"/api/v1/admin/armies/{armyId}", new AdminEditArmyRequest(ArriveInMinutes: 0), Ct);
@@ -701,6 +716,8 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         var army = new ArmyEntity
         {
             SettlementId = settlement.Id,
+            HomeSpotQ = settlement.Q,
+            HomeSpotR = settlement.R,
             Mission = (int)ArmyMission.Move,
             AtHome = false,
             IsSupporting = false,
@@ -708,8 +725,10 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
             DepartedAt = departedAt,
             Path = [new HexPoint(settlement.Q, settlement.R), new HexPoint(settlement.Q + 1, settlement.R)],
             CumulativeHours = [0, 10],
+            EdgeHours = [0, 10],
             ReturnPath = [new HexPoint(settlement.Q + 1, settlement.R), new HexPoint(settlement.Q, settlement.R)],
             ReturnCumulativeHours = [0, 10],
+            ReturnEdgeHours = [0, 10],
             TurnAroundAt = departedAt + TimeSpan.FromHours(100),
             IsReturning = false,
             Stacks = [new ArmyUnitStackEntity { UnitType = UnitType.Thrall, Count = 5 }],

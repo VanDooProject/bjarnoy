@@ -247,6 +247,9 @@ public sealed class WorldService(
             world.CreationError = null;
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+            // The world was readable (and its empty island list cacheable) while it was still being generated.
+            WorldIslandCaches.Invalidate(worldId);
+
             _logger.LogInformation(
                 "World {World} ({WorldId}) created with {Islands} islands and {Land} land hexes.",
                 world.Name, world.Id, generated.Islands.Count, generated.LandTileCount);
@@ -477,8 +480,8 @@ public sealed class WorldService(
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        // The old islands' bogland is gone with them.
-        WorldTerrain.Invalidate(worldId);
+        // The old islands' bog, rivers and start positions are gone with them.
+        WorldIslandCaches.Invalidate(worldId);
 
         // Every settlement this world had is now gone — RealmDirectory's
         // cached realms for it (by settlement id, by user, by owner id) would
@@ -1055,11 +1058,29 @@ public sealed class WorldService(
         return due;
     }
 
-    public Task<List<IslandEntity>> GetIslandsAsync(Guid worldId, CancellationToken cancellationToken = default) =>
+    /// <summary>
+    /// The islands of a world in index order as summaries: the labels and what changes while the world runs, without the bog tiles,
+    /// river tiles and start positions. Those are the bulk of the row (tens of megabytes for a large world), change only on a reseed
+    /// and are served cached by their own endpoints. A dedicated record, not <see cref="IslandEntity"/>, so no caller can mistake the
+    /// missing terrain columns for an island that has none.
+    /// </summary>
+    public Task<List<IslandSummary>> GetIslandSummariesAsync(Guid worldId, CancellationToken cancellationToken = default) =>
         _dbContext.Islands
             .AsNoTracking()
             .Where(i => i.WorldId == worldId)
             .OrderBy(i => i.Index)
+            .Select(i => new IslandSummary(
+                i.Id,
+                i.Index,
+                i.Name,
+                i.CentreQ,
+                i.CentreR,
+                i.TileCount,
+                i.IsWasted,
+                i.Giants,
+                i.Camps,
+                i.UtgardWalls,
+                i.JotunTowers))
             .ToListAsync(cancellationToken);
 
     /// <summary>

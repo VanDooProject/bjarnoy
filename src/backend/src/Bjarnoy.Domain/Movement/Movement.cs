@@ -50,10 +50,20 @@ public sealed record Movement
     /// </summary>
     public required IReadOnlyList<double> CumulativeHours { get; init; }
 
+    /// <summary>
+    /// Game-hours elapsed when the army crosses the edge into <c>Path[i]</c> (<c>EdgeHours[0]</c> is 0), see
+    /// <see cref="HexPathfinder.EdgeHours"/>. Always between <c>CumulativeHours[i-1]</c> and <c>CumulativeHours[i]</c>. Same length as
+    /// <see cref="Path"/>.
+    /// </summary>
+    public required IReadOnlyList<double> EdgeHours { get; init; }
+
     /// <summary>The precomputed homeward route from this leg's destination.</summary>
     public required IReadOnlyList<HexCoord> ReturnPath { get; init; }
 
     public required IReadOnlyList<double> ReturnCumulativeHours { get; init; }
+
+    /// <summary>The edge-crossing schedule of <see cref="ReturnPath"/>, see <see cref="EdgeHours"/>.</summary>
+    public required IReadOnlyList<double> ReturnEdgeHours { get; init; }
 
     /// <summary>
     /// The instant remaining provisions exactly cover the precomputed return
@@ -71,23 +81,61 @@ public sealed record Movement
     public bool IsReturning { get; init; }
 
     /// <summary>
-    /// True only for the two immune-to-interception return legs (issue #206
-    /// §5): the existing natural provisions-driven turnaround
-    /// (<c>Army.SettleTo</c>'s turn-around branch) and a battle-forced retreat
-    /// (<c>Army.SettleArrival</c>'s post-battle survivor return, and the new
-    /// field-battle loser's direct-path-home march). Both are immune because
-    /// neither is something a player can trigger on demand at will.
+    /// Until when an army fleeing after a <em>lost field battle</em> is protected from field battles and camp ambushes
+    /// (<c>docs/design/troop-movement-range.md</c> §2a): the battle instant plus <see cref="FleeProtection"/>. <see langword="null"/> for every
+    /// other movement. Only <c>Army.ForceFieldRetreat</c> sets it; an order (recall, field order, retarget) builds a fresh movement without it,
+    /// which is what ends the protection early. A meeting or an ambush entry is ruled out only while it lies before this instant.
     /// </summary>
-    /// <remarks>
-    /// Deliberately distinct from <see cref="IsReturning"/>: a voluntary
-    /// <c>Army.Recall</c> also sets <see cref="IsReturning"/> but must remain
-    /// fully interceptable (issue #206 §5) — recalling the instant a player
-    /// spots an incoming interception would otherwise trivially dodge every
-    /// fight. Only <see cref="IsReturning"/> &amp;&amp; <see cref="RetreatImmune"/>
-    /// together mean "immune"; <see cref="IsReturning"/> alone (a plain
-    /// Recall) does not.
-    /// </remarks>
-    public bool RetreatImmune { get; init; }
+    public DateTimeOffset? FieldBattleImmuneUntil { get; init; }
+
+    /// <summary>
+    /// The instant this movement's routes (<see cref="Path"/> and <see cref="ReturnPath"/>) were planned, with the walls standing then. It is
+    /// not <see cref="DepartedAt"/> for a way home planned at dispatch: a turn-around or a post-battle return walks the stored way home
+    /// and keeps the instant it was planned at. A wall that changed after it may block the route (<c>WallTimeline.MayBlock</c>);
+    /// <see langword="null"/> when not known (a movement stored before the instant was recorded), see <see cref="PlannedAt"/>.
+    /// </summary>
+    public DateTimeOffset? RoutePlannedAt { get; init; }
+
+    /// <summary><see cref="RoutePlannedAt"/>, or <see cref="DateTimeOffset.MinValue"/> when it is not known: every wall then counts as new.</summary>
+    public DateTimeOffset PlannedAt => RoutePlannedAt ?? DateTimeOffset.MinValue;
+
+    /// <summary>How long a fleeing army is protected after the battle it lost.</summary>
+    public static readonly TimeSpan FleeProtection = TimeSpan.FromHours(6);
+
+    /// <summary>
+    /// True for an army fleeing after a lost field battle (<see cref="FieldBattleImmuneUntil"/> set), on its way home or stranded. It takes
+    /// field orders from where it is like a standing army (<c>docs/design/troop-movement-range.md</c> §2a); the order's fresh movement ends
+    /// the flight and its protection.
+    /// </summary>
+    public bool IsFleeing => FieldBattleImmuneUntil is not null;
+
+    /// <summary>Whether a field battle or camp ambush at <paramref name="at"/> is ruled out by the flee protection.</summary>
+    public bool IsFieldBattleImmuneAt(DateTimeOffset at) => FieldBattleImmuneUntil is { } until && at < until;
+
+    /// <summary>
+    /// True for an army that cannot get home and so stays where it is (<see cref="Stranded"/>): its path ends on the hex it stays on (the path is
+    /// that hex alone, or, when a wall closed its way, the walk there, <c>Army.RerouteAroundWall</c>), it never turns around, and when its provisions run out the whole army starves (<c>docs/design/troop-movement-range.md</c> §2a).
+    /// </summary>
+    public bool IsStranded { get; init; }
+
+    /// <summary>
+    /// A stranded stand on <paramref name="hex"/> from <paramref name="at"/>. <see cref="TurnAroundAt"/> is set to <paramref name="at"/> here;
+    /// <c>Army.Strand</c> replaces it with the instant the army starves.
+    /// </summary>
+    public static Movement Stranded(DateTimeOffset at, HexCoord hex) => new()
+    {
+        DepartedAt = at,
+        Path = [hex],
+        CumulativeHours = [0],
+        EdgeHours = [0],
+        ReturnPath = [hex],
+        ReturnCumulativeHours = [0],
+        ReturnEdgeHours = [0],
+        TurnAroundAt = at,
+        IsReturning = false,
+        IsStranded = true,
+        RoutePlannedAt = at,
+    };
 
     /// <summary>When this leg's <see cref="Path"/> is fully travelled.</summary>
     public DateTimeOffset ArrivesAt => DepartedAt + TimeSpan.FromHours(CumulativeHours[^1]);
@@ -109,14 +157,18 @@ public sealed record Movement
         DateTimeOffset departedAt,
         IReadOnlyList<HexCoord> path,
         IReadOnlyList<double> cumulativeHours,
+        IReadOnlyList<double> edgeHours,
         IReadOnlyList<HexCoord> returnPath,
         IReadOnlyList<double> returnCumulativeHours,
+        IReadOnlyList<double> returnEdgeHours,
         double provisionsAtDeparture,
         double upkeepPerHour)
     {
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(cumulativeHours);
+        ArgumentNullException.ThrowIfNull(edgeHours);
         ArgumentNullException.ThrowIfNull(returnPath);
+        ArgumentNullException.ThrowIfNull(returnEdgeHours);
         ArgumentNullException.ThrowIfNull(returnCumulativeHours);
 
         var arrivesAt = departedAt + TimeSpan.FromHours(cumulativeHours[^1]);
@@ -138,35 +190,80 @@ public sealed record Movement
             DepartedAt = departedAt,
             Path = path,
             CumulativeHours = cumulativeHours,
+            EdgeHours = edgeHours,
             ReturnPath = returnPath,
             ReturnCumulativeHours = returnCumulativeHours,
+            ReturnEdgeHours = returnEdgeHours,
             TurnAroundAt = arrivesAt + TimeSpan.FromHours(standingHours),
             IsReturning = false,
+            RoutePlannedAt = departedAt,
         };
     }
 
     /// <summary>
-    /// The hex reached by <paramref name="now"/> — the last hex whose
-    /// cumulative hour has passed, not a fractional point between two hexes.
-    /// See the type-level remarks for why.
+    /// The hex the army stands on at <paramref name="now"/> — the last hex whose edge
+    /// (<see cref="EdgeHours"/>) it has crossed, not a fractional point between two hexes, so the
+    /// position switches at the shared edge rather than at the hex centre. Arrival stays on
+    /// <see cref="CumulativeHours"/>. See the type-level remarks for why.
     /// </summary>
-    public HexCoord PositionAt(DateTimeOffset now)
+    public HexCoord PositionAt(DateTimeOffset now) => Path[ReachedIndexAt(now)];
+
+    /// <summary>
+    /// The index of the hex centre the marker has last passed at <paramref name="now"/> — the start of the leg a client interpolates
+    /// along (centre to next centre), as opposed to <see cref="ReachedIndexAt"/>, which switches at the shared edge. Never behind
+    /// <c>ReachedIndexAt - 1</c> and never ahead of it.
+    /// </summary>
+    public int CentreIndexAt(DateTimeOffset now)
     {
         if (now <= DepartedAt)
         {
-            return Path[0];
+            return 0;
         }
 
         var elapsedHours = (now - DepartedAt).TotalHours;
         if (elapsedHours >= CumulativeHours[^1])
         {
-            return Path[^1];
+            return Path.Count - 1;
         }
 
         var index = 0;
-        for (var i = 1; i < CumulativeHours.Count; i++)
+        for (var i = 1; i < CumulativeHours.Count && CumulativeHours[i] <= elapsedHours; i++)
         {
-            if (CumulativeHours[i] > elapsedHours)
+            index = i;
+        }
+
+        return index;
+    }
+
+    /// <summary>
+    /// Every hex of <see cref="Path"/> the army has stood on by <paramref name="at"/>: <c>Path[0..index]</c> where <c>index</c> is
+    /// the one <see cref="PositionAt"/> reports (so the last element is always <see cref="PositionAt"/>). At or after
+    /// <see cref="ArrivesAt"/> that is the whole path, before <see cref="DepartedAt"/> just the start hex.
+    /// </summary>
+    public IReadOnlyList<HexCoord> HexesReachedBy(DateTimeOffset at)
+    {
+        var index = ReachedIndexAt(at);
+        return [.. Path.Take(index + 1)];
+    }
+
+    /// <summary>The index into <see cref="Path"/> of the hex <see cref="PositionAt"/> reports (the last edge crossed).</summary>
+    public int ReachedIndexAt(DateTimeOffset now)
+    {
+        if (now <= DepartedAt)
+        {
+            return 0;
+        }
+
+        var elapsedHours = (now - DepartedAt).TotalHours;
+        if (elapsedHours >= CumulativeHours[^1])
+        {
+            return Path.Count - 1;
+        }
+
+        var index = 0;
+        for (var i = 1; i < EdgeHours.Count; i++)
+        {
+            if (EdgeHours[i] > elapsedHours)
             {
                 break;
             }
@@ -174,6 +271,6 @@ public sealed record Movement
             index = i;
         }
 
-        return Path[index];
+        return index;
     }
 }

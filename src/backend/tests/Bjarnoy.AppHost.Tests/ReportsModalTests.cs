@@ -8,6 +8,7 @@ using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.AppHost.Tests;
 
@@ -156,8 +157,7 @@ public class ReportsModalTests(AppHostFixture fixture)
             cancellationToken);
         reseedResponse.EnsureSuccessStatusCode();
 
-        var islands = await apiClient.GetFromJsonAsync<IslandResponse[]>(
-            $"/api/v1/worlds/{world.Id}/islands", cancellationToken);
+        var islands = await apiClient.GetFullIslandsAsync(world.Id, cancellationToken);
         var targetIsland = Assert.Single(islands!, i => i.Index == islandIndex);
 
         // --- Found both settlements anonymously (see class remarks) ---
@@ -202,7 +202,7 @@ public class ReportsModalTests(AppHostFixture fixture)
         // bypasses — see UnitCatalogue.Get(UnitType.Spearman)) ---
         var garrisonResponse = await adminHttpClient.PostAsJsonAsync(
             $"/api/v1/admin/settlements/{playerSettlement.Id}/garrison",
-            new AdjustGarrisonRequest("spearman", 10),
+            new AdjustGarrisonRequest("spearman", new HexPointRequest(playerSettlement.Q, playerSettlement.R), 10),
             cancellationToken);
         garrisonResponse.EnsureSuccessStatusCode();
 
@@ -210,7 +210,7 @@ public class ReportsModalTests(AppHostFixture fixture)
         var dispatchResponse = await playerHttpClient.PostAsJsonAsync(
             $"/api/v1/settlements/{playerSettlement.Id}/armies",
             new DispatchArmyRequest(
-                Units: [new UnitCountRequest("spearman", 10)],
+                From: [new(new HexPointRequest(playerSettlement.Q, playerSettlement.R), [new UnitCountRequest("spearman", 10)])],
                 Waypoints: null,
                 Destination: null,
                 Provisions: 50,
@@ -291,16 +291,17 @@ public class ReportsModalTests(AppHostFixture fixture)
             Path = Path.Combine(screenshotsDir, "reports-modal-desktop-list.png"),
         });
 
+        // A row expands in place, under its own header: the list stays, and the URL does not change.
         await reportRow.ClickAsync();
         await Assertions.Expect(reportsModal.Locator("[data-testid=\"report-detail\"]")).ToBeVisibleAsync(new() { Timeout = 15_000 });
-        await desktopPage.WaitForURLAsync(url => url.EndsWith($"/reports/{reportId}"), new PageWaitForURLOptions { Timeout = 10_000 });
+        Assert.EndsWith("/reports", desktopPage.Url);
         await reportsModal.ScreenshotAsync(new LocatorScreenshotOptions
         {
             Path = Path.Combine(screenshotsDir, "reports-modal-desktop-detail.png"),
         });
 
-        await reportsModal.Locator("[data-testid=\"reports-back-to-list\"]").ClickAsync();
-        await Assertions.Expect(reportRow).ToBeVisibleAsync(new() { Timeout = 15_000 });
+        await reportRow.ClickAsync();
+        await Assertions.Expect(reportsModal.Locator("[data-testid=\"report-detail\"]")).Not.ToBeVisibleAsync(new() { Timeout = 15_000 });
 
         await reportsModal.Locator(".close-button").ClickAsync();
         await Assertions.Expect(reportsModal).Not.ToBeVisibleAsync(new() { Timeout = 15_000 });
@@ -342,16 +343,6 @@ public class ReportsModalTests(AppHostFixture fixture)
 
         var overflows = await phoneModal.EvaluateAsync<bool>("el => el.scrollWidth > el.clientWidth + 1");
         Assert.False(overflows, "The mobile reports panel overflows its own viewport width.");
-
-        await phoneModal.Locator(".back-button").TapAsync();
-        var phoneReportRow = phoneModal.Locator("[data-testid=\"report-row\"]").Filter(new LocatorFilterOptions { HasText = "Victory" });
-        await Assertions.Expect(phoneReportRow).ToBeVisibleAsync(new() { Timeout = 15_000 });
-        await phonePage.WaitForURLAsync(url => url.EndsWith("/reports"), new PageWaitForURLOptions { Timeout = 10_000 });
-
-        await phoneModal.ScreenshotAsync(new LocatorScreenshotOptions
-        {
-            Path = Path.Combine(screenshotsDir, "reports-modal-phone-list.png"),
-        });
 
         await phoneModal.Locator(".back-button").TapAsync();
         await Assertions.Expect(phoneModal).Not.ToBeVisibleAsync(new() { Timeout = 15_000 });

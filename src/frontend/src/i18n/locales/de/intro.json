@@ -23,6 +23,7 @@
     "animations": "Animationen"
   },
   "login": "Anmelden",
+  "howToPlay": "So wird gespielt",
   "enterWorld": "Zur Welt",
   "play": "Saga abspielen",
   "playIntro": "Intro abspielen",
@@ -50,7 +51,8 @@
     "map": "Zur Karte",
     "mapLoading": "Zur Karte · lädt {pct} %",
     "mapArmed": "Öffnet, sobald geladen · {pct} %",
-    "ready": "bereit"
+    "ready": "bereit",
+    "impressum": "Impressum"
   },
   "beats": {
     "fire": "Hör zu! Rück näher ans Feuer und erfahre, wie die Jarle ihre Heimat verloren.",

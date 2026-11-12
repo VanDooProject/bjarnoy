@@ -14,6 +14,7 @@ namespace Bjarnoy.Infrastructure.Tests.Palisades;
 public sealed class WorldBridgesTests : IDisposable
 {
     private static readonly HexCoord SpanHex = new(3, 0);
+    private static readonly DateTimeOffset T0 = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
     private readonly SqliteConnection _connection = new("DataSource=:memory:");
 
@@ -104,12 +105,12 @@ public sealed class WorldBridgesTests : IDisposable
         db.Settlements.Add(settlement);
         await db.SaveChangesAsync(Ct);
 
-        var index = await WorldBridges.IndexAsync(db, world.Id, _ => Terrain.Grass, Ct);
+        var index = await WorldBridges.IndexAsync(db, world.Id, _ => Terrain.Grass, DateTimeOffset.UtcNow, Ct);
 
         double? Crossing(Guid walker) => index.CrossingCost(SpanHex, walker);
-        Assert.Equal(1.0, Crossing(owner.Id));
-        Assert.Equal(1.0, Crossing(guildmate.Id));
-        Assert.Equal(1.0, Crossing(ally.Id));
+        Assert.Equal(1.5, Crossing(owner.Id));
+        Assert.Equal(1.5, Crossing(guildmate.Id));
+        Assert.Equal(1.5, Crossing(ally.Id));
         Assert.Null(Crossing(stranger.Id));
         // An anonymous settlement's key (the settlement itself) is in no guild.
         Assert.Null(Crossing(Guid.NewGuid()));
@@ -120,11 +121,11 @@ public sealed class WorldBridgesTests : IDisposable
     {
         await using var db = CreateContext();
         var (world, _, _) = await SeedAsync(db, level: 0);
-        Assert.True((await WorldBridges.IndexAsync(db, world.Id, _ => Terrain.Grass, Ct)).IsEmpty);
+        Assert.True((await WorldBridges.IndexAsync(db, world.Id, _ => Terrain.Grass, DateTimeOffset.UtcNow, Ct)).IsEmpty);
 
         await using var db2 = CreateContext();
         var (world2, _, _) = await SeedAsync(db2, level: 2);
-        var index = await WorldBridges.IndexAsync(db2, world2.Id, _ => Terrain.Grass, Ct);
+        var index = await WorldBridges.IndexAsync(db2, world2.Id, _ => Terrain.Grass, DateTimeOffset.UtcNow, Ct);
         Assert.Equal(4.0, index.CrossingCost(SpanHex, Guid.NewGuid()));
     }
 
@@ -134,11 +135,155 @@ public sealed class WorldBridgesTests : IDisposable
         await using var db = CreateContext();
         var (world, owner, _) = await SeedAsync(db, level: 3);
 
-        var routes = await WorldBridges.RouteIndexAsync(db, world.Id, _ => Terrain.Grass, _ => true, Ct);
+        var routes = await WorldBridges.RouteIndexAsync(db, world.Id, _ => Terrain.Grass, _ => true, DateTimeOffset.UtcNow, Ct);
 
         var rules = routes.ForOwner(owner.Id);
         Assert.NotNull(rules?.BridgeCost);
-        Assert.Equal(1.0, rules!.BridgeCost!(SpanHex));
+        Assert.Equal(1.5, rules!.BridgeCost!(SpanHex));
         Assert.Null(rules.BridgeCost(new HexCoord(9, 9)));
+    }
+
+    private static BuildOrderEntity Order(
+        int q, int targetLevel, DateTimeOffset completesAt, BuildOrderKind kind = BuildOrderKind.Build) => new()
+    {
+        Q = q, R = 0, Type = BuildingType.Bridge, TargetLevel = targetLevel, Kind = kind,
+        QueuedAt = T0, BaseDuration = TimeSpan.FromHours(1), StartedAt = T0, CompletesAt = completesAt,
+    };
+
+    private static async Task<(WorldEntity World, SettlementEntity Settlement)> SeedWorldAsync(GameDbContext db)
+    {
+        var world = new WorldEntity { Name = $"W-{Guid.NewGuid():N}", MaxPlayers = 10 };
+        db.Worlds.Add(world);
+        var island = new IslandEntity { WorldId = world.Id, Index = 0, Name = "I", CentreQ = 0, CentreR = 0, StartPositions = [new HexPoint(0, 0)] };
+        db.Islands.Add(island);
+        var owner = AddUser(db);
+        var settlement = new SettlementEntity
+        {
+            WorldId = world.Id, IslandId = island.Id, Name = "H", OwnerName = "O", OwnerId = owner.Id.ToString(), UserId = owner.Id,
+            CentreQ = 0, CentreR = 0,
+        };
+        db.Settlements.Add(settlement);
+        await db.SaveChangesAsync(Ct);
+        return (world, settlement);
+    }
+
+    [Fact]
+    public async Task A_bridge_stands_from_its_completed_order_at_the_level_that_order_reaches_even_while_its_owner_never_settled()
+    {
+        await using var db = CreateContext();
+        var (world, settlement) = await SeedWorldAsync(db);
+        // A foundation whose order to level 3 completed an hour ago, a level 1 causeway upgraded to 2 an hour ago and one whose upgrade is
+        // still running: the settlement was not settled since, so the rows still carry the old levels.
+        settlement.Buildings.Add(new PlacedBuildingEntity { Q = 1, R = 0, Type = BuildingType.Bridge, Level = 0 });
+        settlement.Buildings.Add(new PlacedBuildingEntity { Q = 2, R = 0, Type = BuildingType.Bridge, Level = 1 });
+        settlement.Buildings.Add(new PlacedBuildingEntity { Q = 3, R = 0, Type = BuildingType.Bridge, Level = 1 });
+        settlement.Buildings.Add(new PlacedBuildingEntity { Q = 4, R = 0, Type = BuildingType.Bridge, Level = 0 });
+        settlement.Queue.Add(Order(1, 3, T0.AddHours(-1)));
+        settlement.Queue.Add(Order(2, 2, T0.AddHours(-1)));
+        settlement.Queue.Add(Order(3, 2, T0.AddHours(2)));
+        settlement.Queue.Add(Order(4, 1, T0.AddHours(2)));
+        await db.SaveChangesAsync(Ct);
+
+        var timeline = (await WorldBridges.TimelineAsync(db, world.Id, Ct)).ToDictionary(b => b.Coord);
+        Assert.Equal(T0.AddHours(-1), timeline[new HexCoord(1, 0)].Stages[^1].From);
+
+        var now = await WorldBridges.IndexAsync(db, world.Id, _ => Terrain.Grass, T0, Ct);
+        var walker = Guid.NewGuid();
+        Assert.Equal(1.5, now.CrossingCost(new HexCoord(1, 0), walker));
+        Assert.Equal(4.0, now.CrossingCost(new HexCoord(2, 0), walker));
+        Assert.Equal(1.0 + HexPathfinder.CausewayCrossingCost, now.CrossingCost(new HexCoord(3, 0), walker));
+        Assert.Null(now.CrossingCost(new HexCoord(4, 0), walker));
+
+        var later = await WorldBridges.IndexAsync(db, world.Id, _ => Terrain.Grass, T0.AddHours(3), Ct);
+        Assert.Equal(4.0, later.CrossingCost(new HexCoord(3, 0), walker));
+        Assert.Equal(1.0 + HexPathfinder.CausewayCrossingCost, later.CrossingCost(new HexCoord(4, 0), walker));
+
+        var before = await WorldBridges.IndexAsync(db, world.Id, _ => Terrain.Grass, T0.AddHours(-2), Ct);
+        Assert.Null(before.CrossingCost(new HexCoord(1, 0), walker));
+    }
+
+    [Fact]
+    public async Task A_bridge_whose_raze_order_completed_stops_standing_then_even_while_its_owner_never_settled()
+    {
+        await using var db = CreateContext();
+        var (world, settlement) = await SeedWorldAsync(db);
+        settlement.Buildings.Add(new PlacedBuildingEntity { Q = 1, R = 0, Type = BuildingType.Bridge, Level = 3 });
+        settlement.Buildings.Add(new PlacedBuildingEntity { Q = 2, R = 0, Type = BuildingType.Bridge, Level = 3 });
+        settlement.Buildings.Add(new PlacedBuildingEntity { Q = 3, R = 0, Type = BuildingType.Bridge, Level = 2 });
+        // Razed to nothing an hour ago (not applied yet), lowered to level 2 and razed to nothing in two hours.
+        settlement.Queue.Add(Order(1, 0, T0.AddHours(-1), BuildOrderKind.Raze));
+        settlement.Queue.Add(Order(2, 2, T0.AddHours(-1), BuildOrderKind.Raze));
+        settlement.Queue.Add(Order(3, 0, T0.AddHours(2), BuildOrderKind.Raze));
+        await db.SaveChangesAsync(Ct);
+
+        var walker = Guid.NewGuid();
+        var now = await WorldBridges.IndexAsync(db, world.Id, _ => Terrain.Grass, T0, Ct);
+        Assert.Null(now.CrossingCost(new HexCoord(1, 0), walker));
+        Assert.Equal(4.0, now.CrossingCost(new HexCoord(2, 0), walker));
+        Assert.Equal(4.0, now.CrossingCost(new HexCoord(3, 0), walker));
+
+        var before = await WorldBridges.IndexAsync(db, world.Id, _ => Terrain.Grass, T0.AddHours(-2), Ct);
+        Assert.Equal(1.5, before.CrossingCost(new HexCoord(1, 0), walker));
+        var later = await WorldBridges.IndexAsync(db, world.Id, _ => Terrain.Grass, T0.AddHours(2), Ct);
+        Assert.Null(later.CrossingCost(new HexCoord(3, 0), walker));
+    }
+
+    [Fact]
+    public async Task A_bridge_guarded_by_a_finished_order_is_closed_to_strangers_and_one_razed_below_the_guard_level_is_open_to_all()
+    {
+        await using var db = CreateContext();
+        var (world, settlement) = await SeedWorldAsync(db);
+        settlement.Buildings.Add(new PlacedBuildingEntity { Q = 1, R = 0, Type = BuildingType.Bridge, Level = 3 });
+        settlement.Buildings.Add(new PlacedBuildingEntity { Q = 2, R = 0, Type = BuildingType.Bridge, Level = 4 });
+        settlement.Queue.Add(Order(1, 4, T0.AddHours(-1)));
+        settlement.Queue.Add(Order(2, 3, T0.AddHours(-1), BuildOrderKind.Raze));
+        await db.SaveChangesAsync(Ct);
+
+        var index = await WorldBridges.IndexAsync(db, world.Id, _ => Terrain.Grass, T0, Ct);
+
+        var stranger = Guid.NewGuid();
+        Assert.Null(index.CrossingCost(new HexCoord(1, 0), stranger));
+        Assert.Equal(1.5, index.CrossingCost(new HexCoord(2, 0), stranger));
+        Assert.Equal(1.5, index.CrossingCost(new HexCoord(1, 0), WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id)));
+    }
+
+    [Fact]
+    public async Task Chained_orders_an_order_without_a_row_and_a_raze_that_would_raise_follow_the_settle_rules()
+    {
+        await using var db = CreateContext();
+        var (world, settlement) = await SeedWorldAsync(db);
+        // Hex 1: no row at all, an order to 2 then one to 3. Hex 2: already lowered to 1 by a siege, a raze to 2 never raises it.
+        settlement.Buildings.Add(new PlacedBuildingEntity { Q = 2, R = 0, Type = BuildingType.Bridge, Level = 1 });
+        settlement.Queue.Add(Order(1, 2, T0.AddHours(-2)));
+        settlement.Queue.Add(Order(1, 3, T0.AddHours(-1)));
+        settlement.Queue.Add(Order(2, 2, T0.AddHours(-1), BuildOrderKind.Raze));
+        await db.SaveChangesAsync(Ct);
+
+        var walker = Guid.NewGuid();
+        var between = await WorldBridges.IndexAsync(db, world.Id, _ => Terrain.Grass, T0.AddMinutes(-90), Ct);
+        Assert.Equal(4.0, between.CrossingCost(new HexCoord(1, 0), walker));
+        var now = await WorldBridges.IndexAsync(db, world.Id, _ => Terrain.Grass, T0, Ct);
+        Assert.Equal(1.5, now.CrossingCost(new HexCoord(1, 0), walker));
+        Assert.Equal(1.0 + HexPathfinder.CausewayCrossingCost, now.CrossingCost(new HexCoord(2, 0), walker));
+    }
+
+    [Fact]
+    public async Task Two_settlements_with_a_bridge_row_on_one_hex_do_not_break_the_timeline()
+    {
+        await using var db = CreateContext();
+        var (world, settlement) = await SeedWorldAsync(db);
+        var other = new SettlementEntity
+        {
+            WorldId = world.Id, IslandId = settlement.IslandId, Name = "H2", OwnerName = "O2", OwnerId = settlement.UserId.ToString(), UserId = settlement.UserId,
+            CentreQ = 5, CentreR = 5,
+        };
+        settlement.Buildings.Add(new PlacedBuildingEntity { Q = 1, R = 0, Type = BuildingType.Bridge, Level = 1 });
+        other.Buildings.Add(new PlacedBuildingEntity { Q = 1, R = 0, Type = BuildingType.Bridge, Level = 2 });
+        db.Settlements.Add(other);
+        await db.SaveChangesAsync(Ct);
+
+        var timeline = await WorldBridges.TimelineAsync(db, world.Id, Ct);
+
+        Assert.Single(timeline);
     }
 }

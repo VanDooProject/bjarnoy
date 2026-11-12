@@ -14,6 +14,7 @@ import { useI18n } from 'vue-i18n';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { useCoversMap } from '../../composables/useMapCover';
 import { MOBILE_MODAL_QUERY } from '../../lib/breakpoints';
+import { closeModalRoute } from '../../lib/modalRoute';
 import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{
@@ -39,23 +40,9 @@ useCoversMap(isMobile);
 
 const panelEl = ref<HTMLElement | null>(null);
 
-// Closing: if we got here from an in-app navigation (history.state.
-// backgroundView set, and it's genuinely the page we came from — history.
-// state.back matches it), going back lands exactly where the player was,
-// scroll position and all. Otherwise (direct load, reload, a link opened in
-// a new tab) there is nothing to go "back" to, so replace with the
-// background view instead of leaving a stray modal-route entry in history.
+// Closing is lib/modalRoute.ts's closeModalRoute: history-back when we came from the background view, else a replace.
 function close() {
-  // Via the router's own history object, not the global `window.history` —
-  // works the same way against a `createMemoryHistory` router in tests. See
-  // lib/modalRoute.ts's own comment.
-  const state = router.options.history.state as { backgroundView?: unknown; back?: unknown };
-  const backgroundView = typeof state.backgroundView === 'string' ? state.backgroundView : null;
-  if (backgroundView && state.back === backgroundView) {
-    router.back();
-  } else {
-    router.replace(backgroundView ?? '/settlement');
-  }
+  closeModalRoute(router);
 }
 
 defineExpose({ close });

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Services;
@@ -110,6 +111,34 @@ public sealed class CampReportOwnershipEndpointFilter : IEndpointFilter
             context.HttpContext, [report.SettlementId], realms, context.HttpContext.RequestAborted);
 
         return refusal ?? await next(context);
+    }
+}
+
+/// <summary>
+/// The army-report sibling of <see cref="CampReportOwnershipEndpointFilter"/>: an army report belongs to the player
+/// (<c>ArmyReportEntity.OwnerId</c>/<c>UserId</c>, the same pair a settlement carries), not to a settlement, so only
+/// that player may read it. Fits <c>ArmyEndpoints.GetArmyReport</c>.
+/// </summary>
+public sealed class ArmyReportOwnershipEndpointFilter : IEndpointFilter
+{
+    public async ValueTask<object?> InvokeAsync(
+        EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(next);
+
+        var reportId = context.GetArgument<Guid>(0);
+
+        var reports = context.HttpContext.RequestServices.GetRequiredService<ArmyReportService>();
+        var report = await reports.GetAsync(reportId, context.HttpContext.RequestAborted);
+        if (report is null)
+        {
+            return await next(context);
+        }
+
+        return OwnershipGate.Owns(context.HttpContext, report.UserId, report.OwnerId)
+            ? await next(context)
+            : OwnershipGate.Refuse();
     }
 }
 
@@ -338,10 +367,25 @@ internal static class OwnershipGate
             return Guid.TryParse(idClaim, out var callerId) && callerId == settlementUserId;
         }
 
-        var headerOwnerId = httpContext.Request.Headers[OwnerIdHeaderName].ToString();
-        return !string.IsNullOrEmpty(headerOwnerId) && headerOwnerId == settlementOwnerId;
+        var callerOwnerId = CallerOwnerId(httpContext);
+        return !string.IsNullOrEmpty(callerOwnerId) && callerOwnerId == settlementOwnerId;
     }
 
-    private static IResult Refuse() =>
+    /// <summary>
+    /// The client-local id the caller proves an anonymous settlement with. A browser sends it as
+    /// <see cref="OwnerIdHeaderName"/>; an API key request never does: whatever header it sends is ignored, and it
+    /// only ever acts as the anonymous identity an admin granted the key (<see cref="ApiKeyContext.ActingAnonymousOwnerId"/>),
+    /// so a key cannot reach anonymous settlements it was not given.
+    /// </summary>
+    internal static string? CallerOwnerId(HttpContext httpContext)
+    {
+        ArgumentNullException.ThrowIfNull(httpContext);
+
+        return ApiKeyContext.From(httpContext) is { } key
+            ? key.ActingAnonymousOwnerId
+            : httpContext.Request.Headers[OwnerIdHeaderName].ToString();
+    }
+
+    internal static IResult Refuse() =>
         Results.Json(new AuthErrorResponse("not_owner"), statusCode: StatusCodes.Status403Forbidden);
 }

@@ -7,6 +7,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -96,6 +97,81 @@ public sealed class AdminUserEndpointsTests(SqliteApiFixture fixture) : IClassFi
 
         var playerResponse = await player.GetAsync("/api/v1/admin/users", Ct);
         Assert.Equal(HttpStatusCode.Forbidden, playerResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Lookup_finds_accounts_by_user_name_settlement_and_jarl_and_anonymous_players_without_their_owner_id()
+    {
+        using var client = _fixture.CreateClient();
+        var (userName, _, userId) = await CreatePlayerAsync(client);
+        var (_, _, otherId) = await CreatePlayerAsync(client);
+        var (adminToken, _) = await CreateAdminAsync(client);
+        Authorize(client, adminToken);
+
+        var stamp = Guid.CreateVersion7().ToString("N")[..10];
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var world = await _fixture.Factory.CreateWorldAsync($"lookup-{stamp}", 21, 40, cancellationToken: Ct);
+            var islandId = (await db.Islands.FirstAsync(i => i.WorldId == world.Id, Ct)).Id;
+            db.Settlements.Add(new SettlementEntity
+            {
+                WorldId = world.Id,
+                IslandId = islandId,
+                UserId = userId,
+                Name = $"Hafenstad{stamp}",
+                OwnerName = $"Jarl Ragnvald{stamp}",
+                OwnerId = $"o-{stamp}-1",
+                CentreQ = 0,
+                CentreR = 0,
+                FoundedAt = DateTimeOffset.UnixEpoch,
+            });
+            db.Settlements.Add(new SettlementEntity
+            {
+                WorldId = world.Id,
+                IslandId = islandId,
+                UserId = SystemUserIds.Abandoned,
+                Name = $"Ruine{stamp}",
+                OwnerName = $"Verlassen{stamp}",
+                OwnerId = $"o-{stamp}-2",
+                CentreQ = 1,
+                CentreR = 1,
+                FoundedAt = DateTimeOffset.UnixEpoch,
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        async Task<IReadOnlyList<AdminUserLookupResponse>> Lookup(string q)
+        {
+            var response = await client.GetAsync($"/api/v1/admin/users/lookup?q={Uri.EscapeDataString(q)}", Ct);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            return await response.ReadStrictAsync<IReadOnlyList<AdminUserLookupResponse>>(Ct);
+        }
+
+        var byUser = await Lookup(userName.ToUpperInvariant());
+        Assert.Contains(byUser, m => m.UserId == userId && m.Via == "user");
+        Assert.DoesNotContain(byUser, m => m.UserId == otherId);
+
+        var bySettlement = await Lookup($"hafenstad{stamp}");
+        var settlementHit = Assert.Single(bySettlement);
+        Assert.Equal(userId, settlementHit.UserId);
+        Assert.Equal("settlement", settlementHit.Via);
+        Assert.Equal($"Hafenstad{stamp}", settlementHit.MatchedName);
+
+        var byJarl = await Lookup($"ragnvald{stamp}");
+        var jarlHit = Assert.Single(byJarl);
+        Assert.Equal(userId, jarlHit.UserId);
+        Assert.Equal("jarl", jarlHit.Via);
+
+        // A player without an account is found too: by settlement id, never by their client-local owner id.
+        var anonymousHit = Assert.Single(await Lookup($"verlassen{stamp}"));
+        Assert.Equal("anonymous", anonymousHit.Kind);
+        Assert.Null(anonymousHit.UserId);
+        Assert.Equal("jarl", anonymousHit.Via);
+        Assert.Equal($"Verlassen{stamp}", anonymousHit.UserName);
+        Assert.NotNull(anonymousHit.SettlementId);
+        Assert.DoesNotContain($"o-{stamp}-2", await (await client.GetAsync($"/api/v1/admin/users/lookup?q=verlassen{stamp}", Ct)).Content.ReadAsStringAsync(Ct));
+        Assert.Empty(await Lookup("x"));
     }
 
     [Fact]
@@ -194,8 +270,7 @@ public sealed class AdminUserEndpointsTests(SqliteApiFixture fixture) : IClassFi
         var worldResponse = await _fixture.Factory.CreateWorldAsync(
             UniqueName("world"), seed: 4242, radius: 30, maxPlayers: 100, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldResponse.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldResponse.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 

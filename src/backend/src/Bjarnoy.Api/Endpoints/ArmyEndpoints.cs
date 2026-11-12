@@ -3,6 +3,7 @@ using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
+using Bjarnoy.Api.Hosting;
 using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Units;
@@ -29,6 +30,7 @@ public static class ArmyEndpoints
 
         settlements.MapPost("/{settlementId:guid}/armies", Dispatch)
             .WithName("DispatchArmy")
+            .RequireRateLimiting(RoutePlanningRateLimitOptions.PolicyName)
             .WithSummary("Dispatches units from a settlement's garrison on a move mission.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
@@ -57,6 +59,7 @@ public static class ArmyEndpoints
 
         settlements.MapPost("/{settlementId:guid}/guests/{armyId:guid}/send-home", SendGuestHome)
             .WithName("SendGuestArmyHome")
+            .RequireRateLimiting(RoutePlanningRateLimitOptions.PolicyName)
             .WithSummary("Sends a guest (support) army stationed at this settlement back home — the host's recall.")
             // Host owner only: the guest's own owner recalls through
             // RecallArmy. 204 with no body, since the guest's full
@@ -85,6 +88,7 @@ public static class ArmyEndpoints
 
         armies.MapPost("/{armyId:guid}/recall", Recall)
             .WithName("RecallArmy")
+            .RequireRateLimiting(RoutePlanningRateLimitOptions.PolicyName)
             .WithSummary("Turns an army around mid-journey to head home early.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireArmyOwner()
@@ -93,7 +97,8 @@ public static class ArmyEndpoints
 
         armies.MapPost("/{armyId:guid}/orders", FieldOrder)
             .WithName("FieldOrderArmy")
-            .WithSummary("Sends an army already out in the field onward to a new hex (issue #156 phase 1) — 'move on' if it's standing, 'append goal' if it's still travelling.")
+            .RequireRateLimiting(RoutePlanningRateLimitOptions.PolicyName)
+            .WithSummary("Sends an army already out in the field onward on a move, attack, support, hunt or raid (issue #156) — 'move on' if it's standing, 'append goal' if it's still travelling. A standing army can send only part of itself; the response is the army that left.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireArmyOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>()
@@ -101,6 +106,7 @@ public static class ArmyEndpoints
 
         armies.MapPost("/{armyId:guid}/retarget-founding", RetargetFounding)
             .WithName("RetargetFoundingConvoy")
+            .RequireRateLimiting(RoutePlanningRateLimitOptions.PolicyName)
             .WithSummary("Redirects an in-transit or parked founding convoy to a different target hex (issue #55).")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireArmyOwner()
@@ -143,6 +149,17 @@ public static class ArmyEndpoints
             .WithSummary("Lists wildlife camp reports of a settlement, newest first.")
             .RequireSettlementOwner();
 
+        reports.MapGet("/army-reports/{reportId:guid}", GetArmyReport)
+            .WithName("GetArmyReport")
+            .WithSummary("Fetches one army report (army stuck, army starved) by id.")
+            // Only the player the report belongs to.
+            .RequireArmyReportOwner();
+
+        reports.MapGet("/worlds/{worldId:guid}/army-reports", ListArmyReportsForPlayer)
+            .WithName("ListWorldArmyReports")
+            .WithSummary("Lists the caller's own army reports in a world, newest first.")
+            .RequireCallerRealm();
+
         return app;
     }
 
@@ -155,21 +172,50 @@ public static class ArmyEndpoints
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var unitStacks = new List<UnitStack>();
-        foreach (var unit in request.Units)
+        // Group by spot (the same spot listed twice merges), parsing units and dropping all-zero entries.
+        var bySpot = new List<(HexCoord Spot, List<UnitStack> Stacks)>();
+        foreach (var group in request.From)
         {
-            if (!TryParseUnit(unit.Unit, out var type))
+            var spot = group.Spot.ToHexCoord();
+            var stacks = new List<UnitStack>();
+            foreach (var unit in group.Units)
             {
-                return TypedResults.BadRequest(new ProblemDetails
+                if (!TryParseUnit(unit.Unit, out var type))
                 {
-                    Title = "Unknown unit.",
-                    Detail = $"'{unit.Unit}' is not a unit. "
-                        + $"Valid: {string.Join(", ", UnitCatalogue.AllTypes.Select(t => t.ToWireName()))}.",
-                    Status = StatusCodes.Status400BadRequest,
-                });
+                    return TypedResults.BadRequest(new ProblemDetails
+                    {
+                        Title = "Unknown unit.",
+                        Detail = $"'{unit.Unit}' is not a unit. "
+                            + $"Valid: {string.Join(", ", UnitCatalogue.AllTypes.Select(t => t.ToWireName()))}.",
+                        Status = StatusCodes.Status400BadRequest,
+                    });
+                }
+
+                if (unit.Count > 0)
+                {
+                    stacks.Add(new UnitStack(type, unit.Count));
+                }
             }
 
-            unitStacks.Add(new UnitStack(type, unit.Count));
+            if (stacks.Count == 0)
+            {
+                continue;
+            }
+
+            var existing = bySpot.FindIndex(e => e.Spot == spot);
+            if (existing >= 0)
+            {
+                bySpot[existing].Stacks.AddRange(stacks);
+            }
+            else
+            {
+                bySpot.Add((spot, stacks));
+            }
+        }
+
+        if (bySpot.Count == 0)
+        {
+            return TypedResults.Conflict(Problem(DispatchRejection.NoUnitsRequested));
         }
 
         if (!TryParseMission(request.Mission, out var mission))
@@ -177,7 +223,7 @@ public static class ArmyEndpoints
             return TypedResults.BadRequest(new ProblemDetails
             {
                 Title = "Unknown mission.",
-                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid, found, hunt.",
+                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid, found, hunt, setupcamp.",
                 Status = StatusCodes.Status400BadRequest,
             });
         }
@@ -186,7 +232,7 @@ public static class ArmyEndpoints
         var destination = request.Destination?.ToHexCoord();
 
         var result = await armies.DispatchAsync(
-            settlementId, unitStacks, waypoints, destination, request.Provisions,
+            settlementId, [.. bySpot.Select(g => (g.Spot, (IReadOnlyList<UnitStack>)g.Stacks))], waypoints, destination, request.Provisions,
             mission, request.TargetSettlementId, request.TargetBuildingCoord?.ToHexCoord(), cancellationToken);
 
         if (result.WorldPaused)
@@ -318,7 +364,8 @@ public static class ArmyEndpoints
     /// <summary>
     /// The 409 body for a recall that was understood but cannot happen, or
     /// null when it did not conflict — the one place the texts are written,
-    /// for <see cref="Recall"/> and <see cref="SendGuestHome"/>.
+    /// for <see cref="Recall"/> and <see cref="SendGuestHome"/>. Carries the
+    /// outcome as the <c>rejection</c> code the frontend translates.
     /// </summary>
     private static ProblemDetails? RecallConflict(RecallResult result) => result.Outcome switch
     {
@@ -327,12 +374,14 @@ public static class ArmyEndpoints
             Title = "Nothing to recall.",
             Detail = "The army is already heading home.",
             Status = StatusCodes.Status409Conflict,
+            Extensions = { ["rejection"] = nameof(RecallOutcome.NothingToRecall) },
         },
         RecallOutcome.NoRouteHome => new ProblemDetails
         {
             Title = "No route home.",
             Detail = "The army cannot be recalled: no route home exists from where it currently is.",
             Status = StatusCodes.Status409Conflict,
+            Extensions = { ["rejection"] = nameof(RecallOutcome.NoRouteHome) },
         },
         _ => null,
     };
@@ -373,7 +422,10 @@ public static class ArmyEndpoints
 
         var found = await armies.GetAsync(armyId, cancellationToken);
         var (entity, clock) = found!.Value;
-        return TypedResults.Ok(ArmyResponse.From(entity!, clock.ToGameTime(time.GetUtcNow())));
+
+        // An army recalled while it stands on its home spot (a group of a gathering that stands on its own spot) is home again at
+        // once and folded into the garrison by the read above: the answer is the army as it was recalled.
+        return TypedResults.Ok(ArmyResponse.From(entity ?? result.Army!, clock.ToGameTime(time.GetUtcNow())));
     }
 
     private static async Task<Results<Ok<ArmyResponse>, NotFound, Conflict<ProblemDetails>>> RetargetFounding(
@@ -418,7 +470,7 @@ public static class ArmyEndpoints
         return TypedResults.Ok(ArmyResponse.From(entity!, clock.ToGameTime(time.GetUtcNow())));
     }
 
-    private static async Task<Results<Ok<ArmyResponse>, NotFound, Conflict<ProblemDetails>>> FieldOrder(
+    private static async Task<Results<Ok<ArmyResponse>, NotFound, BadRequest<ProblemDetails>, Conflict<ProblemDetails>>> FieldOrder(
         Guid armyId,
         FieldOrderRequest request,
         ClaimsPrincipal principal,
@@ -428,8 +480,39 @@ public static class ArmyEndpoints
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        if (!TryParseMission(request.Mission, out var mission))
+        {
+            return TypedResults.BadRequest(new ProblemDetails
+            {
+                Title = "Unknown mission.",
+                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid, hunt.",
+                Status = StatusCodes.Status400BadRequest,
+            });
+        }
+
+        List<UnitStack>? unitStacks = null;
+        if (request.Units is not null)
+        {
+            unitStacks = [];
+            foreach (var unit in request.Units)
+            {
+                if (!TryParseUnit(unit.Unit, out var type))
+                {
+                    return TypedResults.BadRequest(new ProblemDetails
+                    {
+                        Title = "Unknown unit.",
+                        Detail = $"'{unit.Unit}' is not a unit. "
+                            + $"Valid: {string.Join(", ", UnitCatalogue.AllTypes.Select(t => t.ToWireName()))}.",
+                        Status = StatusCodes.Status400BadRequest,
+                    });
+                }
+
+                unitStacks.Add(new UnitStack(type, unit.Count));
+            }
+        }
+
         var waypoints = (request.Waypoints ?? []).Select(w => w.ToHexCoord()).ToList();
-        var destination = request.Destination.ToHexCoord();
+        var destination = request.Destination?.ToHexCoord();
 
         // Anonymous play is a real, ordinary caller here (same as every other
         // army endpoint) — GetIsPremiumAsync has nothing to check for one, so
@@ -439,7 +522,9 @@ public static class ArmyEndpoints
             : null;
         Guid? callerUserId = Guid.TryParse(idClaim, out var parsed) ? parsed : null;
 
-        var result = await armies.FieldOrderAsync(armyId, waypoints, destination, callerUserId, cancellationToken);
+        var result = await armies.FieldOrderAsync(
+            armyId, waypoints, destination, callerUserId, mission, request.TargetSettlementId,
+            request.TargetBuildingCoord?.ToHexCoord(), unitStacks, cancellationToken);
 
         if (result.ArmyNotFound)
         {
@@ -451,13 +536,20 @@ public static class ArmyEndpoints
             return TypedResults.Conflict(FieldOrderProblem(result.Rejection));
         }
 
-        var found = await armies.GetAsync(armyId, cancellationToken);
+        // The army that left: the new army when only part of a standing one was sent.
+        var found = await armies.GetAsync(result.Army!.Id, cancellationToken);
         var (entity, clock) = found!.Value;
         return TypedResults.Ok(ArmyResponse.From(entity!, clock.ToGameTime(time.GetUtcNow())));
     }
 
     /// <summary>Why a land army has no route: mountains and wide rivers stop it (streams and open land do not).</summary>
     private const string NoLandRoute = "No land route: mountains and wide rivers can't be crossed.";
+
+    /// <summary>Why a fleet has no route: the water it sails is cut off from the target.</summary>
+    private const string NoSeaRoute = "No sea route: the ships can't reach that by water.";
+
+    /// <summary>The route search gave up: the trip is too long to plan, so a shorter one has to be picked.</summary>
+    private const string RouteTooLong = "That trip is too long to plan. Choose a closer destination.";
 
     private static ProblemDetails FieldOrderProblem(FieldOrderRejection rejection)
     {
@@ -469,14 +561,40 @@ public static class ArmyEndpoints
                 FieldOrderRejection.NoActiveJourney =>
                     "This army has nowhere to extend from — it's at home, supporting, already heading home, or arrived home during this settle.",
                 FieldOrderRejection.MissionNotFieldOrderable =>
-                    "Only a move (or a founding convoy standing at its target) can be field-ordered.",
+                    "Only an army on a move (or a founding convoy standing at its target) can take a field order; one that is attacking, hunting, supporting or raiding has to finish that or be recalled.",
+                FieldOrderRejection.MissionNotAllowed =>
+                    "A field order can be a move, attack, support, hunt or raid; a founding convoy is redirected with its own retarget.",
+                FieldOrderRejection.DestinationRequired => "A move or hunt order requires a destination.",
+                FieldOrderRejection.TargetSettlementRequired => "This mission requires a target settlement.",
+                FieldOrderRejection.TargetSettlementNotFound => "The target settlement does not exist.",
+                FieldOrderRejection.CannotAttackOwnSettlement => "An army cannot attack its own settlement.",
+                FieldOrderRejection.CannotSupportOwnSettlement => "An army cannot support its own settlement.",
+                FieldOrderRejection.NoCampAtDestination => "No wildlife camp stands on the destination hex.",
+                FieldOrderRejection.HuntRequiresLandUnits => "A fleet needs land troops aboard to hunt a camp on land.",
+                FieldOrderRejection.HuntRequiresFleet => "Only ships can hunt a camp at sea (the whale road); land units cannot reach it.",
+                FieldOrderRejection.TargetBuildingRequiresAttackMission =>
+                    "A target building may only be given for an attack, raid or support mission.",
+                FieldOrderRejection.FleetTargetBuildingRequired =>
+                    "A fleet must be sent at one building on the target settlement's shore.",
+                FieldOrderRejection.FleetTargetBuildingNotOnShore =>
+                    "That building is not on the target settlement's shore, so a fleet cannot reach it.",
+                FieldOrderRejection.SupportSpotRequired => "A support order must name a garrison spot of the target to join.",
+                FieldOrderRejection.SupportSpotCannotHold => "That hex is not a garrison spot of the target that can hold every unit of the army.",
+                FieldOrderRejection.InsufficientShipCapacity =>
+                    "The ships would not have enough slots for the troops aboard (for a split, each part needs ships for its own troops).",
+                FieldOrderRejection.SplitRequiresStandingArmy =>
+                    "Only an army standing at its destination can send part of itself; one still marching moves as a whole.",
+                FieldOrderRejection.InvalidUnitSelection =>
+                    "The chosen units must be at least one unit, of types and numbers the army actually has.",
                 FieldOrderRejection.DestinationNotLand => "The destination is not land; sea pathing is not supported yet.",
                 FieldOrderRejection.DestinationNotSea => "The destination is not sea; fleets can only path over water.",
                 FieldOrderRejection.WaypointNotLand => "A waypoint is not land; sea pathing is not supported yet.",
                 FieldOrderRejection.WaypointNotSea => "A waypoint is not sea; fleets can only path over water.",
                 FieldOrderRejection.UnreachableLeg => NoLandRoute,
+                FieldOrderRejection.NoSeaRoute => NoSeaRoute,
+                FieldOrderRejection.RouteTooLong => RouteTooLong,
                 FieldOrderRejection.InsufficientProvisionsForRoundTrip =>
-                    "The provisions remaining would not cover the round trip to the new destination.",
+                    "The provisions remaining (for a split, the share that goes with the leaving units) would not cover the round trip to the new destination.",
                 FieldOrderRejection.PremiumRequired =>
                     "Waypoints on a field order, and continuing a march already under way, require a premium account.",
                 _ => "Refused.",
@@ -515,9 +633,10 @@ public static class ArmyEndpoints
         CancellationToken cancellationToken)
     {
         var report = await reports.GetAsync(reportId, cancellationToken);
-        return report is null
-            ? TypedResults.NotFound()
-            : TypedResults.Ok(FieldBattleReportResponse.From(report));
+        if (report is null) return TypedResults.NotFound();
+
+        var names = await reports.GetSideNamesAsync([report], cancellationToken);
+        return TypedResults.Ok(FieldBattleReportResponse.From(report, names));
     }
 
     private static async Task<Ok<IReadOnlyList<FieldBattleReportResponse>>> ListFieldReportsForSettlement(
@@ -526,7 +645,8 @@ public static class ArmyEndpoints
         CancellationToken cancellationToken)
     {
         var entities = await reports.GetForSettlementAsync(settlementId, cancellationToken);
-        IReadOnlyList<FieldBattleReportResponse> response = [.. entities.Select(FieldBattleReportResponse.From)];
+        var names = await reports.GetSideNamesAsync(entities, cancellationToken);
+        IReadOnlyList<FieldBattleReportResponse> response = [.. entities.Select(e => FieldBattleReportResponse.From(e, names))];
         return TypedResults.Ok(response);
     }
 
@@ -548,6 +668,35 @@ public static class ArmyEndpoints
     {
         var entities = await reports.GetForSettlementAsync(settlementId, cancellationToken);
         IReadOnlyList<CampReportResponse> response = [.. entities.Select(CampReportResponse.From)];
+        return TypedResults.Ok(response);
+    }
+
+    private static async Task<Results<Ok<ArmyReportResponse>, NotFound>> GetArmyReport(
+        Guid reportId,
+        ArmyReportService reports,
+        CancellationToken cancellationToken)
+    {
+        var report = await reports.GetAsync(reportId, cancellationToken);
+        return report is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(ArmyReportResponse.From(report));
+    }
+
+    private static async Task<Ok<IReadOnlyList<ArmyReportResponse>>> ListArmyReportsForPlayer(
+        Guid worldId,
+        HttpContext httpContext,
+        ArmyReportService reports,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<ArmyReportResponse>>([]);
+        }
+
+        var entities = await reports.GetForPlayerAsync(worldId, realm.OwnerId!, cancellationToken);
+        IReadOnlyList<ArmyReportResponse> response = [.. entities.Select(ArmyReportResponse.From)];
         return TypedResults.Ok(response);
     }
 
@@ -590,6 +739,12 @@ public static class ArmyEndpoints
             return true;
         }
 
+        if (string.Equals(value, "setupcamp", StringComparison.OrdinalIgnoreCase))
+        {
+            mission = ArmyMission.SetUpCamp;
+            return true;
+        }
+
         mission = default;
         return false;
     }
@@ -619,12 +774,17 @@ public static class ArmyEndpoints
             Detail = rejection switch
             {
                 DispatchRejection.NoUnitsRequested => "At least one unit must be requested.",
-                DispatchRejection.InsufficientGarrison => "The garrison does not hold that many of one or more requested unit types.",
+                DispatchRejection.InsufficientGarrison => "The garrison spot does not hold that many of one or more requested unit types.",
+                DispatchRejection.NotAGarrisonSpot => "The hex is not a garrison spot (longhouse, tower or dock) of the settlement.",
+                DispatchRejection.SupportSpotRequired => "A support mission must name a garrison spot of the target to join.",
+                DispatchRejection.SupportSpotCannotHold => "That hex is not a garrison spot of the target that can hold every unit of the army.",
                 DispatchRejection.ProvisionsExceedCarryCapacity => "The requested provisions exceed what these units can carry.",
                 DispatchRejection.InsufficientResources => "Not enough food to load the requested provisions (some may be reserved for queued construction).",
                 DispatchRejection.DestinationNotLand => "The destination is not land; sea pathing is not supported yet.",
                 DispatchRejection.WaypointNotLand => "A waypoint is not land; sea pathing is not supported yet.",
                 DispatchRejection.UnreachableLeg => NoLandRoute,
+                DispatchRejection.NoSeaRoute => NoSeaRoute,
+                DispatchRejection.RouteTooLong => RouteTooLong,
                 DispatchRejection.InsufficientProvisionsForRoundTrip =>
                     "The loaded provisions would not cover the full round trip's upkeep.",
                 DispatchRejection.TargetSettlementRequired => "This mission requires a target settlement.",
@@ -649,8 +809,13 @@ public static class ArmyEndpoints
                 DispatchRejection.TargetHexNotFoundable =>
                     "The target hex is too close to an already-claimed settlement's border.",
                 DispatchRejection.NoCampAtDestination => "No wildlife camp stands on the destination hex.",
-                DispatchRejection.HuntRequiresLandUnits => "Ships cannot hunt a camp on land; only land units can.",
+                DispatchRejection.HuntRequiresLandUnits => "A fleet needs land troops aboard to hunt a camp on land.",
                 DispatchRejection.HuntRequiresFleet => "Only ships can hunt a camp at sea (the whale road); land units cannot reach it.",
+                DispatchRejection.WrongCampBuilderCount =>
+                    $"A beach camp mission requires exactly {BeachCamp.RequiredBuilders} camp builders, no more, no fewer.",
+                DispatchRejection.CampSiteNotSandShore => "A beach camp can only be set up on a sand hex on the shore.",
+                DispatchRejection.CampSiteNotFree =>
+                    "That hex is taken: a building, a settlement, a wildlife camp or a giant stands on it.",
                 _ => "Refused.",
             },
             Status = StatusCodes.Status409Conflict,

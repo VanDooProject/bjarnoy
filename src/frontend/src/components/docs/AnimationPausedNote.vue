@@ -12,7 +12,7 @@ import { animationPreference } from '../../lib/perf/animationPreference';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-/** Why the docs' clock is held, or null when it runs - the same rule as `useAnimationClock`'s `clockShouldRun`. */
+/** Why the docs' clock is held, or null when it runs - the reasons behind `animationPreference.clipsEnabled` being false. */
 const reason = computed<'off' | 'reducedMotion' | 'saveData' | null>(() => {
   const setting = animationPreference.setting;
   if (setting === 'on') return null;

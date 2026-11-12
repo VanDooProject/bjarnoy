@@ -10,6 +10,7 @@ using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -53,8 +54,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     {
         var world = await _factory.CreateWorldAsync(Unique("w"), seed, radius, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
@@ -121,8 +121,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         using var client = Client();
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
 
         var response = await client.PostJsonAsync(
@@ -140,8 +139,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         // there leaves every land dispatch without a way home, so the founding path filters them out.
         using var client = Client();
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 1);
         var onRiver = island.StartPositions[0];
         var dry = island.StartPositions[1];
@@ -174,8 +172,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         using var client = Client();
         var (worldId, settlement) = await FoundAsync(client);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         var island = islands!.First(i => i.Id == settlement.IslandId);
 
         var again = await client.PostJsonAsync(
@@ -197,8 +194,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         using var client = Client();
         var (worldId, settlement) = await FoundAsync(client);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         // A different island's start position: still a legal plot on its own,
         // so only the per-player rule (checked ahead of spacing) can refuse it.
         var island = islands!.First(i => i.Id != settlement.IslandId && i.StartPositions.Count > 0);
@@ -228,8 +224,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         using var client = Client();
         var (worldId, settlement) = await FoundAsync(client);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         // A different island entirely, so this can never collide with the
         // spacing rule — only the per-player uniqueness this test targets.
         var island = islands!.First(i => i.Id != settlement.IslandId && i.StartPositions.Count > 0);
@@ -261,8 +256,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         // start position that close to the first — the cross-island case below.
         var world = await _factory.CreateWorldAsync(Unique("w"), 31, 300, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
         // Two start positions on the very same island, closer together than
         // MinimumSpacing — with an island's start positions this dense
@@ -355,8 +349,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         using var client = Client();
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
         // Two start positions on the same island, far enough apart that the
         // cheap phase-1 filter (MinimumSpacing, longhouse-only) alone would
@@ -890,6 +883,33 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_building_catalogue_reports_where_each_building_sits_in_the_ring_and_its_bog_and_river_rules()
+    {
+        using var client = Client();
+
+        var catalogue = await client.GetFromJsonAsync<List<BuildingDefinitionResponse>>(
+            "/api/v1/buildings?level=1", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.NotNull(catalogue);
+        BuildingDefinitionResponse Of(string type) => catalogue.Single(d => d.Type == type);
+
+        Assert.Null(Of("longhouse").RingCategory);
+        Assert.Equal("defense", Of("tower").RingCategory);
+        Assert.Equal(["bog"], Of("tower").AlsoOnBogKinds);
+        Assert.Equal("military", Of("smithy").RingCategory);
+        Assert.Equal(["grass"], Of("smithy").AllowedTerrain);
+        Assert.Equal(["creek"], Of("hammerschmiede").RequiresBogKinds);
+        Assert.Equal(["half"], Of("fishinghut").LakeShoreKinds);
+        Assert.Equal(["bend", "bend60", "straight"], Of("sawmill").RequiresRiverShapes);
+        Assert.Equal(["loop"], Of("sawmill").ExcludedRiverVariants);
+        Assert.Equal(["straight"], Of("cropmill").RequiresRiverShapes);
+        Assert.True(Of("quarry").NewPlacementDisabled);
+        Assert.False(Of("farm").NewPlacementDisabled);
+        Assert.True(Of("palisade").AlsoOnCoastalWater);
+        Assert.False(Of("palisadegate").AlsoOnCoastalWater);
+    }
+
+    [Fact]
     public async Task The_building_catalogue_reports_cross_building_prerequisites()
     {
         using var client = Client();
@@ -934,8 +954,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         // player would use, not hard-coded.
         var world = await _factory.CreateWorldAsync(Unique("w"), 1, 60, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
         TileCoordinate? start = null;
         HexCoord waterCoord = default;
@@ -1419,6 +1438,89 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             Ct);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    // ---------------------------------------------------------------- razing
+
+    private Task<HttpResponseMessage> RazeAsync(HttpClient client, Guid settlementId, int q, int r) =>
+        client.PostJsonAsync($"/api/v1/settlements/{settlementId}/razes", new RazeBuildingRequest(q, r), Ct);
+
+    [Fact]
+    public async Task A_razed_building_keeps_working_until_the_raze_finishes_then_is_gone_and_pays_a_third_back()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        var built = await QueueFarmAsync(client, settlement);
+        Assert.NotNull(built);
+        _factory.Time.Advance(TimeSpan.FromHours(2));
+
+        var standing = await GetAsync(client, settlement.Id);
+        Assert.Contains(standing!.Buildings, b => b.Q == built!.Q && b.R == built.R && b.Level == 1);
+        var woodBefore = standing.Resources.Stock.Wood;
+
+        var response = await RazeAsync(client, settlement.Id, built!.Q, built.R);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var order = await response.ReadStrictAsync<BuildOrderResponse>(Ct);
+        Assert.Equal("raze", order.Kind);
+        Assert.Equal(0, order.TargetLevel);
+        Assert.Equal("building", order.State);
+
+        // Free, and the building stands at its level while the order runs.
+        var during = await GetAsync(client, settlement.Id);
+        var queued = Assert.Single(during!.Queue);
+        Assert.Equal("raze", queued.Kind);
+        Assert.Contains(during.Buildings, b => b.Q == built.Q && b.R == built.R && b.Level == 1);
+        Assert.True(during.Resources.Stock.Wood >= woodBefore);
+
+        _factory.Time.Advance(TimeSpan.FromHours(2));
+        var after = await GetAsync(client, settlement.Id);
+
+        Assert.Empty(after!.Queue);
+        Assert.DoesNotContain(after.Buildings, b => b.Q == built.Q && b.R == built.R);
+        Assert.True(after.Resources.RatePerHour.Food < during.Resources.RatePerHour.Food);
+    }
+
+    [Fact]
+    public async Task Razing_the_longhouse_or_an_empty_hex_is_a_409_with_a_machine_readable_rejection()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+
+        var longhouse = await RazeAsync(client, settlement.Id, settlement.Q, settlement.R);
+        Assert.Equal(HttpStatusCode.Conflict, longhouse.StatusCode);
+        Assert.Equal("LonghouseCannotBeRazed", await longhouse.RejectionAsync(Ct));
+
+        var empty = await RazeAsync(client, settlement.Id, settlement.Q + 1, settlement.R);
+        Assert.Equal(HttpStatusCode.Conflict, empty.StatusCode);
+        Assert.Equal("NoBuildingOnHex", await empty.RejectionAsync(Ct));
+    }
+
+    [Fact]
+    public async Task A_hex_with_a_raze_queued_refuses_a_second_one_and_cancelling_the_raze_leaves_the_building()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        var built = await QueueFarmAsync(client, settlement);
+        Assert.NotNull(built);
+        _factory.Time.Advance(TimeSpan.FromHours(2));
+
+        var woodBefore = (await GetAsync(client, settlement.Id))!.Resources.Stock.Wood;
+        var first = await RazeAsync(client, settlement.Id, built!.Q, built.R);
+        Assert.Equal(HttpStatusCode.Accepted, first.StatusCode);
+        var order = await first.ReadStrictAsync<BuildOrderResponse>(Ct);
+
+        var second = await RazeAsync(client, settlement.Id, built.Q, built.R);
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        Assert.Equal("AlreadyQueuedOnHex", await second.RejectionAsync(Ct));
+
+        var cancel = await client.PostAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds/{order.Id}/cancel", content: null, Ct);
+        Assert.Equal(HttpStatusCode.NoContent, cancel.StatusCode);
+
+        var after = await GetAsync(client, settlement.Id);
+        Assert.Empty(after!.Queue);
+        Assert.Contains(after.Buildings, b => b.Q == built.Q && b.R == built.R && b.Level == 1);
+        Assert.Equal(woodBefore, after.Resources.Stock.Wood, 0);
     }
 
     // ---------------------------------------------------------------- helpers

@@ -49,6 +49,11 @@
     "DestinationNotLand": "The destination must be on land.",
     "WaypointNotLand": "A waypoint must be on land.",
     "UnreachableLeg": "No land route: mountains and wide rivers can't be crossed.",
+    "NoSeaRoute": "No sea route: the ships can't reach that by water.",
+    "RouteTooLong": "That trip is too long. Choose a closer destination.",
+    "NothingToRecall": "The army is already heading home.",
+    "NoRouteHome": "No route home from where the army is now.",
+    "RouteRateLimited": "Too many marching orders at once. Wait a moment and try again.",
     "TargetNotReachable": "No land route: mountains and wide rivers can't be crossed.",
     "InsufficientProvisionsForRoundTrip": "Not enough provisions for the round trip.",
     "TargetSettlementRequired": "A target settlement is required for that mission.",
@@ -67,6 +72,9 @@
     "TargetHexNotFoundable": "That hex can't be founded on.",
     "NoActiveJourney": "This army isn't currently travelling.",
     "MissionNotFieldOrderable": "This army's mission can't be redirected.",
+    "MissionNotAllowed": "That mission can't be given as a field order.",
+    "SplitRequiresStandingArmy": "Only an army that is standing can be split. A marching army moves whole.",
+    "InvalidUnitSelection": "Pick at least one unit, and no more than the army holds.",
     "PremiumRequired": "This action requires Premium.",
     "UnitNotAvailable": "That unit is not available at this longhouse level yet.",
     "TrainingQueueFull": "This building's training queue is full.",
@@ -86,9 +94,12 @@
     "NotCompleted": "That quest isn't completed yet.",
     "UnknownQuest": "There is no such quest.",
     "NoCampAtDestination": "There is no wildlife camp at that hex.",
-    "HuntRequiresLandUnits": "Ships cannot hunt a camp on land; send land units.",
+    "HuntRequiresLandUnits": "A fleet can only hunt a sand camp, and only with land troops aboard.",
     "HuntRequiresFleet": "Only ships can hunt a camp at sea; land units cannot reach it.",
     "HexOccupiedByCamp": "Wild beasts still hold that hex.",
-    "HexOccupiedByEndgameSite": "An Utgard wall or a jötun watchtower stands on that hex."
+    "HexOccupiedByEndgameSite": "An Utgard wall or a jötun watchtower stands on that hex.",
+    "WrongCampBuilderCount": "A beach camp needs exactly two camp builders.",
+    "CampSiteNotSandShore": "A beach camp can only go on a sand hex on the shore.",
+    "CampSiteNotFree": "That hex is taken: something already stands there."
   }
 }

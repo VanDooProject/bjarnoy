@@ -10,6 +10,7 @@ import type {
   AdminSettlementLayoutResponse,
   AdminUserActivityDetailResponse,
   AdminUserDetailResponse,
+  AdminUserLookupResponse,
   AdminUserResponse,
   AdminWorldResponse,
   ApiKeyFeatureInfo,
@@ -42,6 +43,7 @@ import type {
   GuildResponse,
   GuildTreatyResponse,
   IslandResponse,
+  IslandTerrainResponse,
   JoinableWorldResponse,
   LeaderboardBoardResponse,
   PagedAdminActivityUsersResponse,
@@ -84,10 +86,13 @@ import type {
   SetUserStatusRequest,
   SetWorldRunStateRequest,
   SettlementResponse,
+  TerrainChunkManifestResponse,
+  TerrainChunkResponse,
   SettlementViewResponse,
   SlotRuneRequest,
   SettlementSummary,
-  WorldWall,
+  RivalBuilding,
+  OwnBuildOrders,
   ShipmentResponse,
   SimulatorRequest,
   SimulatorResponse,
@@ -106,8 +111,10 @@ import type {
   WorldMembershipResponse,
   WorldResponse,
   WorldSummaryResponse,
+  ArmyReportResponse,
   CampReportResponse,
   CampStateResponse,
+  ForeignArmyResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -155,6 +162,14 @@ async function fetchOrThrow(method: string, path: string, init: RequestInit): Pr
  */
 export function isWorldNotFound(err: unknown): boolean {
   return err instanceof ApiError && err.problem?.error === 'world_not_found';
+}
+
+/**
+ * True for the 404 of a terrain chunk the world no longer has — see `WorldEndpoints.GetTerrainChunk`: the world was reseeded
+ * between reading the chunk manifest and the chunk, so the island list read next to it is stale too.
+ */
+export function isTerrainChunkNotFound(err: unknown): boolean {
+  return err instanceof ApiError && err.problem?.error === 'terrain_chunk_not_found';
 }
 
 /**
@@ -280,9 +295,26 @@ export const api = {
   // calls (e.g. getFogChunks/getPlotSuggestion below). 400s without it.
   getWorldMembership: (worldId: string, ownerId: string) =>
     request<WorldMembershipResponse>(`/worlds/${worldId}/membership`, { headers: ownerHeader(ownerId) }),
-  getWorldCamps: (worldId: string, islandId?: string) =>
-    request<CampStateResponse[]>(`/worlds/${worldId}/camps${islandId ? `?islandId=${encodeURIComponent(islandId)}` : ''}`),
-  getIslands: (worldId: string) => request<IslandResponse[]>(`/worlds/${worldId}/islands`),
+  // The camps of /islands and /camps are cut off to the islands the *caller* has seen, and an account-less player is
+  // identified by `X-Owner-Id` alone (CallerRealmResolver): without it the server answers no camps at all.
+  getWorldCamps: (worldId: string, ownerId?: string, islandId?: string) =>
+    request<CampStateResponse[]>(`/worlds/${worldId}/camps${islandId ? `?islandId=${encodeURIComponent(islandId)}` : ''}`, {
+      headers: ownerHeader(ownerId),
+    }),
+  getIslands: (worldId: string, ownerId?: string) =>
+    request<IslandResponse[]>(`/worlds/${worldId}/islands`, { headers: ownerHeader(ownerId) }),
+  // The river and bog tiles of every island, in island order: the manifest says how many chunks there are, then all chunks are
+  // read in parallel. The server sends them gzipped and cached (revalidated by ETag), so a repeat visit costs 304s.
+  getTerrainChunks: async (worldId: string): Promise<IslandTerrainResponse[]> => {
+    const manifest = await request<TerrainChunkManifestResponse>(`/worlds/${worldId}/terrain-chunks`);
+    const chunks = await Promise.all(
+      manifest.chunks.map((info) => request<TerrainChunkResponse>(`/worlds/${worldId}/terrain-chunks/${info.index}`)),
+    );
+    return chunks.flatMap((chunk) => chunk.islands);
+  },
+  // Cut to the *caller's* sight like /camps: an account-less player is identified by `X-Owner-Id` alone.
+  getForeignArmies: (worldId: string, ownerId?: string) =>
+    request<ForeignArmyResponse[]>(`/worlds/${worldId}/foreign-armies`, { headers: ownerHeader(ownerId) }),
   foundSettlement: (worldId: string, body: FoundSettlementRequest) =>
     request<SettlementResponse>(`/worlds/${worldId}/settlements`, {
       method: 'POST',
@@ -294,10 +326,12 @@ export const api = {
   // anonymous caller with no realm at all) just gets an empty list back.
   listSettlements: (worldId: string, ownerId?: string) =>
     request<SettlementSummary[]>(`/worlds/${worldId}/settlements`, { headers: ownerHeader(ownerId) }),
-  // Every standing palisade/gate hex of the rival settlements the caller has explored (their own walls excluded) — same fog rule
-  // and X-Owner-Id handling as `listSettlements`, so the live client can draw, hit-test and route around other players' walls.
-  listWalls: (worldId: string, ownerId?: string) =>
-    request<WorldWall[]>(`/worlds/${worldId}/walls`, { headers: ownerHeader(ownerId) }),
+  listRivalBuildings: (worldId: string, ownerId?: string) =>
+    request<RivalBuilding[]>(`/worlds/${worldId}/rival-buildings`, { headers: ownerHeader(ownerId) }),
+  listOwnBuildOrders: (worldId: string, ownerId?: string) =>
+    request<OwnBuildOrders[]>(`/worlds/${worldId}/own-build-orders`, { headers: ownerHeader(ownerId) }),
+  listOwnBuildings: (worldId: string, ownerId?: string) =>
+    request<RivalBuilding[]>(`/worlds/${worldId}/own-buildings`, { headers: ownerHeader(ownerId) }),
   // `ownerId` becomes the `X-Owner-Id` header the backend's ownership
   // filter reads for an anonymous (unclaimed) settlement — see
   // SettlementOwnershipEndpointFilter. Harmless to omit or send stale for a
@@ -314,6 +348,14 @@ export const api = {
     request<SettlementViewResponse>(`/settlements/${settlementId}/view`, { headers: ownerHeader(ownerId) }),
   queueBuild: (settlementId: string, body: QueueBuildRequest, ownerId?: string) =>
     request<unknown>(`/settlements/${settlementId}/builds`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
+    }),
+  // Razes one level of the building on a hex (docs/design/construction-slots.md, "Razing"): an order like a build, cancellable
+  // through cancelBuild. Same ownership proof as queueBuild.
+  razeBuilding: (settlementId: string, body: { q: number; r: number }, ownerId?: string) =>
+    request<unknown>(`/settlements/${settlementId}/razes`, {
       method: 'POST',
       body: JSON.stringify(body),
       headers: ownerHeader(ownerId),
@@ -393,6 +435,12 @@ export const api = {
     request<FeastResponse>(`/settlements/${settlementId}/feast`, {
       method: 'POST',
       body: JSON.stringify({}),
+      headers: ownerHeader(ownerId),
+    }),
+  renameSettlement: (settlementId: string, name: string, ownerId?: string) =>
+    request<SettlementResponse>(`/settlements/${settlementId}/name`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
       headers: ownerHeader(ownerId),
     }),
   claimQuest: (settlementId: string, questId: string, ownerId?: string) =>
@@ -496,6 +544,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  adminLookupUsers: (q: string, signal?: AbortSignal) =>
+    request<AdminUserLookupResponse[]>(`/admin/users/lookup?q=${encodeURIComponent(q)}&limit=10`, { signal }),
   adminListUsers: (params?: { search?: string; status?: string; page?: number; pageSize?: number }) => {
     const query = new URLSearchParams();
     if (params?.search) query.set('search', params.search);
@@ -710,6 +760,11 @@ export const api = {
     request<CampReportResponse>(`/camp-reports/${reportId}`, { headers: ownerHeader(ownerId) }),
   getSettlementCampReports: (settlementId: string, ownerId?: string) =>
     request<CampReportResponse[]>(`/settlements/${settlementId}/camp-reports`, { headers: ownerHeader(ownerId) }),
+  // Army reports (army stuck / army starved) belong to the player: listed per world by the caller's own realm, no settlement id.
+  getArmyReport: (reportId: string, ownerId?: string) =>
+    request<ArmyReportResponse>(`/army-reports/${reportId}`, { headers: ownerHeader(ownerId) }),
+  getWorldArmyReports: (worldId: string, ownerId?: string) =>
+    request<ArmyReportResponse[]>(`/worlds/${worldId}/army-reports`, { headers: ownerHeader(ownerId) }),
   getMyLeaderboardRank: (
     worldId: string,
     scope: LeaderboardScope,

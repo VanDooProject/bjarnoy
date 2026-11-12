@@ -20,11 +20,13 @@ import { unitName } from '../../i18n/catalogueNames';
 import GuestList from './GuestList.vue';
 import { useWorldStore } from '../../stores/world';
 import { useTrainingOrders } from '../../composables/useQueueOrders';
+import { useHudPanelContent } from '../../composables/useHudPanelContent';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const orders = useTrainingOrders();
+const { garrison: hasContent } = useHudPanelContent();
 
 const garrison = computed(() =>
   world.hud.garrison
@@ -36,17 +38,15 @@ const garrison = computed(() =>
 // the host's view (`GET /settlements/{id}/guests`, fetched alongside
 // `world.armies` — see world.ts's `refreshArmies`), with a "Send home" per
 // row (GuestList.vue, shared with QueueDrawer). Shown as a small section
-// under Garrison rather than a separate HUD panel: most screen corners are
-// already taken (BuildQueuePanel top-left, this panel top-right, ArmyPanel
-// bottom-right), and a guest garrison is close kin to "who's standing at
+// under Garrison rather than a separate HUD panel: a guest garrison is close kin to "who's standing at
 // home" shown just above it.
 const guestCount = computed(() => world.guestArmies.length);
 </script>
 
 <template>
-  <div v-if="orders.length || garrison.length || guestCount" class="status-card training-queue-panel">
+  <div v-if="hasContent" class="status-card training-queue-panel" data-testid="garrison-panel">
     <template v-if="orders.length">
-      <div class="status-card-header">
+      <div class="status-card-header" data-dock-handle>
         <span class="status-card-title">{{ t('hud.trainingQueue.title') }}</span>
         <span class="status-card-count">{{ t('hud.trainingQueue.orders', { count: orders.length }) }}</span>
       </div>
@@ -68,7 +68,7 @@ const guestCount = computed(() => world.guestArmies.length);
     </template>
 
     <div class="garrison" :class="{ 'has-orders-above': orders.length }">
-      <div class="status-card-header">
+      <div class="status-card-header" :data-dock-handle="orders.length ? undefined : ''">
         <span class="status-card-title">{{ t('hud.trainingQueue.garrison') }}</span>
       </div>
       <div v-if="garrison.length" class="garrison-grid">
@@ -99,42 +99,12 @@ const guestCount = computed(() => world.guestArmies.length);
   color: var(--muted);
 }
 /*
- * `.status-card`/`.status-row`/`.status-progress`/`.status-subtext`/
- * `.status-card-header`/`.status-card-title`/`.status-card-count` are
- * intentionally mirrored from BuildQueuePanel.vue's scoped styles (Vue
- * scoped styles don't leak across components) rather than shared, so both
- * panels stay visually identical without introducing a cross-component CSS
- * dependency for four small rulesets.
+ * The card box and its header (`.status-card`, `.status-card-header/-title/-count`) are shared in style.css; only this panel's
+ * place is set here. `.status-row`/`.status-progress`/`.status-subtext` are still mirrored from BuildQueuePanel.vue.
  */
 .status-card {
-  position: absolute;
   right: 16px;
   top: 76px;
-  z-index: 10;
-  width: 240px;
-  padding: 14px 15px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 0;
-}
-.status-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--panel-border);
-}
-.status-card-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text);
-}
-.status-card-count {
-  font-size: 12px;
-  color: var(--muted);
 }
 .status-row {
   padding: 8px 0;

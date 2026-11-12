@@ -8,7 +8,7 @@ const mountPage = (props: { locale?: 'en' | 'de'; loadFraction?: number } = {}) 
 const map = (w: ReturnType<typeof mountPage>) => w.get('[data-testid="landing-map"]');
 
 describe('LandingPage', () => {
-  it('shows the title, the tagline and the three feature cards in English and German', () => {
+  it('shows the title, the tagline and the three feature rows in English and German', () => {
     const en = mountPage();
     expect(en.get('h1').text()).toBe('BJARNØY');
     expect(en.text()).toContain('A saga of the north, played together.');
@@ -18,6 +18,13 @@ describe('LandingPage', () => {
     expect(de.findAll('.usp').map((c) => c.find('b').text())).toEqual(['Mehrspieler', 'Kein Pay-to-Win', 'Werbefrei']);
     expect(de.get('[data-testid="landing-hear"]').text()).toBe('Saga anhören');
     expect(de.get('[data-testid="landing-muted"]').text()).toBe('oder ohne Ton abspielen');
+  });
+
+  it('renders the Impressum link in both languages', () => {
+    const en = mountPage().get('[data-testid="landing-impressum"]');
+    expect(en.attributes('href')).toBe('/impressum');
+    expect(en.text()).toBe('Impressum');
+    expect(mountPage({ locale: 'de' }).get('[data-testid="landing-impressum"]').text()).toBe('Impressum');
   });
 
   it('emits hear and muted from the two saga buttons', async () => {

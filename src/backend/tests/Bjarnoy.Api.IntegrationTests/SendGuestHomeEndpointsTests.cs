@@ -132,11 +132,18 @@ public sealed class SendGuestHomeEndpointsTests : IAsyncLifetime
             DepartedAt = now,
             Path = [new HexPoint(0, 0)],
             CumulativeHours = [0],
+            EdgeHours = [0],
             IsReturning = false,
             Stacks = [new ArmyUnitStackEntity { UnitType = UnitType.Spearman, Count = count }],
         };
         return await WithDbAsync(async db =>
         {
+            var host = await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == hostSettlementId, Ct);
+            army.TargetBuildingQ = host.CentreQ;
+            army.TargetBuildingR = host.CentreR;
+            var guestHome = await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == guestHomeSettlementId, Ct);
+            army.HomeSpotQ = guestHome.CentreQ;
+            army.HomeSpotR = guestHome.CentreR;
             db.Armies.Add(army);
             await db.SaveChangesAsync(Ct);
             return army.Id;
@@ -215,8 +222,10 @@ public sealed class SendGuestHomeEndpointsTests : IAsyncLifetime
                 DepartedAt = _factory.Time.GetUtcNow(),
                 Path = [new HexPoint(0, 0), new HexPoint(5, 0)],
                 CumulativeHours = [0, 10],
+                EdgeHours = [0, 10],
                 ReturnPath = [new HexPoint(5, 0), new HexPoint(0, 0)],
                 ReturnCumulativeHours = [0, 10],
+                ReturnEdgeHours = [0, 10],
                 TurnAroundAt = _factory.Time.GetUtcNow() + TimeSpan.FromHours(100),
                 Stacks = [new ArmyUnitStackEntity { UnitType = UnitType.Spearman, Count = 5 }],
             };

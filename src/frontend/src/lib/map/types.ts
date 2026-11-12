@@ -371,7 +371,8 @@ export interface Tile {
     | 'palisade'
     | 'palisadegate'
     | 'bridge'
-    | 'siegeworkshop';
+    | 'siegeworkshop'
+    | 'beachcamp';
   buildingLevel?: number;
   /**
    * The building on this hex stands outside its owner's realm (`PlacedBuildingResponse.outsideRealmSince` is set): it has no
@@ -478,6 +479,14 @@ export interface Settlement {
   realmId?: string;
   /** Which island (see `IslandLabel`) this settlement sits on, live mode only — used to gold-highlight the player's own island on the world map. */
   islandId?: string;
+  /** Live mode: how the owner stands to the player when not the player (`guild` = same guild, `treaty` = guild with an active peace treaty). Absent = own or rival, decided by `ownerId`. */
+  relation?: 'guild' | 'treaty';
+  /**
+   * Live mode: the hex the server says the label goes on (the centre for an own settlement and a rival whose centre is explored,
+   * else the explored building of a rival closest to its centre). Absent (demo, docs examples) = the centre. Read through
+   * `WorldModel.labelHexOf`.
+   */
+  labelAt?: { q: number; r: number };
 }
 
 /**

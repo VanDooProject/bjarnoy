@@ -3,6 +3,7 @@ using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
+using Bjarnoy.Domain.World;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
@@ -81,7 +82,7 @@ public static class SettlerEndpoints
             .. entities
                 // One entry per linked realm: the switcher lists the oldest member only.
                 .Where(s => s.UserId == userId && labels[s.Id].RealmId == s.Id)
-                .Select(s => SettlementSummary.From(s, mine: true, labels[s.Id])),
+                .Select(s => SettlementSummary.From(s, mine: true, labels[s.Id], SettlementRelations.Mine, new HexCoord(s.CentreQ, s.CentreR))),
         ];
 
         return TypedResults.Ok(response);

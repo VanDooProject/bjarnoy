@@ -1,4 +1,20 @@
 {
+  "focusHome": "Zurück zu deiner Siedlung",
+  "settlementMenu": {
+    "toggle": "Siedlungsmenü",
+    "goTo": "Zu {name}",
+    "rename": "Umbenennen …",
+    "realms": "Deine Reiche",
+    "longhouse": "Langhaus {level}"
+  },
+  "settlementRename": {
+    "label": "Name der Siedlung",
+    "tooShort": "Mindestens {min} Zeichen",
+    "tooLong": "Höchstens {max} Zeichen",
+    "failed": "Die Siedlung konnte nicht umbenannt werden.",
+    "save": "Speichern",
+    "cancel": "Abbrechen"
+  },
   "nav": {
     "settlement": "Siedlung",
     "leaderboards": "Ranglisten",
@@ -32,7 +48,7 @@
     "toggle": "Mehr anzeigen"
   },
   "realmPanel": {
-    "levelHexesShort": "Lv {level} · {count} Hexfelder"
+    "levelShort": "Lv {level}"
   },
   "hoverTooltip": {
     "level": "STUFE {level}",
@@ -94,6 +110,12 @@
   "ringMenu": {
     "shrineLimitLock": "Dein Gebiet hat bereits einen Schrein",
     "storageHouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
+    "occupiedLock": {
+      "giant": "Von einem Riesenwahrzeichen belegt",
+      "camp": "Hier hausen wilde Tiere – räum erst ihr Lager",
+      "fenrirBrood": "Fenrirs Brut wächst immer nach – hier kannst du nichts bauen",
+      "endgameSite": "Hier steht eine Utgardmauer oder ein Jötunn-Wachturm"
+    },
     "palisadeLock": {
       "branch": "Eine Mauer verzweigt sich nie: Dieses Feld hätte drei Nachbarn der Mauer",
       "gateNotStraight": "Ein Tor steht nur zwischen zwei gegenüberliegenden Mauerfeldern in einer geraden Mauer",
@@ -101,6 +123,9 @@
       "seaEnd": "Das Seeende braucht genau eine Landmauer daneben",
       "occupied": "Hier steht schon eine Mauer",
       "terrain": "Auf diesem Gelände kann keine Mauer stehen"
+    },
+    "riverLock": {
+      "tooCurved": "Der Fluss macht hier zu viel Kurve: Du brauchst ein geraderes Flussstück"
     },
     "bridgeLock": {
       "notWide": "Dieser Fluss ist nicht breit: Armeen waten ohnehin hindurch",
@@ -122,27 +147,26 @@
       "combatNotImplemented": "Kampf ist noch nicht implementiert",
       "landHere": "Hier landen",
       "sendSettlers": "Siedler entsenden",
-      "noSettlersYet": "Du hast noch keine verfügbaren Siedler",
+      "foundNeedsSettlers": "{have} / {need} Siedler daheim",
+      "foundNeedsRenown": "Ruhm {total} / {required}",
+      "foundRenownUnknown": "Dein Ruhm wird geprüft …",
+      "setUpCamp": "Strandlager errichten",
+      "campNeedsBuilders": "{have} / {need} Lagerbauer daheim",
       "sendArmyHere": "Armee hierher entsenden",
       "attack": "Angreifen",
-      "support": "Unterstützen",
-      "noUnitsAtHome": "Keine Einheiten daheim",
       "upgrade": "Ausbauen",
       "notEnough": "Benötigt {resources}",
       "raze": "Abreißen",
       "cantRazeLonghouse": "Das Langhaus kann nicht abgerissen werden",
-      "notWiredYet": "Noch nicht mit dem Backend verbunden",
       "trainUnits": "Einheiten ausbilden",
       "feasts": "Feste",
       "build": "Bauen",
-      "giantOccupied": "Von einem Riesenwahrzeichen belegt",
       "hunt": "Jagen",
-      "campOccupied": "Von wilden Tieren belegt",
       "maxLevel": "Höchste Stufe",
-      "noLandUnitsAtHome": "Keine Landeinheiten zu Hause",
-      "noShipsAtHome": "Keine Schiffe zu Hause",
       "siege": "Belagern",
-      "noRamAtHome": "Braucht einen Rammbock zu Hause"
+      "noRamAtHome": "Braucht einen Rammbock zu Hause",
+      "hexBusy": "Auf diesem Feld läuft schon ein Auftrag",
+      "storageTooSmall": "Lager zu klein"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "STF {level} · HEX {q}, {r}",
@@ -162,17 +186,29 @@
       "queueFull": "Die Warteschlange ist voll ({waiting} von {max})",
       "badgeNoResources": "Nicht genug Rohstoffe",
       "badgeNoSlot": "Kein freier Bauplatz",
-      "requiresBuilding": "Benötigt {building} Stufe {level}"
+      "requiresBuilding": "Benötigt {building} Stufe {level}",
+      "razeTitle": "Abriss auf Stufe {level}",
+      "razeTitleRemove": "Abreißen",
+      "razeSubRemove": "{building} · Stufe 1 → weg",
+      "razeBadge": "ABRISS MÖGLICH",
+      "campTitle": "Strandlager errichten",
+      "campSub": "Zwei Lagerbauer bauen es auf",
+      "campBadge": "HIER MÖGLICH"
     },
     "tap": {
       "build": "{name} noch einmal antippen, um zu bauen",
-      "upgrade": "{name} noch einmal antippen, um auszubauen"
+      "upgrade": "{name} noch einmal antippen, um auszubauen",
+      "raze": "{name} noch einmal antippen, um abzureißen"
     },
     "errors": {
+      "couldNotSwitchRealm": "Der Wechsel in dieses Reich ist fehlgeschlagen.",
       "couldNotQueueBuild": "Der Bau konnte nicht eingereiht werden.",
-      "couldNotQueueUpgrade": "Der Ausbau konnte nicht eingereiht werden."
+      "couldNotQueueUpgrade": "Der Ausbau konnte nicht eingereiht werden.",
+      "couldNotQueueRaze": "Der Abriss konnte nicht eingereiht werden."
     },
-    "towerCampWarning": "Wilde Tiere brennen diesen Turm nieder, wenn keine Armee ihn bewacht."
+    "towerCampWarning": "Wilde Tiere brennen diesen Turm nieder, wenn keine Armee ihn bewacht.",
+    "razeTime": "Abrisszeit",
+    "refund": "Rückerstattung"
   },
   "buildQueue": {
     "title": "Bau",
@@ -182,7 +218,9 @@
     "hexSubtext": "Hex {q}-{r}",
     "cancel": "✕",
     "cancelError": "Der Auftrag konnte nicht storniert werden.",
-    "reservedFooter": "Reserviert für laufende Bauaufträge: {wood}H {stone}S {food}N {iron}E"
+    "reservedFooter": "Reserviert für laufende Bauaufträge: {wood}H {stone}S {food}N {iron}E",
+    "razeOrderName": "Abriss {name} → {level}",
+    "razeRemoveOrderName": "Abriss {name}"
   },
   "trainingQueue": {
     "title": "Ausbildung",
@@ -230,15 +268,7 @@
     "slotHere": "Hier einsetzen",
     "slotRuneError": "Die Rune konnte nicht eingesetzt werden — sie ist möglicherweise bereits eingesetzt, oder dieser Schrein hat keinen freien Platz.",
     "unslotRuneError": "Die Rune konnte nicht entfernt werden.",
-    "queuedNote": "In der Warteschlange — wartet auf einen Bauplatz.",
-    "upgradeCost": "Ausbaukosten",
     "notEnoughResources": "Nicht genügend Ressourcen verfügbar (einige sind eventuell für laufende Bauaufträge reserviert).",
-    "premiumRequired": "Jeder Bauplatz ist belegt, und dieses Konto hat keine Warteschlange als Rückgriff — das ist eine {premium}-Funktion.",
-    "premium": "Premium",
-    "queuing": "Wird eingereiht…",
-    "noFreeSlotPremium": "Kein freier Platz — Premium erforderlich",
-    "queueBuild": "Bau einreihen",
-    "upgradeToLevel": "Auf Stufe {level} ausbauen",
     "feastTitle": "Fest",
     "feastDesc": "Verwandle überschüssiges Holz, Stein und Essen in Ruhm. Die Kosten werden sofort bezahlt, der Ruhm kommt, wenn das Fest endet.",
     "feastCost": "Kosten",
@@ -286,27 +316,6 @@
     "train": "Ausbilden",
     "trainingFailed": "Ausbildung fehlgeschlagen."
   },
-  "expansionPanel": {
-    "title": "Expansion",
-    "renown": "Ruhm {total} / {required}",
-    "settlement": "Siedlung",
-    "settlersInGarrison": "Siedler in der Garnison",
-    "trainSettlers": "5 Siedler ausbilden",
-    "canFoundAnother": "Kann eine weitere Siedlung gründen",
-    "yes": "Ja",
-    "notYet": "Noch nicht",
-    "targetHex": "Zielhex",
-    "provisions": "Proviant (max. {max})",
-    "foundHere": "Siedlung hier gründen",
-    "settlerConvoy": "Siedlerkonvoi",
-    "recall": "Zurückrufen",
-    "retarget": "Neu ausrichten",
-    "confirm": "Bestätigen",
-    "trainingFailed": "Ausbildung fehlgeschlagen.",
-    "dispatchFailed": "Entsendung fehlgeschlagen.",
-    "recallFailed": "Rückruf fehlgeschlagen.",
-    "retargetFailed": "Neuausrichtung fehlgeschlagen."
-  },
   "battleReport": {
     "buildings": {
       "longhouse": "Langhaus",
@@ -319,7 +328,9 @@
       "reindeerherder": "Rentierhirte",
       "pumpkinfarm": "Kürbisfarm",
       "palisade": "Palisade",
-      "palisadegate": "Palisadentor"
+      "palisadegate": "Palisadentor",
+      "dockyard": "Werft",
+      "shrineofnjord": "Schrein des Njörd"
     },
     "missionAttack": "Angriff",
     "missionRaid": "Überfall",
@@ -343,7 +354,14 @@
     "lootTaken": "Beute",
     "settlementRazed": "Siedlung dem Erdboden gleichgemacht",
     "siege": "Belagerung",
-    "hexCoord": "Hex ({q}, {r})"
+    "hexCoord": "Hex ({q}, {r})",
+    "shipFight": "Schiffskampf",
+    "landFight": "Landkampf",
+    "noLandFight": "Es kam zu keinem Landkampf.",
+    "drowned": "Ertrunken",
+    "fireShips": "Brandschiffe",
+    "fireShipsBurned": "{n} Brandschiffe verbrannt",
+    "summaryDrowned": "{n} ertrunken"
   },
   "fieldBattleReport": {
     "title": "Feldschlacht",
@@ -360,7 +378,10 @@
     "summaryLost": "verloren, {n} verloren",
     "summaryTied": "unentschieden, {n} verloren",
     "summaryLooted": "{n} erbeutet",
-    "hexCoord": "Hex ({q}, {r})"
+    "hexCoord": "Hex ({q}, {r})",
+    "showOnMap": "Auf der Karte zeigen",
+    "location": "Ort",
+    "unknownOpponent": "Unbekannt"
   },
   "armyStatus": {
     "arriving": "Kommt an",
@@ -369,7 +390,17 @@
     "supporting": "Unterstützt",
     "returning": "Kehrt zurück",
     "inTransit": "Unterwegs",
-    "hunting": "Auf der Jagd"
+    "hunting": "Auf der Jagd",
+    "cannotGetHome": "Kein Weg nach Hause",
+    "starvesIn": "verhungert in {eta}",
+    "buildingCamp": "Baut das Strandlager, fertig um {time} Uhr"
+  },
+  "garrisonSpots": {
+    "longhouse": "Langhaus",
+    "tower": "Wachturm",
+    "dock": "Werft",
+    "beachcamp": "Strandlager",
+    "from": "aus: {spots}"
   },
   "armyPanel": {
     "title": "Armeen",
@@ -380,6 +411,7 @@
     "appendGoal": "Ziel anhängen",
     "moveOn": "Weiterziehen",
     "recalling": "Wird zurückgerufen…",
+    "recallFailed": "Rückruf fehlgeschlagen.",
     "recall": "Zurückrufen",
     "fieldOrderInstructions": "Klicke auf Hexfelder, um festzulegen, wohin diese Armee als Nächstes ziehen soll — der letzte Klick ist das neue Ziel. {count} {hexWord} geplant.",
     "hexWord": "Hexfeld | Hexfelder",
@@ -394,6 +426,8 @@
     "cancel": "Abbrechen",
     "sending": "Wird gesendet…",
     "confirmOrder": "Auftrag bestätigen",
+    "campInstructions": "Am letzten Feld der Route errichtest du das Strandlager. Zwei Lagerbauer ziehen los, Schiffe und Begleitschutz kannst du dazunehmen. Es kostet {cost} und ist {time} nach der Ankunft der Armee fertig.",
+    "foundInstructions": "Am letzten Feld der Route gründest du die Siedlung. Fünf Siedler ziehen los, Schiffe und Begleitschutz kannst du dazunehmen. Mit Schiffen segelt der Zug und landet am letzten Feld.",
     "dispatchInstructions": "Klicke auf Hexfelder, um eine Route zu planen — der letzte Klick ist das Ziel. {count} {hexWord} geplant.",
     "targetInstructions": "Wähle eine Siedlung zum {mission}, dann optional Hexfelder auf der Karte klicken, um eine Route dorthin zu planen. {count} {waypointWord} geplant.",
     "waypointWord": "Wegpunkt | Wegpunkte",
@@ -437,8 +471,41 @@
     "decrement": "−",
     "increment": "+"
   },
+  "sendPicker": {
+    "title": "{mission} → {target}",
+    "titleOwnRealm": "Armee entsenden → {target}",
+    "close": "Schließen",
+    "hex": "Feld ({q}, {r})",
+    "units": "{count} Einheit | {count} Einheiten",
+    "homeUnits": "Zu Hause · {count} Einheit | Zu Hause · {count} Einheiten",
+    "homeEmpty": "Zu Hause · keine Einheiten",
+    "armyStandingAt": "Armee · {count} Einheit bei ({q}, {r}) | Armee · {count} Einheiten bei ({q}, {r})",
+    "armyMarchingTo": "Armee · {count} Einheit auf dem Weg nach ({q}, {r}) | Armee · {count} Einheiten auf dem Weg nach ({q}, {r})",
+    "etaMinutes": "{minutes} Min.",
+    "etaHours": "{hours} Std. {minutes} Min.",
+    "wholeArmy": "Die ganze Armee zieht los.",
+    "splits": "Geteilt: {go} ziehen los, {stay} bleiben stehen.",
+    "pickOne": "Wähle mindestens eine Einheit.",
+    "reasons": {
+      "noUnitsAtHome": "Keine Einheiten zu Hause",
+      "noLandUnits": "Keine Landeinheiten",
+      "noShips": "Keine Schiffe",
+      "supportingNamed": "Unterstützt {name}, ruf sie erst zurück",
+      "supporting": "Unterstützt eine Siedlung, ruf sie erst zurück",
+      "returning": "Kehrt gerade heim",
+      "notOrderable": "Ist auf einem Auftrag und nimmt keine neuen Befehle an",
+      "premium": "Premium: Umleiten während des Marschs",
+      "unreachable": "Kommt dort nicht hin",
+      "noFood": "Proviant reicht nicht für den Rückweg",
+      "checking": "Route wird geprüft …"
+    }
+  },
   "tradeReport": {
     "summary": "Gab {gaveAmount} {gave} für {gotAmount} {got}"
+  },
+  "debugStack": {
+    "handle": "Debug",
+    "handleTitle": "Zum Verschieben ziehen, Doppelklick setzt zurück"
   },
   "fpsMeter": {
     "title": "Bildrate",
@@ -446,6 +513,8 @@
     "msPerFrame": "{n} ms/Bild",
     "worstFrame": "Schlechtestes Bild (letzte {seconds} s)",
     "ms": "{n} ms",
+    "average": "Durchschnitt (letzte {n} Bilder)",
+    "fpsValue": "{n} fps",
     "ago": "vor {n} s",
     "stutters": "Bilder über {threshold} ms",
     "sparkLabel": "Die letzten {n} Bildabstände",
@@ -510,5 +579,31 @@
     "towerBurned": "Der Turm bei ({q}, {r}) brannte nieder.",
     "towerHeld": "Der Turm bei ({q}, {r}) hielt stand.",
     "summary": "{title}: {lost} Einheiten verloren, {beasts} Tiere erlegt, {loot} Beute"
+  },
+  "buildingHud": {
+    "upgrade": "Ausbauen",
+    "needsLonghouse": "Langhaus {level}",
+    "needsBuilding": "{building} {level}",
+    "storage": "Lager zu klein",
+    "max": "Max",
+    "more": "+{n} weitere",
+    "moreShort": "+{n}",
+    "perHour": "/h",
+    "each": "je",
+    "feast": "Fest",
+    "duration": {
+      "hoursMinutes": "{hours} Std. {minutes} Min.",
+      "minutes": "{minutes} Min."
+    },
+    "markerLabel": "{building}, Stufe {level}",
+    "toggle": {
+      "label": "Gebäudeinfo (H)",
+      "title": "Gebäudeinfo ein- oder ausblenden (H)"
+    }
+  },
+  "panelColumn": {
+    "toggle": "{panel} ein- oder ausblenden",
+    "collapse": "{panel} einklappen",
+    "expand": "{panel} ausklappen"
   }
 }

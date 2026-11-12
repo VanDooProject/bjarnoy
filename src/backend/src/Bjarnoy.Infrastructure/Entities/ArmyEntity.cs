@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
@@ -29,7 +30,20 @@ public class ArmyEntity
 
     public SettlementEntity? Settlement { get; set; }
 
+    /// <summary>The hex of the garrison spot of <see cref="SettlementId"/> the army leaves from and returns to — <see cref="Army.HomeSpot"/>.</summary>
+    public int HomeSpotQ { get; set; }
+
+    public int HomeSpotR { get; set; }
+
     public int Mission { get; set; }
+
+    /// <summary>The gathering this army is a group of until it merges or leaves it — <see cref="Army.GatheringId"/>.</summary>
+    public Guid? GatheringId { get; set; }
+
+    public GatheringEntity? Gathering { get; set; }
+
+    /// <summary>When that gathering leaves — <see cref="Army.GatherDepartAt"/>; set and cleared together with <see cref="GatheringId"/>.</summary>
+    public DateTimeOffset? GatherDepartAt { get; set; }
 
     /// <summary>
     /// The settlement an <see cref="ArmyMission.Attack"/> army is headed to
@@ -52,7 +66,8 @@ public class ArmyEntity
 
     /// <summary>
     /// The building coordinate an <see cref="ArmyMission.Attack"/> army was
-    /// told to hit (issue #40 phase 5) — see <see cref="Army.TargetBuildingCoord"/>.
+    /// told to hit (issue #40 phase 5), or the host's garrison spot a <see cref="ArmyMission.Support"/> army joins — see
+    /// <see cref="Army.TargetBuildingCoord"/>.
     /// Null (both columns) means "no preference"; the two are always either
     /// both set or both null, never one alone.
     /// </summary>
@@ -100,22 +115,34 @@ public class ArmyEntity
 
     public List<double> CumulativeHours { get; set; } = [];
 
+    /// <summary>Persisted mirror of <see cref="Movement.EdgeHours"/>.</summary>
+    public List<double> EdgeHours { get; set; } = [];
+
     public List<HexPoint> ReturnPath { get; set; } = [];
 
     public List<double> ReturnCumulativeHours { get; set; } = [];
+
+    /// <summary>Persisted mirror of <see cref="Movement.ReturnEdgeHours"/>.</summary>
+    public List<double> ReturnEdgeHours { get; set; } = [];
 
     public DateTimeOffset TurnAroundAt { get; set; }
 
     public bool IsReturning { get; set; }
 
-    /// <summary>Persisted mirror of <see cref="Movement.RetreatImmune"/> (issue #206 §5).</summary>
-    public bool RetreatImmune { get; set; }
+    /// <summary>Persisted mirror of <see cref="Movement.FieldBattleImmuneUntil"/>; <see langword="null"/> unless the army is fleeing a lost field battle.</summary>
+    public DateTimeOffset? FieldBattleImmuneUntil { get; set; }
+
+    /// <summary>Persisted mirror of <see cref="Movement.IsStranded"/>: the army cannot get home and starves when its food runs out.</summary>
+    public bool IsStranded { get; set; }
+
+    /// <summary>Persisted mirror of <see cref="Movement.RoutePlannedAt"/>; <see langword="null"/> for a row stored before it was recorded.</summary>
+    public DateTimeOffset? RoutePlannedAt { get; set; }
 
     /// <summary>Rebuilds the domain aggregate from the stored columns.</summary>
     public Army ToDomain()
     {
         ArmyLocation location = IsSupporting
-            ? new ArmyLocation.Supporting(TargetSettlementId!.Value)
+            ? new ArmyLocation.Supporting(TargetSettlementId!.Value, new HexCoord(TargetBuildingQ!.Value, TargetBuildingR!.Value))
             : AtHome
                 ? new ArmyLocation.AtHome()
                 : new ArmyLocation.InTransit(new Movement
@@ -123,21 +150,28 @@ public class ArmyEntity
                     DepartedAt = DepartedAt,
                     Path = [.. Path.Select(p => new HexCoord(p.Q, p.R))],
                     CumulativeHours = CumulativeHours,
+                    EdgeHours = EdgeHours,
                     ReturnPath = [.. ReturnPath.Select(p => new HexCoord(p.Q, p.R))],
                     ReturnCumulativeHours = ReturnCumulativeHours,
+                    ReturnEdgeHours = ReturnEdgeHours,
                     TurnAroundAt = TurnAroundAt,
                     IsReturning = IsReturning,
-                    RetreatImmune = RetreatImmune,
+                    FieldBattleImmuneUntil = FieldBattleImmuneUntil,
+                    IsStranded = IsStranded,
+                    RoutePlannedAt = RoutePlannedAt,
                 });
 
         return new Army
         {
             Id = Id,
             SettlementId = SettlementId,
+            HomeSpot = new HexCoord(HomeSpotQ, HomeSpotR),
             Stacks = [.. Stacks.OrderBy(s => s.UnitType).Select(s => new UnitStack(s.UnitType, s.Count))],
             Location = location,
             Provisions = Provisions,
             Mission = (ArmyMission)Mission,
+            GatheringId = GatheringId,
+            GatherDepartAt = GatherDepartAt,
             TargetSettlementId = TargetSettlementId,
             TargetBuildingCoord = TargetBuildingQ is { } q ? new HexCoord(q, TargetBuildingR!.Value) : null,
             TargetCampCoord = TargetCampQ is { } cq ? new HexCoord(cq, TargetCampR!.Value) : null,
@@ -145,12 +179,45 @@ public class ArmyEntity
         };
     }
 
+    /// <summary>
+    /// Legs this entity finished since it was loaded (replaced route, arrival) that its columns no longer show: the ground
+    /// they crossed is saved as explored by <see cref="Bjarnoy.Infrastructure.World.ExploredAreaService.StageWalkedLegsAsync"/>
+    /// with the next save. Never persisted itself.
+    /// </summary>
+    [NotMapped]
+    public List<WalkedLeg> WalkedLegs { get; } = [];
+
+    /// <summary>
+    /// The leg stored on this entity ran its whole path and the army is about to be removed (folded into a garrison, founded a
+    /// settlement, wiped out at its destination), so ApplyDomain never sees the end of it.
+    /// </summary>
+    public void RecordWalkedToEnd()
+    {
+        if (IsInTransit && ToDomain().Location is ArmyLocation.InTransit { Movement: var leg })
+        {
+            WalkedLegs.Add(WalkedLeg.Full(leg));
+        }
+    }
+
+    // A freshly built entity (dispatch) has no stored leg yet.
+    private bool IsInTransit => !AtHome && !IsSupporting && Path.Count > 0;
+
     /// <summary>Writes a settled aggregate back onto the entity, reconciling the stack collection.</summary>
     public void ApplyDomain(Army army)
     {
         ArgumentNullException.ThrowIfNull(army);
 
+        if (IsInTransit && WalkedLeg.Between(ToDomain(), army) is { } walked)
+        {
+            WalkedLegs.Add(walked);
+        }
+
+        SettlementId = army.SettlementId;
+        HomeSpotQ = army.HomeSpot.Q;
+        HomeSpotR = army.HomeSpot.R;
         Mission = (int)army.Mission;
+        GatheringId = army.GatheringId;
+        GatherDepartAt = army.GatherDepartAt;
         TargetSettlementId = army.TargetSettlementId;
         TargetBuildingQ = army.TargetBuildingCoord?.Q;
         TargetBuildingR = army.TargetBuildingCoord?.R;
@@ -185,25 +252,35 @@ public class ArmyEntity
                 DepartedAt = default;
                 Path = [];
                 CumulativeHours = [];
+                EdgeHours = [];
                 ReturnPath = [];
                 ReturnCumulativeHours = [];
+                ReturnEdgeHours = [];
                 TurnAroundAt = default;
                 IsReturning = false;
-                RetreatImmune = false;
+                FieldBattleImmuneUntil = null;
+                IsStranded = false;
+                RoutePlannedAt = null;
                 break;
 
             case ArmyLocation.Supporting supporting:
                 AtHome = false;
                 IsSupporting = true;
                 TargetSettlementId = supporting.HostSettlementId;
+                TargetBuildingQ = supporting.Spot.Q;
+                TargetBuildingR = supporting.Spot.R;
                 DepartedAt = default;
                 Path = [];
                 CumulativeHours = [];
+                EdgeHours = [];
                 ReturnPath = [];
                 ReturnCumulativeHours = [];
+                ReturnEdgeHours = [];
                 TurnAroundAt = default;
                 IsReturning = false;
-                RetreatImmune = false;
+                FieldBattleImmuneUntil = null;
+                IsStranded = false;
+                RoutePlannedAt = null;
                 break;
 
             case ArmyLocation.InTransit inTransit:
@@ -213,11 +290,15 @@ public class ArmyEntity
                 DepartedAt = movement.DepartedAt;
                 Path = [.. movement.Path.Select(c => new HexPoint(c.Q, c.R))];
                 CumulativeHours = [.. movement.CumulativeHours];
+                EdgeHours = [.. movement.EdgeHours];
                 ReturnPath = [.. movement.ReturnPath.Select(c => new HexPoint(c.Q, c.R))];
                 ReturnCumulativeHours = [.. movement.ReturnCumulativeHours];
+                ReturnEdgeHours = [.. movement.ReturnEdgeHours];
                 TurnAroundAt = movement.TurnAroundAt;
                 IsReturning = movement.IsReturning;
-                RetreatImmune = movement.RetreatImmune;
+                FieldBattleImmuneUntil = movement.FieldBattleImmuneUntil;
+                IsStranded = movement.IsStranded;
+                RoutePlannedAt = movement.RoutePlannedAt;
                 break;
         }
     }

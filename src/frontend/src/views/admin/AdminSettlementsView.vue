@@ -22,12 +22,15 @@ const loadError = ref<string | null>(null);
 
 const owner = ref('');
 
-// The settlement currently expanded for management (grant/level forms), and
-// its full detail — fetched separately since the search row is a summary.
-const selectedId = ref<string | null>(null);
-const detail = ref<SettlementResponse | null>(null);
-const detailLoading = ref(false);
-const detailError = ref<string | null>(null);
+// Settlements currently expanded for management (grant/level forms), any number
+// at once, each with its full detail — fetched separately since the search row
+// is a summary.
+interface OpenPanel {
+  detail: SettlementResponse | null;
+  loading: boolean;
+  error: string | null;
+}
+const open = ref<Record<string, OpenPanel>>({});
 
 async function load() {
   // No world selected yet (worlds still loading, or none exist) — nothing to
@@ -92,9 +95,9 @@ function applySummary(updated: SettlementResponse) {
 }
 
 // Background world ticks (resource production, queues) keep changing the
-// open settlement's detail underneath the admin, so it's kept fresh on a
-// timer while a settlement is expanded, alongside a manual "Refresh" button
-// for an on-demand nudge. Stopped whenever nothing is selected/on unmount.
+// open settlements' detail underneath the admin, so they're kept fresh on a
+// timer while any is expanded, alongside a manual "Refresh" button for an
+// on-demand nudge. Stopped whenever nothing is open/on unmount.
 const DETAIL_POLL_MS = 10_000;
 let detailPollHandle: ReturnType<typeof setInterval> | null = null;
 
@@ -106,46 +109,54 @@ function stopDetailPolling() {
 }
 
 function startDetailPolling() {
-  stopDetailPolling();
-  detailPollHandle = setInterval(() => void refreshDetail(), DETAIL_POLL_MS);
+  if (detailPollHandle !== null) return;
+  detailPollHandle = setInterval(() => {
+    for (const id of Object.keys(open.value)) void refreshDetail(id);
+  }, DETAIL_POLL_MS);
 }
 
-async function refreshDetail() {
-  if (!selectedId.value || detailLoading.value) return;
+async function refreshDetail(id: string) {
+  const panel = open.value[id];
+  if (!panel || panel.loading) return;
   try {
-    const updated = await api.adminGetSettlement(selectedId.value);
-    detail.value = updated;
+    const updated = await api.adminGetSettlement(id);
+    if (!open.value[id]) return;
+    panel.detail = updated;
     applySummary(updated);
-    detailError.value = null;
+    panel.error = null;
   } catch (err) {
-    detailError.value = err instanceof ApiError ? err.message : t('adminSettlements.detailError');
+    if (open.value[id]) {
+      panel.error = err instanceof ApiError ? err.message : t('adminSettlements.detailError');
+    }
   }
 }
 
 async function manage(settlement: AdminSettlementSummary) {
-  if (selectedId.value === settlement.id) {
-    selectedId.value = null;
-    detail.value = null;
-    stopDetailPolling();
+  const id = settlement.id;
+  if (open.value[id]) {
+    delete open.value[id];
+    if (Object.keys(open.value).length === 0) stopDetailPolling();
     return;
   }
 
-  selectedId.value = settlement.id;
-  detail.value = null;
-  detailError.value = null;
-  detailLoading.value = true;
+  open.value[id] = { detail: null, loading: true, error: null };
+  const panel = open.value[id];
   try {
-    detail.value = await api.adminGetSettlement(settlement.id);
+    const loaded = await api.adminGetSettlement(id);
+    if (open.value[id]) panel.detail = loaded;
     startDetailPolling();
   } catch (err) {
-    detailError.value = err instanceof ApiError ? err.message : t('adminSettlements.detailError');
+    if (open.value[id]) {
+      panel.error = err instanceof ApiError ? err.message : t('adminSettlements.detailError');
+    }
   } finally {
-    detailLoading.value = false;
+    if (open.value[id]) panel.loading = false;
   }
 }
 
-function onChanged(updated: SettlementResponse) {
-  detail.value = updated;
+function onChanged(id: string, updated: SettlementResponse) {
+  const panel = open.value[id];
+  if (panel) panel.detail = updated;
   applySummary(updated);
 }
 
@@ -189,46 +200,49 @@ onBeforeUnmount(stopDetailPolling);
               <td>{{ settlement.longhouseLevel }}</td>
               <td>
                 <button
-                  v-if="selectedId === settlement.id"
-                  :disabled="detailLoading"
-                  @click="refreshDetail"
+                  v-if="open[settlement.id]"
+                  :disabled="open[settlement.id]!.loading"
+                  @click="refreshDetail(settlement.id)"
                 >
                   {{ $t('adminSettlements.actions.refresh') }}
                 </button>
                 <button @click="manage(settlement)">
-                  {{ selectedId === settlement.id ? $t('adminSettlements.actions.close') : $t('adminSettlements.actions.manage') }}
+                  {{ open[settlement.id] ? $t('adminSettlements.actions.close') : $t('adminSettlements.actions.manage') }}
                 </button>
               </td>
             </tr>
-            <tr v-if="selectedId === settlement.id" class="detail-row">
+            <tr v-if="open[settlement.id]" class="detail-row">
               <td colspan="6">
-                <p v-if="detailLoading">{{ $t('adminSettlements.loadingDetail') }}</p>
-                <p v-else-if="detailError" class="error">{{ detailError }}</p>
-                <div v-else-if="detail" class="detail">
-                  <div class="stocks">
-                    <span>{{ $t('adminSettlements.stocks.wood', { stock: Math.floor(detail.resources.stock.wood), capacity: Math.floor(detail.resources.capacity.wood) }) }}</span>
-                    <span>{{ $t('adminSettlements.stocks.stone', { stock: Math.floor(detail.resources.stock.stone), capacity: Math.floor(detail.resources.capacity.stone) }) }}</span>
-                    <span>{{ $t('adminSettlements.stocks.food', { stock: Math.floor(detail.resources.stock.food), capacity: Math.floor(detail.resources.capacity.food) }) }}</span>
-                    <span>{{ $t('adminSettlements.stocks.iron', { stock: Math.floor(detail.resources.stock.iron), capacity: Math.floor(detail.resources.capacity.iron) }) }}</span>
-                  </div>
-                  <div class="forms">
-                    <GrantResourcesForm
+                <p v-if="open[settlement.id]!.loading">{{ $t('adminSettlements.loadingDetail') }}</p>
+                <p v-else-if="open[settlement.id]!.error" class="error">{{ open[settlement.id]!.error }}</p>
+                <div v-else-if="open[settlement.id]!.detail" class="detail">
+                  <template v-for="detail in [open[settlement.id]!.detail!]" :key="detail.id">
+                    <div class="stocks">
+                      <span>{{ $t('adminSettlements.stocks.wood', { stock: Math.floor(detail.resources.stock.wood), capacity: Math.floor(detail.resources.capacity.wood) }) }}</span>
+                      <span>{{ $t('adminSettlements.stocks.stone', { stock: Math.floor(detail.resources.stock.stone), capacity: Math.floor(detail.resources.capacity.stone) }) }}</span>
+                      <span>{{ $t('adminSettlements.stocks.food', { stock: Math.floor(detail.resources.stock.food), capacity: Math.floor(detail.resources.capacity.food) }) }}</span>
+                      <span>{{ $t('adminSettlements.stocks.iron', { stock: Math.floor(detail.resources.stock.iron), capacity: Math.floor(detail.resources.capacity.iron) }) }}</span>
+                    </div>
+                    <div class="forms">
+                      <GrantResourcesForm
+                        :settlement-id="detail.id"
+                        :before="detail.resources.stock"
+                        @granted="onChanged(detail.id, $event)"
+                      />
+                      <GarrisonForm
+                        :settlement-id="detail.id"
+                        :garrison="detail.garrison"
+                        :spots="detail.garrisonSpots"
+                        @changed="onChanged(detail.id, $event)"
+                      />
+                    </div>
+                    <SettlementLayoutEditor
                       :settlement-id="detail.id"
-                      :before="detail.resources.stock"
-                      @granted="onChanged"
+                      :settlement="detail"
+                      @changed="onChanged(detail.id, $event)"
                     />
-                    <GarrisonForm
-                      :settlement-id="detail.id"
-                      :garrison="detail.garrison"
-                      @changed="onChanged"
-                    />
-                  </div>
-                  <SettlementLayoutEditor
-                    :settlement-id="detail.id"
-                    :settlement="detail"
-                    @changed="onChanged"
-                  />
-                  <ArmyEditor :settlement-id="detail.id" />
+                    <ArmyEditor :settlement-id="detail.id" />
+                  </template>
                 </div>
               </td>
             </tr>

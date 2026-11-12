@@ -5,14 +5,21 @@
 // — this is the layer those helpers can't exercise (i18n keys actually
 // resolve, both side sections render, the "you"/"defending" tags show up
 // correctly, and loot only renders for the winning viewer).
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
+import { createMemoryHistory, createRouter } from 'vue-router';
 import FieldBattleReportCard from './FieldBattleReportCard.vue';
+import { useMapFocus } from '../../composables/useMapFocus';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 
 const baseReport = {
   winner: 'sidea',
+  hex: { q: 12, r: -4 },
+  sideAName: 'Alpha' as string | null,
+  sideAOwnerName: 'Ann' as string | null,
+  sideBName: 'Beta' as string | null,
+  sideBOwnerName: 'Ben' as string | null,
   sideAPower: 420,
   sideBPower: 180,
   sideAWasDefending: false,
@@ -25,14 +32,72 @@ const baseReport = {
   ],
 };
 
-function mountCard(side: 'sidea' | 'sideb' = 'sidea') {
+const router = createRouter({
+  history: createMemoryHistory(),
+  routes: [
+    { path: '/settlement', component: { template: '<div />' } },
+    { path: '/docs', component: { template: '<div />' } },
+    { path: '/reports/:reportId', component: { template: '<div />' } },
+  ],
+});
+
+function mountCard(side: 'sidea' | 'sideb' = 'sidea', report: Partial<typeof baseReport> = {}) {
   return mount(FieldBattleReportCard, {
-    props: { report: baseReport, side, occurredAt: '2026-09-09T10:00:00.000Z' },
-    global: { plugins: [createTestI18n({ hud: enHud })] },
+    props: { report: { ...baseReport, ...report }, side, occurredAt: '2026-09-09T10:00:00.000Z' },
+    global: { plugins: [createTestI18n({ hud: enHud }), router] },
   });
 }
 
 describe('FieldBattleReportCard', () => {
+  it("names the opponent from the viewer's side", () => {
+    const asA = mountCard('sidea');
+    expect(asA.find('[data-testid="field-battle-opponent"]').text()).toBe('Ben (Beta)');
+    asA.unmount();
+
+    const asB = mountCard('sideb');
+    expect(asB.find('[data-testid="field-battle-opponent"]').text()).toBe('Ann (Alpha)');
+    asB.unmount();
+  });
+
+  it('says the opponent is unknown when their settlement is gone', () => {
+    const wrapper = mountCard('sidea', { sideBName: null, sideBOwnerName: null });
+    expect(wrapper.find('[data-testid="field-battle-opponent"]').text()).toBe('Unknown');
+    wrapper.unmount();
+  });
+
+  it('the hex link goes back to the map it was opened over and asks it to centre on the hex', async () => {
+    const map = useMapFocus();
+    map.clear();
+    await router.push('/settlement#world&q=1&r=2&z=0.30');
+    await router.push({ path: '/reports/r1', state: { backgroundView: '/settlement#world&q=1&r=2&z=0.30' } });
+    const wrapper = mountCard('sidea');
+
+    await wrapper.find('[data-testid="field-battle-location"]').trigger('click');
+    await flushPromises();
+
+    expect(map.pending.value?.coord).toEqual({ q: 12, r: -4 });
+    // Back in history to the page the modal was opened over: the link picks no mode or zoom of its own.
+    expect(router.currentRoute.value.fullPath).toBe('/settlement#world&q=1&r=2&z=0.30');
+    map.clear();
+    wrapper.unmount();
+  });
+
+  it('a report opened over a page without a map goes to the map instead of leaving the request waiting', async () => {
+    const map = useMapFocus();
+    map.clear();
+    await router.push('/docs');
+    await router.push({ path: '/reports/r1', state: { backgroundView: '/docs' } });
+    const wrapper = mountCard('sidea');
+
+    await wrapper.find('[data-testid="field-battle-location"]').trigger('click');
+    await flushPromises();
+
+    expect(router.currentRoute.value.path).toBe('/settlement');
+    expect(map.pending.value?.coord).toEqual({ q: 12, r: -4 });
+    map.clear();
+    wrapper.unmount();
+  });
+
   it("renders the viewer's own outcome, both side sections, and no siege section", () => {
     const wrapper = mountCard('sidea');
 

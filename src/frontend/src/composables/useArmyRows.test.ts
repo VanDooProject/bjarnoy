@@ -21,19 +21,25 @@ function army(overrides: Partial<ArmyResponse> = {}): ArmyResponse {
     position: { q: 1, r: 1 },
     provisions: 10,
     totalSpeed: 4,
+    visionRadius: 2,
     totalUpkeepPerHour: 2,
     stacks: [{ unit: 'spearman', count: 10 }],
     movement: {
       departedAt: '2026-01-01T00:00:00Z',
       path: [{ q: 0, r: 0 }, { q: 2, r: 2 }],
       cumulativeHours: [0, 2],
+      edgeHours: [0, 1],
       arrivesAt: '2026-01-01T02:00:00Z',
       returnPath: [{ q: 2, r: 2 }, { q: 0, r: 0 }],
       returnCumulativeHours: [0, 2],
+      returnEdgeHours: [0, 1],
       turnAroundAt: '2026-01-01T02:00:00Z',
       returnArrivesAt: '2026-01-01T04:00:00Z',
       isReturning: false,
+      isStranded: false,
+      isFleeing: false,
     },
+    starvesAt: null,
     ...overrides,
   };
 }
@@ -111,6 +117,82 @@ describe('useArmyRows', () => {
     expect(r.canFieldOrder).toBe(true); // 'move' mission, not at home/supporting
   });
 
+  it('shows an army that cannot get home with the time until it starves, no recall, and a move-on order', () => {
+    const world = useWorldStore();
+    const stand = { q: 2, r: 2 };
+    world.armies = [
+      army({
+        position: stand,
+        movement: {
+          departedAt: '2026-01-01T00:00:00Z',
+          path: [stand],
+          cumulativeHours: [0],
+          edgeHours: [0],
+          arrivesAt: '2026-01-01T00:00:00Z',
+          returnPath: [stand],
+          returnCumulativeHours: [0],
+          returnEdgeHours: [0],
+          turnAroundAt: '2026-01-01T04:30:00Z',
+          returnArrivesAt: '2026-01-01T04:30:00Z',
+          isReturning: false,
+          isStranded: true,
+          isFleeing: false,
+        },
+        starvesAt: '2026-01-01T04:30:00Z',
+      }),
+    ];
+
+    const rows = mountArmyRows();
+
+    const r = rows.value[0];
+    expect(r.status).toBe('Cannot get home');
+    expect(r.eta).toBe('starves in 3h 30m');
+    expect(r.etaMs).toBe(Date.parse('2026-01-01T04:30:00Z'));
+    expect(r.canRecall).toBe(false);
+    expect(r.canFieldOrder).toBe(true);
+    expect(r.fieldOrderLabel).toBe('Move on');
+  });
+
+  it('shows an arrived camp army as building the camp, counting down to arrival plus 10 minutes, and keeps Recall', () => {
+    const world = useWorldStore();
+    // Arrived at 00:50, now 01:00: the camp is ready at 01:00 (10 minutes after arrival) at world speed 1.
+    world.armies = [
+      army({
+        mission: 'setupcamp',
+        stacks: [{ unit: 'campbuilder', count: 2 }],
+        movement: { ...army().movement!, arrivesAt: '2026-01-01T00:50:00Z' },
+      }),
+    ];
+    world.worldSpeedFactor = 1;
+    vi.setSystemTime(new Date('2026-01-01T00:55:00Z'));
+
+    const r = mountArmyRows().value[0];
+
+    expect(r.status).toMatch(/^Building the camp, ready at \d{2}:\d{2}( [AP]M)?$/);
+    expect(r.eta).toBe('5m 0s');
+    expect(r.canRecall).toBe(true);
+    expect(r.mission).toBe('Set up camp');
+  });
+
+  it('scales the camp build time by the world speed', () => {
+    const world = useWorldStore();
+    world.armies = [army({ mission: 'setupcamp', movement: { ...army().movement!, arrivesAt: '2026-01-01T00:50:00Z' } })];
+    world.worldSpeedFactor = 5; // 10 min / 5 = 2 min after arrival
+    vi.setSystemTime(new Date('2026-01-01T00:51:00Z'));
+
+    expect(mountArmyRows().value[0].eta).toBe('1m 0s');
+  });
+
+  it('still counts a camp army that has not arrived yet down to its arrival', () => {
+    const world = useWorldStore();
+    world.armies = [army({ mission: 'setupcamp' })];
+
+    const r = mountArmyRows().value[0];
+
+    expect(r.status).toBe('In transit');
+    expect(r.eta).toBe('1h 0m');
+  });
+
   it('uses the return leg once an army has turned around', () => {
     const world = useWorldStore();
     world.armies = [
@@ -119,12 +201,16 @@ describe('useArmyRows', () => {
           departedAt: '2026-01-01T00:00:00Z',
           path: [{ q: 0, r: 0 }, { q: 2, r: 2 }],
           cumulativeHours: [0, 2],
+          edgeHours: [0, 1],
           arrivesAt: '2026-01-01T02:00:00Z',
           returnPath: [{ q: 2, r: 2 }, { q: 0, r: 0 }],
           returnCumulativeHours: [0, 2],
+          returnEdgeHours: [0, 1],
           turnAroundAt: '2026-01-01T00:00:00Z',
           returnArrivesAt: '2026-01-01T02:00:00Z',
           isReturning: true,
+          isStranded: false,
+          isFleeing: false,
         },
       }),
     ];
@@ -136,6 +222,25 @@ describe('useArmyRows', () => {
     expect(r.eta).toBe('1h 0m'); // returnArrivesAt, not arrivesAt
     expect(r.progress).toBeCloseTo(0.5);
     expect(r.canRecall).toBe(false); // already turned around
+  });
+
+  it('offers a free "Move on" (no recall) to an army fleeing home after a lost field battle, whatever its mission', () => {
+    const world = useWorldStore();
+    const base = army();
+    world.armies = [
+      army({
+        mission: 'attack',
+        movement: { ...base.movement!, turnAroundAt: '2026-01-01T00:00:00Z', isReturning: true, isFleeing: true },
+      }),
+    ];
+
+    const rows = mountArmyRows();
+
+    const r = rows.value[0];
+    expect(r.canFieldOrder).toBe(true);
+    expect(r.fieldOrderLocked).toBe(false);
+    expect(r.fieldOrderLabel).toBe('Move on');
+    expect(r.canRecall).toBe(false); // already walking home
   });
 
   it('reports no ETA/progress and no recall for a supporting army', () => {

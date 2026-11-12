@@ -47,8 +47,7 @@ public sealed class CampAmbushService(
         ArgumentNullException.ThrowIfNull(armyEntity);
         ArgumentNullException.ThrowIfNull(domain);
 
-        if (domain.Location is not ArmyLocation.InTransit { Movement: var movement }
-            || movement.RetreatImmune)
+        if (domain.Location is not ArmyLocation.InTransit { Movement: var movement })
         {
             return CampAmbushOutcome.None;
         }
@@ -104,6 +103,12 @@ public sealed class CampAmbushService(
 
         if (plan.ArmySurvivors.Sum(s => s.Count) <= 0)
         {
+            // Destroyed where the ambush caught it, not at the end of its route.
+            if (domain.Location is ArmyLocation.InTransit { Movement: var ambushed })
+            {
+                armyEntity.WalkedLegs.Add(new WalkedLeg(ambushed, ambush.At));
+            }
+
             _dbContext.Armies.Remove(armyEntity);
             return CampAmbushOutcome.ArmyDestroyed;
         }
@@ -116,8 +121,13 @@ public sealed class CampAmbushService(
         }
 
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
-        var home = settlement.HomeHexFor(survivors, sampler.TerrainAt);
-        armyEntity.ApplyDomain(survivors.ForceFieldRetreat(ambush.At, ambush.Hex, home, sampler.TerrainAt, world.SpeedFactor));
+        var home = settlement.HomeHexFor(survivors);
+        var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, worldId, sampler.TerrainAt, rivers.IsWide, ambush.At, cancellationToken).ConfigureAwait(false))
+            .ForOwner(WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id));
+        armyEntity.ApplyDomain(survivors.ForceFieldRetreat(
+            ambush.At, ambush.Hex, home, sampler.TerrainAt, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls,
+            provisionsAtBattle: domain.ProvisionsAt(ambush.At)));
         return CampAmbushOutcome.Fought;
     }
 

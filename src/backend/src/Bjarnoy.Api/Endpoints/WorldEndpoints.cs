@@ -4,6 +4,7 @@ using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
+using Bjarnoy.Api.Worlds;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
@@ -13,6 +14,8 @@ using Bjarnoy.Infrastructure.Services.PlotReservations;
 using Bjarnoy.Infrastructure.World;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Bjarnoy.Api.Endpoints;
 
@@ -52,18 +55,51 @@ public static class WorldEndpoints
 
         worlds.MapGet("/{worldId:guid}/islands", GetIslands)
             .WithName("GetWorldIslands")
-            .WithSummary("Lists the islands of a world, with their start positions; camps only for the islands the caller has seen part of.")
+            .WithSummary("Lists the islands of a world (labels, giants, camps, walls, towers) without their terrain tiles and start positions; camps only for the islands the caller has seen part of.")
             .RequireCallerRealm();
+
+        worlds.MapGet("/{worldId:guid}/terrain-chunks", GetTerrainChunkManifest)
+            .WithName("GetWorldTerrainChunks")
+            .WithSummary("How many chunks the river and bog tiles of the world's islands are cut into, with each chunk's ETag.");
+
+        worlds.MapGet("/{worldId:guid}/terrain-chunks/{chunk:int}", GetTerrainChunk)
+            .WithName("GetWorldTerrainChunk")
+            .WithSummary("The river and bog tiles of one chunk of the world's islands (gzip, cached, ETag).");
+
+        worlds.MapGet("/{worldId:guid}/start-positions", GetStartPositions)
+            .WithName("GetWorldStartPositions")
+            .WithSummary("The founding plots of every island of the world (gzip, cached, ETag).");
 
         worlds.MapGet("/{worldId:guid}/camps", GetCamps)
             .WithName("GetWorldCamps")
             .WithSummary("The live state (garrison, calm, clears, loot left) at the world's game time of every wildlife camp on an island the caller has seen part of, optionally for one island.")
             .RequireCallerRealm();
 
+        worlds.MapGet("/{worldId:guid}/foreign-armies", GetForeignArmies)
+            .WithName("GetWorldForeignArmies")
+            .WithSummary("The marching armies of other players inside the caller's sight, each with only the short stretch of its route ahead.")
+            .RequireCallerRealm();
+
         worlds.MapGet("/{worldId:guid}/walls", GetWalls)
             .WithName("GetWorldWalls")
-            .WithSummary("Every standing palisade/gate hex of the rival settlements the caller has explored (their own walls excluded).")
+            .WithSummary("Every standing palisade/gate hex of rival settlements that lies on a hex the caller has explored (their own walls excluded).")
             .RequireCallerRealm();
+
+        worlds.MapGet("/{worldId:guid}/rival-buildings", GetRivalBuildings)
+            .WithName("GetWorldRivalBuildings")
+            .WithSummary("Every building of rival settlements, standing or under construction, that lies on a hex the caller has explored, of any type (their own buildings excluded).")
+            .RequireCallerRealm();
+
+        worlds.MapGet("/{worldId:guid}/own-buildings", GetOwnBuildings)
+            .WithName("GetWorldOwnBuildings")
+            .WithSummary("Every building of every settlement of the caller, standing or under construction, so a client can draw one it has not opened.")
+            .RequireCallerRealm();
+
+        worlds.MapGet("/{worldId:guid}/own-build-orders", GetOwnBuildOrders)
+            .WithName("GetWorldOwnBuildOrders")
+            .WithSummary("The active build queue of each of the caller's realms (one row per realm, its oldest member), so a client can show the construction progress of a settlement it has not opened.")
+            .RequireCallerRealm()
+            .WithConcurrencyRetry();
 
         worlds.MapGet("/{worldId:guid}/tiles", GetTiles)
             .WithName("GetWorldTiles")
@@ -236,7 +272,7 @@ public static class WorldEndpoints
             return TypedResults.NotFound(WorldNotFoundProblem());
         }
 
-        var islands = await worlds.GetIslandsAsync(worldId, cancellationToken);
+        var islands = await worlds.GetIslandSummariesAsync(worldId, cancellationToken);
 
         // Wasted islands are hidden — as far as this player-facing endpoint
         // is concerned, sea — until the world's endboss has actually
@@ -252,6 +288,74 @@ public static class WorldEndpoints
         IReadOnlyList<IslandResponse> response = [.. islands.Select(i => IslandResponse.From(i, seen.Contains(i.Id)))];
 
         return TypedResults.Ok(response);
+    }
+
+    /// <summary>The manifest of <see cref="GetTerrainChunk"/>: the chunk count and each chunk's ETag.</summary>
+    private static async Task<Results<Ok<TerrainChunkManifestResponse>, NotFound<ProblemDetails>>> GetTerrainChunkManifest(
+        Guid worldId,
+        WorldService worlds,
+        DbContextOptions<GameDbContext> dbOptions,
+        IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions> json,
+        CancellationToken cancellationToken)
+    {
+        var world = await worlds.GetWorldAsync(worldId, cancellationToken);
+        if (world is null)
+        {
+            return TypedResults.NotFound(WorldNotFoundProblem());
+        }
+
+        var chunks = await IslandPayloads.TerrainAsync(dbOptions, json.Value.SerializerOptions, worldId, world.EndbossTriggeredAt is not null, cancellationToken);
+        return TypedResults.Ok(chunks.Manifest());
+    }
+
+    /// <summary>One terrain chunk, served from the in-memory gzip bytes (see <see cref="IslandPayloads"/>).</summary>
+    private static async Task<IResult> GetTerrainChunk(
+        Guid worldId,
+        int chunk,
+        HttpContext httpContext,
+        WorldService worlds,
+        DbContextOptions<GameDbContext> dbOptions,
+        IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions> json,
+        CancellationToken cancellationToken)
+    {
+        var world = await worlds.GetWorldAsync(worldId, cancellationToken);
+        if (world is null)
+        {
+            return TypedResults.NotFound(WorldNotFoundProblem());
+        }
+
+        var chunks = await IslandPayloads.TerrainAsync(dbOptions, json.Value.SerializerOptions, worldId, world.EndbossTriggeredAt is not null, cancellationToken);
+        if (chunk < 0 || chunk >= chunks.Chunks.Count)
+        {
+            var problem = new ProblemDetails
+            {
+                Title = "No such terrain chunk.",
+                Detail = $"The world's terrain has {chunks.Chunks.Count} chunk(s), numbered from 0.",
+                Status = StatusCodes.Status404NotFound,
+            };
+            problem.Extensions["error"] = "terrain_chunk_not_found";
+            return TypedResults.NotFound(problem);
+        }
+
+        return new GzipPayloadResult(chunks.Chunks[chunk]);
+    }
+
+    /// <summary>Every island's founding plots, served from the in-memory gzip bytes (see <see cref="IslandPayloads"/>).</summary>
+    private static async Task<IResult> GetStartPositions(
+        Guid worldId,
+        WorldService worlds,
+        DbContextOptions<GameDbContext> dbOptions,
+        IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions> json,
+        CancellationToken cancellationToken)
+    {
+        var world = await worlds.GetWorldAsync(worldId, cancellationToken);
+        if (world is null)
+        {
+            return TypedResults.NotFound(WorldNotFoundProblem());
+        }
+
+        var payload = await IslandPayloads.StartPositionsAsync(dbOptions, json.Value.SerializerOptions, worldId, world.EndbossTriggeredAt is not null, cancellationToken);
+        return new GzipPayloadResult(payload);
     }
 
     /// <summary>
@@ -319,15 +423,45 @@ public static class WorldEndpoints
     }
 
     /// <summary>
+    /// The marching armies of other players inside the caller's sight (<see cref="ForeignArmyService"/>, <c>docs/design/map-fog-v2.md</c> §1g).
+    /// A caller that does not resolve to a realm sees none.
+    /// </summary>
+    private static async Task<Results<Ok<IReadOnlyList<ForeignArmyResponse>>, NotFound<ProblemDetails>>> GetForeignArmies(
+        Guid worldId,
+        HttpContext httpContext,
+        WorldService worlds,
+        ForeignArmyService foreignArmies,
+        RealmDirectory realms,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var world = await worlds.GetWorldAsync(worldId, cancellationToken);
+        if (world is null)
+        {
+            return TypedResults.NotFound(WorldNotFoundProblem());
+        }
+
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<ForeignArmyResponse>>([]);
+        }
+
+        var now = world.ToClock().ToGameTime(timeProvider.GetUtcNow());
+        var seen = await foreignArmies.GetAsync(worldId, realm.OwnerId!, now, cancellationToken);
+        return TypedResults.Ok<IReadOnlyList<ForeignArmyResponse>>([.. seen.Select(ForeignArmyResponse.From)]);
+    }
+
+    /// <summary>
     /// The standing wall hexes (level 1 or more) of the world's rival settlements, so a live client can draw, hit-test and plan routes
-    /// around walls it never fetched a settlement for. Gated exactly like <c>GET /worlds/{id}/settlements</c> (<c>SettlementEndpoints.ListForWorld</c>):
-    /// a settlement's walls are listed only when its centre hex is in the caller's explored area, and the caller's own settlements are
-    /// left out (their walls already ship in their own settlement read). No resolvable realm or world answers an empty list.
+    /// around walls it never fetched a settlement for. A wall is listed when its own hex is in the caller's visible area (explored ground plus where the fog is not yet
+    /// fully opaque), whether or not its settlement's centre is (<see cref="RivalVisibility"/>); the caller's own settlements are left out (their walls already ship in
+    /// their own settlement read). No resolvable realm or world answers an empty list.
     /// </summary>
     private static async Task<Ok<IReadOnlyList<WallResponse>>> GetWalls(
         Guid worldId,
         HttpContext httpContext,
-        GameDbContext db,
+        SettlementService settlements,
         ExploredAreaService exploredArea,
         RealmDirectory realms,
         CancellationToken cancellationToken)
@@ -344,28 +478,147 @@ public static class WorldEndpoints
             return TypedResults.Ok<IReadOnlyList<WallResponse>>([]);
         }
 
-        var idClaim = httpContext.User.Identity?.IsAuthenticated == true
-            ? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
-            : null;
-        var callerUserId = Guid.TryParse(idClaim, out var parsedUserId) ? parsedUserId : (Guid?)null;
-
-        var rows = (await WorldPalisades.ListStandingAsync(db, worldId, cancellationToken))
-            .Where(w => w.OwnerId != realm.OwnerId && !(callerUserId is not null && w.UserId == callerUserId))
-            .ToList();
-
-        var explored = await exploredArea.ExploredAmongAsync(
-            area, rows.Select(w => new HexCoord(w.CentreQ, w.CentreR)).Distinct(), cancellationToken);
+        var callerUserId = RivalVisibility.CallerUserId(httpContext.User);
+        var sights = await RivalVisibility.ForAsync(
+            exploredArea, area, await settlements.GetForWorldAsync(worldId, cancellationToken),
+            s => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId), withLabels: false, cancellationToken);
 
         IReadOnlyList<WallResponse> response =
         [
-            .. rows
-                .Where(w => explored.Contains(new HexCoord(w.CentreQ, w.CentreR)))
-                .Select(w => new WallResponse(
-                    w.Q, w.R, w.Type.ToWireName(), w.Level, w.SettlementId,
-                    w.UserId == SystemUserIds.Abandoned ? null : w.UserId, w.OutsideRealm)),
+            .. sights.SelectMany(sight => sight.VisibleStandingBuildings
+                .Where(b => b.Type is BuildingType.Palisade or BuildingType.PalisadeGate)
+                .OrderBy(b => b.Q).ThenBy(b => b.R)
+                .Select(b => new WallResponse(
+                    b.Q, b.R, b.Type.ToWireName(), b.Level, sight.Settlement.Id,
+                    sight.Settlement.UserId == SystemUserIds.Abandoned ? null : sight.Settlement.UserId,
+                    b.OutsideRealmSince is not null))),
         ];
 
         return TypedResults.Ok(response);
+    }
+
+    /// <summary>
+    /// Every building of the world's rival settlements, any type and level (a level-0 construction site included), that stands on a hex
+    /// in the caller's visible area, one row per hex, so a live client can draw what it sees of a rival it never fetched a settlement for. Gated per hex
+    /// like <see cref="GetWalls"/> (<see cref="RivalVisibility"/>): nothing about a hex out of sight is sent, with one exception: a
+    /// rival's towers and Longhouse are sent when any hex of their claim disc is visible, wherever they stand themselves (the client
+    /// draws the realm border from those discs). The caller's own buildings are left out. No resolvable realm or world answers an empty list.
+    /// </summary>
+    private static async Task<Ok<IReadOnlyList<RivalBuildingResponse>>> GetRivalBuildings(
+        Guid worldId,
+        HttpContext httpContext,
+        SettlementService settlements,
+        ExploredAreaService exploredArea,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<RivalBuildingResponse>>([]);
+        }
+
+        var area = await exploredArea.GetAsync(worldId, realm.OwnerId!, persist: false, cancellationToken);
+        if (area is null)
+        {
+            return TypedResults.Ok<IReadOnlyList<RivalBuildingResponse>>([]);
+        }
+
+        var callerUserId = RivalVisibility.CallerUserId(httpContext.User);
+        var sights = await RivalVisibility.ForAsync(
+            exploredArea, area, await settlements.GetForWorldAsync(worldId, cancellationToken),
+            s => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId), withLabels: false, cancellationToken);
+
+        IReadOnlyList<RivalBuildingResponse> response =
+        [
+            .. sights.SelectMany(sight => sight.VisibleBuildings
+                .OrderBy(b => b.Q).ThenBy(b => b.R)
+                .Select(b => new RivalBuildingResponse(
+                    b.Q, b.R, b.Type.ToWireName(), b.Level, sight.Settlement.Id,
+                    sight.Settlement.UserId == SystemUserIds.Abandoned ? null : sight.Settlement.UserId,
+                    b.OutsideRealmSince is not null))),
+        ];
+
+        return TypedResults.Ok(response);
+    }
+
+    /// <summary>
+    /// Every building of each of the caller's own settlements in the world, one row per hex, same shape as <see cref="GetRivalBuildings"/>.
+    /// No fog gate: they are the caller's own. A client only loads the buildings of the settlement it has open, so this is how it draws
+    /// the others. No resolvable realm or world answers an empty list.
+    /// </summary>
+    private static async Task<Ok<IReadOnlyList<RivalBuildingResponse>>> GetOwnBuildings(
+        Guid worldId,
+        HttpContext httpContext,
+        SettlementService settlements,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<RivalBuildingResponse>>([]);
+        }
+
+        var callerUserId = RivalVisibility.CallerUserId(httpContext.User);
+        IReadOnlyList<RivalBuildingResponse> response =
+        [
+            .. (await settlements.GetForWorldAsync(worldId, cancellationToken))
+                .Where(s => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId))
+                .SelectMany(own => own.Buildings
+                    .OrderBy(b => b.Q).ThenBy(b => b.R)
+                    .Select(b => new RivalBuildingResponse(
+                        b.Q, b.R, b.Type.ToWireName(), b.Level, own.Id,
+                        own.UserId == SystemUserIds.Abandoned ? null : own.UserId,
+                        b.OutsideRealmSince is not null))),
+        ];
+
+        return TypedResults.Ok(response);
+    }
+
+    /// <summary>
+    /// The build queue of each of the caller's realms in the world, read from the settled linked group exactly as <c>GET /settlements/{id}</c>
+    /// reads it (a realm's queue merges its members', so one row per realm, named by its oldest member). The settlement view only polls the
+    /// open settlement; this is how a client learns when a build elsewhere completes and how long it still runs. No resolvable realm or
+    /// world answers an empty list.
+    /// </summary>
+    private static async Task<Ok<IReadOnlyList<OwnBuildOrdersResponse>>> GetOwnBuildOrders(
+        Guid worldId,
+        HttpContext httpContext,
+        SettlementService settlements,
+        RealmDirectory realms,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<OwnBuildOrdersResponse>>([]);
+        }
+
+        var callerUserId = RivalVisibility.CallerUserId(httpContext.User);
+        var result = new List<OwnBuildOrdersResponse>();
+        var seenRealms = new HashSet<Guid>();
+        foreach (var own in (await settlements.GetForWorldAsync(worldId, cancellationToken))
+                     .Where(s => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId)))
+        {
+            var session = await settlements.GetGroupAsync(own.Id, cancellationToken);
+            if (session is null)
+            {
+                continue;
+            }
+
+            var realmId = session.Store.RealmIdOf(own.Id);
+            if (!seenRealms.Add(realmId))
+            {
+                continue;
+            }
+
+            var response = SettlementResponse.Build(session, realmId, session.Clock, session.Clock.ToGameTime(time.GetUtcNow()));
+            result.Add(new OwnBuildOrdersResponse(realmId, response.Queue));
+        }
+
+        return TypedResults.Ok<IReadOnlyList<OwnBuildOrdersResponse>>(result);
     }
 
     /// <summary>
@@ -578,12 +831,12 @@ public static class WorldEndpoints
 
         var islandSettlementEntities = await settlements.GetForIslandAsync(suggestion.IslandId, cancellationToken);
         var labels = await LinkedRealmNames.ForAsync(db, worldId, islandSettlementEntities, cancellationToken);
+        bool IsMine(Bjarnoy.Infrastructure.Entities.SettlementEntity s) =>
+            s.OwnerId == realm.OwnerId || (callerUserId is not null && s.UserId == callerUserId);
+        var relationOf = await SettlementRelations.ForCallerAsync(db, worldId, callerUserId, IsMine, cancellationToken);
         IReadOnlyList<SettlementSummary> islandSettlements =
         [
-            .. islandSettlementEntities.Select(s => SettlementSummary.From(
-                s,
-                s.OwnerId == realm.OwnerId || (callerUserId is not null && s.UserId == callerUserId),
-                labels[s.Id])),
+            .. islandSettlementEntities.Select(s => SettlementSummary.From(s, IsMine(s), labels[s.Id], relationOf(s), new HexCoord(s.CentreQ, s.CentreR))),
         ];
 
         return TypedResults.Ok(new PlotSuggestionResponse(

@@ -49,7 +49,7 @@ bit-identical; `src/shared/camp-placement-golden.json` is asserted by both
 1. **Count**: an island with fewer than `MinCampIslandTiles` (60) land tiles gets **no camp** (islets stay
    camp-free). Otherwise two separate budgets: strong
    `clamp(round(land / StrongCampTilesPer), 0, MaxStrongCampsPerIsland)` (1500 tiles each, max 16) and weak
-   `clamp(round(land / WeakCampTilesPer), 0, MaxWeakCampsPerIsland)` (600 tiles each, max 24; weak camps
+   `clamp(round(land / WeakCampTilesPer), 0, MaxWeakCampsPerIsland)` (400 tiles each, max 36; weak camps
    have no start-position distance rule because they do not attack on their own). An island of 60+ tiles
    whose budgets both round to zero still gets one camp, of either kind. A budget that the island's
    ground cannot fill (no sand or mountain for weak, say) stays unfilled and is never turned into the other kind.
@@ -125,7 +125,7 @@ walrushaulout 32, wolfden 23, eagleeyrie 22, boarwallow 16, otterslide 8, bearra
 generate bog, so no bog camps). The weak budget now fills; the start-position numbers above predate this
 change and were not re-measured.
 
-Tuning defaults for the land camps (all in `CampGenerator` and `campPlacement.ts`; the whale road's are under [Water camps](#water-camps)): `StrongCampTilesPer` 1500, `WeakCampTilesPer` 600, `MaxStrongCampsPerIsland` 16, `MaxWeakCampsPerIsland` 24,
+Tuning defaults for the land camps (all in `CampGenerator` and `campPlacement.ts`; the whale road's are under [Water camps](#water-camps)): `StrongCampTilesPer` 1500, `WeakCampTilesPer` 400, `MaxStrongCampsPerIsland` 16, `MaxWeakCampsPerIsland` 36,
 `MinCampIslandTiles` 60, `SandTilesPerSealCamp` 2000, `MountainTilesPerEyrieCamp` 2000, `MinCampSpacing` 6, `MaxCampLevel` 5, `StartPositionMargin` 2, plus the two
 guard-range formulas above.
 
@@ -333,10 +333,10 @@ base rule and each camp's own extras from the design roster (#334's brainstorm);
 |---|---|---|
 | wolfden | strong | food, wood, iron |
 | boarwallow | strong | **food ++**, iron |
-| bearrapids | strong | food, stone, iron |
+| bearrapids | strong | food, brick, iron |
 | moosemire | strong | **food ++**, iron |
 | fenrirbrood | strong | food, **iron ++** |
-| eagleeyrie | strong | food, stone, iron |
+| eagleeyrie | strong | food, brick, iron |
 | walrushaulout | strong | food, iron |
 | sealhaulout | weak | food |
 | beaverlodge | weak | food, wood |

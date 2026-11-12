@@ -35,6 +35,8 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<ArmyEntity> Armies => Set<ArmyEntity>();
 
+    public DbSet<GatheringEntity> Gatherings => Set<GatheringEntity>();
+
     public DbSet<ArmyUnitStackEntity> ArmyUnitStacks => Set<ArmyUnitStackEntity>();
 
     public DbSet<BattleReportEntity> BattleReports => Set<BattleReportEntity>();
@@ -57,6 +59,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<CampReportBeastLineEntity> CampReportBeastLines => Set<CampReportBeastLineEntity>();
 
+    public DbSet<ArmyReportEntity> ArmyReports => Set<ArmyReportEntity>();
+
+    public DbSet<ArmyReportUnitLineEntity> ArmyReportUnitLines => Set<ArmyReportUnitLineEntity>();
+
     public DbSet<UserEntity> Users => Set<UserEntity>();
 
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
@@ -64,6 +70,9 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
     public DbSet<ApiKeyEntity> ApiKeys => Set<ApiKeyEntity>();
 
     public DbSet<ApiKeyRequestEntity> ApiKeyRequests => Set<ApiKeyRequestEntity>();
+    public DbSet<ApiKeyAccountEntity> ApiKeyAccounts => Set<ApiKeyAccountEntity>();
+
+    public DbSet<ApiKeyAnonymousAccountEntity> ApiKeyAnonymousAccounts => Set<ApiKeyAnonymousAccountEntity>();
 
     public DbSet<GuildEntity> Guilds => Set<GuildEntity>();
 
@@ -231,6 +240,9 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             {
                 case SettlementEntity settlement when entry.State == EntityState.Modified:
                     touched.Add(settlement.Id);
+                    break;
+                case GatheringEntity when entry.State == EntityState.Modified:
+                    entry.Property(nameof(GatheringEntity.Version)).CurrentValue = Guid.NewGuid();
                     break;
                 case TradeOfferEntity when entry.State == EntityState.Modified:
                     entry.Property(nameof(TradeOfferEntity.Version)).CurrentValue = Guid.NewGuid();
@@ -462,8 +474,8 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             stack.Property(s => s.Id).ValueGeneratedNever();
             stack.Property(s => s.UnitType).HasConversion<int>();
 
-            // One stack row per unit type per settlement.
-            stack.HasIndex(s => new { s.SettlementId, s.UnitType }).IsUnique();
+            // One stack row per unit type per garrison spot of a settlement.
+            stack.HasIndex(s => new { s.SettlementId, s.SpotQ, s.SpotR, s.UnitType }).IsUnique();
         });
 
         modelBuilder.Entity<TrainingOrderEntity>(order =>
@@ -507,6 +519,14 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .HasConversion(new DoubleListConverter())
                 .Metadata.SetValueComparer(DoubleListConverter.Comparer);
 
+            army.Property(a => a.EdgeHours)
+                .HasConversion(new DoubleListConverter())
+                .Metadata.SetValueComparer(DoubleListConverter.Comparer);
+
+            army.Property(a => a.ReturnEdgeHours)
+                .HasConversion(new DoubleListConverter())
+                .Metadata.SetValueComparer(DoubleListConverter.Comparer);
+
             // Restrict rather than cascade: nothing should delete a
             // settlement out from under an army still travelling. In
             // practice settlements are never deleted today, but the intent
@@ -531,6 +551,14 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             // ArmyService/SettlementService's guest-loading helpers.
             army.HasIndex(a => new { a.TargetSettlementId, a.IsSupporting });
 
+            // A group whose gathering is deleted (merged, or called off) is just an army again.
+            army.HasOne(a => a.Gathering)
+                .WithMany()
+                .HasForeignKey(a => a.GatheringId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            army.HasIndex(a => a.GatheringId);
+
             army.HasMany(a => a.Stacks)
                 .WithOne(s => s.Army!)
                 .HasForeignKey(s => s.ArmyId)
@@ -540,6 +568,34 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             // in-transit, non-home, non-guest armies before doing anything
             // else — this index covers exactly that predicate.
             army.HasIndex(a => new { a.AtHome, a.IsSupporting });
+        });
+
+        modelBuilder.Entity<GatheringEntity>(gathering =>
+        {
+            gathering.ToTable("gatherings");
+            gathering.HasKey(g => g.Id);
+            gathering.Property(g => g.Id).ValueGeneratedNever();
+
+            gathering.Property(g => g.Stops)
+                .HasConversion(new HexListConverter())
+                .Metadata.SetValueComparer(HexListConverter.Comparer);
+
+            gathering.HasOne(g => g.Settlement)
+                .WithMany()
+                .HasForeignKey(g => g.SettlementId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            gathering.HasOne(g => g.ParentGathering)
+                .WithMany()
+                .HasForeignKey(g => g.ParentGatheringId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            gathering.Property(g => g.Version).IsConcurrencyToken();
+
+            // The due gatherings of a world are found by departure (ArmyService.ResolveDueGatheringsAsync), through the settlement.
+            gathering.HasIndex(g => g.DepartAt);
+            gathering.HasIndex(g => g.SettlementId);
+            gathering.HasIndex(g => g.ParentGatheringId);
         });
 
         modelBuilder.Entity<ArmyUnitStackEntity>(stack =>
@@ -578,6 +634,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             line.ToTable("battle_report_attacker_lines");
             line.HasKey(l => l.Id);
             line.Property(l => l.Id).ValueGeneratedNever();
+            line.Property(l => l.Fight).HasConversion<int>();
             line.Property(l => l.UnitType).HasConversion<int>();
         });
 
@@ -586,6 +643,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             line.ToTable("battle_report_defender_lines");
             line.HasKey(l => l.Id);
             line.Property(l => l.Id).ValueGeneratedNever();
+            line.Property(l => l.Fight).HasConversion<int>();
             line.Property(l => l.UnitType).HasConversion<int>();
         });
 
@@ -677,6 +735,35 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             line.ToTable("camp_report_beast_lines");
             line.HasKey(l => l.Id);
             line.Property(l => l.Id).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<ArmyReportEntity>(report =>
+        {
+            report.ToTable("army_reports");
+            report.HasKey(r => r.Id);
+            report.Property(r => r.Id).ValueGeneratedNever();
+            report.Property(r => r.OwnerId).HasMaxLength(200).IsRequired();
+
+            // The inbox reads by world and the player's owner key — see ArmyReportService.GetForPlayerAsync.
+            report.HasIndex(r => new { r.WorldId, r.OwnerId });
+
+            report.HasOne<WorldEntity>()
+                .WithMany()
+                .HasForeignKey(r => r.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            report.HasMany(r => r.UnitLines)
+                .WithOne(l => l.ArmyReport!)
+                .HasForeignKey(l => l.ArmyReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ArmyReportUnitLineEntity>(line =>
+        {
+            line.ToTable("army_report_unit_lines");
+            line.HasKey(l => l.Id);
+            line.Property(l => l.Id).ValueGeneratedNever();
+            line.Property(l => l.UnitType).HasConversion<int>();
         });
 
         modelBuilder.Entity<UserEntity>(user =>
@@ -775,6 +862,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             key.Property(k => k.KeyId).HasMaxLength(16).IsRequired();
             key.Property(k => k.SecretHash).HasMaxLength(64).IsRequired();
             key.Property(k => k.Purpose).HasMaxLength(500);
+            key.Property(k => k.OwnerCanAct).HasDefaultValue(true);
 
             // Same list-column convention as the island hex lists: one text column, a converter and a comparer so
             // in-place edits of the collection are seen by change tracking.
@@ -802,6 +890,37 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .WithMany()
                 .HasForeignKey(k => k.CreatedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Extra accounts a key may act as (the owner is not a row here). Rows die with the key; the account is
+        // Restrict for the same audit-trail reason as the owner.
+        modelBuilder.Entity<ApiKeyAccountEntity>(account =>
+        {
+            account.ToTable("api_key_accounts");
+            account.HasKey(a => new { a.ApiKeyId, a.UserId });
+            account.HasIndex(a => a.UserId);
+            account.HasOne(a => a.ApiKey)
+                .WithMany(k => k.Accounts)
+                .HasForeignKey(a => a.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+            account.HasOne(a => a.User)
+                .WithMany()
+                .HasForeignKey(a => a.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ApiKeyAnonymousAccountEntity>(anon =>
+        {
+            anon.ToTable("api_key_anonymous_accounts");
+            anon.HasKey(a => a.Id);
+            anon.Property(a => a.Id).ValueGeneratedNever();
+            anon.Property(a => a.OwnerId).HasMaxLength(200).IsRequired();
+            anon.Property(a => a.Label).HasMaxLength(100).IsRequired();
+            anon.HasIndex(a => new { a.ApiKeyId, a.Label }).IsUnique();
+            anon.HasOne(a => a.ApiKey)
+                .WithMany(k => k.AnonymousAccounts)
+                .HasForeignKey(a => a.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ApiKeyRequestEntity>(request =>
@@ -843,6 +962,19 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .IsRequired()
                 .HasConversion(new GuidListConverter())
                 .Metadata.SetValueComparer(GuidListConverter.Comparer);
+            request.Property(r => r.ApprovedAdditionalUserIds)
+                .IsRequired()
+                .HasConversion(new GuidListConverter())
+                .Metadata.SetValueComparer(GuidListConverter.Comparer);
+            request.Property(r => r.ApprovedAnonymousAccounts)
+                .IsRequired()
+                .HasConversion(new AnonymousAccountGrantListConverter())
+                .Metadata.SetValueComparer(AnonymousAccountGrantListConverter.Comparer);
+            request.Property(r => r.ApprovedOwnerCanAct).HasDefaultValue(true);
+            request.Property(r => r.RequestedAdditionalUserNames)
+                .IsRequired()
+                .HasConversion(new StringListConverter())
+                .Metadata.SetValueComparer(StringListConverter.Comparer);
 
             // Admins find a request by the code the agent shows them.
             request.HasIndex(r => r.UserCode).IsUnique();

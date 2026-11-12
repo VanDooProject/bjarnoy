@@ -43,9 +43,10 @@ public static class MovementOccupancy
 {
     /// <summary>
     /// Every hex this <paramref name="movement"/> occupies, in path order.
-    /// The general rule — hex <c>i</c> occupies <c>[c_i, c_{i+1})</c> — needs
+    /// The general rule — hex <c>i</c> occupies <c>[e_i, e_{i+1})</c>, from crossing its edge
+    /// (<see cref="Movement.EdgeHours"/>) to crossing the next one — needs
     /// no special case for a one-hex (stationary/holding) path: with no
-    /// <c>c_1</c> to bound it, hex 0's window is already open-ended by the
+    /// <c>e_1</c> to bound it, hex 0's window is already open-ended by the
     /// same "no known end" reasoning that gives every path's *last* hex an
     /// open-ended window (see <see cref="HexOccupancy"/>'s remarks).
     /// </summary>
@@ -56,9 +57,9 @@ public static class MovementOccupancy
         var result = new List<HexOccupancy>(movement.Path.Count);
         for (var i = 0; i < movement.Path.Count; i++)
         {
-            var start = movement.DepartedAt + TimeSpan.FromHours(movement.CumulativeHours[i]);
+            var start = movement.DepartedAt + TimeSpan.FromHours(movement.EdgeHours[i]);
             DateTimeOffset? end = i + 1 < movement.Path.Count
-                ? movement.DepartedAt + TimeSpan.FromHours(movement.CumulativeHours[i + 1])
+                ? movement.DepartedAt + TimeSpan.FromHours(movement.EdgeHours[i + 1])
                 : null;
             result.Add(new HexOccupancy(movement.Path[i], start, end));
         }
@@ -77,8 +78,12 @@ public static class MovementOccupancy
     /// in the first place, so no special-case logic is needed to exclude it
     /// (issue #206's own design history: this was considered and dropped).
     /// </summary>
+    /// <remarks>
+    /// <paramref name="notBefore"/> rules out every meeting before that instant (the flee protection of either side, see
+    /// <see cref="Movement.FieldBattleImmuneUntil"/>): two armies that share a hex across <paramref name="notBefore"/> meet at it.
+    /// </remarks>
     public static (HexCoord Hex, DateTimeOffset At)? EarliestMeeting(
-        Movement a, Movement b, HexCoord? excludeHexA = null, HexCoord? excludeHexB = null)
+        Movement a, Movement b, HexCoord? excludeHexA = null, HexCoord? excludeHexB = null, DateTimeOffset? notBefore = null)
     {
         var occupancyA = Compute(a);
         var occupancyB = Compute(b);
@@ -110,6 +115,16 @@ public static class MovementOccupancy
                 }
 
                 var meetAt = oa.Start > ob.Start ? oa.Start : ob.Start;
+                if (notBefore is { } floor && meetAt < floor)
+                {
+                    // Together on this hex from meetAt, but protected until floor: they meet then, if both are still here.
+                    meetAt = floor;
+                    if ((oa.End is { } endA && meetAt >= endA) || (ob.End is { } endB && meetAt >= endB))
+                    {
+                        continue;
+                    }
+                }
+
                 if (earliest is null || meetAt < earliest.Value.At)
                 {
                     earliest = (oa.Hex, meetAt);

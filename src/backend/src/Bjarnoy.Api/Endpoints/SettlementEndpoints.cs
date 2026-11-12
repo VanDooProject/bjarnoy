@@ -8,6 +8,7 @@ using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Bjarnoy.Infrastructure.World;
@@ -75,6 +76,14 @@ public static class SettlementEndpoints
             .AddEndpointFilter<UserActivityEndpointFilter>()
             .WithConcurrencyRetry();
 
+        settlements.MapPost("/{settlementId:guid}/razes", RazeBuilding)
+            .WithName("RazeBuilding")
+            .WithSummary("Queues razing one level of a building: free, takes construction slots, pays back a third of the level's cost.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .RequireSettlementOwner()
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
+
         settlements.MapPost("/{settlementId:guid}/builds/{orderId:guid}/cancel", CancelBuild)
             .WithName("CancelBuild")
             .WithSummary("Cancels a still-queued build order, refunding its cost.")
@@ -94,6 +103,14 @@ public static class SettlementEndpoints
         settlements.MapPost("/{settlementId:guid}/feast", HoldFeast)
             .WithName("HoldFeast")
             .WithSummary("Starts a Town Square feast, charging its cost immediately; it grants renown when it ends.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .RequireSettlementOwner()
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
+
+        settlements.MapPut("/{settlementId:guid}/name", Rename)
+            .WithName("RenameSettlement")
+            .WithSummary("Renames a settlement: free, any time, names need not be unique.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>()
@@ -168,7 +185,8 @@ public static class SettlementEndpoints
             new HexCoord(request.Q, request.R),
             request.Name,
             request.OwnerName,
-            request.OwnerId,
+            // A key acting as an anonymous settlement founds as exactly that identity, whatever the body says.
+            ApiKeyContext.From(httpContext)?.ActingAnonymousOwnerId ?? request.OwnerId,
             callerUserId,
             cancellationToken);
 
@@ -215,8 +233,9 @@ public static class SettlementEndpoints
 
     /// <summary>
     /// The rival-safe counterpart to <see cref="Get"/>: identity, position and
-    /// buildings only, and only once the caller has actually explored this
-    /// settlement's own centre hex — see <see cref="SettlementViewResponse"/>.
+    /// buildings only, and only once the caller sees the settlement's centre hex, the hex of one of its standing buildings or a hex of
+    /// the claim disc of its Longhouse or a tower (<see cref="RivalVisibility"/>); the buildings returned are the ones on visible hexes plus
+    /// its towers and Longhouse whose claim disc reaches visible ground — see <see cref="SettlementViewResponse"/>.
     /// Resolves the caller's realm the same way the per-world reads in
     /// <see cref="WorldEndpoints"/> do (<see cref="CallerRealmResolver"/>): no
     /// realm at all is refused rather than answered with an empty view, since
@@ -260,25 +279,25 @@ public static class SettlementEndpoints
         }
 
         var isOwnSettlement = string.Equals(entity.OwnerId, realm.OwnerId, StringComparison.Ordinal);
-        var explored = isOwnSettlement
-            ? []
-            : await exploredArea.ExploredAmongAsync(
-                area,
-                entity.Buildings.Select(b => new HexCoord(b.Q, b.R))
-                    .Append(new HexCoord(entity.CentreQ, entity.CentreR)),
-                cancellationToken);
-        if (!isOwnSettlement && !explored.Contains(new HexCoord(entity.CentreQ, entity.CentreR)))
+        IReadOnlyList<PlacedBuildingEntity> visibleBuildings;
+        if (isOwnSettlement)
         {
-            // Never reveal that an unexplored settlement even exists.
-            return TypedResults.NotFound(SettlementNotFoundProblem());
+            visibleBuildings = entity.Buildings;
+        }
+        else
+        {
+            var sights = await RivalVisibility.ForAsync(exploredArea, area, [entity], _ => false, withLabels: false, cancellationToken);
+            if (sights.Count == 0)
+            {
+                // Never reveal that a settlement with nothing in sight even exists.
+                return TypedResults.NotFound(SettlementNotFoundProblem());
+            }
+
+            visibleBuildings = sights[0].VisibleBuildings;
         }
 
         IReadOnlyList<PlacedBuildingResponse> buildings =
-        [
-            .. entity.Buildings
-                .Where(b => isOwnSettlement || explored.Contains(new HexCoord(b.Q, b.R)))
-                .Select(b => PlacedBuildingResponse.From(b.ToPlacedBuilding())),
-        ];
+            [.. visibleBuildings.Select(b => PlacedBuildingResponse.From(b.ToPlacedBuilding()))];
 
         var realmLabel = await LinkedRealmNames.ForSettlementAsync(db, entity, cancellationToken);
 
@@ -302,9 +321,10 @@ public static class SettlementEndpoints
     /// rather than a 403/400 — this is a passive listing, not a specific
     /// ask. Otherwise: the caller's own settlements (every realm they hold,
     /// not just their primary one — settler-convoy foundings can leave a
-    /// player with several) plus every settlement whose centre hex is in
-    /// their explored area (<see cref="ExploredAreaService"/>) — exactly
-    /// what their own fog mask/world map already shows them.
+    /// player with several) plus every rival settlement whose centre hex or any
+    /// standing building's hex is in their visible area, or has a visible hex inside the claim disc of its Longhouse or one of its
+    /// towers (<see cref="ExploredAreaService"/>, <see cref="RivalVisibility"/>) — what their own fog mask/world map already shows them.
+    /// A listed rival's summary is complete; its <c>LabelQ</c>/<c>LabelR</c> say which visible hex to label it on.
     /// </summary>
     private static async Task<Ok<IReadOnlyList<SettlementSummary>>> ListForWorld(
         Guid worldId,
@@ -327,34 +347,27 @@ public static class SettlementEndpoints
             return TypedResults.Ok<IReadOnlyList<SettlementSummary>>([]);
         }
 
-        var user = httpContext.User;
-        var idClaim = user.Identity?.IsAuthenticated == true
-            ? user.FindFirstValue(ClaimTypes.NameIdentifier)
-            : null;
-        var callerUserId = Guid.TryParse(idClaim, out var parsedUserId) ? parsedUserId : (Guid?)null;
+        var callerUserId = RivalVisibility.CallerUserId(httpContext.User);
 
         var entities = await settlements.GetForWorldAsync(worldId, cancellationToken);
 
-        bool IsMine(Bjarnoy.Infrastructure.Entities.SettlementEntity s) =>
-            s.OwnerId == realm.OwnerId || (callerUserId is not null && s.UserId == callerUserId);
+        bool IsMine(SettlementEntity s) => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId);
 
-        // Only rivals' centres need the fog check; the explored lookup reads
-        // just the stored chunks those centres fall in.
-        var explored = await exploredArea.ExploredAmongAsync(
-            area,
-            entities
-                .Where(s => !IsMine(s))
-                .Select(s => new HexCoord(s.CentreQ, s.CentreR)),
-            cancellationToken);
+        var sights = await RivalVisibility.ForAsync(exploredArea, area, entities, IsMine, withLabels: true, cancellationToken);
+        var labelHexOf = sights.ToDictionary(sight => sight.Settlement.Id, sight => sight.LabelHex!.Value);
 
-        // Every longhouse stays (the map draws them), each under its linked realm's name.
+        // Every visible longhouse stays (the map draws them), each under its linked realm's name.
         var labels = await LinkedRealmNames.ForAsync(db, worldId, entities, cancellationToken);
+
+        var relationOf = await SettlementRelations.ForCallerAsync(db, worldId, callerUserId, IsMine, cancellationToken);
 
         IReadOnlyList<SettlementSummary> response =
         [
             .. entities
-                .Where(s => IsMine(s) || explored.Contains(new HexCoord(s.CentreQ, s.CentreR)))
-                .Select(s => SettlementSummary.From(s, IsMine(s), labels[s.Id])),
+                .Where(s => IsMine(s) || labelHexOf.ContainsKey(s.Id))
+                .Select(s => SettlementSummary.From(
+                    s, IsMine(s), labels[s.Id], relationOf(s),
+                    IsMine(s) ? new HexCoord(s.CentreQ, s.CentreR) : labelHexOf[s.Id])),
         ];
 
         return TypedResults.Ok(response);
@@ -391,7 +404,7 @@ public static class SettlementEndpoints
         if (result.Accepted)
         {
             var order = result.Order!;
-            var definition = BuildingCatalogue.Get(order.Type, order.TargetLevel);
+            var definition = BuildingCatalogue.Get(order.Type, order.LevelInWork);
             var totalSeconds = order.IsWaiting
                 ? order.BaseDuration.TotalSeconds
                 : (order.CompletesAt!.Value - order.StartedAt!.Value).TotalSeconds;
@@ -405,7 +418,8 @@ public static class SettlementEndpoints
                     definition.SlotCost,
                     order.CompletesAt,
                     order.IsWaiting ? null : totalSeconds,
-                    totalSeconds));
+                    totalSeconds,
+                    order.Kind.ToWireName()));
         }
 
         var problem = new ProblemDetails
@@ -426,6 +440,57 @@ public static class SettlementEndpoints
             problem.Extensions["requiredLevel"] = missing.Level;
         }
 
+        return result.Rejection == BuildRejection.UnknownBuildingLevel
+            ? TypedResults.NotFound()
+            : TypedResults.Conflict(problem);
+    }
+
+    private static async Task<Results<Accepted<BuildOrderResponse>, NotFound, Conflict<ProblemDetails>>> RazeBuilding(
+        Guid settlementId,
+        RazeBuildingRequest request,
+        SettlementService settlements,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var result = await settlements.RazeBuildingLevelAsync(
+            settlementId, new HexCoord(request.Q, request.R), cancellationToken);
+
+        if (result.WorldPaused)
+        {
+            return TypedResults.Conflict(WorldPausedProblem());
+        }
+
+        if (result.Accepted)
+        {
+            var order = result.Order!;
+            var definition = BuildingCatalogue.Get(order.Type, order.LevelInWork);
+            var totalSeconds = order.IsWaiting
+                ? order.BaseDuration.TotalSeconds
+                : (order.CompletesAt!.Value - order.StartedAt!.Value).TotalSeconds;
+
+            return TypedResults.Accepted(
+                $"/api/v1/settlements/{settlementId}",
+                new BuildOrderResponse(
+                    order.Id, order.Coord.Q, order.Coord.R, order.Type.ToWireName(),
+                    order.TargetLevel,
+                    order.IsWaiting ? "waiting" : "building",
+                    definition.SlotCost,
+                    order.CompletesAt,
+                    order.IsWaiting ? null : totalSeconds,
+                    totalSeconds,
+                    order.Kind.ToWireName()));
+        }
+
+        var problem = new ProblemDetails
+        {
+            Title = "The raze was refused.",
+            Detail = Describe(result.Rejection),
+            Status = StatusCodes.Status409Conflict,
+        };
+        problem.Extensions["rejection"] = result.Rejection.ToString();
+
+        // UnknownBuildingLevel is how the service reports a settlement that does not exist.
         return result.Rejection == BuildRejection.UnknownBuildingLevel
             ? TypedResults.NotFound()
             : TypedResults.Conflict(problem);
@@ -535,6 +600,41 @@ public static class SettlementEndpoints
         problem.Extensions["rejection"] = result.Rejection.ToString();
 
         return TypedResults.Conflict(problem);
+    }
+
+    private static async Task<Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>, ValidationProblem>> Rename(
+        Guid settlementId,
+        RenameSettlementRequest request,
+        SettlementService settlements,
+        GameDbContext db,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        // The attribute length checks run on the raw text; the real rule is on the trimmed name.
+        var name = request.Name.Trim();
+        if (name.Length is < 2 or > 100)
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [nameof(request.Name)] = ["The name must be 2 to 100 characters long once trimmed."],
+            });
+        }
+
+        var result = await settlements.RenameAsync(settlementId, name, cancellationToken);
+
+        if (result.SettlementNotFound)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (result.WorldPaused)
+        {
+            return TypedResults.Conflict(WorldPausedProblem());
+        }
+
+        var clock = result.Clock!.Value;
+        return TypedResults.Ok(
+            await SettlementResponse.ForOwnerAsync(db, result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow()), cancellationToken));
     }
 
     private static async Task<Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>>> ClaimQuest(
@@ -833,6 +933,8 @@ public static class SettlementEndpoints
         BuildRejection.NewPlacementDisabled => "That building can no longer be built; existing ones keep working.",
         BuildRejection.BridgeNeedsWideRiver =>
             "A bridge only spans a wide river crossing: streams can be waded and other river tiles take no bridge.",
+        BuildRejection.NoBuildingOnHex => "There is no building to raze on that hex.",
+        BuildRejection.LonghouseCannotBeRazed => "The longhouse cannot be razed.",
         BuildRejection.NoFreeSlot =>
             "Every construction slot is busy. Premium settlements can queue extra builds to wait for a free slot.",
         _ => "Refused.",
@@ -843,6 +945,7 @@ public static class SettlementEndpoints
         QuestRejection.UnknownQuest => "There is no such quest.",
         QuestRejection.AlreadyClaimed => "This quest's reward was already claimed.",
         QuestRejection.NotCompleted => "This quest is not completed yet.",
+        QuestRejection.NotFirstSettlement => "Quests are only available on your first settlement.",
         _ => "Refused.",
     };
 

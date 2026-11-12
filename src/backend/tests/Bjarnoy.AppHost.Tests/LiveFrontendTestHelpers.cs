@@ -4,7 +4,9 @@ using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
 using Bjarnoy.Api.Contracts;
+using Bjarnoy.Domain.World;
 using Microsoft.Playwright;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.AppHost.Tests;
 
@@ -76,7 +78,7 @@ public static class LiveFrontendTestHelpers
     /// <summary>
     /// Navigates <paramref name="page"/> to <paramref name="frontendUrl"/> and
     /// founds the starting settlement through the real UI, the same way a
-    /// brand-new player does. Returns once the tray confirms
+    /// brand-new player does. Returns once the stepper confirms
     /// <c>player.hasFoundedSettlement</c> is true (mirrors
     /// <see cref="FoundingSettlementPersistenceTests"/>'s own click-retry loop
     /// and its reasoning — see that file for why the retry exists).
@@ -91,7 +93,7 @@ public static class LiveFrontendTestHelpers
         // about a real backend.
         await Assertions.Expect(page.GetByText("Demo mode")).Not.ToBeVisibleAsync(new() { Timeout = 15_000 });
 
-        var trayStatus = page.Locator(".tray-item .sub").First;
+        var firstStep = page.Locator("[data-testid=\"onboarding-checklist\"] .step").First;
         var canvas = page.Locator("canvas");
         // The canvas mounts only once PixiJS has a WebGL context and its
         // first frame ready — on a cold, unbundled Vite dev server under
@@ -156,11 +158,11 @@ public static class LiveFrontendTestHelpers
                 // mid-flight, which most likely means a previous attempt's
                 // click DID found and the view has already flipped into
                 // settlement mode. There is no plot left to click, so settle
-                // it on the tray rather than burning the remaining attempts
+                // it on the stepper rather than burning the remaining attempts
                 // clicking into a view that can no longer found.
                 try
                 {
-                    await Assertions.Expect(trayStatus).ToHaveTextAsync("Placed", new() { Timeout = 10_000 });
+                    await Assertions.Expect(firstStep).ToHaveClassAsync(new System.Text.RegularExpressions.Regex(@"\bdone\b"), new() { Timeout = 10_000 });
                     founded = true;
                 }
                 catch (PlaywrightException)
@@ -175,7 +177,7 @@ public static class LiveFrontendTestHelpers
             await page.Mouse.ClickAsync(box.X + (float)point[0], box.Y + (float)point[1]);
             try
             {
-                await Assertions.Expect(trayStatus).ToHaveTextAsync("Placed", new() { Timeout = 2_000 });
+                await Assertions.Expect(firstStep).ToHaveClassAsync(new System.Text.RegularExpressions.Regex(@"\bdone\b"), new() { Timeout = 2_000 });
                 founded = true;
             }
             catch (PlaywrightException)
@@ -195,7 +197,7 @@ public static class LiveFrontendTestHelpers
             // #96) — is the difference between "the request never went out"
             // and "the click hit the wrong hex", so surface it rather than
             // leaving this exception to guess.
-            var heroStatus = await page.Locator(".hero .status").AllTextContentsAsync();
+            var heroStatus = await page.Locator(".founding-col .status").AllTextContentsAsync();
             var recentConsole = consoleMessages.Count > 20
                 ? consoleMessages.Skip(consoleMessages.Count - 20)
                 : consoleMessages;
@@ -257,6 +259,16 @@ public static class LiveFrontendTestHelpers
     }
 
     /// <summary>
+    /// Sets the map's "Smooth edges" setting (<c>lib/perf/antialiasPreference.ts</c>) to off, the way a player does: through
+    /// its own localStorage key, before the app loads. MSAA multiplies the fill cost of every frame on CI's software
+    /// renderer, and each frame the renderer is slow to produce is one more the page's animations (the ring's layer swap
+    /// waits on them) have to wait for. Same as the demo suite's <c>antialias: 'off'</c> in <c>e2e/fixtures.ts</c>; only
+    /// geometry edges change with it, so it is for tests whose assertions are DOM and game state.
+    /// </summary>
+    public static Task TurnSmoothEdgesOffAsync(IPage page) =>
+        page.AddInitScriptAsync("() => { try { window.localStorage.setItem('bjarnoy.antialias', 'off'); } catch { /* storage blocked: stays on */ } }");
+
+    /// <summary>
     /// Builds <paramref name="building"/> through the open ring menu the way a player does: the Build hub, then
     /// <paramref name="category"/>, then the building bubble. The onboarding ring is the map's own two-lane ring
     /// (<c>useBuildRing</c>), so a building is never on the first layer. Waits for each layer swap to land, as
@@ -280,6 +292,14 @@ public static class LiveFrontendTestHelpers
     }
 
     /// <summary>
+    /// How long a layer swap may take to land. The swap is only Web Animations (~0.25 s under reduced motion, under 1 s
+    /// otherwise), but they finish a frame at a time, and on CI's software renderer one frame of the map takes hundreds of
+    /// ms: swaps were seen at 4.4 and 5.5 s there, past Playwright's 5 s default. Same budget as this class's other
+    /// element waits.
+    /// </summary>
+    private const float SwapLandedTimeoutMs = 10_000;
+
+    /// <summary>
     /// Waits for the layer swap after clicking <paramref name="clicked"/> to land. On a timeout the exception carries what
     /// the page showed: a count of 0 means either the ring is gone or it is stuck mid-swap (<c>data-swapping</c> never
     /// cleared), and only the DOM state plus the timeline from <see cref="RingTimelineScript"/> can tell those apart —
@@ -289,7 +309,7 @@ public static class LiveFrontendTestHelpers
     {
         try
         {
-            await Assertions.Expect(swapped).ToHaveCountAsync(1);
+            await Assertions.Expect(swapped).ToHaveCountAsync(1, new() { Timeout = SwapLandedTimeoutMs });
         }
         catch (PlaywrightException ex)
         {
@@ -378,5 +398,57 @@ public static class LiveFrontendTestHelpers
             new AuthenticationHeaderValue("Bearer", adminAuth.AccessToken);
 
         return adminHttpClient;
+    }
+
+    /// <summary>
+    /// The hex nearest <paramref name="centre"/> within the level-1 claim (radius 2) where a guided building of
+    /// <paramref name="terrain"/> ("grass" for the Reindeer Herder, "forest" for the Lumberjack) can actually be queued:
+    /// that terrain, not a river hex and not a camp hex — the two refusals of <c>Settlement.PlanBuild</c> a plain terrain
+    /// check misses. A start position only promises one forest and two grass neighbours by terrain; about one start in
+    /// twenty has a river or a camp on the first of them, and every test of a run shares the run's one random-seed world,
+    /// so a "first grass neighbour" pick failed all guided-build tests of such a run together (409 on the queue POST, or
+    /// no Reindeer Herder in the ring). <paramref name="apiClient"/> must carry the founder's <c>X-Owner-Id</c>: camps
+    /// ship only for an island the caller has seen.
+    /// </summary>
+    public static async Task<HexCoord> FindGuidedBuildHexAsync(
+        HttpClient apiClient, Guid worldId, HexCoord centre, string terrain, CancellationToken cancellationToken)
+    {
+        const int claimRadius = 2;
+        var chunk = await apiClient.GetFromJsonAsync<TileChunkResponse>(
+            $"/api/v1/worlds/{worldId}/tiles?qMin={centre.Q - claimRadius}&qMax={centre.Q + claimRadius}"
+            + $"&rMin={centre.R - claimRadius}&rMax={centre.R + claimRadius}",
+            cancellationToken);
+        var islands = await apiClient.GetFullIslandsAsync(worldId, cancellationToken);
+        var island = islands!.Single(i => i.StartPositions.Any(p => p.Q == centre.Q && p.R == centre.R));
+        var blocked = island.RiverTiles.Select(t => new HexCoord(t.Q, t.R))
+            .Concat(island.Camps.Select(c => new HexCoord(c.Q, c.R)))
+            .ToHashSet();
+
+        return chunk!.Tiles
+            .Select(t => (Coord: new HexCoord(t.Q, t.R), t.Terrain))
+            .Where(t => t.Terrain == terrain && !blocked.Contains(t.Coord))
+            .Select(t => t.Coord)
+            .Where(c => centre.DistanceTo(c) is >= 1 and <= claimRadius)
+            .OrderBy(c => centre.DistanceTo(c))
+            .ThenBy(c => c.Q)
+            .ThenBy(c => c.R)
+            .First();
+    }
+
+    /// <summary>
+    /// <see cref="HttpResponseMessage.EnsureSuccessStatusCode"/> with the response body in the failure: a refused build
+    /// answers 409 with a ProblemDetails whose <c>rejection</c> names the rule, and the bare status code hides it.
+    /// </summary>
+    public static async Task EnsureSuccessWithBodyAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new HttpRequestException(
+                $"{(int)response.StatusCode} ({response.StatusCode}) from {response.RequestMessage?.Method} "
+                + $"{response.RequestMessage?.RequestUri}: {body}",
+                null,
+                response.StatusCode);
+        }
     }
 }

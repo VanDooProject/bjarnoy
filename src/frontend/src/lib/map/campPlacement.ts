@@ -81,17 +81,22 @@ export function isWaterCampFamily(family: string): boolean {
   return campFamilyInfo(family)?.ground === 'sea';
 }
 
+/** True for a sand camp (a seal or walrus haul-out) — mirrors `CampFamilies.IsSand`. A fleet's land troops hunt it from the ships. */
+export function isSandCampFamily(family: string): boolean {
+  return campFamilyInfo(family)?.ground === 'sand';
+}
+
 /** One strong camp per this many land tiles (rounded) — mirrors `CampGenerator.StrongCampTilesPer`. */
 export const StrongCampTilesPer = 1500;
 
 /** One weak camp per this many land tiles (rounded) — mirrors `CampGenerator.WeakCampTilesPer`. */
-export const WeakCampTilesPer = 600;
+export const WeakCampTilesPer = 400;
 
 /** No island gets more strong camps than this — mirrors `CampGenerator.MaxStrongCampsPerIsland`. */
 export const MaxStrongCampsPerIsland = 16;
 
 /** No island gets more weak camps than this — mirrors `CampGenerator.MaxWeakCampsPerIsland`. */
-export const MaxWeakCampsPerIsland = 24;
+export const MaxWeakCampsPerIsland = 36;
 
 /** An island with fewer land tiles than this gets no camp at all — mirrors `CampGenerator.MinCampIslandTiles`. */
 export const MinCampIslandTiles = 60;

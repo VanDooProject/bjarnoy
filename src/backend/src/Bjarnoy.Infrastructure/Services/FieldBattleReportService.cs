@@ -42,4 +42,27 @@ public sealed class FieldBattleReportService(GameDbContext dbContext)
         reports.Sort((a, b) => b.OccurredAt.CompareTo(a.OccurredAt));
         return reports;
     }
+
+    /// <summary>
+    /// The settlement name and owner name of every side of <paramref name="reports"/>, by settlement id, so a report can say
+    /// who fought. A settlement that no longer exists is simply absent from the result.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, FieldBattleSideName>> GetSideNamesAsync(
+        IEnumerable<FieldBattleReportEntity> reports, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reports);
+
+        var ids = reports.SelectMany(r => new[] { r.SideASettlementId, r.SideBSettlementId }).Distinct().ToList();
+        if (ids.Count == 0) return new Dictionary<Guid, FieldBattleSideName>();
+
+        return await _dbContext.Settlements
+            .AsNoTracking()
+            .Where(s => ids.Contains(s.Id))
+            .Select(s => new { s.Id, s.Name, s.OwnerName })
+            .ToDictionaryAsync(s => s.Id, s => new FieldBattleSideName(s.Name, s.OwnerName), cancellationToken)
+            .ConfigureAwait(false);
+    }
 }
+
+/// <summary>The settlement and its owner as shown on a field-battle report side.</summary>
+public sealed record FieldBattleSideName(string SettlementName, string OwnerName);

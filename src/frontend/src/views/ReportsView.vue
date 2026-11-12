@@ -1,24 +1,27 @@
 <script setup lang="ts">
-// Issue #40 phase 3: battle-reports inbox and detail — now rendered inside
+// Issue #40 phase 3: battle-reports inbox — rendered inside
 // components/reports/ReportsModal.vue's shared dialog chrome as a modal over
 // whatever page was showing before (see lib/modalRoute.ts and App.vue's own
 // comment), rather than a full page of its own. This component keeps all of
-// the actual reports logic (data loading, the kind filter, the list/detail
-// split); ReportsModal.vue is only the chrome around it — mirroring how
-// ProfileModal.vue wraps ProfileView.vue. List and detail still share this
-// one component (mirroring how ProfileView.vue reuses one component for "my
-// profile" vs. "someone else's") since the detail is just "the list, but
-// one row expanded to a full card" with no separate data-loading concern
-// once the list itself is loaded.
+// the actual reports logic (data loading, the kind filter, which rows are
+// open); ReportsModal.vue is only the chrome around it — mirroring how
+// ProfileModal.vue wraps ProfileView.vue.
+//
+// Every row is collapsible and expands in place into its full report, any
+// number at once, so reports can be read side by side with no detail page
+// to go back from. `/reports/:reportId` is only a deep link: that row starts
+// expanded (and is scrolled into view); opening and closing rows never
+// touches the URL.
 //
 // The battle-detail card itself is BattleReportCard.vue (issue #40 phase 7)
 // — extracted so the premium fight simulator can render its result with the
 // exact same markup as a real report, rather than duplicating it.
-import { computed, onMounted, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { usePlayerStore } from '../stores/player';
 import { useReportsStore } from '../stores/reports';
+import { useWorldStore } from '../stores/world';
 import { DEMO_MODE } from '../config';
 import type { BattleReportResponse, FieldBattleReportResponse, TradeReportResponse } from '../api/types';
 import { isVictoryFor, missionLabel, outcomeLabel, reportSummaryLine, sideFor } from '../lib/units/battleReports';
@@ -30,10 +33,11 @@ import {
 } from '../lib/units/fieldBattleReports';
 import { tradeSideFor, tradeSummaryLine } from '../lib/units/tradeReports';
 import { type InboxKindFilter, filterInbox } from '../lib/units/inbox';
-import { reportsLocation } from '../lib/modalRoute';
 import BattleReportCard from '../components/battle/BattleReportCard.vue';
 import FieldBattleReportCard from '../components/battle/FieldBattleReportCard.vue';
 import CampReportCard from '../components/battle/CampReportCard.vue';
+import ArmyReportCard from '../components/battle/ArmyReportCard.vue';
+import { armyReportHex } from '../lib/units/armyReports';
 import { campName } from '../i18n/catalogueNames';
 import { isCampReportVictory, totalBeastsLost, totalCampLoot, totalUnitsLost } from '../lib/units/campReports';
 import type { MessageSchema } from '../i18n/schema';
@@ -41,16 +45,16 @@ import type { MessageSchema } from '../i18n/schema';
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const route = useRoute();
-const router = useRouter();
 const player = usePlayerStore();
 const reports = useReportsStore();
+const world = useWorldStore();
 
 const reportId = computed(() => (typeof route.params.reportId === 'string' ? route.params.reportId : null));
 const kindFilter = ref<InboxKindFilter>('all');
 
 async function load() {
   if (!player.settlementId) return;
-  await reports.load(player.settlementId, player.id);
+  await reports.load(player.settlementId, player.id, world.worldId);
   // Opening the inbox (list or a specific report) is what "reading it"
   // means client-side — see stores/reports.ts's own comment on why there is
   // no backend read-state to defer to instead.
@@ -60,23 +64,36 @@ async function load() {
 onMounted(load);
 watch(() => player.settlementId, load);
 
-function open(id: string) {
-  router.push(reportsLocation(router, id));
+// Rows currently expanded. Local state, not the URL: any number can be open at once.
+const expanded = ref(new Set<string>());
+const listRef = ref<HTMLElement | null>(null);
+function isExpanded(id: string): boolean {
+  return expanded.value.has(id);
 }
-// Exposed to ReportsModal.vue for the mobile header's back chevron on a
-// detail (list → this modal's own close() instead, since there's nowhere
-// "up" from the list). Goes back in history when the previous entry really
-// is the list (an in-app "open a report" navigation), otherwise replaces
-// with the list location instead of leaving a stray detail entry in
-// history — same reasoning as RouteModal.vue's own close().
-function backToList() {
-  const state = router.options.history.state as { back?: unknown };
-  if (state.back === '/reports') {
-    router.back();
-  } else {
-    router.replace(reportsLocation(router));
-  }
+function toggle(id: string) {
+  const next = new Set(expanded.value);
+  if (!next.delete(id)) next.add(id);
+  expanded.value = next;
 }
+// A deep link (`/reports/:reportId`) opens that report's row and brings it into view once the list has rendered.
+watch(
+  reportId,
+  async (id) => {
+    if (!id) return;
+    expanded.value = new Set(expanded.value).add(id);
+    await nextTick();
+    listRef.value?.querySelector<HTMLElement>(`[data-report-id="${CSS.escape(id)}"]`)?.scrollIntoView?.({ block: 'nearest' });
+  },
+  { immediate: true },
+);
+watch(
+  () => reports.inboxItems.length,
+  async () => {
+    if (!reportId.value) return;
+    await nextTick();
+    listRef.value?.querySelector<HTMLElement>(`[data-report-id="${CSS.escape(reportId.value)}"]`)?.scrollIntoView?.({ block: 'nearest' });
+  },
+);
 
 function sideOf(report: BattleReportResponse): 'attacker' | 'defender' {
   if (!player.settlementId) return 'attacker';
@@ -101,6 +118,7 @@ const rows = computed(() =>
       const side = sideOf(item.report);
       return {
         kind: 'battle' as const,
+        item,
         id: item.report.id,
         outcome: outcomeLabel(item.report, side),
         isVictory: isVictoryFor(item.report, side),
@@ -114,6 +132,7 @@ const rows = computed(() =>
       const side = fieldSideOf(item.report);
       return {
         kind: 'field' as const,
+        item,
         id: item.report.id,
         outcome: fieldBattleOutcomeLabel(item.report, side),
         isVictory: isFieldBattleVictoryFor(item.report, side),
@@ -127,6 +146,7 @@ const rows = computed(() =>
       const report = item.report;
       return {
         kind: 'camp' as const,
+        item,
         id: report.id,
         outcome: isCampReportVictory(report) ? t('hud.campReport.won') : t('hud.campReport.lost'),
         isVictory: isCampReportVictory(report),
@@ -141,9 +161,24 @@ const rows = computed(() =>
         when: d(new Date(report.occurredAt), 'long'),
       };
     }
+    if (item.kind === 'army') {
+      const report = item.report;
+      return {
+        kind: 'army' as const,
+        item,
+        id: report.id,
+        outcome: t(`reports.army.kind.${report.kind}`),
+        isVictory: false,
+        isTie: report.kind === 'stuck',
+        mission: t('reports.tabs.army'),
+        summary: t(`reports.army.${report.kind}`, { hex: armyReportHex(report) }),
+        when: d(new Date(report.occurredAt), 'long'),
+      };
+    }
     const side = tradeSideOf(item.report);
     return {
       kind: 'trade' as const,
+      item,
       id: item.report.id,
       outcome: null,
       isVictory: false,
@@ -154,30 +189,6 @@ const rows = computed(() =>
     };
   }),
 );
-
-const detailItem = computed(() => reports.inboxItems.find((item) => item.report.id === reportId.value) ?? null);
-const detail = computed(() => (detailItem.value?.kind === 'battle' ? detailItem.value.report : null));
-const fieldDetail = computed(() => (detailItem.value?.kind === 'field' ? detailItem.value.report : null));
-const campDetail = computed(() => (detailItem.value?.kind === 'camp' ? detailItem.value.report : null));
-const tradeDetail = computed(() => (detailItem.value?.kind === 'trade' ? detailItem.value.report : null));
-const detailSide = computed(() => (detail.value ? sideOf(detail.value) : 'attacker'));
-const fieldDetailSide = computed(() => (fieldDetail.value ? fieldSideOf(fieldDetail.value) : 'sidea'));
-const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDetail.value) : 'poster'));
-
-// Exposed to ReportsModal.vue for the modal's title: the mobile header bar
-// (list title, or a short label for whichever detail is open) and the
-// mobile chevron's target (isDetail decides whether it goes to backToList()
-// or falls through to RouteModal's own close()).
-const isDetail = computed(() => detailItem.value !== null);
-const detailTitle = computed(() => {
-  if (detail.value) return missionLabel(detail.value.mission);
-  if (fieldDetail.value) return t('hud.fieldBattleReport.title');
-  if (campDetail.value) return t(`hud.campReport.kind.${campDetail.value.kind}`);
-  if (tradeDetail.value) return tradeDetail.value.guildTrade ? t('reports.trade.guildTrade') : t('reports.trade.trade');
-  return t('reports.title');
-});
-
-defineExpose({ detailTitle, isDetail, backToList });
 </script>
 
 <template>
@@ -185,73 +196,12 @@ defineExpose({ detailTitle, isDetail, backToList });
     <p v-if="DEMO_MODE" class="hint">{{ $t('reports.demoModeHint') }}</p>
     <p v-else-if="!player.settlementId" class="hint">{{ $t('reports.noSettlement') }}</p>
 
-    <template v-else-if="tradeDetail">
-      <button type="button" class="back-to-list" data-testid="reports-back-to-list" @click="backToList">
-        {{ $t('reports.backToList') }}
-      </button>
-      <div class="card trade" data-testid="report-detail">
-        <div class="card-header">
-          <span class="banner trade-banner">{{ $t('reports.trade.completed') }}</span>
-          <span class="mission-pill">{{
-            tradeDetail.guildTrade ? $t('reports.trade.guildTrade') : $t('reports.trade.trade')
-          }}</span>
-        </div>
-        <p class="occurred">{{ d(new Date(tradeDetail.completedAt), 'long') }}</p>
-
-        <div class="power-row">
-          <div class="power">
-            <span class="power-label">{{ $t('reports.trade.youGave') }}</span>
-            <span class="power-value">
-              {{ Math.round(tradeDetailSide === 'poster' ? tradeDetail.offeredAmount : tradeDetail.requestedAmount) }}
-              {{ tradeDetailSide === 'poster' ? tradeDetail.offeredResource : tradeDetail.requestedResource }}
-            </span>
-          </div>
-          <div class="power">
-            <span class="power-label">{{ $t('reports.trade.youReceived') }}</span>
-            <span class="power-value">
-              {{ Math.round(tradeDetailSide === 'poster' ? tradeDetail.requestedAmount : tradeDetail.offeredAmount) }}
-              {{ tradeDetailSide === 'poster' ? tradeDetail.requestedResource : tradeDetail.offeredResource }}
-            </span>
-          </div>
-        </div>
-
-        <p class="trade-travel">{{ $t('reports.trade.travelled', { hours: tradeDetail.travelHours.toFixed(1) }) }}</p>
-      </div>
-    </template>
-
-    <template v-else-if="detail">
-      <button type="button" class="back-to-list" data-testid="reports-back-to-list" @click="backToList">
-        {{ $t('reports.backToList') }}
-      </button>
-      <div data-testid="report-detail">
-        <BattleReportCard :report="detail" :side="detailSide" :occurred-at="detail.occurredAt" />
-      </div>
-    </template>
-
-    <template v-else-if="fieldDetail">
-      <button type="button" class="back-to-list" data-testid="reports-back-to-list" @click="backToList">
-        {{ $t('reports.backToList') }}
-      </button>
-      <div data-testid="report-detail">
-        <FieldBattleReportCard :report="fieldDetail" :side="fieldDetailSide" :occurred-at="fieldDetail.occurredAt" />
-      </div>
-    </template>
-
-    <template v-else-if="campDetail">
-      <button type="button" class="back-to-list" data-testid="reports-back-to-list" @click="backToList">
-        {{ $t('reports.backToList') }}
-      </button>
-      <div data-testid="report-detail">
-        <CampReportCard :report="campDetail" />
-      </div>
-    </template>
-
     <template v-else>
       <h1>{{ $t('reports.title') }}</h1>
 
       <div class="kind-tabs">
         <button
-          v-for="tab in (['all', 'battle', 'field', 'camp', 'trade'] as const)"
+          v-for="tab in (['all', 'battle', 'field', 'camp', 'army', 'trade'] as const)"
           :key="tab"
           type="button"
           class="kind-tab"
@@ -266,29 +216,75 @@ defineExpose({ detailTitle, isDetail, backToList });
       <p v-else-if="reports.error" class="hint error">{{ reports.error }}</p>
       <p v-else-if="!rows.length" class="hint">{{ $t('reports.noReports') }}</p>
 
-      <div v-else class="list">
-        <button
-          v-for="row in rows"
-          :key="row.id"
-          type="button"
-          class="row"
-          data-testid="report-row"
-          @click="open(row.id)"
-        >
-          <div class="row-top">
-            <span
-              v-if="row.kind === 'battle' || row.kind === 'field' || row.kind === 'camp'"
-              class="outcome"
-              :class="row.isTie ? 'tie' : row.isVictory ? 'victory' : 'defeat'"
-            >
-              {{ row.outcome }}
-            </span>
-            <span v-else class="outcome trade-outcome">{{ $t('reports.trade.trade') }}</span>
-            <span class="mission-pill">{{ row.mission }}</span>
-            <span class="when">{{ row.when }}</span>
+      <div v-else ref="listRef" class="list">
+        <div v-for="row in rows" :key="row.id" class="item" :data-report-id="row.id">
+          <button
+            type="button"
+            class="row"
+            :class="{ open: isExpanded(row.id) }"
+            data-testid="report-row"
+            :aria-expanded="isExpanded(row.id)"
+            @click="toggle(row.id)"
+          >
+            <div class="row-top">
+              <span
+                v-if="row.kind === 'battle' || row.kind === 'field' || row.kind === 'camp' || row.kind === 'army'"
+                class="outcome"
+                :class="row.isTie ? 'tie' : row.isVictory ? 'victory' : 'defeat'"
+              >
+                {{ row.outcome }}
+              </span>
+              <span v-else class="outcome trade-outcome">{{ $t('reports.trade.trade') }}</span>
+              <span class="mission-pill">{{ row.mission }}</span>
+              <span class="when">{{ row.when }}</span>
+              <span class="chevron" aria-hidden="true" />
+            </div>
+            <div class="row-summary">{{ row.summary }}</div>
+          </button>
+
+          <div v-if="isExpanded(row.id)" class="row-body" data-testid="report-detail">
+            <BattleReportCard
+              v-if="row.item.kind === 'battle'"
+              :report="row.item.report"
+              :side="sideOf(row.item.report)"
+              :occurred-at="row.item.report.occurredAt"
+            />
+            <FieldBattleReportCard
+              v-else-if="row.item.kind === 'field'"
+              :report="row.item.report"
+              :side="fieldSideOf(row.item.report)"
+              :occurred-at="row.item.report.occurredAt"
+            />
+            <CampReportCard v-else-if="row.item.kind === 'camp'" :report="row.item.report" />
+            <ArmyReportCard v-else-if="row.item.kind === 'army'" :report="row.item.report" />
+            <div v-else class="card trade">
+              <div class="card-header">
+                <span class="banner trade-banner">{{ $t('reports.trade.completed') }}</span>
+                <span class="mission-pill">{{ row.mission }}</span>
+              </div>
+              <p class="occurred">{{ row.when }}</p>
+
+              <div class="power-row">
+                <div class="power">
+                  <span class="power-label">{{ $t('reports.trade.youGave') }}</span>
+                  <span class="power-value">
+                    {{ Math.round(tradeSideOf(row.item.report) === 'poster' ? row.item.report.offeredAmount : row.item.report.requestedAmount) }}
+                    {{ tradeSideOf(row.item.report) === 'poster' ? row.item.report.offeredResource : row.item.report.requestedResource }}
+                  </span>
+                </div>
+                <div class="power">
+                  <span class="power-label">{{ $t('reports.trade.youReceived') }}</span>
+                  <span class="power-value">
+                    {{ Math.round(tradeSideOf(row.item.report) === 'poster' ? row.item.report.requestedAmount : row.item.report.offeredAmount) }}
+                    {{ tradeSideOf(row.item.report) === 'poster' ? row.item.report.requestedResource : row.item.report.offeredResource }}
+                  </span>
+                </div>
+              </div>
+
+              <p class="trade-travel">{{ $t('reports.trade.travelled', { hours: row.item.report.travelHours.toFixed(1) }) }}</p>
+            </div>
           </div>
-          <div class="row-summary">{{ row.summary }}</div>
-        </button>
+        </div>
       </div>
 
       <p class="simulator-link">
@@ -317,28 +313,10 @@ h1 {
   color: #e08a8a;
 }
 
-/* Desktop-only "← Reports" back button — on mobile, ReportsModal.vue's
-   header chevron does the same job (see MOBILE_MODAL_MAX_WIDTH's own
-   comment on why this literal must be kept in sync by hand: plain CSS here
-   has no access to the shared TS constant inside a `@media` condition). */
-.back-to-list {
-  display: inline-block;
-  margin-bottom: 16px;
-  background: transparent;
-  border: 1px solid var(--panel-border);
-  color: var(--text);
-  padding: 8px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.back-to-list:hover {
-  border-color: var(--gold);
-}
-/* Same for the list's own "Reports" heading: the mobile header bar already
-   titles the modal, so showing it twice just pushes the list down. */
+/* The mobile header bar already titles the modal, so the list's own "Reports"
+   heading would just push the list down (see MOBILE_MODAL_MAX_WIDTH's comment
+   on why this literal must be kept in sync by hand). */
 @media (max-width: 640px) {
-  .back-to-list,
   h1 {
     display: none;
   }
@@ -395,8 +373,34 @@ h1 {
   cursor: pointer;
   font-family: inherit;
 }
-.row:hover {
+.row {
+  width: 100%;
+}
+.row:hover,
+.row.open {
   border-color: var(--gold);
+}
+.chevron {
+  width: 7px;
+  height: 7px;
+  margin: 0 4px 3px 2px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 0.15s;
+}
+.row.open .chevron {
+  margin-bottom: 0;
+  margin-top: 3px;
+  transform: rotate(225deg);
+}
+/* The expanded report sits directly under its row, the cards' own top margin dropped. */
+.row-body {
+  border: 1px solid var(--panel-border);
+  border-top: 0;
+}
+.row-body :deep(.card) {
+  margin-top: 0;
 }
 .row-top {
   display: flex;

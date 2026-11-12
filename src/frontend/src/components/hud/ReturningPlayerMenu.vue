@@ -43,7 +43,7 @@ import { mountLandingIntro } from '../../intro/startLandingIntro';
 // background of its own, the same chip look as the settlement bubble.
 //
 // `landingEntries`: the pre-founding landing bar has no HudNav, so this menu is
-// its only menu: it adds the Docs link, a "Start page" row (the intro's landing
+// its only menu ("How to play" floats beside it): it adds a "Start page" row (the intro's landing
 // page, otherwise only shown on a fresh device) and, on phones (where the
 // floating PlayIntroButton is left out), a "Play intro" row.
 const props = withDefaults(
@@ -94,8 +94,6 @@ function go(to: RouteLocationRaw) {
   close();
   router.push(to);
 }
-
-const docsHref = computed(() => router.resolve('/docs').href);
 
 function openIntro(playNow: boolean) {
   close();
@@ -194,9 +192,6 @@ watch(() => route.fullPath, close);
            stay first: they are what this menu is for. -->
       <slot name="entries" :close="close" />
       <template v-if="landingEntries">
-        <HudNavLink :href="docsHref" role="menuitem" class="row link-row" data-testid="returning-player-docs" @navigate="go('/docs')">
-          {{ t('hud.nav.docs') }}
-        </HudNavLink>
         <template v-if="!introMounted">
           <button type="button" role="menuitem" class="row" data-testid="returning-player-start-page" @click="openIntro(false)">
             {{ t('intro.startPage') }}
@@ -377,8 +372,7 @@ html[data-hud-motion='reduced'] .trigger.is-nudging {
 .name-jarl-row {
   color: var(--gold);
 }
-.settings-row,
-.link-row {
+.settings-row {
   display: block;
   text-decoration: none;
 }

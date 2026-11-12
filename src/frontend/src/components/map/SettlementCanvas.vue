@@ -65,6 +65,8 @@ const emit = defineEmits<{
   // A draft waypoint pin was tapped (grabbed and released without crossing
   // into another hex) — see HexMapRendererOptions.onWaypointTap.
   'waypoint-tap': [index: number];
+  // An army's marker was tapped — see HexMapRendererOptions.onArmyTap.
+  'army-tap': [armyId: string, screen: { x: number; y: number }];
   // Docs/design/zoom-transition.md: a wheel/pinch zoom crossed the enter- or
   // exit-threshold — see HexMapRendererOptions.onZoomModeChange.
   'zoom-mode-change': [mode: RenderMode];
@@ -94,6 +96,7 @@ const { renderer, loadState, animLoad, mountError, retry: retryMount } = useHexM
   onHoverChange: (info) => emit('hover', info),
   onWaypointMove: (index, coord) => emit('waypoint-move', index, coord),
   onWaypointTap: (index) => emit('waypoint-tap', index),
+  onArmyTap: (armyId, screen) => emit('army-tap', armyId, screen),
   onZoomModeChange: (mode) => emit('zoom-mode-change', mode),
   onCameraChange: () => emit('camera-change'),
 });

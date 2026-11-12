@@ -202,10 +202,10 @@ public class FoundingOnClickedTileTests(AppHostFixture fixture)
             ?? throw new InvalidOperationException("Map canvas never rendered a bounding box.");
 
         // Nearest alternative plot that actually renders somewhere clickable.
-        // "On the canvas" isn't enough on its own: the onboarding tray
-        // (LandingView's .tray, bottom: 96px) sits over the map and would eat
-        // the click, so the bottom strip is excluded outright. The hero copy
-        // and the top bar are both pointer-events: none, so only their
+        // "On the canvas" isn't enough on its own: the onboarding stepper
+        // (OnboardingChecklist's .steps, bottom: 44px) sits over the map and its
+        // current step would eat the click, so the bottom strip is excluded
+        // outright. The founding column is pointer-events: none, so only its
         // geometry — not their clicks — matters. With the pinned seed above
         // this always resolves to a neighbouring plot near the middle of the
         // canvas; the search (rather than a hardcoded offset) is what makes it
@@ -233,7 +233,7 @@ public class FoundingOnClickedTileTests(AppHostFixture fixture)
         var (target, click) = clickable[0];
         Assert.NotEqual(suggested, target);
 
-        var trayStatus = page.Locator(".tray-item .sub").First;
+        var firstStep = page.Locator("[data-testid=\"onboarding-checklist\"] .step").First;
         var founded = false;
         for (var attempt = 0; attempt < 10 && !founded; attempt++)
         {
@@ -254,7 +254,7 @@ public class FoundingOnClickedTileTests(AppHostFixture fixture)
                 attemptBox.X + (float)attemptClick.x, attemptBox.Y + (float)attemptClick.y);
             try
             {
-                await Assertions.Expect(trayStatus).ToHaveTextAsync("Placed", new() { Timeout = 2_000 });
+                await Assertions.Expect(firstStep).ToHaveClassAsync(new System.Text.RegularExpressions.Regex(@"\bdone\b"), new() { Timeout = 2_000 });
                 founded = true;
             }
             catch (PlaywrightException)
@@ -268,7 +268,7 @@ public class FoundingOnClickedTileTests(AppHostFixture fixture)
             $"Clicking the non-suggested start position ({target.Q}|{target.R}) at "
             + $"({click.x:F0},{click.y:F0}) in a {box.Width}x{box.Height} canvas never founded a settlement. "
             + $"Suggested plot was ({suggested.Q}|{suggested.R}). "
-            + $"Hero status: [{string.Join(" | ", await page.Locator(".hero .status").AllTextContentsAsync())}]. "
+            + $"Hero status: [{string.Join(" | ", await page.Locator(".founding-col .status").AllTextContentsAsync())}]. "
             + $"Console errors: [{string.Join(" | ", consoleErrors)}]");
 
         var settlements = await apiClient.GetFromJsonAsync<SettlementSummary[]>(

@@ -13,8 +13,6 @@ import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { terrainName, unitName } from '../i18n/catalogueNames';
 import { ravensRings } from '../lib/map/buildingEconomy';
 import {
-  ARMY_VISION_RINGS,
-  BRIDGE_GROUND_COST,
   BRIDGE_LEVELS,
   BRIDGE_UNLOCK,
   GROUND_COSTS,
@@ -61,7 +59,7 @@ const slowest = computed(() => {
 });
 
 const tocLinks = computed(() =>
-  ['example', 'cost', 'bridges', 'pace', 'food', 'road', 'sight'].map((id) => ({ href: `#${id}`, label: t(`docs.landMovement.toc.${id}`) })),
+  ['example', 'cost', 'bridges', 'pace', 'food', 'road', 'sendOut', 'sight'].map((id) => ({ href: `#${id}`, label: t(`docs.landMovement.toc.${id}`) })),
 );
 </script>
 
@@ -140,13 +138,7 @@ const tocLinks = computed(() =>
           <tbody>
             <tr v-for="b in BRIDGE_LEVELS" :key="b.level" :data-bridge="b.name">
               <th scope="row" class="name">{{ b.level }}: {{ $t(`docs.landMovement.bridges.levels.${b.name}`) }}</th>
-              <td class="value">
-                <template v-if="b.cost !== null">{{ n(b.cost) }}</template>
-                <template v-else>
-                  {{ n(BRIDGE_GROUND_COST.min) }}–{{ n(BRIDGE_GROUND_COST.max) }}
-                  <span class="muted">{{ $t('docs.landMovement.bridges.groundCost') }}</span>
-                </template>
-              </td>
+              <td class="value">{{ n(b.cost) }}</td>
               <td>{{ $t(b.everyone ? 'docs.landMovement.bridges.everyone' : 'docs.landMovement.bridges.friends') }}</td>
             </tr>
           </tbody>
@@ -204,6 +196,7 @@ const tocLinks = computed(() =>
         <li>{{ $t('docs.landMovement.food.upkeep') }}</li>
         <li>{{ $t('docs.landMovement.food.carry') }}</li>
         <li>{{ $t('docs.landMovement.food.turnBack') }}</li>
+        <li>{{ $t('docs.landMovement.food.noWayHome') }}</li>
       </ul>
       <div v-if="unitRows.length > 0" class="table-scroll">
         <table class="small" data-testid="food-table">
@@ -217,7 +210,7 @@ const tocLinks = computed(() =>
           <tbody>
             <tr v-for="row in unitRows" :key="row.type" :data-unit="row.type">
               <th scope="row" class="name">{{ unitName(row.type) }}</th>
-              <td class="value">{{ row.upkeep }}</td>
+              <td class="value">{{ n(row.upkeep) }}</td>
               <td class="value">{{ row.food }}</td>
             </tr>
           </tbody>
@@ -236,17 +229,30 @@ const tocLinks = computed(() =>
           <template #max>{{ strongCampGuardRange(5) }}</template>
         </i18n-t>
         <li>{{ $t('docs.landMovement.road.enemies') }}</li>
+        <li>{{ $t('docs.landMovement.road.fleeing') }}</li>
+        <li>{{ $t('docs.landMovement.road.newWalls') }}</li>
         <li>{{ $t('docs.landMovement.road.orders') }}</li>
+      </ul>
+    </section>
+
+    <section id="sendOut" class="block">
+      <h2>{{ $t('docs.landMovement.sendOut.heading') }}</h2>
+      <ul class="rules">
+        <li>{{ $t('docs.landMovement.sendOut.spots') }}</li>
+        <li>{{ $t('docs.landMovement.sendOut.orders') }}</li>
+        <li>{{ $t('docs.landMovement.sendOut.split') }}</li>
+        <li>{{ $t('docs.landMovement.sendOut.reach') }}</li>
+        <li>{{ $t('docs.landMovement.sendOut.support') }}</li>
       </ul>
     </section>
 
     <section id="sight" class="block">
       <h2>{{ $t('docs.landMovement.sight.heading') }}</h2>
       <i18n-t keypath="docs.landMovement.sight.body" tag="p" class="text" scope="global">
-        <template #rings>{{ ARMY_VISION_RINGS }}</template>
         <template #odin><BuildingLink type="odinstatue" /></template>
         <template #bonus>{{ ravensRings(1) }}</template>
       </i18n-t>
+      <p class="text">{{ $t('docs.landMovement.sight.others') }}</p>
     </section>
   </DocsPageLayout>
 </template>

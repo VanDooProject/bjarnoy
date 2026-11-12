@@ -21,12 +21,25 @@ formula changes, re-run the lab and check all of them.
 | T6 | Troops come before settling | Cart Workshop (settlers) at LH 10, after Barracks (LH 5) and Dockyard (LH 8) |
 | T7 | Territory grows through towers, not the Longhouse | Longhouse claim radius stops growing at LH 3 (§5) |
 
+### World speed
+
+Each world has a speed factor (1 = normal). It scales:
+
+- production (×), including the renown from buildings (§6)
+- build, training and feast times (÷); build times also take Odin's Wisdom
+- the decay of buildings outside the realm (÷)
+- travel time of armies and fleets (÷)
+
+It does not scale troop upkeep (at home or on the march), how much food an army carries, or fight stats: those run
+per real hour on every world. So on a fast world a full load of provisions reaches correspondingly farther.
+
 ## 2. Resources
 
-Wood, Stone, Food, Iron.
+Wood, Brick, Food, Iron. Brick (made from clay) is the resource. The code still calls it `stone` internally (API, stores, i18n
+keys); it can be renamed to brick or clay when we work on those parts. The German name is Stein.
 
 - **Wood** — Lumberjack (forest).
-- **Stone** — the **Clay Brickworks** on bog ground is the start's stone
+- **Brick** — the **Clay Brickworks** on bog ground is the start's brick
   source: bog is guaranteed in reach of every start (§8, `bog.md`), a
   mountain is not. Where a mountain is in reach, the **Quarry** is an
   alternative. Both unlock at LH 1.
@@ -61,10 +74,10 @@ per level: the next level is always worth building, just less obviously.
 
 ### Level-1 values
 
-| Building | C₁ wood/stone/food | P₁ /h | t₁ min |
+| Building | C₁ wood/brick/food | P₁ /h | t₁ min |
 |---|---|---|---|
 | Producers (Lumberjack, Quarry, Clay, Herder, Farm, Fishing) | 50 / 40 / 15 | 40 | 3 |
-| Longhouse | 120 / 100 / 60 | +15 wood, +12 stone, +15 food per level (linear) | 1.5 |
+| Longhouse | 120 / 100 / 60 | +15 wood, +12 brick, +15 food per level (linear) | 1.5 |
 | Storage House | 80 / 60 / 0 | +600 capacity · 1.22^(L−1) | 2.5 |
 
 (Other buildings: same formulas, `C₁`/`t₁` set per building in the
@@ -99,7 +112,7 @@ has 3–8 stages per building, and each level maps onto a stage
 | Palisade | 3 |
 | Bridge | 4 |
 
-Construction slots: `2 + ⌊(LH − 5) / 5⌋` → 2 at LH 1–9, 7 at LH 30.
+Construction slots: `max(2, LH)` → 2 at LH 1–2, then one more per level (10 at LH 10, 30 at LH 30). A Longhouse upgrade occupies 90 % of them, rounded down (min 1): 1 of 2 at LH 1–2, 9 of 10 at LH 10.
 
 **What caps a building's level.** Most buildings can never be a higher level
 than the Longhouse (level `L` needs LH `max(unlock, L)`), and Storage Houses
@@ -154,7 +167,7 @@ If producers could never outlevel the Longhouse, an active player's economy
 would stall at the cap while the Longhouse (the slow, expensive upgrade)
 catches up, and a casual player who checks in twice a day would close the gap.
 Capping producers by storage lets an active player's production run ahead.
-Simulator result, production per hour (wood + stone + food) of an active
+Simulator result, production per hour (wood + brick + food) of an active
 player (awake 07–23) relative to one checking in twice a day, 3 of each
 producer:
 
@@ -200,6 +213,7 @@ play.
   bog shore, creek, spring or lake). It replaces the tile it stands on; its
   art keeps that ground round it, so each ground has its own version of the
   tower.
+- **The Druid Hut and the Shrine of Ullr stand in the forest** (not on grass); the other land shrines stand on grass.
 - **Towers have to be chained to a longhouse.** A tower claims its ground only
   while it is connected: it stands on ground claimed by one of your
   longhouses, or by a tower that is itself connected. All of your longhouses
@@ -250,6 +264,8 @@ play.
 - A linked realm's units eat from the shared food. When it runs out, the units with the highest upkeep across the whole realm starve first, until the shared food stops falling.
 - Leaderboards show a linked realm once, under the oldest settlement's name, with the members' scores added up; battle and trade reports use the realm's name.
 - A linked realm holds one shrine in total, like a settlement: while it holds one or more, no new shrine can be built in it. Settlements that each raised a shrine before they linked keep them all, and all of them keep working, so linking settlements is a way to combine favours.
+- **Switching between your realms.** In the settlement view, tapping a hex of another of your realms switches to it right away: the top bar shows its name, Longhouse level and stock, the queues and garrison are its own, and you can build there as at home. Clicking the realm name in the top bar centres the map on your realm; the arrow beside it lists your realms, and picking one switches to it and centres the map on it.
+- **Sending troops between your realms.** When you send troops, you can pick the home garrison of any of your realms or any of their armies in the field. Troops from the realm you send them to move there; troops from another of your realms go as support.
 - **Producers are limited only by territory:** every matching hex inside
   the claim can hold one.
 - **Rivers and bog creeks block space but pay for it.** A river hex can't
@@ -259,6 +275,17 @@ play.
   the same for bog-ore works. A river or creek running through a claim is a
   trade: fewer producer hexes, and a much stronger boost on the ones that are
   left.
+- **Which ground takes what.** Sand takes only towers, walls and the Longhouse of a settlement founded on the shore (it
+  is never placed anew, only levelled where it stands). Every other
+  ordinary building (Smithy, Archery Range, Barracks, Siege Workshop and the
+  rest) stands on grass only. A stream, a widening or a river spring takes no
+  building. A full-width river hex takes only what has art for its shape:
+  the Sawmill on a straight or a bend (not the hairpin loop), the Crop Mill on
+  a straight only, and the bridge on a wide straight or bend. A bog creek
+  takes only the Hammer Forge. Walls never stand on rivers, streams or creeks.
+  Where a river hex takes a river building in general but this stretch bends
+  too much for it, the ring shows the building disabled with the hint that it
+  needs a straighter river piece (no degrees: players don't read them).
 
 ### Shrines
 
@@ -282,7 +309,7 @@ The settlement's wall, built **one hex at a time** (`BuildingType.Palisade` 30 a
 `BuildingType.PalisadeGate` 31, wire ids `palisade` and `palisadegate`; they share
 one tech-tree card, "Palisade / Gate", in the LH 7 row). It unlocks at Longhouse 7
 behind a level-5 Tower, and has **3 levels**. Per hex it costs `C₁ = 40 wood /
-10 stone`, no food, and takes `t₁ = 2 min` at level 1, with the standard growth
+10 brick`, no food, and takes `t₁ = 2 min` at level 1, with the standard growth
 (cost ×1.30 and time ×1.33 per level). It has no production, storage or claim.
 
 **Placement** (`Settlement.PlanBuild`, `Palisades/PalisadeRules.cs`; the frontend
@@ -342,7 +369,7 @@ for friend and foe, a half-open end and a sealed end), the dispatch is refused w
 land route is left, and the range tint applies the same rules for the selected
 settlement's owner (friends come from the guild store: `friendlyUserIds`).
 
-**Siege.** On land a wall hex falls to **battering rams only** (a fleet can hit a wall's sea end, see below): a won Attack or Raid that names the wall hex
+**Siege.** On land a wall hex falls to **battering rams only**: a won Attack or Raid that names the wall hex
 as `TargetBuildingCoord` takes **one level** off it, however many rams survive
 (`SiegeResolver.LevelsTakenFrom`, the same rule as a bridge): a level-3 palisade needs three won
 sieges to be breached, and the hex is gone at level 0. Catapults do nothing to a wall. There is no
@@ -350,12 +377,12 @@ separate siege mission: the in-game "Siege" action on a rival wall opens an Atta
 settlement with the wall hex as the preferred target building. Which engine damages which
 building is one table (`UnitDefinition.SiegeTargets`, asked through `SiegeResolver.CanDamage`):
 
-| Target | Rams | Catapults | Ships (shore only) | Levels per won siege |
-|---|---|---|---|---|
-| Wall hex (Palisade, Palisade Gate) | yes | no | yes | 1 |
-| Tower | yes | yes | yes | `LevelsDestroyed` of the surviving power that can damage it |
-| Bridge | no | yes | yes | 1 |
-| Every other building (Longhouse included) | no | yes | yes | `LevelsDestroyed` |
+| Target | Rams | Catapults | Levels per won siege |
+|---|---|---|---|
+| Wall hex (Palisade, Palisade Gate) | yes | no | 1 |
+| Tower | yes | yes | `LevelsDestroyed` of the surviving power that can damage it |
+| Bridge | no | yes | 1 |
+| Every other building (Longhouse included) | no | yes | `LevelsDestroyed` |
 
 Only the surviving engines that can damage the target count towards its levels. A named target
 the surviving engines cannot damage takes no damage (the report has no siege line). Without a
@@ -363,27 +390,32 @@ named target, or when it is gone, the pick is random (seeded) among the building
 engines can damage; if there are none, no siege happens. Rams and catapults are trained at the Siege Workshop
 (section 8, the iron ladder).
 
-**Fleets.** A fleet Attack or Raid is always sent at one building on the target's shore: a building inside the target's
-claim on a shoreline land hex or on a sea hex (Dockyard, Fishing Hut, Shrine of Njörd, a wall's sea end). Without one the
-dispatch is refused (`FleetTargetBuildingRequired`, `FleetTargetBuildingNotOnShore`). The fleet's route ends at that
-building's hex and the target's Longhouse may be inland. The battle there is fought by the ships standing on that hex
-only: the defender's ships at home when the target is the hex they are anchored at (its Dockyard, or a centre on the
-shore), and allied fleets supporting it when the target is its centre. Land troops on either side stay out of it. With no
-ships on that hex there is no battle and the fleet's siege hits the building.
-A won fight damages only that building, by `LevelsDestroyed` of the surviving ships' siege power (Karve 10, Longship 20,
-starting values to be tuned; catapult 40), walls and bridges one level as above. A fleet has no random fallback: if the
-building is gone when it arrives, nothing is damaged.
+**Fleets.** Ships do no damage to buildings on land; fleet attacks are in [`skirmish/conquest.md`](skirmish/conquest.md).
 
 **Troops on ships.** Ships carry land units in slots (`ShipCargo`); every mission a fleet can take can carry them, and a
 dispatch whose passengers need more slots than its ships have is refused (`InsufficientShipCapacity`). A fleet moves at the
-speed of its slowest ship; passengers do not slow it. Passengers eat from the fleet's provisions. They stay on board during a
-fleet battle and do not fight; they only go ashore at a beach camp (`skirmish/beach-camp.md`). When ships are lost, the
+speed of its slowest ship; passengers do not slow it. Passengers eat from the fleet's provisions. They do not take part in the ship
+fight; in the land fight they fight from on board. They go ashore only at a beach camp or a home dock (`skirmish/conquest.md`). When ships are lost, the
 passengers beyond what the surviving ships can carry drown, the units that take the most slots first. Starting values, to be tuned:
 
 | Ship | Slots |
 |---|---|
 | Karve | 10 |
 | Longship | 20 |
+| Fire Ship | 0 |
+
+The **Fire Ship** is a ship hull that carries nothing and does not attack. Starting values, to be tuned:
+
+| Fire Ship | |
+|---|---|
+| Cost (wood / stone / food / iron) | 300 / 60 / 40 / 80 |
+| Training time | 40 min |
+| Needs | Longhouse 12, the Karve, a Dockyard |
+| Attack / defence | 0 / 25 |
+| Speed | 8 |
+| Troop slots / loot capacity | 0 / 0 |
+| Food capacity | 200 |
+| Upkeep per hour | 5 |
 
 | Unit | Slots |
 |---|---|
@@ -403,9 +435,9 @@ is impassable to every land army (`troop-movement-range.md` section 5); a bridge
 only way to open one. It unlocks at Longhouse 7 behind a level-1 Town Square, has **4
 levels** (a causeway, a footbridge, a king's bridge and a guarded bridge), and no
 production, storage or claim. Costs and times are set per level (no cost growth), wood-heavy,
-with stone from level 3 and no iron:
+with brick from level 3 and no iron:
 
-| Level | Name | Wood | Stone | Food | Iron | Time |
+| Level | Name | Wood | Brick | Food | Iron | Time |
 |---|---|---|---|---|---|---|
 | 1 | Causeway | 120 | 0 | 20 | 0 | 10 min |
 | 2 | Footbridge | 220 | 0 | 30 | 0 | 20 min |
@@ -424,13 +456,18 @@ under the river (grass, forest or sand).
 **Movement** (land armies; fleets are unaffected). Only standing bridges count (level 1
 or more): a foundation leaves the river shut. The bridge's price replaces the
 impassable wide river in `HexPathfinder.LandStepCost`; streams keep their own price.
+A build or raze order is applied when its owner's settlement is next settled, but the river opens
+or shuts for every army from the instant the order **completes**: a finished build order counts at
+the level it reaches (the price table below is by level), a finished raze at the level it leaves
+(0: no bridge). `WorldBridges.TimelineAsync` reads that, and route planning asks it for the
+instant it plans at, like the walls (`WorldPalisades.TimelineAsync`).
 
 | Level | Land army |
 |---|---|
 | 1 | every army, the owner's included: slower than any ground (`1.0 + CausewayCrossingCost` = 6) |
 | 2 | every army: still slower than the ground, but quicker than the causeway (`1.0 + FootbridgeCrossingCost` = 4) |
-| 3 | every army: as quickly as the ground under it (its terrain cost) |
-| 4 | the owner's armies and their friends: as quickly as the ground; everyone else is stopped as if there were no bridge |
+| 3 | every army: `1.0 + KingsBridgeCrossingCost` = 1.5, a little slower than grass whatever ground lies under the river |
+| 4 | the owner's armies and their friends: also 1.5; everyone else is stopped as if there were no bridge |
 
 Friends of a guarded bridge are the same as for a palisade gate: the owner's guildmates
 and the members of guilds with an active peace treaty with that guild
@@ -470,16 +507,20 @@ shuts the river again.
 A new settlement needs:
 
 1. a Cart Workshop (LH 10, Town Square 3), so troops come first (T6);
-2. 5 Settlers (the settler cost doubles per settlement already held);
-3. **renown**: +1 per building level per hour, across all settlements
+2. 5 Settlers, at the same price for every settlement;
+3. **renown**: +1 per building level per hour × world speed, across all settlements
    (`Renown.cs`), never spent. Thresholds: **55 000** for the 2nd, then
    ×2 per settlement.
+
+Ships and land escorts may travel with the settlers, overland and by sea. With a ship in it the convoy is a fleet: it
+sails from the Dockyard and lands on a land hex next to the sea. Every unit but the settlers stays as the new settlement's
+garrison.
 
 **Feasts (Town Square)** are what lets a strong player settle early:
 Travian's celebrations.
 
 - A feast needs a standing Town Square; its level TS sets the numbers.
-- It costs `800 · 1.25^(TS−1)` of each of wood, stone and food, paid up front.
+- It costs `800 · 1.25^(TS−1)` of each of wood, brick and food, paid up front.
 - It runs for 12 h and then grants `3 500 · 1.15^(TS−1)` renown to the account.
 - Only one feast can run at a time per settlement. It does not use a
   construction slot.
@@ -558,7 +599,7 @@ their renown.
 ## 7. First 10 minutes (T1)
 
 - Founding stock: the starting storage nearly full — capacity (500 base +
-  250 from the Longhouse) less 50, so 700 wood / 700 stone / 700 food, no
+  250 from the Longhouse) less 50, so 700 wood / 700 brick / 700 food, no
   iron.
 - Level-1 producers cost 50 / 40 / 15 and build in 3 min; the Longhouse is
   +15 / 12 / 15 per level.
@@ -572,16 +613,17 @@ their renown.
   The quests come in this order (`Bjarnoy.Domain.Settlers.Quests`, mirrored
   for demo mode in `src/frontend/src/lib/quests.ts`):
 
-  | # | Quest | Condition | Reward (wood / stone / food) |
+  | # | Quest | Condition | Reward (wood / brick / food) |
   |---|---|---|---|
   | 1 | 3 producers built | 3 standing resource producers | 150 / 120 / 80 |
   | 2 | Longhouse 2 | Longhouse level 2 or more | 250 / 200 / 150 |
   | 3 | First Storage House | a standing Storage House | 200 / 200 / 200 |
   | 4 | 6 producers built | 6 standing resource producers | 200 / 150 / 100 |
   | 5 | Longhouse 3 | Longhouse level 3 or more | 400 / 300 / 200 |
-  | 6 | Longhouse 5 | Longhouse level 5 or more | 800 / 600 / 400 |
-  | 7 | Train 5 spearmen | 5 fighting land units at home (any type), stored once reached: it stays completed after the troops leave or die | 500 / 400 / 300 |
-  | 8 | Hunt a camp | an army sent to hunt a wildlife camp; unlocks once troops were trained (5 fighting land units were ever at home when it was sent), no claim needed | 400 / 300 / 300 |
+  | 6 | Tower 3 | your highest Tower at level 3 or more (what the Barracks needs) | 400 / 300 / 200 |
+  | 7 | Longhouse 5 | Longhouse level 5 or more | 800 / 600 / 400 |
+  | 8 | Train 5 spearmen | 5 fighting land units at home (any type), stored once reached: it stays completed after the troops leave or die | 500 / 400 / 300 |
+  | 9 | Hunt a camp | an army sent to hunt a wildlife camp; unlocks once troops were trained (5 fighting land units were ever at home when it was sent), no claim needed | 400 / 300 / 300 |
 
   Rules:
 
@@ -594,16 +636,21 @@ their renown.
   - **Exactly once per settlement.** Each quest has a bit in the settlement's
     claimed-quests mask, set in the same save that pays the reward, so a
     double click or a retry gets a 409 (`AlreadyClaimed`), never a second
-    payment. A second settlement has its own list.
+    payment. Quests are enabled only on a player's first settlement in a world
+    (the oldest by founding time): any later settlement lists none, and claiming one there gets a 409
+    (`NotFirstSettlement`).
   - **Only standing buildings count.** Queued and under-construction orders do
     not; a producer is any building (other than the Longhouse) that yields
-    wood, stone, food or iron of its own, so storage, towers and the
+    wood, brick, food or iron of its own, so storage, towers and the
     radius-boost buildings (Sawmill, Crop Mill) do not.
   - **Clamped to storage.** The reward is deposited like any other income, so
     whatever would exceed a resource's storage capacity is lost; the tray
     warns when a reward will not fully fit.
   - **Never a building.** Rewards are resources only, never a finished or
     free building.
+  - **New and claimable marker.** On phones the quest strip shows a dot on its
+    icon when a quest appeared that you haven't opened yet, or a quest just
+    became claimable.
 
 Simulated: the first 25 minutes are continuous building (9 producers, then
 LH 2 at about 13 min), LH 3 at about 1h45.
@@ -666,6 +713,7 @@ them so the levels match. *Implemented:*
   | Spearman | Barracks | 5 (1) |
   | Axeman | Barracks | 6 (3): three levels after the bog-ore works open (LH 3) |
   | Karve | Dockyard | 8 (5) |
+  | Fire Ship | Dockyard | 12: after the Karve |
   | Bowman | Archery Range | 9 (4) |
   | Provisioner, Settler | Cart Workshop | 10 (4, 5) |
   | Berserker, Catapult, Longship | Barracks, Siege Workshop, Dockyard | 20 (6, 10, 8): with the Hammer Forge |
@@ -688,7 +736,7 @@ Why 20: iron is the indirect gate for the army, so it must stay scarcer than
 wood. A unit costs about half as much iron as wood (Spearman 40 iron / 80
 wood, Karve 100 / 250, Catapult 250 / 300), so iron income at about **half of
 wood income** makes both equally binding. With the default three bog-ore
-works the lab (three producers each of wood, stone and food, two storage
+works the lab (three producers each of wood, brick and food, two storage
 houses, producers up to three levels ahead) gives iron/wood 0.44 to 0.49 from
 Longhouse 8 on; one works gives 0.16, so a settlement with one works is
 iron-limited. P₁ 40 gave 0.9 (iron never binds), P₁ 10 gave 0.23.
@@ -805,8 +853,6 @@ oases and NPC villages. Bjarnoy's version:
   clearing new islands must pay much more than farming smaller players.**
   Spawn, levels and guard ranges are implemented (no gameplay yet): see
   [`wildlife-camps.md`](./wildlife-camps.md).
-- **Beast dens** are the oasis equivalent: raidable spots whose loot grows
-  back over time, and which can later be annexed for a production bonus.
 - **Merchant ships** sail NPC routes between islands and can be raided at
   sea.
 - **Inactive players** become raidable, but only after several days of

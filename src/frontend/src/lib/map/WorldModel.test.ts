@@ -11,10 +11,25 @@ import { giantCoverage } from './giantTiles';
 import { guardRange, placeCamps } from './campPlacement';
 import { BOG_REACH } from './bogGenerator';
 import { placeLakeProps } from './lakeProps';
-import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
+import { FOG_SCOUT_RING, floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
 import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } from './worldGenerator';
 import type { BogTile, RiverTile, Settlement } from './types';
 import { JOTNAR_OWNER_KEY } from './endgamePlacement';
+import { claimRadiusForLevel } from './shoreline';
+import {
+  guidedBuildTarget,
+  guidedTypesStarted,
+  GUIDED_BUILD_TERRAIN,
+  nextGuidedType,
+  type GuidedBuildType,
+  type GuidedQueueOrder,
+} from './onboardingGuidance';
+import { makePendingOrder } from '../hud/pendingBuild';
+
+// A free grass hex with no river on it: the ground every ordinary building stands on (the catalogue's `allowedTerrain`, `riverBuildingAllowedHere`).
+function isEmptyGrass(model: WorldModel, c: AxialCoord): boolean {
+  return model.getTile(c.q, c.r).terrain === 'grass' && !model.getTile(c.q, c.r).buildingType && !model.getRiverTile(c.q, c.r);
+}
 
 function foundLandedSettlement(model: WorldModel) {
   const at = model.findLandfall({ q: 0, r: 0 });
@@ -175,6 +190,36 @@ describe('WorldModel.registerSettlement / claimTerritory', () => {
     expect(model.getTile(0, 0).buildingLevel).toBe(15);
   });
 
+  // Regression: a rival's claim used to add its whole vision ring to the explored set, which lifted the hover, border and label
+  // gating over ground the player never explored. Only the player's own settlements explore; a rival is seen through the server's fog.
+  it('claimTerritory does not mark a rival\'s vision ring as explored, an own settlement\'s it does', () => {
+    const model = new WorldModel();
+    const empty = { wood: 0, stone: 0, food: 0, iron: 0 };
+    const base = { ownerName: 'X', name: 'X', q: 0, r: 0, level: 1, resources: empty, rates: empty, foundedAt: 0, islandId: 'i' };
+    const rival = model.registerSettlement({ ...base, id: 'rival-9', ownerId: 'rival-9', q: 60, r: 60 });
+    const own = model.registerSettlement({ ...base, id: 'own-9', ownerId: 'player-9' });
+
+    model.claimTerritory(rival.id);
+    expect(model.isExplored(60, 60)).toBe(false);
+    expect(model.isExplored(61, 60)).toBe(false);
+    expect(model.getTile(60, 60).buildingType).toBe('longhouse');
+
+    model.claimTerritory(own.id);
+    expect(model.isExplored(0, 0)).toBe(true);
+    expect(model.isExplored(1, 0)).toBe(true);
+  });
+
+  it('labels a settlement on the hex the server gave, on its centre without one', () => {
+    const model = new WorldModel();
+    const empty = { wood: 0, stone: 0, food: 0, iron: 0 };
+    const base = { ownerName: 'X', name: 'X', level: 1, resources: empty, rates: empty, foundedAt: 0, islandId: 'i' };
+    const seen = model.registerSettlement({ ...base, id: 'a', ownerId: 'a', q: 10, r: 4, labelAt: { q: 7, r: 4 } });
+    const plain = model.registerSettlement({ ...base, id: 'b', ownerId: 'b', q: 20, r: 4 });
+
+    expect(model.labelHexOf(seen)).toEqual({ q: 7, r: 4 });
+    expect(model.labelHexOf(plain)).toEqual({ q: 20, r: 4 });
+  });
+
   it('claimTerritory draws a rival longhouse at the level its summary reports', () => {
     const model = new WorldModel();
     const rival = model.registerSettlement({
@@ -209,18 +254,17 @@ describe('WorldModel.listPlacedBuildings', () => {
 
     const radius = model.borderRadius(settlement);
     const spots = hexesInRadius(at, radius).filter(
-      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => (c.q !== at.q || c.r !== at.r) && isEmptyGrass(model, c),
     );
     if (spots.length < 2) throw new Error('not enough empty land in claim radius — pick a different test seed');
 
-    // Lumberjack first, farm second — the reverse of the checklist's own
-    // visual order, proving the list reflects what's built, not a fixed step.
-    expect(model.placeBuilding(settlement.id, spots[0], 'lumberjack')).toBe(true);
-    expect(new Set(model.listPlacedBuildings(settlement.id))).toEqual(new Set(['longhouse', 'lumberjack']));
+    // Storage house first, farm second — proving the list reflects what's built, in any order, not a fixed step.
+    expect(model.placeBuilding(settlement.id, spots[0], 'storagehouse')).toBe(true);
+    expect(new Set(model.listPlacedBuildings(settlement.id))).toEqual(new Set(['longhouse', 'storagehouse']));
 
     expect(model.placeBuilding(settlement.id, spots[1], 'farm')).toBe(true);
     expect(new Set(model.listPlacedBuildings(settlement.id))).toEqual(
-      new Set(['longhouse', 'lumberjack', 'farm']),
+      new Set(['longhouse', 'storagehouse', 'farm']),
     );
   });
 
@@ -252,7 +296,7 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
     const spots = hexesInRadius(at, 3).filter(
-      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => (c.q !== at.q || c.r !== at.r) && isEmptyGrass(model, c),
     );
     expect(spots.length).toBeGreaterThan(3);
 
@@ -277,7 +321,7 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
     const spots = hexesInRadius(at, 3).filter(
-      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => (c.q !== at.q || c.r !== at.r) && isEmptyGrass(model, c),
     );
     expect(spots.length).toBeGreaterThan(5);
 
@@ -318,7 +362,7 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
     const spots = hexesInRadius(at, 3).filter(
-      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => (c.q !== at.q || c.r !== at.r) && isEmptyGrass(model, c),
     );
     settlement.level = 3;
 
@@ -336,7 +380,7 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
     const spots = hexesInRadius(at, 3).filter(
-      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => (c.q !== at.q || c.r !== at.r) && isEmptyGrass(model, c),
     );
     settlement.level = 3;
     const before = model.visionDiscsFor(settlement)[0].radius;
@@ -380,6 +424,50 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     // a level-0 foundation stub grants nothing yet
     model.applyServerSnapshot(settlement.id, snapshot([{ q: settlement.q + 1, r: settlement.r, type: 'odinstatue', level: 0 }]));
     expect(model.ravensRingsFor(settlement.id)).toBe(0);
+  });
+
+  it('gives a beach camp (a beachcamp building, no Longhouse) the sight of a level-1 Longhouse, Ravens included', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    settlement.level = 0;
+    const snapshot = (buildings: { q: number; r: number; type: string; level: number }[]) => ({
+      level: 0,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.capacity!,
+      buildings,
+    });
+
+    // a Longhouse-less settlement without a camp sees nothing
+    model.applyServerSnapshot(settlement.id, snapshot([]));
+    expect(model.visionDiscsFor(settlement)).toEqual([]);
+    const signatureBefore = model.fogSignature();
+
+    model.applyServerSnapshot(settlement.id, snapshot([{ q: settlement.q, r: settlement.r, type: 'beachcamp', level: 1 }]));
+    expect(model.visionDiscsFor(settlement)).toEqual([{ q: settlement.q, r: settlement.r, radius: 2 }]);
+    expect(model.exploredRadius(settlement)).toBe(2 + FOG_SCOUT_RING);
+    expect(model.fogSignature()).not.toBe(signatureBefore);
+  });
+
+  it('gives a beach camp a claim of its own hex only (border radius 0), not the nothing of a destroyed Longhouse', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    settlement.level = 0;
+    const snapshot = (buildings: { q: number; r: number; type: string; level: number }[]) => ({
+      level: 0,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.capacity!,
+      buildings,
+    });
+
+    model.applyServerSnapshot(settlement.id, snapshot([]));
+    expect(model.borderRadius(settlement)).toBe(0);
+    expect(model.claimDiscsOf(settlement.id)).toEqual([]);
+
+    model.applyServerSnapshot(settlement.id, snapshot([{ q: settlement.q, r: settlement.r, type: 'beachcamp', level: 1 }]));
+    expect(model.claimDiscsOf(settlement.id)).toEqual([{ q: settlement.q, r: settlement.r, radius: 0 }]);
+    expect(model.claimedHexCount(settlement.id)).toBe(1);
   });
 
   it('refuses to place a tower outside the existing border, so it can only bump the shape outward, never teleport it', () => {
@@ -510,6 +598,37 @@ describe('WorldModel realm shrinks when a tower falls', () => {
 
     expect(outer.some(owned)).toBe(false);
     expect(owned(at)).toBe(true);
+  });
+
+  it('demo razeBuilding takes one level: a level-2 tower keeps standing at level 1 and releases only its outer ring', () => {
+    const { model, settlement, edge, snap, owned, exclusive } = setup();
+    snap([{ q: edge.q, r: edge.r, type: 'tower', level: 2 }]);
+    const ring2 = exclusive(edge, 2).filter((c) => hexDistance(edge, c) === 2);
+    const inner = exclusive(edge, 1);
+    expect(ring2.some(owned)).toBe(true);
+
+    expect(model.razeBuilding(settlement.id, edge)).toBe(true);
+
+    const tile = model.getTile(edge.q, edge.r);
+    expect(tile.buildingType).toBe('tower');
+    expect(tile.buildingLevel).toBe(1);
+    expect(ring2.some(owned)).toBe(false);
+    expect(inner.every(owned)).toBe(true);
+  });
+
+  it('demo razeBuilding removes the building only at level 1 and never touches the longhouse', () => {
+    const { model, settlement, at, snap } = setup();
+    const farm = hexRing(at, 1)[0];
+    snap([{ q: farm.q, r: farm.r, type: 'farm', level: 2 }]);
+
+    expect(model.razeBuilding(settlement.id, farm)).toBe(true);
+    expect(model.getTile(farm.q, farm.r)).toMatchObject({ buildingType: 'farm', buildingLevel: 1 });
+    expect(model.razeBuilding(settlement.id, farm)).toBe(true);
+    expect(model.getTile(farm.q, farm.r).buildingType).toBeUndefined();
+
+    expect(model.getTile(at.q, at.r).buildingType).toBe('longhouse');
+    expect(model.razeBuilding(settlement.id, at)).toBe(false);
+    expect(model.getTile(at.q, at.r).buildingType).toBe('longhouse');
   });
 
   it('explored ground stays explored after the realm shrinks', () => {
@@ -953,7 +1072,7 @@ describe('WorldModel.placeBuilding — PumpkinFarm soil gate', () => {
     model.setIslands([{ id: 'isl-wheat', name: 'Wheatisle', q: centre.q, r: centre.r }]);
 
     const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
-      (c) => model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => isEmptyGrass(model, c),
     );
     if (!spot) throw new Error('no empty land near founding — pick a different test seed');
 
@@ -968,7 +1087,7 @@ describe('WorldModel.placeBuilding — PumpkinFarm soil gate', () => {
     model.setIslands([{ id: 'isl-pumpkin', name: 'Pumpkinisle', q: centre.q, r: centre.r }]);
 
     const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
-      (c) => model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => isEmptyGrass(model, c),
     );
     if (!spot) throw new Error('no empty land near founding — pick a different test seed');
 
@@ -983,7 +1102,7 @@ describe('WorldModel.placeBuilding — PumpkinFarm soil gate', () => {
     model.setIslands([{ id: 'isl-wheat', name: 'Wheatisle', q: centre.q, r: centre.r }]);
 
     const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
-      (c) => model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => isEmptyGrass(model, c),
     );
     if (!spot) throw new Error('no empty land near founding — pick a different test seed');
 
@@ -995,7 +1114,7 @@ describe('WorldModel.placeBuilding — PumpkinFarm soil gate', () => {
     const { settlement, at } = foundLandedSettlement(model);
 
     const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
-      (c) => model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => isEmptyGrass(model, c),
     );
     if (!spot) throw new Error('no empty land near founding — pick a different test seed');
 
@@ -2541,42 +2660,63 @@ describe('WorldModel bridge', () => {
   });
 });
 
-describe('WorldModel.applyRivalWalls', () => {
-  const rivalWall = (q: number, r: number, over: Partial<{ type: string; level: number; ownerUserId: string | null }> = {}) => ({
+describe('WorldModel.applyRivalBuildings', () => {
+  const rivalBuilding = (q: number, r: number, over: Partial<{ type: string; level: number; ownerUserId: string | null }> = {}) => ({
     q, r, type: 'palisade', level: 2, settlementId: 'rival-1', ownerUserId: 'user-rival' as string | null, ...over,
   });
 
   it('puts the walls on their tiles like own walls, with the owner kept per hex', () => {
     const model = new WorldModel(20260825);
-    model.applyRivalWalls([rivalWall(5, 5), rivalWall(5, 6, { type: 'palisadegate', level: 1 }), rivalWall(5, 7, { ownerUserId: null })]);
+    model.applyRivalBuildings([rivalBuilding(5, 5), rivalBuilding(5, 6, { type: 'palisadegate', level: 1 }), rivalBuilding(5, 7, { ownerUserId: null })]);
 
     expect(model.getTile(5, 5)).toMatchObject({ buildingType: 'palisade', buildingLevel: 2, ownerId: 'rival-1' });
     expect(model.getTile(5, 6)).toMatchObject({ buildingType: 'palisadegate', buildingLevel: 1 });
-    expect(model.rivalWallOwner(5, 5)).toBe('user-rival');
-    expect(model.rivalWallOwner(5, 7)).toBeNull();
-    expect(model.rivalWallOwner(9, 9)).toBeUndefined();
+    expect(model.rivalBuildingOwner(5, 5)).toBe('user-rival');
+    expect(model.rivalBuildingOwner(5, 7)).toBeNull();
+    expect(model.rivalBuildingOwner(9, 9)).toBeUndefined();
     // The piece a wall draws follows its wall neighbours, rival or not.
     expect(model.wallNeighbourFlags({ q: 5, r: 6 }).filter(Boolean)).toHaveLength(2);
   });
 
+  it('places every building type of a rival, not just walls, and clears each one that is gone', () => {
+    const model = new WorldModel(20260825);
+    model.applyRivalBuildings([
+      rivalBuilding(5, 5, { type: 'tower', level: 3 }),
+      rivalBuilding(5, 6, { type: 'farm', level: 1 }),
+      rivalBuilding(5, 7, { type: 'longhouse', level: 4 }),
+    ]);
+
+    expect(model.getTile(5, 5)).toMatchObject({ buildingType: 'tower', buildingLevel: 3, ownerId: 'rival-1' });
+    expect(model.getTile(5, 6)).toMatchObject({ buildingType: 'farm', ownerId: 'rival-1' });
+    expect(model.getTile(5, 7)).toMatchObject({ buildingType: 'longhouse', buildingLevel: 4 });
+    expect(model.rivalBuildingOwner(5, 6)).toBe('user-rival');
+    // Only walls are walls for the movement rules.
+    expect(model.standingPalisadeWalls().size).toBe(0);
+
+    model.applyRivalBuildings([rivalBuilding(5, 7, { type: 'longhouse', level: 4 })]);
+    expect(model.getTile(5, 5).buildingType).toBeUndefined();
+    expect(model.getTile(5, 6).buildingType).toBeUndefined();
+    expect(model.getTile(5, 7).buildingType).toBe('longhouse');
+  });
+
   it('replaces the previous set: moved walls follow and walls gone server-side disappear', () => {
     const model = new WorldModel(20260825);
-    model.applyRivalWalls([rivalWall(5, 5), rivalWall(5, 6)]);
-    model.applyRivalWalls([rivalWall(5, 6, { level: 3 })]);
+    model.applyRivalBuildings([rivalBuilding(5, 5), rivalBuilding(5, 6)]);
+    model.applyRivalBuildings([rivalBuilding(5, 6, { level: 3 })]);
 
     expect(model.getTile(5, 5).buildingType).toBeUndefined();
     expect(model.getTile(5, 5).buildingLevel).toBeUndefined();
-    expect(model.rivalWallOwner(5, 5)).toBeUndefined();
+    expect(model.rivalBuildingOwner(5, 5)).toBeUndefined();
     expect(model.getTile(5, 6).buildingLevel).toBe(3);
     expect([...model.standingPalisadeWalls().keys()]).toEqual(['5,6']);
 
-    model.applyRivalWalls([]);
+    model.applyRivalBuildings([]);
     expect(model.standingPalisadeWalls().size).toBe(0);
   });
 
   it('keys a rival wall to its account (or its settlement when anonymous) for the route rules', () => {
     const model = new WorldModel(20260825);
-    model.applyRivalWalls([rivalWall(5, 5, { type: 'palisadegate' }), rivalWall(5, 6, { ownerUserId: null })]);
+    model.applyRivalBuildings([rivalBuilding(5, 5, { type: 'palisadegate' }), rivalBuilding(5, 6, { ownerUserId: null })]);
 
     const standing = model.standingPalisadeWalls();
     expect(standing.get('5,5')).toEqual({ gate: true, owner: 'user-rival' });
@@ -2595,11 +2735,51 @@ describe('WorldModel.applyRivalWalls', () => {
       buildings: [{ ...own, type: 'palisade', level: 1 }],
     });
 
-    model.applyRivalWalls([rivalWall(own.q, own.r)]);
-    model.applyRivalWalls([]);
+    model.applyRivalBuildings([rivalBuilding(own.q, own.r), rivalBuilding(settlement.q, settlement.r, { type: 'longhouse' })], settlement.id);
+    model.applyRivalBuildings([], settlement.id);
 
     expect(model.getTile(own.q, own.r)).toMatchObject({ buildingType: 'palisade', ownerId: settlement.id });
-    expect(model.rivalWallOwner(own.q, own.r)).toBeUndefined();
+    expect(model.rivalBuildingOwner(own.q, own.r)).toBeUndefined();
+  });
+
+  // Regression: the buildings of the player's other settlements were only drawn after the player had opened (switched to) them.
+  it('draws the buildings of an own settlement that was never opened, without treating them as a rival\'s', () => {
+    const model = new WorldModel(20260825);
+    const { settlement: opened } = foundLandedSettlement(model);
+    const other = model.registerSettlement({
+      id: 'own-2', ownerId: 'p1', ownerName: 'Tester', name: 'Second',
+      q: opened.q + 40, r: opened.r, level: 1,
+      resources: { ...opened.resources }, rates: { ...opened.rates },
+      foundedAt: 0, realmId: 'own-2', islandId: opened.islandId,
+    });
+    const at = { q: other.q + 1, r: other.r };
+
+    model.applyRivalBuildings([
+      { ...at, type: 'palisade', level: 2, settlementId: other.id, ownerUserId: null },
+    ]);
+
+    expect(model.getTile(at.q, at.r)).toMatchObject({ buildingType: 'palisade', buildingLevel: 2, ownerId: other.id });
+    // Own, not a rival's: no siege target, and routed as the player's own wall.
+    expect(model.rivalBuildingOwner(at.q, at.r)).toBeUndefined();
+    expect(model.standingPalisadeWalls().get(`${at.q},${at.r}`)?.owner).toBe('p1');
+
+    model.applyRivalBuildings([]);
+    expect(model.getTile(at.q, at.r).buildingType).toBeUndefined();
+  });
+
+  // Regression: a settlement opened once and then left kept its old buildings, because every ever-rendered hex was skipped.
+  it('keeps updating an own settlement the player opened and then left', () => {
+    const model = new WorldModel(20260825);
+    const { settlement: left } = foundLandedSettlement(model);
+    const at = { q: left.q + 1, r: left.r };
+    model.applyServerSnapshot(left.id, {
+      level: left.level, resources: left.resources, rates: left.rates, capacity: left.resources,
+      buildings: [{ ...at, type: 'farm', level: 1 }],
+    });
+
+    model.applyRivalBuildings([{ ...at, type: 'farm', level: 3, settlementId: left.id, ownerUserId: null }], 'another-open-one');
+
+    expect(model.getTile(at.q, at.r).buildingLevel).toBe(3);
   });
 });
 
@@ -2754,7 +2934,7 @@ describe('WorldModel chained towers', () => {
     expect(model.connectedTowerCount(settlement.id)).toBe(0);
 
     const spot = hexesInRadius(at, 3).find(
-      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => (c.q !== at.q || c.r !== at.r) && isEmptyGrass(model, c),
     )!;
     expect(model.placeBuilding(settlement.id, spot, 'tower')).toBe(true);
     expect(model.connectedTowerCount(settlement.id)).toBe(1);
@@ -2763,7 +2943,7 @@ describe('WorldModel chained towers', () => {
     snap(settlement, [spot, along(3), along(5), along(7)]);
     expect(model.connectedTowerCount(settlement.id)).toBe(4);
     const another = hexesInRadius(at, 3).find(
-      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => (c.q !== at.q || c.r !== at.r) && isEmptyGrass(model, c),
     )!;
     expect(model.placeBuilding(settlement.id, another, 'tower')).toBe(false);
   });
@@ -2889,5 +3069,102 @@ describe('WorldModel destroyed Longhouse vision', () => {
     snapTowers(model, razed, [chained, lone]);
 
     expect(model.visionDiscsFor(razed).map((d) => `${d.q},${d.r}`)).toEqual([`${chained.q},${chained.r}`]);
+  });
+});
+
+// The onboarding pointer (LandingView's nextGuidedTargetCoord, via `guidedBuildTarget`) aims at the nearest realm hex `hexTakesBuilding` accepts. It used
+// to check only ownership and emptiness, so on a start whose nearest grass/forest hex is a river or guarded-camp hex (the world
+// generator promises the terrain only) it pointed at a hex where the ring offers neither the Reindeer Herder nor the Lumberjack.
+describe('WorldModel.hexTakesBuilding — the onboarding pointer target', () => {
+  const SEED = 20260825;
+
+  function pointerTarget(model: WorldModel, settlement: Settlement, type: GuidedBuildType, queue: readonly GuidedQueueOrder[] = []): AxialCoord | null {
+    return guidedBuildTarget(model, { q: settlement.q, r: settlement.r }, claimRadiusForLevel(settlement.level), type, (owner) => owner === settlement.id, queue);
+  }
+
+  it.each(['reindeerherder', 'lumberjack'] as const)('the %s target skips a river hex and lands where it can be built', (type) => {
+    const control = new WorldModel(SEED);
+    const { settlement: controlSettlement } = foundLandedSettlement(control);
+    const nearest = pointerTarget(control, controlSettlement, type);
+    expect(nearest).not.toBeNull();
+    expect(control.getTile(nearest!.q, nearest!.r).terrain).toBe(GUIDED_BUILD_TERRAIN[type]);
+
+    const model = new WorldModel(SEED);
+    const { settlement } = foundLandedSettlement(model);
+    model.setRiverTiles([riverTile(nearest!, 'straight')]);
+    expect(model.hexTakesBuilding(nearest!, type)).toBe(false);
+    expect(model.placeBuilding(settlement.id, nearest!, type)).toBe(false);
+
+    const target = pointerTarget(model, settlement, type);
+    expect(target).not.toBeNull();
+    expect(target).not.toEqual(nearest);
+    expect(model.placeBuilding(settlement.id, target!, type)).toBe(true);
+  });
+
+  it('the reindeer herder target skips a guarded camp hex, and takes a cleared one', () => {
+    const control = new WorldModel(SEED);
+    const { settlement: controlSettlement } = foundLandedSettlement(control);
+    const nearest = pointerTarget(control, controlSettlement, 'reindeerherder')!;
+
+    const model = new WorldModel(SEED);
+    const { settlement } = foundLandedSettlement(model);
+    model.setCamps([{ family: 'wolfden', coord: nearest, level: 2, orientation: 'SE' }]);
+    expect(model.hexTakesBuilding(nearest, 'reindeerherder')).toBe(false);
+    const target = pointerTarget(model, settlement, 'reindeerherder');
+    expect(target).not.toBeNull();
+    expect(target).not.toEqual(nearest);
+    expect(model.placeBuilding(settlement.id, target!, 'reindeerherder')).toBe(true);
+
+    model.getTile(nearest.q, nearest.r).camp!.empty = true;
+    expect(model.hexTakesBuilding(nearest, 'reindeerherder')).toBe(true);
+    expect(pointerTarget(model, settlement, 'reindeerherder')).toEqual(nearest);
+  });
+
+  it('refuses a hex with a building already on it', () => {
+    const model = new WorldModel(SEED);
+    const { settlement } = foundLandedSettlement(model);
+    const target = pointerTarget(model, settlement, 'reindeerherder')!;
+    expect(model.placeBuilding(settlement.id, target, 'reindeerherder')).toBe(true);
+    expect(model.hexTakesBuilding(target, 'reindeerherder')).toBe(false);
+  });
+  // Once the server confirms a new building it sends it as a level-0 foundation in the settlement snapshot: the checklist
+  // counts it as placed (onboarding ticks and completes on queue) and the pointer no longer aims at its hex.
+  it('counts a level-0 foundation from the server as placed and never aims at its hex', () => {
+    const model = new WorldModel(SEED);
+    const { settlement } = foundLandedSettlement(model);
+    const herderHex = pointerTarget(model, settlement, 'reindeerherder')!;
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.capacity!,
+      buildings: [
+        { q: settlement.q, r: settlement.r, type: 'longhouse', level: 1 },
+        { q: herderHex.q, r: herderHex.r, type: 'reindeerherder', level: 0 },
+      ],
+    });
+    const placed = model.listPlacedBuildings(settlement.id);
+    expect(placed).toContain('reindeerherder');
+    expect(nextGuidedType(placed)).toBe('lumberjack');
+    expect(pointerTarget(model, settlement, 'reindeerherder')).not.toEqual(herderHex);
+  });
+
+  // Until the server answers, a queued build is only an optimistic order in `hud.queue` (no foundation on the tile yet).
+  // The pointer used to count it as not placed and its hex as free for that wait, so it stayed on the herder's hex.
+  it('moves on to the Lumberjack once the Reindeer Herder is queued, and never aims at the queued hex', () => {
+    const model = new WorldModel(SEED);
+    const { settlement } = foundLandedSettlement(model);
+    const placed = model.listPlacedBuildings(settlement.id);
+    const herderHex = pointerTarget(model, settlement, 'reindeerherder')!;
+    expect(nextGuidedType(guidedTypesStarted(placed, []))).toBe('reindeerherder');
+
+    const queue = [makePendingOrder('reindeerherder', herderHex)];
+    expect(nextGuidedType(guidedTypesStarted(placed, queue))).toBe('lumberjack');
+    const herderAgain = pointerTarget(model, settlement, 'reindeerherder', queue);
+    expect(herderAgain).not.toBeNull();
+    expect(herderAgain).not.toEqual(herderHex);
+
+    queue.push(makePendingOrder('lumberjack', pointerTarget(model, settlement, 'lumberjack', queue)!));
+    expect(nextGuidedType(guidedTypesStarted(placed, queue))).toBeNull();
   });
 });

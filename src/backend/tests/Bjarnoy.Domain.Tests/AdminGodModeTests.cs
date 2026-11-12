@@ -346,8 +346,10 @@ public sealed class AdminGodModeTests
             DepartedAt = Start,
             Path = path,
             CumulativeHours = [0, 5, 10],
+            EdgeHours = [0, 2.5, 7.5],
             ReturnPath = [new HexCoord(2, 0), new HexCoord(1, 0), new HexCoord(0, 0)],
             ReturnCumulativeHours = [0, 5, 10],
+            ReturnEdgeHours = [0, 2.5, 7.5],
             TurnAroundAt = Start + TimeSpan.FromHours(40),
             IsReturning = false,
         };
@@ -356,6 +358,7 @@ public sealed class AdminGodModeTests
         {
             Id = Guid.CreateVersion7(),
             SettlementId = Guid.CreateVersion7(),
+            HomeSpot = new HexCoord(0, 0),
             Stacks = [new UnitStack(UnitType.Thrall, 5)],
             Location = new ArmyLocation.InTransit(movement),
             Provisions = 1_000,
