@@ -15,7 +15,7 @@ namespace Bjarnoy.Domain.Combat;
 /// <param name="Drowned">The passengers the surviving ships could not carry, drowned before the land fight (or after a lost ship fight).</param>
 /// <param name="FireShipsBurned">The Fire Ships burned by the fire damage: the levels taken times ten.</param>
 /// <param name="FireSiege">The fire damage to a building standing in the water; <see cref="SiegeOutcome.None"/> when nothing burned.</param>
-/// <param name="LandSiege">The siege engines' damage after a won land fight; <see cref="SiegeOutcome.None"/> when none happened.</param>
+/// <param name="LandSiege">The siege engines' damage after a won land fight of an attack; <see cref="SiegeOutcome.None"/> when none happened, and always for a raid, which only plunders.</param>
 /// <param name="AttackerLosses">Everything the attacker lost: ship fight, drowned, land fight, burned Fire Ships.</param>
 /// <param name="AttackerSurvivors">What sails or walks home.</param>
 /// <param name="DefenderHomeLosses">The defender's own garrison's losses, both fights together.</param>
@@ -76,7 +76,7 @@ public static class AttackResolver
     /// <param name="defenderGuests">The guest armies' pooled stacks standing in the settlement, ships included.</param>
     /// <param name="defenseBonusPercent">The tower bonus; applies to both fights.</param>
     /// <param name="lootAvailable">The defender's settled stock at the battle instant.</param>
-    /// <param name="raid">A raid caps the losses in both fights (<see cref="BattleResolver.Resolve"/>).</param>
+    /// <param name="raid">A raid caps the losses in both fights (<see cref="BattleResolver.Resolve"/>) and does no land siege: only a won attack damages buildings with catapults and rams.</param>
     /// <param name="landAttackBonusPercent">Applies to the land fight only.</param>
     /// <param name="shipAttackBonusPercent">Applies to the ship fight only.</param>
     /// <param name="targetBuildingCoord">The building the army was sent at (<see cref="Army.TargetBuildingCoord"/>).</param>
@@ -144,7 +144,7 @@ public static class AttackResolver
             : (ResourceAmounts.Zero, 0);
         landFight = landFight with { LootTaken = loot };
 
-        var siege = landFight.Winner == BattleWinner.Attacker
+        var siege = !raid && landFight.Winner == BattleWinner.Attacker
             ? SiegeResolver.Resolve(landFight.AttackerSurvivors, defenderBuildings, targetBuildingCoord, seed)
             : SiegeOutcome.None;
 
@@ -236,7 +236,7 @@ public static class AttackResolver
         var (fireSiege, burned) = SiegeResolver.Burn(fireShips, defenderBuildings, targetBuildingCoord, terrainAt);
         var buildings = fireSiege.Applied ? fireSiege.UpdatedBuildings! : defenderBuildings;
 
-        var landSiege = landWon
+        var landSiege = landWon && !raid
             ? SiegeResolver.Resolve(landFight!.AttackerSurvivors, buildings, targetBuildingCoord, seed)
             : SiegeOutcome.None;
         if (landSiege.Applied)

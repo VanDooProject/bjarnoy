@@ -39,8 +39,8 @@ public enum ArmyMission
     /// phase 7, design doc §4): both sides' loss fraction is scaled down and
     /// capped rather than the loser losing everything, since a raider
     /// prioritises loot over annihilation. Dispatch validation, target-
-    /// building support, food-range rules, and siege behavior on a win are
-    /// all identical to <see cref="Attack"/> — the only difference is the
+    /// building support and food-range rules are identical to <see cref="Attack"/>, but a
+    /// raid only plunders: it does no land siege, its catapults and rams destroy nothing. The other difference is the
     /// <c>raid: true</c> flag threaded into <see cref="Combat.BattleResolver.Resolve"/>
     /// by <see cref="SettleArrival"/>. See <see cref="Combat.BattleResolver.Resolve"/>'s
     /// remarks for the exact loss-fraction math.
@@ -690,9 +690,7 @@ public sealed partial record Army
         // (see TargetBuildingCoord's remarks), since the layout can change
         // before the army arrives. All this rejects is "a target building was
         // named for a mission that has no battle to apply it in". Raid mirrors
-        // Attack here — a raid can carry catapults just as an attack can (the
-        // design doc places no restriction on this), even though it usually
-        // wouldn't.
+        // Attack here (a fleet raid needs its shore building to land at), though a raid does no siege damage to it.
         if (targetBuildingCoord is not null && mission is not (ArmyMission.Attack or ArmyMission.Raid or ArmyMission.Support))
         {
             return (DispatchRejection.TargetBuildingRequiresAttackMission, destination);
@@ -766,7 +764,7 @@ public sealed partial record Army
     /// <see cref="ArmyMission.Raid"/> army fights through
     /// <see cref="BattleResolver.Resolve"/>'s <c>raid: true</c> path (reduced,
     /// capped losses on both sides — issue #40 phase 7); everything else
-    /// (guest combining, loot, siege) is identical to <see cref="ArmyMission.Attack"/>.
+    /// (guest combining, loot) is identical to <see cref="ArmyMission.Attack"/>; only a won Attack does siege damage.
     /// Otherwise (mid-journey, already on the return leg, or a
     /// <see cref="Move"/>/<see cref="Support"/>-mission army) this is a no-op:
     /// <see cref="ArmyArrivalResult.Fought"/> is <see langword="false"/> and
