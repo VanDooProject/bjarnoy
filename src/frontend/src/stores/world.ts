@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
-import { api, ApiError, isSettlementNotFound, isWorldNotFound } from '../api/client';
+import { api, ApiError, isSettlementNotFound, isTerrainChunkNotFound, isWorldNotFound } from '../api/client';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { i18n } from '../i18n';
 import type {
@@ -696,9 +696,20 @@ export const useWorldStore = defineStore('world', {
       this.model.setFrozenEnabled(world.frozenIslesEnabled);
       let terrain: IslandTerrainResponse[];
       try {
-        this.islands = await api.getIslands(world.id, this.callerOwnerId());
-        // The river and bog tiles are big and only change on a reseed, so they come separately (cached, chunked).
-        terrain = await api.getTerrainChunks(world.id);
+        // The river and bog tiles are big and only change on a reseed, so they come separately (cached, chunked), in parallel
+        // with the island list.
+        const loadIslandsAndTerrain = () =>
+          Promise.all([api.getIslands(world.id, this.callerOwnerId()), api.getTerrainChunks(world.id)]);
+        let loaded;
+        try {
+          loaded = await loadIslandsAndTerrain();
+        } catch (err) {
+          // The world was reseeded between the chunk manifest and a chunk: the island list read next to it is stale as well,
+          // so read both again (once; a second miss is a real failure).
+          if (!isTerrainChunkNotFound(err)) throw err;
+          loaded = await loadIslandsAndTerrain();
+        }
+        [this.islands, terrain] = loaded;
       } catch (err) {
         if (!isWorldNotFound(err)) throw err;
         // The world resolved a moment ago (getWorld/newestWorld, just above)

@@ -118,6 +118,8 @@ async function loadStoreModule(demoMode: boolean) {
       err instanceof MockApiError && err.problem?.error === 'world_not_found',
     isSettlementNotFound: (err: unknown) =>
       err instanceof MockApiError && err.problem?.error === 'settlement_not_found',
+    isTerrainChunkNotFound: (err: unknown) =>
+      err instanceof MockApiError && err.problem?.error === 'terrain_chunk_not_found',
     // `stores/auth.ts` wires its refresh/lock hooks onto this at module load
     // (`authHooks.getAccessToken = ...`) — world.ts now imports that store
     // for the field-order premium check below, so the mock needs a plain
@@ -1489,6 +1491,75 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     getIslands.mockReset().mockRejectedValue(new Error('network error'));
 
     await expect(store.bootstrapLiveWorld()).rejects.toThrow('network error');
+  });
+
+  describe('a world reseeded between the chunk manifest and a chunk', () => {
+    const arrangeWorld = () => {
+      listWorlds.mockReset().mockResolvedValue([
+        {
+          id: 'world-1',
+          name: 'Kettil Sea',
+          status: 'Running',
+          joinable: true,
+          joinableReason: 'None',
+          playerCount: 0,
+          maxPlayers: 100,
+          freeSlots: 100,
+          startsAt: null,
+        },
+      ]);
+      getWorld.mockReset().mockResolvedValue({
+        id: 'world-1',
+        name: 'Kettil Sea',
+        seed: 1,
+        radius: 30,
+        maxPlayers: 100,
+        status: 'Running',
+        islandCount: 1,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        joinable: true,
+        joinableReason: 'None',
+        startsAt: null,
+        endbossTriggered: false,
+        frozenIslesEnabled: false,
+        speedFactor: 1,
+        generation: generationResponse(),
+        movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+      });
+    };
+
+    it('reads the islands and the terrain again once, and uses the second answer', async () => {
+      const store = await loadStoreModule(false);
+      const { ApiError: MockedApiError } = await import('../api/client');
+      arrangeWorld();
+      getIslands
+        .mockReset()
+        .mockResolvedValueOnce([{ id: 'old', index: 0, name: 'Old', q: 0, r: 0, tileCount: 5, giants: [], camps: [], wasted: false }])
+        .mockResolvedValueOnce([{ id: 'new', index: 0, name: 'New', q: 1, r: 1, tileCount: 5, giants: [], camps: [], wasted: false }]);
+      getTerrainChunks
+        .mockReset()
+        .mockRejectedValueOnce(new MockedApiError(404, { error: 'terrain_chunk_not_found' }))
+        .mockResolvedValueOnce([{ id: 'new', riverTiles: [], bogTiles: [{ q: 3, r: 4, kind: 'bog', inDirections: [], outDirection: null, waterEdges: [] }] }]);
+
+      await store.bootstrapLiveWorld();
+
+      expect(getIslands).toHaveBeenCalledTimes(2);
+      expect(getTerrainChunks).toHaveBeenCalledTimes(2);
+      expect(store.islands.map((i) => i.id)).toEqual(['new']);
+      expect(store.model!.getBogTile(3, 4)).toMatchObject({ kind: 'bog' });
+    });
+
+    it('throws when the second read misses a chunk too', async () => {
+      const store = await loadStoreModule(false);
+      const { ApiError: MockedApiError } = await import('../api/client');
+      arrangeWorld();
+      getIslands.mockReset().mockResolvedValue([]);
+      getTerrainChunks.mockReset().mockRejectedValue(new MockedApiError(404, { error: 'terrain_chunk_not_found' }));
+
+      await expect(store.bootstrapLiveWorld()).rejects.toMatchObject({ status: 404 });
+
+      expect(getTerrainChunks).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('propagates frozenIslesEnabled onto the world model', async () => {

@@ -3,7 +3,7 @@
 // shared `request()` plumbing (URL/query building, JSON parsing, ApiError on
 // failure) the same way it behaves for every other client method.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError, authHooks } from './client';
+import { api, ApiError, authHooks, isTerrainChunkNotFound } from './client';
 import { isUpdatePending, resetAppUpdate } from '../lib/appUpdate';
 import { setOwnBuildId } from '../lib/buildId';
 import type {
@@ -203,6 +203,21 @@ describe('terrain chunks', () => {
 
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({ status: 404, path: '/worlds/w1/terrain-chunks/0' });
+  });
+});
+
+describe('isTerrainChunkNotFound', () => {
+  it('is true for the 404 of a chunk the world no longer has, and for nothing else', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse({ chunkSize: 64, chunkCount: 1, chunks: [{ index: 0, eTag: '"a"' }] }))
+      .mockResolvedValueOnce(jsonResponse({ error: 'terrain_chunk_not_found' }, 404));
+    const missing = await api.getTerrainChunks('w1').catch((e) => e);
+    expect(isTerrainChunkNotFound(missing)).toBe(true);
+
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ error: 'world_not_found' }, 404));
+    const noWorld = await api.getIslands('w1').catch((e) => e);
+    expect(isTerrainChunkNotFound(noWorld)).toBe(false);
+    expect(isTerrainChunkNotFound(new Error('x'))).toBe(false);
   });
 });
 

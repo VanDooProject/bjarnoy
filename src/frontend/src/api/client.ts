@@ -165,6 +165,14 @@ export function isWorldNotFound(err: unknown): boolean {
 }
 
 /**
+ * True for the 404 of a terrain chunk the world no longer has — see `WorldEndpoints.GetTerrainChunk`: the world was reseeded
+ * between reading the chunk manifest and the chunk, so the island list read next to it is stale too.
+ */
+export function isTerrainChunkNotFound(err: unknown): boolean {
+  return err instanceof ApiError && err.problem?.error === 'terrain_chunk_not_found';
+}
+
+/**
  * Settlement counterpart to {@link isWorldNotFound} — see
  * `SettlementEndpoints.SettlementNotFoundProblem`.
  */
