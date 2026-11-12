@@ -703,6 +703,19 @@ export interface ArmyOverlayData {
   targets?: ArmyOverlayTarget[];
 }
 
+/** A pooled set of marker-icon Sprites under one parent; `used` counts what the current pass has handed out (see drawIcon). */
+interface IconSink {
+  pool: Sprite[];
+  used: number;
+  parent: Container;
+}
+
+/** Where an overlay part is drawn: a Graphics for its shapes and the icon pool for its sprites, both in one coordinate space. */
+interface ArmyDrawSink {
+  g: Graphics;
+  icons: IconSink;
+}
+
 /**
  * What `drawArmyOverlay` actually placed on screen on its most recent frame
  * — read back via `lastArmyOverlayFrame()`.
@@ -2372,8 +2385,20 @@ export class HexMapRenderer {
   // Null until the load resolves (and if it ever fails), which the overlay
   // draws plain vector shapes through instead of showing nothing.
   private icons: MarkerIcons | null = null;
-  private iconPool: Sprite[] = [];
-  private iconsUsed = 0;
+  // The per-frame icons (army markers, the pick/route parts that move with them, ...), drawn in screen pixels.
+  private movingIcons: IconSink = { pool: [], used: 0, parent: this.markerLayer };
+  // The army overlay's static part (routes, pins, targets: see drawArmyOverlay) lives in its own container, a child of
+  // markerLayer placed first so it draws under the pooled icons and labels. Its content is laid out in "world x zoom"
+  // space and rebuilt only when the overlay, the zoom or the selection changes; a pan is one position write.
+  private armyStatic = new Container();
+  private armyStaticGraphics = new Graphics();
+  private staticIcons: IconSink = { pool: [], used: 0, parent: this.armyStatic };
+  // What the static part was last built from (see armyStaticSignature), plus the zoom/leg/drag key: both are compared
+  // every frame, since the caller may change the overlay's arrays in place.
+  private armyStaticSnapshot: number[] | null = null;
+  private armyStaticKey = '';
+  private armyStaticWaypoints: { index: number; x: number; y: number }[] = [];
+  private armyStaticTargets: { kind: ArmyOverlayTarget['kind']; x: number; y: number }[] = [];
   // Read back by `lastArmyOverlayFrame()` — recorded by drawArmyOverlay as it
   // draws, so it always describes the frame actually on screen.
   private armyOverlayFrame: ArmyOverlayFrame = { armies: [], waypoints: [], targets: [], iconsReady: false };
@@ -2903,6 +2928,8 @@ export class HexMapRenderer {
     // front; whiteMistLayer (never-scouted) sits over everything, since
     // nothing should show through ground that's never been seen at all.
     app.stage.addChild(this.world, this.campPawLayer, this.blackFogLayer.mesh, this.markerLayer, this.whiteMistLayer.mesh);
+    this.armyStatic.addChild(this.armyStaticGraphics);
+    this.markerLayer.addChildAt(this.armyStatic, 0);
 
     app.ticker.add(this.onTick);
     // See framePacing.ts: a loop whose frames outlast the vsync interval otherwise starves input and timers.
@@ -5653,7 +5680,7 @@ export class HexMapRenderer {
     // markerLayer.clear() only wipes the Graphics geometry, not the pooled
     // Sprite/Text children parented to it — each pass counts what it used and
     // hides the rest, same bookkeeping labels do (hideUnusedLabels).
-    this.iconsUsed = 0;
+    this.movingIcons.used = 0;
     this.labelFrame++;
     if (this.options.mode === 'settlement') {
       if (!this.options.hideSettlementBadge) this.rebuildSettlementLabels();
@@ -5664,6 +5691,7 @@ export class HexMapRenderer {
       return;
     }
     if (this.options.mode !== 'world') {
+      this.clearArmyStatic();
       this.hideUnusedIcons();
       this.hideUnusedLabels();
       return;
@@ -5995,8 +6023,8 @@ export class HexMapRenderer {
     return { badges: Object.fromEntries(this.badgeVisibility) };
   }
 
-  private hideUnusedIcons() {
-    for (let i = this.iconsUsed; i < this.iconPool.length; i++) this.iconPool[i].visible = false;
+  private hideUnusedIcons(sink: IconSink = this.movingIcons) {
+    for (let i = sink.used; i < sink.pool.length; i++) sink.pool[i].visible = false;
   }
 
   private toScreen(world: { x: number; y: number }) {
@@ -6028,16 +6056,17 @@ export class HexMapRenderer {
       anchorX?: number;
       anchorY?: number;
     },
+    sink: IconSink = this.movingIcons,
   ): boolean {
     const texture = this.icons?.[name];
     if (!texture) return false;
-    let sprite = this.iconPool[this.iconsUsed];
+    let sprite = sink.pool[sink.used];
     if (!sprite) {
       sprite = new Sprite();
-      this.iconPool.push(sprite);
-      this.markerLayer.addChild(sprite);
+      sink.pool.push(sprite);
+      sink.parent.addChild(sprite);
     }
-    this.iconsUsed++;
+    sink.used++;
     sprite.texture = texture;
     sprite.anchor.set(opts.anchorX ?? 0.5, opts.anchorY ?? 0.5);
     const scale = opts.size / texture.height;
@@ -6602,13 +6631,18 @@ export class HexMapRenderer {
   /**
    * Draws a route polyline with per-segment direction arrows (issue #93) —
    * a plain line reads the same in both directions and gives no clue which
-   * end is the destination.
+   * end is the destination. `points` are in the sink's own space.
    */
-  private drawRoute(points: { x: number; y: number }[], style: { color: number; alpha: number; width: number }) {
+  private drawRoute(
+    sink: ArmyDrawSink,
+    points: { x: number; y: number }[],
+    style: { color: number; alpha: number; width: number },
+  ) {
     if (points.length < 2) return;
-    this.markerLayer.moveTo(points[0].x, points[0].y);
-    for (const p of points.slice(1)) this.markerLayer.lineTo(p.x, p.y);
-    this.markerLayer.stroke({ width: style.width, color: style.color, alpha: style.alpha, cap: 'round' });
+    const { g, icons } = sink;
+    g.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) g.lineTo(points[i].x, points[i].y);
+    g.stroke({ width: style.width, color: style.color, alpha: style.alpha, cap: 'round' });
 
     for (let i = 1; i < points.length; i++) {
       const a = points[i - 1];
@@ -6619,12 +6653,18 @@ export class HexMapRenderer {
       const mid = lerpPoint(a, b, 0.5);
       const rotation = Math.atan2(dy, dx);
       if (
-        !this.drawIcon('arrowhead', mid.x, mid.y, {
-          size: ROUTE_ARROW_PX,
-          color: style.color,
-          alpha: style.alpha,
-          rotation,
-        })
+        !this.drawIcon(
+          'arrowhead',
+          mid.x,
+          mid.y,
+          {
+            size: ROUTE_ARROW_PX,
+            color: style.color,
+            alpha: style.alpha,
+            rotation,
+          },
+          icons,
+        )
       ) {
         // Icon-less fallback: the same triangle the sprite draws, so a
         // failed icon load costs polish rather than the direction cue itself.
@@ -6632,9 +6672,10 @@ export class HexMapRenderer {
         const cos = Math.cos(rotation);
         const sin = Math.sin(rotation);
         const point = (fx: number, fy: number) => [mid.x + fx * cos - fy * sin, mid.y + fx * sin + fy * cos];
-        this.markerLayer
-          .poly([...point(size, 0), ...point(-size, size * 0.8), ...point(-size, -size * 0.8)])
-          .fill({ color: style.color, alpha: style.alpha });
+        g.poly([...point(size, 0), ...point(-size, size * 0.8), ...point(-size, -size * 0.8)]).fill({
+          color: style.color,
+          alpha: style.alpha,
+        });
       }
     }
   }
@@ -6657,6 +6698,111 @@ export class HexMapRenderer {
     });
   }
 
+  /** Hides the army overlay's static part (no overlay, or a mode that draws none) and forgets what it showed. */
+  private clearArmyStatic() {
+    if (this.armyStaticSnapshot === null) return;
+    this.armyStaticGraphics.clear();
+    this.staticIcons.used = 0;
+    this.hideUnusedIcons(this.staticIcons);
+    this.armyStaticSnapshot = null;
+    this.armyStaticKey = '';
+    this.armyStaticWaypoints = [];
+    this.armyStaticTargets = [];
+  }
+
+  /**
+   * Draws the army overlay's static part into `armyStatic`, in "world x zoom" space (the screen position minus the camera
+   * offset the container carries), with the same on-screen sizes and widths as the per-frame part. `splitLeg` is the route
+   * leg the selected army is on (-1: none): the legs before it are the dimmed walked part, the legs after it the part still
+   * ahead; the leg itself is drawn per frame, split at the marker.
+   */
+  private rebuildArmyStatic(overlay: ArmyOverlayData, splitLeg: number, draggedIndex: number | null) {
+    const zoom = this.camera.zoom;
+    const at = (c: AxialCoord) => {
+      const w = this.hexCenterWorld(c);
+      return { x: w.x * zoom, y: w.y * zoom };
+    };
+    const g = this.armyStaticGraphics;
+    g.clear();
+    this.staticIcons.used = 0;
+    const sink: ArmyDrawSink = { g, icons: this.staticIcons };
+
+    if (overlay.route.length > 1) {
+      const points = overlay.route.map(at);
+      if (splitLeg >= 0) {
+        this.drawRoute(sink, points.slice(0, splitLeg + 1), { color: ROUTE_COLOR, alpha: 0.3, width: 2 });
+        this.drawRoute(sink, points.slice(splitLeg + 1), { color: ROUTE_COLOR, alpha: 0.85, width: 2 });
+      } else {
+        this.drawRoute(sink, points, { color: ROUTE_COLOR, alpha: 0.8, width: 2 });
+      }
+    }
+
+    // An in-progress dispatch's clicked waypoints, plus an arrowed line
+    // connecting them — the "pins and a line" the design doc asks for, shown
+    // before anything has actually been sent to the backend. Each pin is
+    // draggable (see onPointerDown/draftWaypointAt).
+    if (overlay.draftWaypoints.length > 1) {
+      this.drawRoute(sink, overlay.draftWaypoints.map(at), { color: GOLD, alpha: 0.9, width: 2 });
+    }
+    this.armyStaticWaypoints = [];
+    overlay.draftWaypoints.forEach((c, i) => {
+      const p = at(c);
+      const isDestination = i === overlay.draftWaypoints.length - 1;
+      const size = isDestination ? 30 : 24;
+      this.armyStaticWaypoints.push({ index: i, x: p.x, y: p.y });
+      if (
+        !this.drawIcon(
+          'waypoint-pin',
+          p.x,
+          p.y,
+          {
+            size: i === draggedIndex ? size * 1.15 : size,
+            color: GOLD,
+            alpha: isDestination ? 1 : 0.85,
+          },
+          this.staticIcons,
+        )
+      ) {
+        g.circle(p.x, p.y, isDestination ? 8 : 5)
+          .fill({ color: GOLD, alpha: isDestination ? 0.95 : 0.7 })
+          .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.85 });
+      }
+    });
+
+    // Issue #93: what this dispatch (or the selected army) is being sent at —
+    // crossed sword and axe on an attack target's hex, a shield on a
+    // support target's, so the settlement picked from a text list has a place
+    // on the map rather than existing only as a name in the panel.
+    this.armyStaticTargets = [];
+    for (const target of overlay.targets ?? []) {
+      const p = at(target.coord);
+      this.armyStaticTargets.push({ kind: target.kind, x: p.x, y: p.y });
+      const color = target.kind === 'attack' ? ATTACK_COLOR : SUPPORT_COLOR;
+      const drawn =
+        target.kind === 'attack'
+          ? this.drawIcon('sword', p.x, p.y, { size: 30, color, rotation: -Math.PI / 4 }, this.staticIcons) &&
+            this.drawIcon('axe', p.x, p.y, { size: 30, color, rotation: Math.PI / 4, flipX: true }, this.staticIcons)
+          : this.drawIcon('shield', p.x, p.y, { size: 30, color }, this.staticIcons);
+      if (!drawn) {
+        // Icon-less fallback: a cross for attack, a ring for support.
+        if (target.kind === 'attack') {
+          g.moveTo(p.x - 10, p.y - 10)
+            .lineTo(p.x + 10, p.y + 10)
+            .moveTo(p.x + 10, p.y - 10)
+            .lineTo(p.x - 10, p.y + 10)
+            .stroke({ width: 3, color, cap: 'round' });
+        } else {
+          g.circle(p.x, p.y, 10).stroke({ width: 3, color });
+        }
+      }
+      // A ring under the marker so it reads as "this hex", not "something
+      // floating near here" — the marker itself is deliberately bigger than
+      // the hex it sits on at low zoom.
+      g.circle(p.x, p.y, 18).stroke({ width: 1.5, color, alpha: 0.55 });
+    }
+    this.hideUnusedIcons(this.staticIcons);
+  }
+
   private drawArmyOverlay() {
     const overlay = this.armyOverlay;
     const frame: ArmyOverlayFrame = {
@@ -6667,20 +6813,26 @@ export class HexMapRenderer {
     };
     this.armyOverlayFrame = frame;
     if (!overlay) {
+      this.clearArmyStatic();
       this.syncArmyCullSources([]);
       return;
     }
 
     const now = Date.now();
+    const movingSink: ArmyDrawSink = { g: this.markerLayer, icons: this.movingIcons };
 
+    // The overlay's static part (routes, draft line, pins, target icons and rings) is drawn into `armyStatic` in
+    // "world x zoom" space, so a pan only moves that container. What moves on its own stays per frame in markerLayer: the
+    // army markers, the pick rings around them, and the leg the selected army is on (split at the marker below).
+    //
     // The selected army's full route (waypoints + computed path) — a muted
-    // blue line, distinct from the gold in-progress-dispatch line below so a
+    // blue line, distinct from the gold in-progress-dispatch line so a
     // player editing a *new* dispatch while another army is already selected
     // can't confuse the two. Issue #94: the part already marched is dimmed
     // and the part still ahead drawn at full strength, split at the same
     // interpolated point the marker itself sits at.
+    let split: { legIndex: number; t: number } | null = null;
     if (overlay.route.length > 1) {
-      const points = overlay.route.map((c) => this.hexCenterScreen(c));
       const selected = overlay.armies.find((a) => a.selected);
       const progress = selected?.movement
         ? routeProgressAt(
@@ -6695,86 +6847,30 @@ export class HexMapRenderer {
       // Only split when the drawn route really is the leg being travelled —
       // `route` is whichever path the caller chose to show, and a mismatched
       // length means it is not the one `progress` was measured against.
-      const splitAt =
-        progress && !progress.arrived && selected!.movement!.path.length === points.length ? progress : null;
-      if (splitAt) {
-        const marker = lerpPoint(points[splitAt.legIndex], points[splitAt.legIndex + 1], splitAt.t);
-        this.drawRoute([...points.slice(0, splitAt.legIndex + 1), marker], {
-          color: ROUTE_COLOR,
-          alpha: 0.3,
-          width: 2,
-        });
-        this.drawRoute([marker, ...points.slice(splitAt.legIndex + 1)], {
-          color: ROUTE_COLOR,
-          alpha: 0.85,
-          width: 2,
-        });
-      } else {
-        this.drawRoute(points, { color: ROUTE_COLOR, alpha: 0.8, width: 2 });
+      split =
+        progress && !progress.arrived && selected!.movement!.path.length === overlay.route.length ? progress : null;
+      if (split) {
+        // Only the leg being walked changes from frame to frame; the legs before and after it are in the static part.
+        const legStart = this.hexCenterScreen(overlay.route[split.legIndex]);
+        const legEnd = this.hexCenterScreen(overlay.route[split.legIndex + 1]);
+        const marker = lerpPoint(legStart, legEnd, split.t);
+        this.drawRoute(movingSink, [legStart, marker], { color: ROUTE_COLOR, alpha: 0.3, width: 2 });
+        this.drawRoute(movingSink, [marker, legEnd], { color: ROUTE_COLOR, alpha: 0.85, width: 2 });
       }
     }
 
-    // An in-progress dispatch's clicked waypoints, plus an arrowed line
-    // connecting them — the "pins and a line" the design doc asks for, shown
-    // before anything has actually been sent to the backend. Each pin is
-    // draggable (see onPointerDown/draftWaypointAt).
-    if (overlay.draftWaypoints.length > 1) {
-      this.drawRoute(
-        overlay.draftWaypoints.map((c) => this.hexCenterScreen(c)),
-        { color: GOLD, alpha: 0.9, width: 2 },
-      );
-    }
     const draggedIndex = this.waypointDrag?.index ?? null;
-    overlay.draftWaypoints.forEach((c, i) => {
-      const p = this.hexCenterScreen(c);
-      const isDestination = i === overlay.draftWaypoints.length - 1;
-      const size = isDestination ? 30 : 24;
-      frame.waypoints.push({ index: i, x: p.x, y: p.y });
-      if (
-        !this.drawIcon('waypoint-pin', p.x, p.y, {
-          size: i === draggedIndex ? size * 1.15 : size,
-          color: GOLD,
-          alpha: isDestination ? 1 : 0.85,
-        })
-      ) {
-        this.markerLayer
-          .circle(p.x, p.y, isDestination ? 8 : 5)
-          .fill({ color: GOLD, alpha: isDestination ? 0.95 : 0.7 })
-          .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.85 });
-      }
-    });
-
-    // Issue #93: what this dispatch (or the selected army) is being sent at —
-    // crossed sword and axe on an attack target's hex, a shield on a
-    // support target's, so the settlement picked from a text list has a place
-    // on the map rather than existing only as a name in the panel.
-    for (const target of overlay.targets ?? []) {
-      const p = this.hexCenterScreen(target.coord);
-      frame.targets.push({ kind: target.kind, x: p.x, y: p.y });
-      const color = target.kind === 'attack' ? ATTACK_COLOR : SUPPORT_COLOR;
-      const drawn =
-        target.kind === 'attack'
-          ? this.drawIcon('sword', p.x, p.y, { size: 30, color, rotation: -Math.PI / 4 }) &&
-            this.drawIcon('axe', p.x, p.y, { size: 30, color, rotation: Math.PI / 4, flipX: true })
-          : this.drawIcon('shield', p.x, p.y, { size: 30, color });
-      if (!drawn) {
-        // Icon-less fallback: a cross for attack, a ring for support.
-        if (target.kind === 'attack') {
-          this.markerLayer
-            .moveTo(p.x - 10, p.y - 10)
-            .lineTo(p.x + 10, p.y + 10)
-            .moveTo(p.x + 10, p.y - 10)
-            .lineTo(p.x - 10, p.y + 10)
-            .stroke({ width: 3, color, cap: 'round' });
-        } else {
-          this.markerLayer.circle(p.x, p.y, 10).stroke({ width: 3, color });
-        }
-      }
-      // A ring under the marker so it reads as "this hex", not "something
-      // floating near here" — the marker itself is deliberately bigger than
-      // the hex it sits on at low zoom.
-      this.markerLayer.circle(p.x, p.y, 18).stroke({ width: 1.5, color, alpha: 0.55 });
+    const zoom = this.camera.zoom;
+    const staticKey = `${zoom}|${split ? split.legIndex : -1}|${draggedIndex}|${this.icons !== null}`;
+    if (this.armyStaticKey !== staticKey || !armyStaticSnapshotMatches(overlay, this.armyStaticSnapshot)) {
+      this.armyStaticSnapshot = armyStaticSignature(overlay);
+      this.armyStaticKey = staticKey;
+      this.rebuildArmyStatic(overlay, split ? split.legIndex : -1, draggedIndex);
     }
+    const offset = this.toScreen({ x: 0, y: 0 });
+    this.armyStatic.position.set(offset.x, offset.y);
+    for (const w of this.armyStaticWaypoints) frame.waypoints.push({ index: w.index, x: w.x + offset.x, y: w.y + offset.y });
+    for (const t of this.armyStaticTargets) frame.targets.push({ kind: t.kind, x: t.x + offset.x, y: t.y + offset.y });
 
     // Every dispatched army gets a banner marker (issue #94) at its live
     // position — interpolated along the current leg while marching, on its
@@ -7054,6 +7150,31 @@ export class HexMapRenderer {
     this.app?.destroy(false, { children: true });
     this.app = null;
   }
+}
+
+/**
+ * What the army overlay's static part draws, as numbers: the route, the draft waypoints and the targets with their kinds.
+ * The overlay's arrays can be changed in place (a dragged pin), so the static part compares this instead of the object.
+ */
+export function armyStaticSignature(overlay: ArmyOverlayData): number[] {
+  const out: number[] = [overlay.route.length, overlay.draftWaypoints.length];
+  for (const c of overlay.route) out.push(c.q, c.r);
+  for (const c of overlay.draftWaypoints) out.push(c.q, c.r);
+  for (const t of overlay.targets ?? []) out.push(t.coord.q, t.coord.r, t.kind === 'attack' ? 1 : 0);
+  return out;
+}
+
+/** `armyStaticSignature(overlay)` equals `snapshot`, without building the array. */
+export function armyStaticSnapshotMatches(overlay: ArmyOverlayData, snapshot: number[] | null): boolean {
+  if (!snapshot) return false;
+  const targets = overlay.targets ?? [];
+  if (snapshot.length !== 2 + 2 * overlay.route.length + 2 * overlay.draftWaypoints.length + 3 * targets.length) return false;
+  if (snapshot[0] !== overlay.route.length || snapshot[1] !== overlay.draftWaypoints.length) return false;
+  let i = 2;
+  for (const c of overlay.route) if (snapshot[i++] !== c.q || snapshot[i++] !== c.r) return false;
+  for (const c of overlay.draftWaypoints) if (snapshot[i++] !== c.q || snapshot[i++] !== c.r) return false;
+  for (const t of targets) if (snapshot[i++] !== t.coord.q || snapshot[i++] !== t.coord.r || snapshot[i++] !== (t.kind === 'attack' ? 1 : 0)) return false;
+  return true;
 }
 
 const NEIGHBOR_DIRS: AxialCoord[] = [

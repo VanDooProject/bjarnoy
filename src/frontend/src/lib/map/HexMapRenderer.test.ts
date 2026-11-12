@@ -5,9 +5,12 @@ import {
   VISIBLE_RECT_MARGIN,
   armyMarkerColor,
   armyMarkerAt,
+  armyStaticSignature,
+  armyStaticSnapshotMatches,
   armyTapSwallowed,
   armyVisionEntryOf,
   grantsArmyVision,
+  type ArmyOverlayData,
   type ArmyOverlayMarker,
   previewGroundCoords,
   attentionPulseFrame,
@@ -1333,5 +1336,41 @@ describe('terrain rebuild cadence', () => {
     );
     expect(heights.length).toBeGreaterThan(0);
     expect(Math.max(...heights)).toBeLessThanOrEqual(GIANT_MAX_NATIVE_H);
+  });
+});
+
+describe('army overlay static signature', () => {
+  const overlay = (): ArmyOverlayData => ({
+    armies: [],
+    route: [{ q: 0, r: 0 }, { q: 1, r: 0 }],
+    draftWaypoints: [{ q: 2, r: 1 }],
+    targets: [{ kind: 'attack', coord: { q: 3, r: 3 } }],
+  });
+
+  it('matches the overlay it was taken from and nothing else is needed to tell it is unchanged', () => {
+    const o = overlay();
+    expect(armyStaticSnapshotMatches(o, armyStaticSignature(o))).toBe(true);
+    expect(armyStaticSnapshotMatches(overlay(), armyStaticSignature(o))).toBe(true);
+    expect(armyStaticSnapshotMatches(o, null)).toBe(false);
+  });
+
+  it('notices a pin moved in place inside the same arrays (a dragged waypoint)', () => {
+    const o = overlay();
+    const before = armyStaticSignature(o);
+    o.draftWaypoints[0] = { q: 2, r: 2 };
+    expect(armyStaticSnapshotMatches(o, before)).toBe(false);
+  });
+
+  it('notices a changed route, a different number of pins and a target that changed kind', () => {
+    const before = armyStaticSignature(overlay());
+    const route = overlay();
+    route.route[1] = { q: 1, r: 1 };
+    expect(armyStaticSnapshotMatches(route, before)).toBe(false);
+    const pins = overlay();
+    pins.draftWaypoints.push({ q: 4, r: 4 });
+    expect(armyStaticSnapshotMatches(pins, before)).toBe(false);
+    const target = overlay();
+    target.targets = [{ kind: 'support', coord: { q: 3, r: 3 } }];
+    expect(armyStaticSnapshotMatches(target, before)).toBe(false);
   });
 });
