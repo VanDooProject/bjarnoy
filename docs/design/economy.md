@@ -369,7 +369,8 @@ for friend and foe, a half-open end and a sealed end), the dispatch is refused w
 land route is left, and the range tint applies the same rules for the selected
 settlement's owner (friends come from the guild store: `friendlyUserIds`).
 
-**Siege.** On land a wall hex falls to **battering rams only**: a won Attack or Raid that names the wall hex
+**Siege.** Only a won Attack does siege damage; a Raid only plunders, its catapults and rams destroy nothing.
+On land a wall hex falls to **battering rams only**: a won Attack that names the wall hex
 as `TargetBuildingCoord` takes **one level** off it, however many rams survive
 (`SiegeResolver.LevelsTakenFrom`, the same rule as a bridge): a level-3 palisade needs three won
 sieges to be breached, and the hex is gone at level 0. Catapults do nothing to a wall. There is no
