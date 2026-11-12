@@ -1,0 +1,372 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using Bjarnoy.Api.Contracts;
+using Bjarnoy.Api.IntegrationTests.Infrastructure;
+using Bjarnoy.Domain.Armies;
+using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Units;
+using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Bjarnoy.Api.IntegrationTests;
+
+/// <summary>
+/// Destroying a beach camp (<c>docs/design/skirmish/beach-camp.md</c>) and the armies it leaves without a home
+/// (<c>docs/design/troop-movement-range.md</c> §2a, <c>docs/design/garrison.md</c>). The scene: the camp owner (a registered player)
+/// has a home settlement six hexes west of a camp at (0, 0); an anonymous attacker marches on the camp from the east and lands four
+/// hours in; the camp's own army is out on the road south when it falls. Armies are planted straight into the database, one hex an hour.
+/// </summary>
+public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
+{
+    private const string CampOwner = "camp-owner";
+    private const string AttackerOwner = "camp-attacker";
+    private const string Password = "correct-horse-battery";
+
+    private static readonly HexCoord CampHex = new(0, 0);
+    private static readonly HexCoord HomeHex = new(-6, 0);
+    private static readonly HexCoord AttackerHome = new(20, 0);
+
+    private readonly BjarnoyApiFactory _factory = BjarnoyApiFactory.Sqlite();
+
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    public async ValueTask InitializeAsync() => await _factory.MigrateAsync(Ct);
+
+    public async ValueTask DisposeAsync()
+    {
+        await _factory.DisposeAsync();
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>A single huge all-land island, as <c>ArmyStarvationEndpointsTests.LandOptions</c>.</summary>
+    private static WorldGenerationOptions LandOptions => new()
+    {
+        Seed = 14,
+        Radius = 500,
+        IslandCellSize = 100,
+        IslandChance = 1.0,
+        IslandMaxReach = 0.0,
+        IslandMinGap = 0.0,
+        IslandMinWidth = 100.0,
+        IslandMaxWidth = 100.0,
+        IslandMinSegments = 1,
+        IslandMaxSegments = 1,
+        IslandCoastWarp = 0.0,
+        IslandCoastNoise = 0.0,
+        IslandSmallShare = 0.0,
+        IslandLargeShare = 0.0,
+        BeachThreshold = 1.0,
+        MountainThreshold = 0.0,
+        MountainRockiness = 2.0,
+        ForestRockiness = 2.0,
+    };
+
+    private sealed record Scene(
+        Guid WorldId, Guid HomeId, Guid CampId, Guid AttackerSettlementId, Guid AttackerArmyId, Guid? CampArmyId, string UserName);
+
+    /// <summary>
+    /// Plants the scene. <paramref name="campArmyProvisions"/>: the camp's own army (5 spearmen, 1.25 food an hour) marching south
+    /// from the camp, ten hexes in ten hours, with that much food at the start; null for none. <paramref name="raidWithCatapults"/>: the
+    /// attacker raids with catapults instead of attacking with axemen.
+    /// </summary>
+    private async Task<Scene> PlantAsync(double? campArmyProvisions, bool raidWithCatapults = false, int campGarrison = 0)
+    {
+        using var client = _factory.CreateClient();
+        var userName = $"jarl{Guid.CreateVersion7():N}"[..20];
+        var registered = await (await client.PostJsonAsync("/api/v1/auth/register", new RegisterRequest(userName, Password), Ct))
+            .ReadStrictAsync<AuthResponse>(Ct);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        var world = new WorldEntity { Name = $"w-{Guid.CreateVersion7():N}", MaxPlayers = 100 };
+        world.ApplyGenerationOptions(LandOptions);
+        db.Worlds.Add(world);
+        var island = new IslandEntity { WorldId = world.Id, Name = "Island", CentreQ = 0, CentreR = 0 };
+        db.Islands.Add(island);
+
+        var now = _factory.Time.GetUtcNow();
+        var home = Settlement(world.Id, island.Id, CampOwner, registered.User.Id, HomeHex, now - TimeSpan.FromDays(1));
+        home.Buildings.Add(new PlacedBuildingEntity { Q = HomeHex.Q, R = HomeHex.R, Type = BuildingType.Longhouse, Level = 1 });
+        var camp = Settlement(world.Id, island.Id, CampOwner, registered.User.Id, CampHex, now);
+        camp.Name = "Strandlager";
+        camp.CapacityFood = BuildingCatalogue.BeachCampStorage;
+        camp.Buildings.Add(new PlacedBuildingEntity { Q = CampHex.Q, R = CampHex.R, Type = BuildingType.BeachCamp, Level = 1 });
+        if (campGarrison > 0)
+        {
+            camp.Garrison.Add(new UnitStackEntity { SettlementId = camp.Id, UnitType = UnitType.Spearman, Count = campGarrison, SpotQ = CampHex.Q, SpotR = CampHex.R });
+        }
+
+        var attacker = Settlement(world.Id, island.Id, AttackerOwner, SystemUserIds.Abandoned, AttackerHome, now - TimeSpan.FromDays(1));
+        db.Settlements.AddRange(home, camp, attacker);
+
+        // Lands on the camp four hours in.
+        var attack = Army(
+            attacker.Id, AttackerHome, [(4, 0), (3, 0), (2, 0), (1, 0), (0, 0)], [(0, 0), (1, 0), (2, 0), (3, 0), (4, 0)], 1_000,
+            raidWithCatapults ? [(UnitType.Axeman, 10), (UnitType.Catapult, 4)] : [(UnitType.Axeman, 10)]);
+        attack.Mission = (int)(raidWithCatapults ? ArmyMission.Raid : ArmyMission.Attack);
+        attack.TargetSettlementId = camp.Id;
+        db.AddArmyRows(attack);
+
+        ArmyEntity? campArmy = null;
+        if (campArmyProvisions is { } provisions)
+        {
+            (int Q, int R)[] south = [.. Enumerable.Range(0, 11).Select(i => (0, i))];
+            campArmy = Army(camp.Id, CampHex, south, [.. south.Reverse()], provisions, [(UnitType.Spearman, 5)]);
+            db.AddArmyRows(campArmy);
+        }
+
+        await db.SaveChangesAsync(Ct);
+        return new Scene(world.Id, home.Id, camp.Id, attacker.Id, attack.Id, campArmy?.Id, userName);
+    }
+
+    private SettlementEntity Settlement(Guid worldId, Guid islandId, string ownerId, Guid userId, HexCoord centre, DateTimeOffset foundedAt) => new()
+    {
+        WorldId = worldId,
+        IslandId = islandId,
+        Name = $"s-{Guid.CreateVersion7():N}",
+        OwnerName = "Owner",
+        OwnerId = ownerId,
+        UserId = userId,
+        CentreQ = centre.Q,
+        CentreR = centre.R,
+        SettledAt = _factory.Time.GetUtcNow(),
+        FoundedAt = foundedAt,
+        StockFood = 300,
+        CapacityFood = 1000,
+    };
+
+    private ArmyEntity Army(
+        Guid settlementId, HexCoord home, (int Q, int R)[] path, (int Q, int R)[] returnPath, double provisions, (UnitType Unit, int Count)[] units)
+    {
+        var departedAt = _factory.Time.GetUtcNow();
+        List<double> hours = [.. path.Select((_, i) => (double)i)];
+        List<double> returnHours = [.. returnPath.Select((_, i) => (double)i)];
+        return new ArmyEntity
+        {
+            SettlementId = settlementId,
+            HomeSpotQ = home.Q,
+            HomeSpotR = home.R,
+            Mission = (int)ArmyMission.Move,
+            AtHome = false,
+            Provisions = provisions,
+            DepartedAt = departedAt,
+            Path = [.. path.Select(p => new HexPoint(p.Q, p.R))],
+            CumulativeHours = hours,
+            EdgeHours = hours,
+            ReturnPath = [.. returnPath.Select(p => new HexPoint(p.Q, p.R))],
+            ReturnCumulativeHours = returnHours,
+            ReturnEdgeHours = returnHours,
+            TurnAroundAt = departedAt + TimeSpan.FromHours(100),
+            IsReturning = false,
+            Stacks = [.. units.Select(u => new ArmyUnitStackEntity { UnitType = u.Unit, Count = u.Count })],
+        };
+    }
+
+    private HttpClient AttackerClient()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Owner-Id", AttackerOwner);
+        return client;
+    }
+
+    /// <summary>A client signed in as the camp owner now (an access token does not survive the hours these tests skip).</summary>
+    private async Task<HttpClient> OwnerClientAsync(Scene scene)
+    {
+        var client = _factory.CreateClient();
+        var auth = await (await client.PostJsonAsync("/api/v1/auth/login", new LoginRequest(scene.UserName, Password), Ct))
+            .ReadStrictAsync<AuthResponse>(Ct);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
+        return client;
+    }
+
+    /// <summary>
+    /// Moves the clock on to just after the attacker lands and reads its army, which settles the attack (a wiped-out attacker
+    /// reads as not found).
+    /// </summary>
+    private async Task LandTheAttackAsync(Scene scene)
+    {
+        _factory.Time.Advance(TimeSpan.FromHours(4.5));
+        using var attacker = AttackerClient();
+        var read = await attacker.GetAsync($"/api/v1/armies/{scene.AttackerArmyId}", Ct);
+        Assert.Contains(read.StatusCode, new[] { HttpStatusCode.OK, HttpStatusCode.NotFound });
+    }
+
+    private async Task<T> InDbAsync<T>(Func<GameDbContext, Task<T>> read)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        return await read(scope.ServiceProvider.GetRequiredService<GameDbContext>());
+    }
+
+    [Fact]
+    public async Task An_attack_on_an_empty_camp_destroys_it_and_both_players_keep_the_battle_report()
+    {
+        var scene = await PlantAsync(campArmyProvisions: null);
+
+        await LandTheAttackAsync(scene);
+
+        Assert.False(await InDbAsync(db => db.Settlements.AnyAsync(s => s.Id == scene.CampId, Ct)));
+        Assert.False(await InDbAsync(db => db.PlacedBuildings.AnyAsync(b => b.SettlementId == scene.CampId, Ct)));
+
+        using var owner = await OwnerClientAsync(scene);
+        var mine = await owner.GetFromJsonAsync<List<SettlementSummary>>(
+            $"/api/v1/worlds/{scene.WorldId}/settlements/mine", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal([scene.HomeId], mine!.Select(s => s.Id));
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync($"/api/v1/settlements/{scene.CampId}", Ct)).StatusCode);
+
+        // The report names the camp that is gone; the defender still has it, and so does the attacker.
+        var ownerReports = await owner.GetFromJsonAsync<List<BattleReportResponse>>(
+            $"/api/v1/worlds/{scene.WorldId}/reports", SqliteApiFixture.StrictJson, Ct);
+        var report = Assert.Single(ownerReports!);
+        Assert.Equal(scene.CampId, report.DefenderSettlementId);
+        Assert.Equal(scene.AttackerArmyId, report.AttackerArmyId);
+
+        using var attacker = AttackerClient();
+        var attackerReports = await attacker.GetFromJsonAsync<List<BattleReportResponse>>(
+            $"/api/v1/worlds/{scene.WorldId}/reports", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(report.Id, Assert.Single(attackerReports!).Id);
+
+        // The attacker walks home with its loot; the camp is no longer its target.
+        var back = await attacker.GetFromJsonAsync<ArmyResponse>($"/api/v1/armies/{scene.AttackerArmyId}", SqliteApiFixture.StrictJson, Ct);
+        Assert.True(back!.Movement!.IsReturning);
+        Assert.Null(back.TargetSettlementId);
+        Assert.Equal(scene.AttackerSettlementId, back.SettlementId);
+    }
+
+    [Fact]
+    public async Task An_attack_that_leaves_troops_in_the_camp_does_not_destroy_it()
+    {
+        // 50 spearmen hold against 10 axemen.
+        var scene = await PlantAsync(campArmyProvisions: null, campGarrison: 50);
+
+        await LandTheAttackAsync(scene);
+
+        Assert.True(await InDbAsync(db => db.Settlements.AnyAsync(s => s.Id == scene.CampId, Ct)));
+        Assert.False(await InDbAsync(db => db.Armies.AnyAsync(a => a.Id == scene.AttackerArmyId, Ct)));
+        Assert.Single(await InDbAsync(db => db.BattleReports.Where(r => r.DefenderSettlementId == scene.CampId).ToListAsync(Ct)));
+    }
+
+    [Fact]
+    public async Task A_raid_whose_catapults_raze_the_camp_building_destroys_the_camp()
+    {
+        var scene = await PlantAsync(campArmyProvisions: null, raidWithCatapults: true);
+
+        await LandTheAttackAsync(scene);
+
+        Assert.False(await InDbAsync(db => db.Settlements.AnyAsync(s => s.Id == scene.CampId, Ct)));
+        var report = await InDbAsync(db => db.BattleReports.SingleAsync(r => r.DefenderSettlementId == scene.CampId, Ct));
+        Assert.True(report.WasRaid);
+        Assert.Equal(0, report.SiegeLevelAfter);
+    }
+
+    [Fact]
+    public async Task A_camp_army_out_in_the_field_gets_the_owners_settlement_it_can_reach_as_its_new_home()
+    {
+        var scene = await PlantAsync(campArmyProvisions: 100);
+
+        await LandTheAttackAsync(scene);
+
+        var army = await InDbAsync(db => db.Armies.SingleAsync(a => a.Id == scene.CampArmyId, Ct));
+        Assert.Equal(scene.HomeId, army.SettlementId);
+        Assert.Equal((HomeHex.Q, HomeHex.R), (army.HomeSpotQ, army.HomeSpotR));
+        Assert.False(army.IsStranded);
+    }
+
+    [Fact]
+    public async Task A_camp_army_that_can_reach_no_spot_has_no_home_shows_in_the_owners_list_and_starves_with_a_report()
+    {
+        // 15 food: ten left at the fall, not enough to finish the march and walk back to the home settlement.
+        var scene = await PlantAsync(campArmyProvisions: 15);
+
+        await LandTheAttackAsync(scene);
+
+        using (var owner = await OwnerClientAsync(scene))
+        {
+            var listed = await owner.GetFromJsonAsync<List<ArmySummary>>(
+                $"/api/v1/settlements/{scene.HomeId}/armies", SqliteApiFixture.StrictJson, Ct);
+            Assert.Contains(listed!, a => a.Id == scene.CampArmyId);
+
+            var army = await owner.GetFromJsonAsync<ArmyResponse>($"/api/v1/armies/{scene.CampArmyId}", SqliteApiFixture.StrictJson, Ct);
+            Assert.Null(army!.SettlementId);
+            Assert.True(army.Movement!.IsStranded);
+            // It stays where it was when the camp fell: four hexes down its road.
+            Assert.Equal(new HexPointResponse(0, 4), army.Position);
+            var startedAt = _factory.Time.GetUtcNow() - TimeSpan.FromHours(4.5);
+            Assert.Equal(startedAt + TimeSpan.FromHours(15 / 1.25), army.StarvesAt!.Value, TimeSpan.FromSeconds(1));
+
+            var recall = await owner.PostAsync($"/api/v1/armies/{scene.CampArmyId}/recall", null, Ct);
+            Assert.Equal(HttpStatusCode.Conflict, recall.StatusCode);
+            Assert.Equal("NoHome", await recall.RejectionAsync(Ct));
+        }
+
+        _factory.Time.Advance(TimeSpan.FromHours(8));
+        using var later = await OwnerClientAsync(scene);
+        Assert.Equal(HttpStatusCode.NotFound, (await later.GetAsync($"/api/v1/armies/{scene.CampArmyId}", Ct)).StatusCode);
+        var reports = await later.GetFromJsonAsync<List<ArmyReportResponse>>(
+            $"/api/v1/worlds/{scene.WorldId}/army-reports", SqliteApiFixture.StrictJson, Ct);
+        var starved = Assert.Single(reports!);
+        Assert.Equal("starved", starved.Kind);
+        Assert.Equal(scene.CampArmyId, starved.ArmyId);
+        Assert.Equal(new HexPointResponse(0, 4), starved.Hex);
+    }
+
+    [Fact]
+    public async Task An_army_without_a_home_sent_to_the_owners_longhouse_folds_in_there()
+    {
+        var scene = await PlantAsync(campArmyProvisions: 15);
+        await LandTheAttackAsync(scene);
+
+        using (var owner = await OwnerClientAsync(scene))
+        {
+            var ordered = await owner.PostJsonAsync(
+                $"/api/v1/armies/{scene.CampArmyId}/orders", new FieldOrderRequest(null, new HexPointRequest(HomeHex.Q, HomeHex.R)), Ct);
+            Assert.Equal(HttpStatusCode.OK, ordered.StatusCode);
+            var moving = await ordered.ReadStrictAsync<ArmyResponse>(Ct);
+            Assert.Null(moving.SettlementId);
+            Assert.False(moving.Movement!.IsStranded);
+        }
+
+        _factory.Time.Advance(TimeSpan.FromHours(4));
+        using var later = await OwnerClientAsync(scene);
+        Assert.Equal(HttpStatusCode.NotFound, (await later.GetAsync($"/api/v1/armies/{scene.CampArmyId}", Ct)).StatusCode);
+        var home = await later.GetFromJsonAsync<SettlementResponse>($"/api/v1/settlements/{scene.HomeId}", SqliteApiFixture.StrictJson, Ct);
+        Assert.Contains(home!.Garrison, g => g.Unit == "spearman" && g.Count == 5);
+        Assert.False(await InDbAsync(db => db.Armies.AnyAsync(a => a.Id == scene.CampArmyId, Ct)));
+    }
+
+    [Fact]
+    public async Task Another_players_army_on_its_way_to_the_destroyed_camp_goes_on_to_its_hex_and_stands_there()
+    {
+        var scene = await PlantAsync(campArmyProvisions: null);
+        Guid secondId;
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            // Sent at the camp too, landing four hours after the first.
+            var second = Army(
+                scene.AttackerSettlementId, AttackerHome, [.. Enumerable.Range(0, 9).Select(i => (8 - i, 0))], [(0, 0), (1, 0)], 1_000,
+                [(UnitType.Axeman, 3)]);
+            second.Mission = (int)ArmyMission.Attack;
+            second.TargetSettlementId = scene.CampId;
+            db.AddArmyRows(second);
+            await db.SaveChangesAsync(Ct);
+            secondId = second.Id;
+        }
+
+        await LandTheAttackAsync(scene);
+        Assert.False(await InDbAsync(db => db.Settlements.AnyAsync(s => s.Id == scene.CampId, Ct)));
+
+        _factory.Time.Advance(TimeSpan.FromHours(5));
+        using var attacker = AttackerClient();
+        var standing = await attacker.GetFromJsonAsync<ArmyResponse>($"/api/v1/armies/{secondId}", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal("move", standing!.Mission);
+        Assert.Null(standing.TargetSettlementId);
+        Assert.False(standing.Movement!.IsReturning);
+        Assert.Equal(new HexPointResponse(CampHex.Q, CampHex.R), standing.Position);
+        Assert.Equal(3, standing.Stacks.Sum(s => s.Count));
+        Assert.Single(await InDbAsync(db => db.BattleReports.Where(r => r.DefenderSettlementId == scene.CampId).ToListAsync(Ct)));
+    }
+}
