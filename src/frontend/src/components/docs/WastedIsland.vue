@@ -28,11 +28,6 @@ const rotation = ref(0);
 const playing = ref(false);
 let playTimer: ReturnType<typeof setInterval> | null = null;
 
-const reducedMotion =
-  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-    ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    : false;
-
 // useHexMapRenderer reads its options once, non-reactively, at mount (see
 // SettlementCanvas.vue's matching comment) — every later change (the blight
 // slider, the rotate buttons) instead goes through this same model's own
@@ -84,14 +79,15 @@ const captionText = computed(() => {
 // The blight slider (and `togglePlay`'s own steps through it) rebuilds the
 // whole island for the new stage and cross-fades the swap — mirrors the old
 // DOM version's CSS transition (700ms, staggered by `delay * 400ms` per hex,
-// ring by ring from the centre out).
+// ring by ring from the centre out). Always plays, reduce-motion or not: the
+// owner's call - the fade is how the page shows the blight spreading.
 watch(stage, (newStage) => {
   world.setTiles(buildIslandTiles(rotation.value, newStage));
   world.setRivers(buildIslandStreams(rotation.value, newStage));
   renderer.value?.forceRebuild({
     transition: {
-      durationMs: reducedMotion ? 0 : 700,
-      delayMs: (c) => (reducedMotion ? 0 : delayFraction(rotation.value, c) * 400),
+      durationMs: 700,
+      delayMs: (c) => delayFraction(rotation.value, c) * 400,
     },
   });
 });

@@ -110,6 +110,7 @@ import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
 import { DOUBLE_TAP_MS, DOUBLE_TAP_ZOOM_MS, doubleTapZoomLog, isDoubleTap, type Tap } from './doubleTap';
 import { animationPreference } from '../perf/animationPreference';
+import { prefersReducedMotion } from '../motion';
 import { antialiasPreference } from '../perf/antialiasPreference';
 import { advanceClipFrame, clipTimingOf, phasedStart, sharedClockPlayback, swayPeriodOffset } from './clipPlayback';
 import { hash2 } from './worldGenerator';
@@ -5833,7 +5834,8 @@ export class HexMapRenderer {
         top.y - 10 * zoomScale - REALM_PILL.badge.height * zoomScale,
       );
 
-      // Beneath an open ring menu the badge fades out instead of showing through the bubbles.
+      // Beneath an open ring menu the badge fades out instead of showing through the bubbles - under the HUD motion
+      // setting, like the building markers' fade in BuildingHudLayer.vue.
       const occluded =
         this.markerOcclusion !== null &&
         circleIntersectsRect(this.markerOcclusion, { x: pill.x, y: pill.y, w: pill.w, h: pill.h });
@@ -5842,7 +5844,7 @@ export class HexMapRenderer {
         this.badgeVisibility.get(settlement.id) ?? 1,
         occluded,
         dtMs,
-        animationPreference.reducedMotion,
+        prefersReducedMotion(),
       );
       if (vis < 1) this.badgeVisibility.set(settlement.id, vis);
       else this.badgeVisibility.delete(settlement.id);
