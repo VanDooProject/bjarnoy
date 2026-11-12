@@ -146,9 +146,10 @@ export type TextureKey =
   | 'hammerschmiedebend'
   // The stave tower on sand, on a forest hex and on plain bog moss: texture-lookup keys, the wire type is `tower`.
   | 'towersand'
-  | 'longhousesand'
   | 'towerforest'
   | 'towerbog'
+  // The Longhouse on sand (3D_assets hextile165): a texture-lookup key, the wire type is `longhouse`.
+  | 'longhousesand'
   // The palisade's six pieces (`palisadeArtFor`): which one a wall hex draws is decided by its wall neighbours, so these are
   // texture-lookup keys, not wire building types (the wire types are `palisade` and `palisadegate`).
   | 'palisadestraight'
@@ -223,9 +224,10 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   // hextile148), sand (hextile151), forest (hextile150) and plain bog moss (hextile149).
   tower: 'stavetower',
   towersand: 'stavetower_sand',
-  longhousesand: 'greathall_sand',
   towerforest: 'stavetower_forest',
   towerbog: 'stavetower_bog',
+  // The Longhouse on sand: the same hall with the beach kept round it (3D_assets hextile165).
+  longhousesand: 'greathall_sand',
   dockyard: 'dockyard',
   // A Sawmill is never actually on grass (the backend requires a river
   // shape to place one — BuildingCatalogue.SawmillRiverShapes) — there is
