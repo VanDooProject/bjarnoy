@@ -174,7 +174,9 @@ internal sealed class GarrisonRelocation(GameDbContext dbContext)
         foreach (var entity in armies)
         {
             var army = entity.ToDomain();
-            var rehomed = Rehome(army, targets, now, routing);
+
+            // An army given an order after `now` (a camp that fell before it was settled) is rehomed from that order on.
+            var rehomed = Rehome(army, targets, army.NotBeforeItsOrder(now), routing);
             if (rehomed is not null)
             {
                 entity.ApplyDomain(rehomed);

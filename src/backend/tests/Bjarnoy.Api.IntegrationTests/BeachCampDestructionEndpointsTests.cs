@@ -397,6 +397,52 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
         Assert.Equal(new HexPointResponse(0, 4), starved.Hex);
     }
 
+    /// <summary>
+    /// Half an hour after the attacker landed, before anything settled its attack, the owner calls the camp's army back (an order
+    /// that starts then); then the attacker's army is read, which settles the attack and destroys the camp.
+    /// </summary>
+    private async Task<(DateTimeOffset OrderedAt, ArmyResponse Army)> RecallTheCampArmyThenLandTheAttackAsync(Scene scene)
+    {
+        _factory.Time.Advance(TimeSpan.FromHours(4.5));
+        var orderedAt = _factory.Time.GetUtcNow();
+        using var owner = await OwnerClientAsync(scene);
+        var ordered = await owner.PostAsync($"/api/v1/armies/{scene.CampArmyId}/recall", null, Ct);
+        Assert.True(ordered.StatusCode == HttpStatusCode.OK, await ordered.Content.ReadAsStringAsync(Ct));
+        Assert.True(await InDbAsync(db => db.Settlements.AnyAsync(s => s.Id == scene.CampId, Ct)));
+
+        using var attacker = AttackerClient();
+        Assert.Equal(HttpStatusCode.OK, (await attacker.GetAsync($"/api/v1/armies/{scene.AttackerArmyId}", Ct)).StatusCode);
+        Assert.False(await InDbAsync(db => db.Settlements.AnyAsync(s => s.Id == scene.CampId, Ct)));
+
+        var army = await owner.GetFromJsonAsync<ArmyResponse>($"/api/v1/armies/{scene.CampArmyId}", SqliteApiFixture.StrictJson, Ct);
+        return (orderedAt, army!);
+    }
+
+    [Fact]
+    public async Task A_camp_army_called_back_after_the_battle_is_rehomed_from_where_its_order_started_not_rewound_to_the_battle()
+    {
+        var scene = await PlantAsync(campArmyProvisions: 100);
+
+        var (orderedAt, army) = await RecallTheCampArmyThenLandTheAttackAsync(scene);
+
+        Assert.Equal(scene.HomeId, army.SettlementId);
+        Assert.True(army.Movement!.IsReturning);
+        Assert.Equal(orderedAt, army.Movement.DepartedAt, TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task A_camp_army_called_back_after_the_battle_that_loses_its_home_stays_where_its_order_started_not_rewound_to_the_battle()
+    {
+        // 8 food: 2.4 left when it is called back, not enough for the 2.5 hours' march to the home settlement.
+        var scene = await PlantAsync(campArmyProvisions: 8);
+
+        var (orderedAt, army) = await RecallTheCampArmyThenLandTheAttackAsync(scene);
+
+        Assert.Null(army.SettlementId);
+        Assert.True(army.Movement!.IsStranded);
+        Assert.Equal(orderedAt, army.Movement.DepartedAt, TimeSpan.FromSeconds(1));
+    }
+
     [Fact]
     public async Task An_army_without_a_home_sent_to_the_owners_longhouse_folds_in_there()
     {

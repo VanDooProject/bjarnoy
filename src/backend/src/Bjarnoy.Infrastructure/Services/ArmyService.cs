@@ -1988,19 +1988,22 @@ public sealed class ArmyService(
         {
             var domain = army.ToDomain();
 
+            // An army given an order after the camp fell (the attack is settled lazily) changes from that order on, not from the fall.
+            var armyAt = domain.NotBeforeItsOrder(at);
+
             if (army.SettlementId == campId)
             {
                 // Could reach none of its owner's spots: it has no home now and stays where it is at the instant the camp fell.
                 var standsOn = domain.Location switch
                 {
-                    ArmyLocation.InTransit { Movement: var m } => m.PositionAt(at),
+                    ArmyLocation.InTransit { Movement: var m } => m.PositionAt(armyAt),
                     ArmyLocation.Supporting supporting => supporting.Spot,
                     _ => campHex,
                 };
                 var homeless = (domain with { SettlementId = null }).LeaveGathering();
                 domain = domain.Location is ArmyLocation.InTransit { Movement.IsStranded: true }
                     ? homeless
-                    : homeless.Strand(at, standsOn);
+                    : homeless.Strand(armyAt, standsOn);
             }
 
             if (domain.TargetSettlementId == campId)
@@ -2009,8 +2012,8 @@ public sealed class ArmyService(
                 {
                     // A guest standing in the camp is sent home (or, with no way home, stays on the camp's hex).
                     ArmyLocation.Supporting supporting =>
-                        await PlanRecallAsync(army, domain, at, supporting.Spot, cancellationToken).ConfigureAwait(false)
-                            ?? domain.Strand(at, supporting.Spot),
+                        await PlanRecallAsync(army, domain, armyAt, supporting.Spot, cancellationToken).ConfigureAwait(false)
+                            ?? domain.Strand(armyAt, supporting.Spot),
                     // On its way there: it goes on to the camp's hex and stays there, as after a move order.
                     ArmyLocation.InTransit { Movement: { IsReturning: false, IsStranded: false } } =>
                         domain with { Mission = ArmyMission.Move, TargetSettlementId = null, TargetBuildingCoord = null },

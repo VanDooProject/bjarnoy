@@ -125,4 +125,20 @@ public sealed class ArmyWithoutHomeTests
         Assert.Equal([Here], movement.Path);
         Assert.Equal(battleAt + Bjarnoy.Domain.Movement.Movement.FleeProtection, movement.FieldBattleImmuneUntil);
     }
+
+    [Fact]
+    public void An_instant_before_the_armys_current_order_started_is_moved_on_to_that_start()
+    {
+        var army = Marching(200);
+        var departed = MovementOf(army).DepartedAt;
+
+        Assert.Equal(departed, army.NotBeforeItsOrder(departed.AddHours(-1)));
+        Assert.Equal(departed.AddHours(2), army.NotBeforeItsOrder(departed.AddHours(2)));
+
+        var replanned = army with
+        {
+            Location = new ArmyLocation.InTransit(MovementOf(army) with { RoutePlannedAt = departed.AddHours(3) }),
+        };
+        Assert.Equal(departed.AddHours(3), replanned.NotBeforeItsOrder(departed.AddHours(1)));
+    }
 }

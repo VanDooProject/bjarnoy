@@ -282,6 +282,15 @@ public sealed partial record Army
         };
     }
 
+    /// <summary>
+    /// <paramref name="at"/>, or the instant this army's current movement was ordered (<see cref="Movement.Movement.DepartedAt"/>,
+    /// <see cref="Movement.Movement.RoutePlannedAt"/>) when that is later: something settled late for an earlier instant (a camp
+    /// that fell before the army was given its order) changes the army from its order on, it does not rewind it.
+    /// </summary>
+    public DateTimeOffset NotBeforeItsOrder(DateTimeOffset at) => Location is ArmyLocation.InTransit { Movement: var movement }
+        ? new[] { at, movement.DepartedAt, movement.RoutePlannedAt ?? at }.Max()
+        : at;
+
     /// <summary>Current hex: <paramref name="home"/> while <see cref="ArmyLocation.AtHome"/>, else the active leg's position.</summary>
     public HexCoord PositionAt(HexCoord home, DateTimeOffset now) => Location switch
     {
