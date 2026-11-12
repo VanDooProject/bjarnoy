@@ -405,7 +405,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
 
         Assert.Equal(1, renown!.SettlementCount);
-        Assert.Equal(55_000, renown.RequiredForNextSettlement);
+        Assert.Equal(RenownThresholds.RequiredFor(2), renown.RequiredForNextSettlement);
 
         // The settlement list says which row is the camp: the flag, not the missing Longhouse level, tells.
         var mine = await client.GetFromJsonAsync<List<SettlementSummary>>(
