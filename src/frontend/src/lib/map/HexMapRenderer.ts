@@ -2143,6 +2143,8 @@ export class HexMapRenderer {
     },
   });
   private riverFlowEntries: RiverFlowEntry[] = [];
+  /** The hex of each `riverFlowEntries` entry, for the water mesh's river cover. */
+  private riverFlowCoords: AxialCoord[] = [];
   // Bog lakes' gust (settlement mode only): the lake wet masks drawn over the lakes' bounding rect, and the mesh that shades them.
   private bogLakeLayer: BogLakeLayer;
   private bogLakeMask = new WaterDryLayer('lake');
@@ -4464,6 +4466,7 @@ export class HexMapRenderer {
     }
     this.waterLayer.setDryTexture(this.waterDry.draw(renderer, region.rect, this.waterDryEntries, TILE_W));
     this.waterLayer.setRiverFlowTexture(this.riverFlow.draw(renderer, this.riverFlowEntries, TILE_W), this.riverFlow.rect, this.riverFlow.psiTexture);
+    this.waterLayer.setRiverHexes(this.riverFlowCoords);
   }
 
   /**
@@ -4790,6 +4793,7 @@ export class HexMapRenderer {
     this.waterDryEntries = maskEntries(baseEntries.values(), (c) => worldModel.getTile(c.q, c.r).terrain === 'sea', artOrigin);
     this.bogLakeEntries = maskEntries(baseEntries.values(), (_c, texture) => LAKE_FRAME_RE.test(texture.label ?? ''), artOrigin);
     this.riverFlowEntries = [];
+    this.riverFlowCoords = [];
     const flowCoords = new Map<string, RiverFlowEntry>();
     const entryCoords: { entry: RiverFlowEntry; coord: AxialCoord }[] = [];
     for (const { texture, coord, crop } of baseEntries.values()) {
@@ -4801,6 +4805,7 @@ export class HexMapRenderer {
       const grid = isoGridPosition(coord, TILE_W, TILE_H);
       const entry = { texture, x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET, ...flow };
       this.riverFlowEntries.push(entry);
+      this.riverFlowCoords.push(coord);
       flowCoords.set(coordKey(coord), entry);
       entryCoords.push({ entry, coord });
     }
@@ -6876,10 +6881,12 @@ export class HexMapRenderer {
     this.waterDryEntries = [];
     this.bogLakeEntries = [];
     this.riverFlowEntries = [];
+    this.riverFlowCoords = [];
     if (mode === 'world') {
       this.waterLayer.setDryTexture(null);
       this.bogLakeLayer.setLake(null, null);
       this.waterLayer.setRiverFlowTexture(null);
+      this.waterLayer.setRiverHexes([]);
     }
     // Reinsert every layer in the new mode's order — addChild only moves a
     // single already-parented child to the end, it doesn't reorder the rest

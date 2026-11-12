@@ -478,6 +478,33 @@ of the water-side reach for that reason.
 - The mesh keeps `eventMode = 'none'`, like the fog quads, so it never eats a
   hex click.
 
+### 3.7 The mesh covers only water, shore and river hexes
+
+The mesh is not one quad over the mask's rect. A full-rect quad makes the
+rasteriser and blender touch every pixel, land included, only for the fragment
+shader to `discard` there; in the software renderer that alone is ~150 ms a
+frame, and in settlement view most of the screen is land. The shader can only
+draw in three places, so the mesh is the hexagons of exactly those
+(`waterCoverage.ts`):
+
+- **sea hexes**, read off the mask (`R` at the hex centre is above 0.5);
+- **the shore ring**: every land hex touching a sea hex. Foam reaches onto the
+  beach by `uFoamWidth * uFoamLandReach` tile widths (0.036 at the defaults, a
+  tenth of a tile at most), and a hex is ~0.87 tile across, so one ring is
+  enough;
+- **river hexes** (`WaterLayer.setRiverHexes`), because the river flow of §4.4e
+  is drawn on land, before the land discard. This term is separate so it can go
+  when rivers get a mesh of their own.
+
+Each hexagon is the tile's exact top face (`isoTopPoints`) with UVs taken from
+world position against the mask rect, so the fragment shader sees the same
+inputs it saw on the quad. Corners are computed from integer lattice
+coordinates, so neighbours share bit-identical vertices: no cracks, and no
+margin to overdraw, which matters because the blend is not idempotent. The
+mesh is rebuilt with each mask bake (about 1 ms, in reused buffers) and when the
+river hexes change. World mode uses the same rule; there the sea covers most of
+the viewport, so the mesh is simply large.
+
 ---
 
 ## 4. The shader

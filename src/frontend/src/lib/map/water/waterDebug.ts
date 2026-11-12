@@ -312,6 +312,8 @@ export interface WaterPerfStats {
    * like a broken counter unless the panel says where it ran.
    */
   bakedOnWorker: boolean;
+  /** Wall-clock of the last water mesh rebuild (which hexes the mesh covers, and its geometry), in ms — always on this thread. */
+  coverMs: number;
 }
 
 export const waterPerfStats: WaterPerfStats = {
@@ -321,4 +323,5 @@ export const waterPerfStats: WaterPerfStats = {
   bakes: 0,
   frameMs: 0,
   bakedOnWorker: false,
+  coverMs: 0,
 };

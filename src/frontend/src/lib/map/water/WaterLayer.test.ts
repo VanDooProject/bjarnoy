@@ -501,27 +501,33 @@ describe('WaterLayer', () => {
     expect(u.uTime).toBeCloseTo(1.5, 6);
   });
 
-  it('places the quad on exactly the world rect its mask was baked over', () => {
-    const layer = new WaterLayer('world', TILE_W, TILE_H);
-    const mask = maskOver(-400, -250, 600, 350);
-    layer.setMask(mask);
-
-    const { minX, minY, maxX, maxY } = mask.region.rect;
-    expect(Array.from(layer.mesh.geometry.getBuffer('aPosition').data)).toEqual([
-      minX, minY, maxX, minY, maxX, maxY, minX, maxY,
-    ]);
-  });
-
-  it('follows the camera by re-placing the quad, not by moving the mesh', () => {
-    // The mesh is a child of the camera-transformed `world` container, so it
-    // must never carry a transform of its own — mask UV and world position stay
-    // locked together only because the quad *is* the baked rect.
+  it('covers only the hexes the shader can draw on, not the whole baked rect', () => {
+    // An all-land mask has nothing for the water shader to draw: no sea, so no shore either.
     const layer = new WaterLayer('world', TILE_W, TILE_H);
     layer.setMask(maskOver(-400, -250, 600, 350));
-    const first = Array.from(layer.mesh.geometry.getBuffer('aPosition').data);
+    expect(layer.mesh.geometry.getBuffer('aPosition').data.length).toBe(0);
+    expect(layer.mesh.geometry.indexBuffer.data.length).toBe(0);
+
+    // River flow is drawn on land, so a river hex alone gets a hexagon.
+    layer.setRiverHexes([{ q: 0, r: 0 }]);
+    expect(layer.mesh.geometry.getBuffer('aPosition').data.length).toBe(12);
+    expect(layer.mesh.geometry.indexBuffer.data.length).toBe(12);
+
+    layer.setRiverHexes([]);
+    expect(layer.mesh.geometry.getBuffer('aPosition').data.length).toBe(0);
+  });
+
+  it('follows the camera by re-placing the mesh, not by moving it', () => {
+    // The mesh is a child of the camera-transformed `world` container, so it
+    // must never carry a transform of its own — mask UV and world position stay
+    // locked together because the vertices are in world space.
+    const layer = new WaterLayer('world', TILE_W, TILE_H);
+    layer.setRiverHexes([{ q: 0, r: 0 }]);
+    layer.setMask(maskOver(-400, -250, 600, 350));
+    const first = Array.from(layer.mesh.geometry.getBuffer('aUV').data);
 
     layer.setMask(maskOver(2000, 1000, 3000, 1600));
-    const second = Array.from(layer.mesh.geometry.getBuffer('aPosition').data);
+    const second = Array.from(layer.mesh.geometry.getBuffer('aUV').data);
 
     expect(second).not.toEqual(first);
     expect(layer.mesh.position.x).toBe(0);
