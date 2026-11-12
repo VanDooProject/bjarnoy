@@ -92,6 +92,8 @@ function earlyCurveFor(type: string, k: BuildTimeKnobs): EarlyCurve | null {
 
 /** Build minutes of `type` at `level` (of `max` levels), unrounded. */
 export function buildMinutes(type: string, level: number, max: number, k: BuildTimeKnobs = DEFAULT_BUILD_TIME_KNOBS): number {
+  // The Beach Camp a sea landing sets up is never built: it stands at once (BuildingCatalogue.BeachCamp).
+  if (type === 'beachcamp') return 0;
   const c = earlyCurveFor(type, k);
   let start: number;
   let from: number;

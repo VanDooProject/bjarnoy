@@ -32,9 +32,9 @@
 // instead of slicing across their canopy. Fog-of-war dimming sits above
 // everything, since a scouted-but-not-currently-visible hex needs to dim
 // its whole tile, props included.
+import { exploredShare, frameCameraFor } from './frameCamera';
 import {
   circleIntersectsRect,
-  circlesIntersect,
   markerFadeStep,
   type OcclusionCircle,
 } from './markerOcclusion';
@@ -43,40 +43,21 @@ import type { AxialCoord } from '../hex/coords';
 import { axialToOddQ, coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
-import { formatCountdownShort } from '../hud/countdown';
-import {
-  DIAL_FINISH_MS,
-  dialFinishFrame,
-  dialRejectFrame,
-  hexPerimeterSegment,
-  pendingDotFrame,
-  DIAL_PENDING_SWEEP_MS,
-  DIAL_REJECT_MS,
-  polylinePartial,
-  retainFinishingDials,
-  dialProgress,
-  dialRemainingSeconds,
-  hexPerimeterPath,
-  dialScale,
-  dialHoverStep,
-  dialRadiusPx,
-  pickTappedDial,
-  nextTapReveal,
-  DIAL_TAP_REVEAL_MS,
-  type ConstructionDial,
-  rejectDialAt,
-} from './constructionDial';
+import { DIAL_FINISH_MS, DIAL_REJECT_MS, retainFinishingDials, rejectDialAt, type ConstructionDial } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import { atlasPageCount } from './atlasManifests';
 import { attachFramePacing } from './framePacing';
 import { insetBorderCorners, splitBorderEdges } from './realmBorderEdges';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
-import { TILE_ORIENTATIONS, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
+import { drawsAsSea, TILE_ORIENTATIONS, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
+import { buildingName } from '../../i18n/catalogueNames';
+import { settlementBadgeSuffix } from './settlementBadge';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP, armyFogClearReachHexes, type ArmyVisionSource } from './fog/FogMaskLayer';
 import type { FogCoverageLookup } from './fog/fogCoverage';
+import { UNKNOWN_RAMP_MARGIN_HEXES } from './fog/fogRamp';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
 import { WaterDryLayer, entriesWorldBounds, maskEntries, type DryEntry } from './water/waterDryMask';
@@ -88,6 +69,7 @@ import type { TerrainLookup, WaterMask } from './water/waterMask';
 import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
 import { fogMaskPlacement, type MaskBounds } from './fog/fogMaskLayout';
+import { outerEdgesOf, ownedAcrossEdges, shownBorderOwner } from './realmBorders';
 import { chunkRangeOfTexels, rangesEqual, type ChunkRange } from './fog/fogChunks';
 import { bogCreekPathFor, riverPathFor, type RiverDrawing } from './riverPath';
 import {
@@ -128,6 +110,7 @@ import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
 import { DOUBLE_TAP_MS, DOUBLE_TAP_ZOOM_MS, doubleTapZoomLog, isDoubleTap, type Tap } from './doubleTap';
 import { animationPreference } from '../perf/animationPreference';
+import { prefersReducedMotion } from '../motion';
 import { antialiasPreference } from '../perf/antialiasPreference';
 import { advanceClipFrame, clipTimingOf, phasedStart, sharedClockPlayback, swayPeriodOffset } from './clipPlayback';
 import { hash2 } from './worldGenerator';
@@ -164,6 +147,7 @@ const HOVER_STROKE = 0xffe9c2;
 // straight from that screenshot so the app actually matches what's shown.
 const WORLD_TERRAIN_FILL: Record<Terrain, number> = {
   sea: 0x215a7a, // unused (open sea has no tile at all in world mode)
+  inlandlake: 0x215a7a, // unused: drawn as the sea background
   sand: 0x9c8a5c,
   grass: 0x4e7a3a,
   forest: 0x365e2f,
@@ -248,13 +232,6 @@ export const LABEL_STYLES = {
   }),
   cart: new TextStyle({ fill: CART_COLOR, fontFamily: 'sans-serif', fontWeight: 'normal', fontSize: 11 }),
   badgeName: new TextStyle({ fill: 0xf4f8fa, fontFamily: "'Barlow', sans-serif", fontWeight: '700', fontSize: 15 }),
-  dialTime: new TextStyle({
-    fill: 0xffffff,
-    fontFamily: "'Barlow', sans-serif",
-    fontWeight: 'bold',
-    fontSize: 12,
-    dropShadow: { color: 0x000000, alpha: 0.9, blur: 2, distance: 1, angle: Math.PI / 2 },
-  }),
   badgeSuffix: new TextStyle({ fill: 0xb9c8d1, fontFamily: "'Barlow', sans-serif", fontWeight: '600', fontSize: 13 }),
 } as const;
 
@@ -547,8 +524,8 @@ export interface HexMapRendererOptions {
   // did nothing at all — see the pointerup early-return this replaces).
   onWaypointTap?: (index: number) => void;
   /**
-   * A tap landed on an army's marker while the send picker is open (some `ArmyOverlayMarker.pick` is set): the army's id and the
-   * marker's canvas position, so the host can show a hint beside it. The tap does not reach the tile below.
+   * A tap landed on an army's marker (while the send picker is open, only on its `pick` markers; otherwise on any own marker): the
+   * army's id and the marker's canvas position, so the host can show a hint beside it. While the send picker is open the tap does not reach the tile below (`armyTapSwallowed`); otherwise it does.
    */
   onArmyTap?: (armyId: string, screen: { x: number; y: number }) => void;
   /**
@@ -630,7 +607,7 @@ export interface ArmyOverlayMarker {
   /**
    * The send picker is open (SendArmyPicker.vue): `eligible` armies get a dashed gold ring and can be tapped (`onArmyTap`),
    * the `selected` one a solid ring, `ineligible` ones are drawn faded (a tap still reports them, so the reason can be shown).
-   * Absent while no picker is open, and then markers are not hit-tested at all.
+   * Absent while no picker is open; a tap on an own marker then selects that army.
    */
   pick?: 'eligible' | 'selected' | 'ineligible';
   /** Issue #94: present only while in transit — the renderer interpolates along it every frame. */
@@ -642,6 +619,33 @@ export interface ArmyOverlayMarker {
   foreign?: boolean;
   /** The marker's colour for a `foreign` army: its owner's realm colour (`realmColor`). Own armies ignore it. */
   color?: number;
+}
+
+/** True while the send picker marks armies: a tap on a marker then only picks it and never reaches the tile below. */
+export function armyTapSwallowed(armies: readonly ArmyOverlayMarker[]): boolean {
+  return armies.some((a) => a.pick);
+}
+
+/**
+ * The id of the army marker under canvas point `screen`, nearest first. While the send picker marks armies (`pick`) only those are
+ * hit; otherwise every own marker is (a foreign army is not ours to select). `placed` are the markers' resolved screen points.
+ */
+export function armyMarkerAt(
+  armies: readonly ArmyOverlayMarker[],
+  placed: readonly { id: string; x: number; y: number }[],
+  screen: { x: number; y: number },
+  hitCentre: (p: { x: number; y: number }, isFleet: boolean) => { x: number; y: number },
+): string | null {
+  const picking = armyTapSwallowed(armies);
+  let best: { id: string; distance: number } | null = null;
+  for (const p of placed) {
+    const army = armies.find((a) => a.id === p.id);
+    if (!army || (picking ? !army.pick : army.foreign)) continue;
+    const c = hitCentre(p, army.isFleet);
+    const distance = Math.hypot(screen.x - c.x, screen.y - c.y);
+    if (distance <= PICK_RING_RADIUS + 4 && (!best || distance < best.distance)) best = { id: army.id, distance };
+  }
+  return best?.id ?? null;
 }
 
 /** Whether `army` lifts our fog live: only our own armies on the march (a foreign army's sight is its owner's). */
@@ -975,13 +979,10 @@ function hexPoints(cx: number, cy: number, r: number): number[] {
   return points;
 }
 
-// Construction progress dial (see `constructionDial.ts`): drawn in screen space
-// by `drawConstructionDials` (scaled with the map, grows on hover) over a building under construction — white track, yellow elapsed arc,
-// remaining time inside. A queued order draws `#position` on the plain track, a pending one an orbiting sweep and dots,
-// a refused one a red flash and cross.
-const CONSTRUCTION_DIAL_ELAPSED_COLOR = 0xffd23f;
-// Refused-build dial: red outline, flash and rings.
-const CONSTRUCTION_DIAL_REJECT_COLOR = 0xff4d3d;
+const NO_DIALS: readonly ConstructionDial[] = [];
+
+// Construction progress dial (see `constructionDial.ts`): drawn by the HTML layer (BuildingHudLayer / BuildingHudDial); the renderer only
+// holds the data and the lift of the dial's centre above its hex.
 // Dial height above the tile centre: half a tile, so the dial's middle sits on
 // the hex's upper edge and the dial overlaps its own tile instead of floating
 // above it.
@@ -1237,12 +1238,9 @@ const FOG_ZOOM_MARGIN_HEXES = 10;
 // is saturated and no amount of edge shaping can reach (fogShader.ts works
 // in ramp units, where 1.0 is exactly this many hexes).
 //
-// Must stay equal to the backend generator's FogMaskOptions.UnknownMarginHexes
-// and demoFogMask.ts's UNKNOWN_MARGIN_HEXES — the three describe the same
-// ramp, and a mismatch silently puts the live and demo fog edges at
-// different distances. Nothing derives it from the mask itself; a PNG
-// carries no metadata beyond its pixel dimensions.
-const FOG_RAMP_MARGIN_HEXES = 14;
+// The one constant for it lives in fogRamp.ts (UNKNOWN_RAMP_MARGIN_HEXES), shared with demoFogMask.ts and pinned against
+// the backend generator's FogMaskOptions.UnknownMarginHexes by fogConstants.test.ts.
+const FOG_RAMP_MARGIN_HEXES = UNKNOWN_RAMP_MARGIN_HEXES;
 // Floor for zoomForFogMargin — a very high-level settlement's explored ring
 // is already large, and without a floor the margin target would zoom out
 // far enough to make individual hexes too small to read or click precisely.
@@ -1500,6 +1498,23 @@ function fogSourcesNear(
 }
 
 /**
+ * Whether a hex is drawn clear of the white mist right now, from the same sources the fog shader reads: the loaded mask
+ * (`coverage`; outside its window everything is white) and the live reveal round every army (`armySources`, cleared between
+ * mask fetches). Before the first mask arrives the client's own `explored` set stands in for it. The send picker's framing
+ * compares how much of the view this is before and after a move.
+ */
+export function isDrawnClearOf(
+  q: number,
+  r: number,
+  coverage: { isExplored(q: number, r: number): boolean } | null,
+  exploredBeforeMask: (q: number, r: number) => boolean,
+  armySources: FogSource[],
+): boolean {
+  if (distanceBeyondSources(q, r, armySources) <= 0) return true;
+  return coverage ? coverage.isExplored(q, r) : exploredBeforeMask(q, r);
+}
+
+/**
  * WorldModel.distanceBeyondExplored's answer, against a list already pruned
  * to the settlements that can affect the current viewport. Identical result
  * for every hex the fog tiers actually discriminate at (see
@@ -1644,6 +1659,95 @@ export function isWaypointTap(startCoordKey: string, lastCoordKey: string, moved
 /** One zoom-button step (`zoomStep`). */
 const ZOOM_STEP = 1.25;
 
+export type ArrowKey = 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown';
+/** Camera direction per arrow key (screen axes: +x right, +y down). */
+const ARROW_KEY_PAN = new Map<ArrowKey, [number, number]>([
+  ['ArrowLeft', [-1, 0]],
+  ['ArrowRight', [1, 0]],
+  ['ArrowUp', [0, -1]],
+  ['ArrowDown', [0, 1]],
+]);
+/** Arrow-key pan speed in screen px per second. */
+const KEY_PAN_SPEED = 700;
+/** Screen px one arrow-key press pans, however short: quick presses add one step each. A press held longer keeps panning. */
+export const KEY_STEP_PX = 100;
+/**
+ * Longest wall-clock gap one tick pans for: a slow (paced, see framePacing.ts) frame still pans its full time, a frame
+ * after a longer stall does not jump. A hidden or covered map stops the ticker, so its gap never reaches a tick.
+ */
+const KEY_PAN_MAX_DT_MS = 1000;
+/** A keydown this soon after the same key's keyup is auto-repeat (some platforms send repeats as keyup+keydown pairs). */
+export const KEY_REPEAT_PAIR_MS = 20;
+/** Keys that zoom the map one `zoomStep` (`=` is `+` without Shift on US layouts). */
+const ZOOM_KEYS = new Map<string, 1 | -1>([
+  ['+', 1],
+  ['=', 1],
+  ['-', -1],
+]);
+
+/** An arrow key that is down, or let go with part of its press steps still to pan. */
+export interface ArrowKeyState {
+  down: boolean;
+  /** Screen px of press steps (`KEY_STEP_PX` per press) not panned yet. */
+  owedPx: number;
+}
+
+/**
+ * An arrow keydown at `now` (event time): a new press makes the key down and adds one `KEY_STEP_PX`; auto-repeat
+ * (`repeat`, or a keydown within `KEY_REPEAT_PAIR_MS` of the key's own keyup at `upAt`) only keeps it down.
+ */
+export function pressArrowKey(
+  keys: Map<ArrowKey, ArrowKeyState>,
+  key: ArrowKey,
+  now: number,
+  repeat: boolean,
+  upAt: number | undefined,
+): void {
+  const state = keys.get(key);
+  if (state?.down) return;
+  const step = repeat || (upAt !== undefined && now - upAt < KEY_REPEAT_PAIR_MS) ? 0 : KEY_STEP_PX;
+  if (state) {
+    state.down = true;
+    state.owedPx += step;
+  } else {
+    keys.set(key, { down: true, owedPx: step });
+  }
+}
+
+/**
+ * Advances the arrow-key pan by up to `px` screen px of travel and returns the screen offset to pan by (null when it
+ * does not move). A key pans while it is down or still owes part of its steps; the travel is taken off every moving
+ * key's steps, and only the steps that are left are travelled once no key is down, so each press pans exactly
+ * `KEY_STEP_PX` unless it is held longer. Drops (mutates `keys`) the keys that are up with nothing owed.
+ */
+export function advanceArrowKeyPan(keys: Map<ArrowKey, ArrowKeyState>, px: number): { x: number; y: number } | null {
+  let dx = 0;
+  let dy = 0;
+  let anyDown = false;
+  let maxOwed = 0;
+  for (const [key, state] of keys) {
+    const [kx, ky] = ARROW_KEY_PAN.get(key)!;
+    dx += kx;
+    dy += ky;
+    anyDown ||= state.down;
+    maxOwed = Math.max(maxOwed, state.owedPx);
+  }
+  const travel = anyDown ? px : Math.min(px, maxOwed);
+  for (const [key, state] of keys) {
+    state.owedPx = Math.max(0, state.owedPx - travel);
+    if (!state.down && state.owedPx === 0) keys.delete(key);
+  }
+  if ((dx === 0 && dy === 0) || travel === 0) return null;
+  const len = Math.hypot(dx, dy);
+  return { x: (dx / len) * travel, y: (dy / len) * travel };
+}
+
+/** Whether a key event's target is somewhere the user types or navigates with the arrows (input, select, dialog, ...). */
+export function isTypingTarget(t: EventTarget | null): boolean {
+  if (!(t instanceof HTMLElement)) return false;
+  return t.isContentEditable || !!t.closest('input, textarea, select, [role="dialog"], [role="menu"], [role="listbox"]');
+}
+
 /**
  * Whether a wheel event over the canvas goes to the page (scrolls it) instead of the map's zoom.
  * Only `allowPageScroll` hosts ever pass: a locked camera cannot zoom, so its wheel always scrolls the
@@ -1667,8 +1771,8 @@ export function wheelPassesToPage(o: {
  * `isLand` is `isLandOrLake`, not `isLand`: a bog lake is water to the game
  * (`WorldModel.isLand` says so), but to the water mask it is land. Lakes are
  * drawn entirely by their own art, so the sea's shader must never reach into
- * them. A pocket lake sits on what the seed calls sea, so the bake worker gets
- * those hexes as a list (`seaBogHexKeys`), and both bake paths agree.
+ * them. A pocket lake sits on what the seed calls sea, so the bake worker gets those hexes as a list (`seaBogHexKeys`), and both
+ * bake paths agree. An inland lake is the opposite: it is water here, drawn like the sea (the seed calls it sea too).
  */
 export function waterMaskTerrainFor(worldModel: WorldModel): TerrainLookup {
   const isLand = (q: number, r: number) => worldModel.isLandOrLake(q, r);
@@ -1698,6 +1802,7 @@ export function clampAnimationDeltaMs(deltaMs: number, maxMs = 100): number {
 /** One child of the camera-transformed `world` container — see `worldLayerOrder`. */
 export type WorldLayerName =
   | 'water'
+  | 'riverFlow'
   | 'bogLake'
   | 'terrainBase'
   | 'bogEdges'
@@ -1733,6 +1838,9 @@ export type WorldLayerName =
  * anything that existed, so the coastline's sea/land occlusion is exactly what
  * it was.
  *
+ * `riverFlow` (the river flow's own mesh, water-shader.md §4.4e) follows `water` directly in both modes, so it draws over the
+ * water mesh's beach foam. It only has anything to draw in settlement mode.
+ *
  * Note what is deliberately *not* here: `terrainBase` is not split into sea and
  * land halves with the mesh between them. Every tile in the pack, water
  * included, has a 68px skirt below its top face, and a land tile's skirt reaches
@@ -1752,8 +1860,8 @@ export function worldLayerOrder(mode: 'world' | 'settlement'): WorldLayerName[] 
   // The bog lake gust sits right on the ground art it shades, under `bogEdges`: the bog edge fringe paints moss over the rim of a lake
   // tile, and the lake mask (baked from the tile art alone) can't know that, so anything drawn later has to cover the gust, not take it.
   return mode === 'world'
-    ? ['water', 'terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'rivers', ...rest]
-    : ['terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'water', ...rest];
+    ? ['water', 'riverFlow', 'terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'rivers', ...rest]
+    : ['terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'water', 'riverFlow', ...rest];
 }
 
 /**
@@ -2344,15 +2452,12 @@ export class HexMapRenderer {
   private hoveredKey: string | null = null;
   /** Mouse position in canvas px while hovering the canvas (never set for touch/pen); null otherwise. */
   private hoverPointer: { x: number; y: number } | null = null;
-  /** Per-dial hover tween progress 0..1 (`dialHoverStep`), keyed by `coordKey`; absent = 0. */
-  private dialHover = new Map<string, number>();
-  /** Dial revealed by a touch/pen tap (acts as hovered); see `handleDialTap`. */
-  private tapRevealKey: string | null = null;
-  private tapRevealAtMs = 0;
+  /** Told of every touch/pen tap on the map (canvas px) without taking it over; see `setTapObserver`. */
+  private tapObserver: ((screen: { x: number; y: number }) => void) | null = null;
+  private frameObserver: (() => void) | null = null;
   /** Screen-space circle (canvas px) of an open ring menu; markers beneath it fade out. See `setMarkerOcclusion`. */
   private markerOcclusion: OcclusionCircle | null = null;
-  /** Per-marker visibility 0..1 (`markerFadeStep`): dials keyed by `coordKey`, badges by settlement id. Absent = 1. */
-  private dialVisibility = new Map<string, number>();
+  /** Per-badge visibility 0..1 (`markerFadeStep`), keyed by settlement id. Absent = 1. */
   private badgeVisibility = new Map<string, number>();
   // Issue #16 "ring menu": while a RingMenu is open, its DOM overlay sits on
   // top of the canvas, but this renderer's own pointer tracking is a
@@ -2574,6 +2679,7 @@ export class HexMapRenderer {
   private layersByName(): Record<WorldLayerName, Container> {
     return {
       water: this.waterLayer.mesh,
+      riverFlow: this.waterLayer.river.mesh,
       bogLake: this.bogLakeLayer.mesh,
       terrainBase: this.terrainBase.container,
       bogEdges: this.bogEdgeLayer,
@@ -2635,6 +2741,9 @@ export class HexMapRenderer {
     // the ghost click at the source instead of trying to ignore it later.
     canvas.addEventListener('touchstart', this.onTouchStart, { passive: false });
     document.addEventListener('visibilitychange', this.onVisibilityChange);
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('blur', this.clearHeldKeys);
 
     // World mode never renders tile-art sprites (see WORLD_TERRAIN_FILL
     // above), so it has no need for the (large) building atlas at all —
@@ -2801,6 +2910,19 @@ export class HexMapRenderer {
     // zero the moment the player first opens a settlement. Dropped while the
     // tab is hidden by animationPreference.feedFrame itself.
     animationPreference.feedFrame(performance.now(), this.app!.ticker.deltaMS);
+    // Every camera move of this tick comes before the markers: they are drawn in screen pixels from this.camera, so
+    // drawing them first would leave them a frame behind the world (a pointer drag moves the camera before the tick).
+    if (this.idleDrift) {
+      this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
+      this.applyCameraTransform();
+      this.scheduleCull();
+    }
+    this.tickKeyPan();
+    this.tickCameraAnim();
+    this.tickDoubleTapZoom();
+    // HTML overlays placed from the camera (the building HUD) follow in this same tick, so what they place is the frame Pixi
+    // presents; a tick Pixi skips (framePacing) skips them too.
+    this.frameObserver?.();
     this.rebuildMarkers();
     // Issue #16 "ring menu": the settlement name badge (rebuildSettlementLabels,
     // below) floats right where the ring's own bubbles/track need to sit — it
@@ -2827,16 +2949,9 @@ export class HexMapRenderer {
     // The settle path for a bake a gesture deferred (see waterMaskDirty). One
     // check per frame, and it can only ever do work on the first frame after
     // the gesture that owes it ends.
-    if (this.waterMaskDirty && !this.dragging && !this.wheeling) this.maybeBakeWaterMask();
+    if (this.waterMaskDirty && !this.dragging && !this.wheeling && !this.keyPanning) this.maybeBakeWaterMask();
     this.waterLayer.tick(this.mapAnimMs);
     this.bogLakeLayer.tick(this.animClockMs);
-    if (this.idleDrift) {
-      this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
-      this.applyCameraTransform();
-      this.scheduleCull();
-    }
-    this.tickCameraAnim();
-    this.tickDoubleTapZoom();
     const now = performance.now();
     // isFogActive() mirrors rebuildTerrain's/rebuildBorders' own bypass: no
     // settlement yet (settlement-mode preview) or the local player hasn't
@@ -3373,7 +3488,7 @@ export class HexMapRenderer {
     // they can't actually land on. Once a settlement exists (village view)
     // or in world-map mode, water is just terrain like any other hex and
     // should hover/tooltip normally, even though it's still not buildable.
-    if (tile.terrain === 'sea' && mode === 'settlement' && !this.settlement()) {
+    if (drawsAsSea(tile.terrain) && mode === 'settlement' && !this.settlement()) {
       this.options.onHoverChange?.(null);
       return;
     }
@@ -3478,6 +3593,89 @@ export class HexMapRenderer {
   }
 
   private getTile = (q: number, r: number): Tile => this.options.worldModel.getTile(q, r);
+
+  /** Arrow keys down or still panning their press steps (see `advanceArrowKeyPan`, `tickKeyPan`). */
+  private heldArrowKeys = new Map<ArrowKey, ArrowKeyState>();
+  /** Wall-clock time the arrow-key pan last advanced to (its own clock, not the ticker's capped delta). */
+  private keyPanAt = 0;
+  /** Event time of each arrow key's last keyup, to tell auto-repeat pairs from new presses (`pressArrowKey`). */
+  private arrowKeyUpAt = new Map<ArrowKey, number>();
+  /** Whether the current arrow-key pan moved the camera, so its end owes a rebuild. */
+  private keyPanMoved = false;
+
+  /** Whether a key event may drive the map: no Ctrl/Meta/Alt, not typing, camera free, and not a page-scrolling host. */
+  keyDrivesMap(e: KeyboardEvent): boolean {
+    if (e.ctrlKey || e.metaKey || e.altKey || isTypingTarget(e.target)) return false;
+    // A host that lets the page scroll keeps the keys for the page; a locked or menu-covered map does not move.
+    return !this.lockCamera && !this.interactionLocked && !this.covered && !this.options.allowPageScroll;
+  }
+
+  private onKeyDown = (e: KeyboardEvent) => {
+    const zoom = ZOOM_KEYS.get(e.key);
+    if (zoom !== undefined) {
+      if (!this.keyDrivesMap(e)) return;
+      e.preventDefault();
+      // One step per press, like the zoom buttons: auto-repeat would jump the zoom at the OS repeat rate.
+      if (!e.repeat) this.zoomStep(zoom);
+      return;
+    }
+    const key = e.key as ArrowKey;
+    if (!ARROW_KEY_PAN.has(key) || e.shiftKey || !this.keyDrivesMap(e)) return;
+    e.preventDefault();
+    if (this.heldArrowKeys.size === 0) this.keyPanAt = performance.now();
+    pressArrowKey(this.heldArrowKeys, key, e.timeStamp, e.repeat, this.arrowKeyUpAt.get(key));
+  };
+
+  private onKeyUp = (e: KeyboardEvent) => {
+    const key = e.key as ArrowKey;
+    if (!ARROW_KEY_PAN.has(key)) return;
+    this.arrowKeyUpAt.set(key, e.timeStamp);
+    const state = this.heldArrowKeys.get(key);
+    if (state) state.down = false;
+  };
+
+  /** Window blur: no keyup arrives for the keys held, so let them all go (they still finish their steps). */
+  private clearHeldKeys = () => {
+    for (const state of this.heldArrowKeys.values()) state.down = false;
+  };
+
+  /**
+   * Pans at `KEY_PAN_SPEED` screen px/s of wall-clock time along the arrow keys (`advanceArrowKeyPan`), through the
+   * same clamp the drag uses. Like a drag, the pan defers the full rebuild and the water bake (keyPanning) and ends with
+   * one up-to-date rebuild.
+   */
+  private tickKeyPan() {
+    if (this.heldArrowKeys.size === 0) return;
+    if (this.lockCamera || this.interactionLocked) {
+      this.heldArrowKeys.clear();
+      this.endKeyPan();
+      return;
+    }
+    const now = performance.now();
+    const dt = Math.min(KEY_PAN_MAX_DT_MS, Math.max(0, now - this.keyPanAt));
+    this.keyPanAt = now;
+    const offset = advanceArrowKeyPan(this.heldArrowKeys, (KEY_PAN_SPEED * dt) / 1000);
+    if (offset) {
+      this.idleDrift = false;
+      this.cameraAnim = null;
+      this.camera = this.clampCamera({
+        ...this.camera,
+        x: this.camera.x + offset.x / this.camera.zoom,
+        y: this.camera.y + offset.y / this.camera.zoom,
+      });
+      this.keyPanMoved = true;
+      this.cameraTouched = true;
+      this.applyCameraTransform();
+      this.scheduleCull();
+    }
+    if (this.heldArrowKeys.size === 0) this.endKeyPan();
+  }
+
+  /** The end of an arrow-key pan: one up-to-date rebuild (deferred during the pan) when it moved the camera. */
+  private endKeyPan() {
+    if (this.keyPanMoved) this.rebuildAll();
+    this.keyPanMoved = false;
+  }
 
   private onWheel = (e: WheelEvent) => {
     if (
@@ -3690,14 +3888,14 @@ export class HexMapRenderer {
   private handleClick(e: TapPoint) {
     const screen = this.clientToCanvas(e.clientX, e.clientY);
     if (!screen) return;
-    // Touch/pen has no hover: a tap on a construction dial reveals it instead
-    // of reaching the tile below. Mouse clicks always go to the tile.
-    if (e.pointerType !== 'mouse' && this.handleDialTap(screen)) return;
-    // While the send picker is open an army's marker is a button: the tap picks (or explains) that army instead of the tile below.
+    // Touch/pen has no hover: the HTML markers (construction dials included) reveal themselves from this tap, which still reaches the tile.
+    if (e.pointerType !== 'mouse') this.tapObserver?.(screen);
+    // An army's marker is a button while the send picker is open: the tap picks it instead of reaching the tile below. Otherwise the
+    // tap also selects the army but still reaches the tile (ring menu, waypoint drafts), so a hex holding an army stays tappable.
     const armyId = this.pickedArmyAt(screen);
     if (armyId) {
       this.options.onArmyTap?.(armyId, screen);
-      return;
+      if (armyTapSwallowed(this.armyOverlay?.armies ?? [])) return;
     }
     const world = screenToWorld(this.camera, screen, this.viewport);
     const coord = isoPixelToAxial(world, TILE_W, TILE_H);
@@ -3716,54 +3914,28 @@ export class HexMapRenderer {
     return { x: p.x, y: isFleet ? p.y : p.y - 14 };
   }
 
-  /** The id of the army marker under canvas point `screen`, nearest first; only while the send picker marks armies (`pick`). */
+  /** The id of the army marker under canvas point `screen` (see `armyMarkerAt`). */
   private pickedArmyAt(screen: { x: number; y: number }): string | null {
     const overlay = this.armyOverlay;
-    if (!overlay || !overlay.armies.some((a) => a.pick)) return null;
-    let best: { id: string; distance: number } | null = null;
-    for (const placed of this.armyOverlayFrame.armies) {
-      const army = overlay.armies.find((a) => a.id === placed.id);
-      if (!army?.pick) continue;
-      const c = this.armyHitCentre(placed, army.isFleet);
-      const distance = Math.hypot(screen.x - c.x, screen.y - c.y);
-      if (distance <= PICK_RING_RADIUS + 4 && (!best || distance < best.distance)) best = { id: army.id, distance };
-    }
-    return best?.id ?? null;
-  }
-
-  /**
-   * Touch tap at canvas point `screen`: when it lands on a construction dial
-   * (`pickTappedDial`) toggles that dial's tap-reveal and returns true (the
-   * caller must not dispatch the tap to the tile); otherwise clears any
-   * reveal and returns false so the tap behaves normally.
-   */
-  private handleDialTap(screen: { x: number; y: number }): boolean {
-    const nowMs = Date.now();
-    const mapScale = this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM;
-    const targets = (this.constructionDials ?? [])
-      .filter((d) => d.rejectedAtMs === undefined)
-      .filter((d) => !this.isDialOccluded(this.dialScreenPoint(d.coord), mapScale))
-      .map((d) => {
-        const key = coordKey(d.coord);
-        const p = this.dialScreenPoint(d.coord);
-        return { key, cx: p.x, cy: p.y, r: dialRadiusPx(dialScale(mapScale, this.dialHover.get(key) ?? 0).zs) };
-      });
-    const hit = pickTappedDial(screen, targets);
-    this.tapRevealKey = nextTapReveal(this.tapRevealKey, hit);
-    this.tapRevealAtMs = nowMs;
-    return hit !== null;
+    if (!overlay) return null;
+    return armyMarkerAt(overlay.armies, this.armyOverlayFrame.armies, screen, (p, isFleet) => this.armyHitCentre(p, isFleet));
   }
 
   /**
    * True while the camera is mid-gesture — a pointer drag, an animated
-   * transition (tickCameraAnim) or a wheel/pinch zoom (see noteZoomActivity)
-   * — i.e. while more camera movement is expected imminently and any rebuild
-   * done right now is about to be superseded. Each of the three ends with a
+   * transition (tickCameraAnim), a wheel/pinch zoom (see noteZoomActivity) or
+   * an arrow-key pan (tickKeyPan) — i.e. while more camera movement is expected
+   * imminently and any rebuild done right now is about to be superseded. Each ends with a
    * forced, fully up-to-date rebuild, so work skipped while this is true is
    * never work lost.
    */
   private get isInteracting(): boolean {
-    return this.dragging || !!this.cameraAnim || this.wheeling;
+    return this.dragging || !!this.cameraAnim || this.wheeling || this.keyPanning;
+  }
+
+  /** Arrow keys are panning the camera: a gesture like a drag (see isInteracting), ended by tickKeyPan's rebuild. */
+  private get keyPanning(): boolean {
+    return this.heldArrowKeys.size > 0;
   }
 
   private scheduleCull() {
@@ -3773,7 +3945,7 @@ export class HexMapRenderer {
       this.cullQueued = false;
       if (this.destroyed) return;
       // Any ongoing camera gesture (see isInteracting: a drag, the founding
-      // transition's animation, or a wheel/pinch zoom) can cross
+      // transition's animation, a wheel/pinch zoom or an arrow-key pan) can cross
       // cameraMovedEnough's threshold on almost every rAF — each pointermove,
       // animation step or wheel event nudges the camera or its zoom further —
       // and a rebuild re-syncs every visible terrain/border sprite, real
@@ -3784,7 +3956,8 @@ export class HexMapRenderer {
       // firing on every threshold-crossing frame. Each gesture still ends
       // with one forced, fully up-to-date rebuild — onPointerUp's when a drag
       // is released, tickCameraAnim's forceRebuild() when the animation
-      // completes, and noteZoomActivity's idle timer once zooming settles.
+      // completes, noteZoomActivity's idle timer once zooming settles, and
+      // tickKeyPan's when the last arrow key is let go.
       if (this.isInteracting && performance.now() - this.lastRebuildAtMs < DRAG_REBUILD_THROTTLE_MS) {
         return;
       }
@@ -4208,7 +4381,7 @@ export class HexMapRenderer {
     // A camera *animation* (the founding transition) is not a gesture in this
     // sense — it is a fixed, short move, so deferring its bake would only
     // withhold the water for the length of the ease.
-    if (this.dragging || this.wheeling) {
+    if (this.dragging || this.wheeling || this.keyPanning) {
       this.waterMaskDirty = true;
       return;
     }
@@ -4616,7 +4789,7 @@ export class HexMapRenderer {
       const grid = isoGridPosition(c, TILE_W, TILE_H);
       return { x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET };
     };
-    this.waterDryEntries = maskEntries(baseEntries.values(), (c) => worldModel.getTile(c.q, c.r).terrain === 'sea', artOrigin);
+    this.waterDryEntries = maskEntries(baseEntries.values(), (c) => drawsAsSea(worldModel.getTile(c.q, c.r).terrain), artOrigin);
     this.bogLakeEntries = maskEntries(baseEntries.values(), (_c, texture) => LAKE_FRAME_RE.test(texture.label ?? ''), artOrigin);
     this.riverFlowEntries = [];
     const flowCoords = new Map<string, RiverFlowEntry>();
@@ -4681,7 +4854,7 @@ export class HexMapRenderer {
       // entries zoomed out — and nine hexes in ten are the open sea this
       // skips, which would have been a full Tile built to say "background".
       const terrain = worldModel.terrainOf(c.q, c.r);
-      if (terrain === 'sea') continue; // open sea is just the background
+      if (drawsAsSea(terrain)) continue; // open sea (and an inland lake, drawn like it) is just the background
 
       // Same cull as the settlement view's rebuildTerrain: draw the island
       // under the thin part of the unexplored mist near the scouted ring
@@ -4782,8 +4955,8 @@ export class HexMapRenderer {
     // terrainOf, not getTile: this asks seven hexes a terrain-only question,
     // once per surviving wave grid point, and getTile would build (and cache)
     // a whole Tile — orientation, variant, coastal-ness — to answer it.
-    if (worldModel.terrainOf(coord.q, coord.r) !== 'sea') return true;
-    return NEIGHBOR_DIRS.some((d) => worldModel.terrainOf(coord.q + d.q, coord.r + d.r) !== 'sea');
+    if (!drawsAsSea(worldModel.terrainOf(coord.q, coord.r))) return true;
+    return NEIGHBOR_DIRS.some((d) => !drawsAsSea(worldModel.terrainOf(coord.q + d.q, coord.r + d.r)));
   }
 
   // Recomputes which open-water grid points get a wave squiggle for the
@@ -5327,14 +5500,15 @@ export class HexMapRenderer {
     }
 
     for (const c of coords) {
-      if (fogActive && !worldModel.isExplored(c.q, c.r)) continue;
+      // Own realm on explored ground, a rival's wherever the mist is not fully opaque; ground outside every claim has no owner.
+      const ownerId = shownBorderOwner(worldModel, c.q, c.r, fogActive);
+      if (!ownerId) continue;
 
       const tile = worldModel.getTile(c.q, c.r);
-      if (mode === 'world' && tile.terrain === 'sea') continue;
-      if (!tile.ownerId) continue;
+      if (mode === 'world' && drawsAsSea(tile.terrain)) continue;
 
       fogPerfStats.borderedHexCount++;
-      const owner = worldModel.getSettlement(tile.ownerId);
+      const owner = worldModel.getSettlement(ownerId);
       const color = realmColor(owner, playerId);
 
       const grid = isoGridPosition(c, TILE_W, TILE_H);
@@ -5354,7 +5528,7 @@ export class HexMapRenderer {
       // Back edges (and in world mode, which has no tall art, all edges) stay in the layer under the toppings; in
       // settlement mode the front edges go to their own graphic in terrainTop so the hex's own art can't hide them.
       // Each realm draws its outline inside its own hexes (see insetBorderCorners), so touching realms show two lines side by side.
-      const owned = ownedAcrossEdges(worldModel, c, tile.ownerId);
+      const owned = ownedAcrossEdges(worldModel, c, ownerId);
       const corners = insetBorderCorners(top, owned);
       const { back, front } = splitBorderEdges(outerEdgesOf(owned));
       if (mode === 'settlement') {
@@ -5389,7 +5563,7 @@ export class HexMapRenderer {
     if (this.options.mode === 'settlement') {
       this.labelsUsed = 0;
       if (!this.options.hideSettlementBadge) this.rebuildSettlementLabels();
-      this.drawConstructionDials();
+      this.pruneConstructionDials();
       for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
       this.drawArmyOverlay();
       this.hideUnusedIcons();
@@ -5412,27 +5586,13 @@ export class HexMapRenderer {
       if (fogActive && !worldModel.isExplored(labelHex.q, labelHex.r)) continue;
       const grid = isoGridPosition(labelHex, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
-      // Reference draws settlements as a diamond (prototypes/worldmap/Viking
-      // Realm.dc.html's `world.marks`: `<polygon points="0,-8 8,0 0,8 -8,0">`),
-      // not a plain dot.
-      const markerR = 5 * this.camera.zoom + 3;
-      this.markerLayer
-        .poly([
-          center.x, center.y - markerR,
-          center.x + markerR, center.y,
-          center.x, center.y + markerR,
-          center.x - markerR, center.y,
-        ])
-        .fill({ color: realmColor(settlement, playerId) })
-        .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
-
-      // Settlers-II-style owner label under the marker: the shared realm pill
-      // (see drawRealmPill) in its small size, so the name stays readable over
-      // water and terrain without a drop shadow.
+      // The settlement is marked by the shared realm pill alone (see
+      // drawRealmPill; its diamond carries the realm colour), centred on the
+      // settlement hex, so the name stays readable over water and terrain.
       const ownerLabel = this.acquireLabel(LABEL_STYLES.ownerName);
       ownerLabel.text = settlement.ownerName;
       ownerLabel.anchor.set(0, 0.5);
-      const pill = layoutRealmPill(REALM_PILL.owner, 1, [ownerLabel.width], center.x, center.y + markerR + 4);
+      const pill = layoutRealmPill(REALM_PILL.owner, 1, [ownerLabel.width], center.x, center.y - REALM_PILL.owner.height / 2);
       this.drawRealmPill(pill, realmColor(settlement, playerId), 'diamond', 1);
       ownerLabel.position.set(pill.labelXs[0], pill.labelY);
       ownerLabel.visible = true;
@@ -5667,7 +5827,7 @@ export class HexMapRenderer {
       nameLabel.anchor.set(0, 0.5);
 
       const suffixLabel = this.acquireLabel(LABEL_STYLES.badgeSuffix, zoomScale);
-      suffixLabel.text = mine ? `you · Lv ${settlement.level}` : `Lv ${settlement.level}`;
+      suffixLabel.text = settlementBadgeSuffix(settlement, mine, worldModel.isBeachCamp(settlement.id), buildingName('beachcamp'));
       suffixLabel.anchor.set(0, 0.5);
 
       // `top` is already clear of every claimed tile's tallest possible art
@@ -5680,7 +5840,8 @@ export class HexMapRenderer {
         top.y - 10 * zoomScale - REALM_PILL.badge.height * zoomScale,
       );
 
-      // Beneath an open ring menu the badge fades out instead of showing through the bubbles.
+      // Beneath an open ring menu the badge fades out instead of showing through the bubbles - under the HUD motion
+      // setting, like the building markers' fade in BuildingHudLayer.vue.
       const occluded =
         this.markerOcclusion !== null &&
         circleIntersectsRect(this.markerOcclusion, { x: pill.x, y: pill.y, w: pill.w, h: pill.h });
@@ -5689,7 +5850,7 @@ export class HexMapRenderer {
         this.badgeVisibility.get(settlement.id) ?? 1,
         occluded,
         dtMs,
-        animationPreference.reducedMotion,
+        prefersReducedMotion(),
       );
       if (vis < 1) this.badgeVisibility.set(settlement.id, vis);
       else this.badgeVisibility.delete(settlement.id);
@@ -5710,178 +5871,30 @@ export class HexMapRenderer {
   }
 
   /**
-   * Construction progress dials, in screen space (markerLayer): they scale
-   * exactly with the map (`camera.zoom / SETTLEMENT_DEFAULT_ZOOM`, no floor),
-   * so a dial stays the same fraction of a tile at every zoom. The time label
-   * is dropped while it would be under `DIAL_MIN_LABEL_PX` on screen (the ring
-   * and progress edge still draw); see `dialScale`. Hovering a dial with the
-   * mouse (on the dial itself or on its hex) eases it up to at least its
-   * default-zoom size and shows its time; hovered dials are drawn last so they
-   * sit above their neighbours. Must run before the unused-label hide loop in
-   * `rebuildMarkers` since it acquires pooled labels. A completed dial plays
-   * `dialFinishFrame` (pop, flash, shockwaves, check mark) and is then pruned.
+   * Drops the construction dials whose finish or refusal animation has played out (`dialPhase` is null then). The dials are drawn
+   * by the HTML layer (components/hud/BuildingHudLayer.vue) from `constructionDialList`; the data and its lifetime stay here.
    */
-  private drawConstructionDials() {
+  private pruneConstructionDials() {
     if (!this.constructionDials) return;
     const nowMs = Date.now();
-    const mapScale = this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM;
-    const g = this.markerLayer;
-    const strokePath = (path: number[], width: number, color: number, alpha: number) => {
-      if (path.length < 4) return;
-      g.moveTo(path[0], path[1]);
-      for (let i = 2; i < path.length; i += 2) g.lineTo(path[i], path[i + 1]);
-      g.stroke({ width, color, alpha, cap: 'round', join: 'round' });
-    };
     const live = this.constructionDials.filter((d) =>
       d.rejectedAtMs !== undefined ? nowMs - d.rejectedAtMs < DIAL_REJECT_MS : d.endMs === null || nowMs - d.endMs < DIAL_FINISH_MS,
     );
     if (live.length !== this.constructionDials.length) this.constructionDials = live.length > 0 ? live : null;
-    // Hover pass: advance each dial's tween, then draw the hovered ones last.
-    const dtMs = this.app ? clampAnimationDeltaMs(this.app.ticker.deltaMS) : 0;
-    const reduced = animationPreference.reducedMotion;
-    const pointer = this.hoverPointer;
-    const seen = new Set<string>();
-    if (this.tapRevealKey !== null && nowMs - this.tapRevealAtMs >= DIAL_TAP_REVEAL_MS) this.tapRevealKey = null;
-    const placed = live.map((dial) => {
-      const anchor = this.dialScreenPoint(dial.coord);
-      // A refused build's dial shakes, flashes red with a cross, then shrinks and fades (dialRejectFrame).
-      const reject = dial.rejectedAtMs !== undefined ? dialRejectFrame(nowMs - dial.rejectedAtMs, reduced) : null;
-      const key = coordKey(dial.coord);
-      seen.add(key);
-      const cx = anchor.x + (reject?.offsetX ?? 0);
-      const cy = anchor.y;
-      let hoverT = this.dialHover.get(key) ?? 0;
-      // On the dial's drawn disc (it sits half a tile above its hex, so the hex alone is the wrong hit test) or on its hex.
-      const r0 = dialRadiusPx(dialScale(mapScale, hoverT, reject?.scale ?? 1).zs, reject?.scale ?? 1);
-      // Beneath an open ring: fade out and don't react to hover (or a tap reveal).
-      const occluded = this.isDialOccluded({ x: cx, y: cy }, mapScale);
-      const vis = markerFadeStep(this.dialVisibility.get(key) ?? 1, occluded, dtMs, reduced);
-      if (vis < 1) this.dialVisibility.set(key, vis);
-      else this.dialVisibility.delete(key);
-      const hovered =
-        !reject &&
-        !occluded &&
-        (this.tapRevealKey === key ||
-          (pointer !== null && (Math.hypot(pointer.x - cx, pointer.y - cy) <= r0 || this.hoveredKey === key)));
-      hoverT = dialHoverStep(hoverT, hovered, dtMs, reduced);
-      if (hoverT > 0) this.dialHover.set(key, hoverT);
-      else this.dialHover.delete(key);
-      return { dial, reject, cx, cy, hoverT, vis };
-    });
-    for (const key of this.dialHover.keys()) if (!seen.has(key)) this.dialHover.delete(key);
-    for (const key of this.dialVisibility.keys()) if (!seen.has(key)) this.dialVisibility.delete(key);
-    if (this.tapRevealKey !== null && !seen.has(this.tapRevealKey)) this.tapRevealKey = null;
-    placed.sort((a, b) => a.hoverT - b.hoverT);
-    for (const { dial, reject, cx, cy, hoverT, vis } of placed) {
-      if (vis <= 0) continue;
-      const progress = dialProgress(dial, nowMs);
-      const remaining = dialRemainingSeconds(dial, nowMs);
-      const dAlpha = (reject?.alpha ?? 1) * vis;
-      const { zs, showLabel } = dialScale(mapScale, hoverT, reject?.scale ?? 1);
-      const r = dialRadiusPx(zs, reject?.scale ?? 1);
-      const frame = dial.endMs !== null && nowMs >= dial.endMs ? dialFinishFrame(nowMs - dial.endMs) : null;
-
-      if (frame) {
-        const fr = r * frame.scale;
-        const a = frame.alpha * vis;
-        g.poly(hexPoints(cx, cy, fr)).fill({ color: 0x08121a, alpha: 0.85 * a });
-        g.poly(hexPoints(cx, cy, fr)).fill({ color: CONSTRUCTION_DIAL_ELAPSED_COLOR, alpha: 0.75 * frame.flash * a });
-        strokePath(hexPerimeterPath(cx, cy, fr, 1), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, a);
-        for (const ring of frame.rings) {
-          if (ring.alpha <= 0) continue;
-          g.poly(hexPoints(cx, cy, r * ring.scale)).stroke({
-            width: 3 * zs,
-            color: CONSTRUCTION_DIAL_ELAPSED_COLOR,
-            alpha: ring.alpha * a,
-            join: 'round',
-          });
-        }
-        const check = polylinePartial(
-          [
-            { x: cx - 0.38 * fr, y: cy + 0.02 * fr },
-            { x: cx - 0.1 * fr, y: cy + 0.3 * fr },
-            { x: cx + 0.4 * fr, y: cy - 0.25 * fr },
-          ],
-          frame.check,
-        );
-        strokePath(check, 5 * zs, 0xffffff, a);
-        continue;
-      }
-
-      if (reject) {
-        const a = reject.alpha * vis;
-        for (const ring of reject.rings) {
-          g.poly(hexPoints(cx, cy, r * ring.scale)).stroke({
-            width: 3 * zs,
-            color: CONSTRUCTION_DIAL_REJECT_COLOR,
-            alpha: ring.alpha * a,
-            join: 'round',
-          });
-        }
-        g.poly(hexPoints(cx, cy, r)).fill({ color: 0x08121a, alpha: 0.85 * a });
-        g.poly(hexPoints(cx, cy, r)).fill({ color: CONSTRUCTION_DIAL_REJECT_COLOR, alpha: 0.7 * reject.flash * a });
-        strokePath(hexPerimeterPath(cx, cy, r, 1), 6 * zs, CONSTRUCTION_DIAL_REJECT_COLOR, a);
-        const h = 0.34 * r;
-        const cross = reject.cross;
-        strokePath(polylinePartial([{ x: cx - h, y: cy - h }, { x: cx + h, y: cy + h }], cross * 2), 5 * zs, 0xffffff, a);
-        strokePath(polylinePartial([{ x: cx + h, y: cy - h }, { x: cx - h, y: cy + h }], cross * 2 - 1), 5 * zs, 0xffffff, a);
-        continue;
-      }
-
-      const queued = dial.state === 'queued';
-      g.poly(hexPoints(cx, cy, r)).fill({ color: 0x08121a, alpha: 0.85 * dAlpha });
-      g.poly(hexPoints(cx, cy, r)).stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.3 * dAlpha, join: 'round' });
-      if (dial.state === 'pending') {
-        if (reduced) {
-          for (let k = 0; k < 3; k++) {
-            strokePath(hexPerimeterSegment(cx, cy, r, k / 3, k / 3 + 1 / 12), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
-          }
-        } else {
-          const head = (nowMs % DIAL_PENDING_SWEEP_MS) / DIAL_PENDING_SWEEP_MS;
-          strokePath(hexPerimeterSegment(cx, cy, r, head, head + 1 / 6), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
-        }
-      } else if (!queued) {
-        strokePath(hexPerimeterPath(cx, cy, r, progress), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
-      }
-      if (!showLabel) continue;
-      if (dial.state === 'pending') {
-        const s = 0.1 * r;
-        for (let i = 0; i < 3; i++) {
-          const dot = pendingDotFrame(nowMs, i, reduced);
-          g.circle(cx + (i - 1) * 3.2 * s, cy - dot.lift * s, s).fill({ color: 0xffffff, alpha: dot.alpha * dAlpha });
-        }
-        continue;
-      }
-      const label = this.acquireLabel(LABEL_STYLES.dialTime, zs * 1.2);
-      label.alpha = dAlpha;
-      label.text = queued ? `#${dial.queuePosition}` : remaining === null ? '…' : formatCountdownShort(remaining);
-      label.tint = !queued && remaining !== null && remaining <= 60 ? CONSTRUCTION_DIAL_ELAPSED_COLOR : 0xffffff;
-      label.anchor.set(0.5);
-      label.position.set(cx, cy);
-      label.visible = true;
-    }
-  }
-
-  /** True when a dial centred at `p` (at its resting size) overlaps the open ring's footprint. */
-  private isDialOccluded(p: { x: number; y: number }, mapScale: number): boolean {
-    if (!this.markerOcclusion) return false;
-    const r = dialRadiusPx(dialScale(mapScale, 0).zs);
-    return circlesIntersect(this.markerOcclusion, { x: p.x, y: p.y, r });
   }
 
   /**
-   * While a ring menu is open, markers beneath it (construction dials, the
-   * settlement name badge) fade out so they don't show through between its
-   * DOM bubbles. `circle` is the ring's footprint in canvas px; null restores
+   * While a ring menu is open, markers beneath it (the settlement name badge; the HTML markers read `markerOcclusionCircle`)
+   * fade out so they don't show through between its DOM bubbles. `circle` is the ring's footprint in canvas px; null restores
    * them. Markers outside the circle are unaffected.
    */
   setMarkerOcclusion(circle: OcclusionCircle | null) {
     this.markerOcclusion = circle;
   }
 
-  /** Current marker visibility 0..1 (read-only): dials by `coordKey` ("q,r"), badges by settlement id; absent = fully visible. */
-  markerVisibility(): { dials: Record<string, number>; badges: Record<string, number> } {
-    return { dials: Object.fromEntries(this.dialVisibility), badges: Object.fromEntries(this.badgeVisibility) };
+  /** Current marker visibility 0..1 (read-only): badges by settlement id; absent = fully visible. */
+  markerVisibility(): { badges: Record<string, number> } {
+    return { badges: Object.fromEntries(this.badgeVisibility) };
   }
 
   private hideUnusedIcons() {
@@ -5962,6 +5975,14 @@ export class HexMapRenderer {
     label.tint = 0xffffff;
     this.labelsUsed++;
     return label;
+  }
+
+  /**
+   * The map scale the construction dials size themselves by (`camera.zoom` over the settlement's default zoom, see `dialScale`);
+   * the building HUD's markers read the same number, so they stay the same fraction of a tile as the dials.
+   */
+  get dialMapScale(): number {
+    return this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM;
   }
 
   /** Current camera zoom — for the zoom-transition debug panel's live readout and e2e assertions on camera continuity. `camera` itself stays private. */
@@ -6053,34 +6074,40 @@ export class HexMapRenderer {
   }
 
   /**
-   * Frames `coords` in the part of the canvas that stays visible: the camera centres on them and zooms to fit with `marginPx` to
-   * spare, never closer than the settlement default or further out than a readable `MIN_FRAME_ZOOM`. `bottomInsetPx` is what a
-   * sheet covers at the bottom. Eased over `durationMs`, at once when that is 0. False when the camera cannot move.
+   * Brings `coords` into the part of the canvas that stays visible (`bottomInsetPx` is what a sheet covers at the bottom), with
+   * `marginPx` to spare: the camera stays put when they are all there already, and otherwise pans only by what sticks out and
+   * zooms out only as far as they need, never in and never past a readable `MIN_FRAME_ZOOM` (see `frameCameraFor`). Eased over
+   * `durationMs`, at once when that is 0. A move that would show more white mist than the view has now is not made at all. False
+   * when the camera cannot move or that move is refused.
    */
   frameHexes(coords: AxialCoord[], opts: { bottomInsetPx?: number; marginPx?: number; durationMs?: number } = {}): boolean {
     if (!this.app || this.lockCamera || coords.length === 0 || this.viewport.width === 0) return false;
-    const margin = opts.marginPx ?? 48;
-    const bottom = Math.max(0, opts.bottomInsetPx ?? 0);
     const points = coords.map((c) => {
       const g = isoGridPosition(c, TILE_W, TILE_H);
       return { x: g.x + TILE_W / 2, y: g.y + TILE_CENTER_Y_OFFSET };
     });
-    const minX = Math.min(...points.map((p) => p.x));
-    const maxX = Math.max(...points.map((p) => p.x));
-    const minY = Math.min(...points.map((p) => p.y));
-    const maxY = Math.max(...points.map((p) => p.y));
-    const availW = Math.max(1, this.viewport.width - margin * 2);
-    const availH = Math.max(1, this.viewport.height - bottom - margin * 2);
-    const fit = Math.min(availW / Math.max(1, maxX - minX), availH / Math.max(1, maxY - minY));
-    // Zooms out only as far as needed to fit everything, never in past the player's own zoom.
-    const zoom = Math.min(this.camera.zoom, Math.max(MIN_FRAME_ZOOM, fit));
-    // The visible area is the top (height - bottom) px: its centre sits `bottom / 2` px above the canvas centre.
-    const to = this.clampCamera({
-      ...this.camera,
-      zoom,
-      x: (minX + maxX) / 2,
-      y: (minY + maxY) / 2 + bottom / 2 / zoom,
+    const framed = frameCameraFor(this.camera, this.viewport, points, {
+      margin: opts.marginPx ?? 48,
+      bottomInset: opts.bottomInsetPx ?? 0,
+      minZoom: Math.min(MIN_FRAME_ZOOM, this.camera.zoom),
     });
+    // Everything is on screen already: the camera stays where the player left it (and stops drifting off it).
+    if (!framed) {
+      this.idleDrift = false;
+      return true;
+    }
+    const to = this.clampCamera({ ...this.camera, ...framed });
+    // A move that would show more white mist (unexplored or not yet loaded ground) than the player sees now is not made at all.
+    if (this.isFogActive()) {
+      const { worldModel } = this.options;
+      const coverage = worldModel.getFogCoverage();
+      const explored = (x: number, y: number) => {
+        const c = isoPixelToAxial({ x, y }, TILE_W, TILE_H);
+        return isDrawnClearOf(c.q, c.r, coverage, (q, r) => worldModel.isExplored(q, r), this.armyCullSources);
+      };
+      const inset = opts.bottomInsetPx ?? 0;
+      if (exploredShare(to, this.viewport, explored, inset) < exploredShare(this.camera, this.viewport, explored, inset)) return false;
+    }
     this.cameraTouched = true;
     this.idleDrift = false;
     if ((opts.durationMs ?? 0) > 0) {
@@ -6234,14 +6261,55 @@ export class HexMapRenderer {
     this.rangeOverlay = hexes && hexes.length > 0 ? hexes : null;
   }
 
+  /** The mouse in canvas px while it is over the map itself (not over a panel); null for touch and pen. HTML markers hit-test with it. */
+  get mousePoint(): { x: number; y: number } | null {
+    return this.hoverPointer;
+  }
+
+  /** `coordKey` of the hex under the mouse, null when none. */
+  get hoveredHexKey(): string | null {
+    return this.hoveredKey;
+  }
+
+  /**
+   * HTML markers over the map take no pointer input (they would block the map's own hover, taps and ring), so a tap on one
+   * reaches the map as on any tile; this observer is told of the tap's point meanwhile to reveal the marker there.
+   */
+  setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null) {
+    this.tapObserver = fn;
+  }
+
+  /**
+   * Called once per rendered map frame, right after the camera moved for that frame (before the canvas markers are drawn):
+   * HTML overlays that follow the camera (the building HUD) place themselves from it, so they never run ahead of or behind
+   * the canvas, however `framePacing` thins the ticks out. `null` clears it.
+   */
+  setFrameObserver(fn: (() => void) | null) {
+    this.frameObserver = fn;
+  }
+
   /**
    * Hands in the under-construction dials (`constructionDialsFromQueue`).
-   * Like `setRangeOverlay`, this only stores the data; `drawHighlight` redraws
-   * the animated progress every tick (settlement mode only). `null` clears.
+   * Like `setRangeOverlay`, this only stores the data; the HTML layer (BuildingHudLayer) draws and animates the dials from
+   * `constructionDialList`. `null` clears.
    */
   setConstructionDials(dials: ConstructionDial[] | null) {
     const merged = retainFinishingDials(this.constructionDials ?? [], dials ?? [], Date.now());
     this.constructionDials = merged.length > 0 ? merged : null;
+  }
+
+  /**
+   * The dials the renderer holds right now: the queue's, plus the finishing and refused ones it keeps until their animation has
+   * played (`setConstructionDials`, `rejectConstructionDial`). The list is replaced, never edited, so a changed identity means
+   * a changed list. The building HUD layer draws every dial from it (on the building's marker, or as a dial-only marker).
+   */
+  get constructionDialList(): readonly ConstructionDial[] {
+    return this.constructionDials ?? NO_DIALS;
+  }
+
+  /** The open ring menu's footprint (`setMarkerOcclusion`), read by HTML markers that fade out beneath it like the dials do. */
+  get markerOcclusionCircle(): OcclusionCircle | null {
+    return this.markerOcclusion;
   }
 
   /**
@@ -6256,7 +6324,7 @@ export class HexMapRenderer {
   /**
    * Screen position (the space `hexCenterScreen` reports in) of the middle of
    * the construction dial over `coord`: the hex's centre lifted by the same
-   * `CONSTRUCTION_DIAL_LIFT` `drawConstructionDials` uses, so an HTML overlay
+   * `CONSTRUCTION_DIAL_LIFT` the HTML dial markers sit at, so an HTML overlay
    * (the queue card's flying token) starts exactly where the dial is drawn.
    */
   dialScreenPoint(coord: AxialCoord): { x: number; y: number } {
@@ -6843,6 +6911,9 @@ export class HexMapRenderer {
     canvas?.removeEventListener('wheel', this.onWheel as EventListener);
     canvas?.removeEventListener('touchstart', this.onTouchStart);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
+    window.removeEventListener('blur', this.clearHeldKeys);
     // Otherwise a zoom gesture still settling when the renderer goes away
     // would fire its rebuild into a torn-down app (see noteZoomActivity).
     this.endZoomActivity();
@@ -6882,15 +6953,6 @@ const NEIGHBOR_DIRS: AxialCoord[] = [
   { q: 0, r: 1 },
 ];
 
-// isoTopPoints()'s 6 corners (P0..P5) form edges [P0,P1],[P1,P2],...,[P5,P0];
-// this maps each NEIGHBOR_DIRS index to the corner-index pair of the one
-// edge that actually faces that neighbour (derived by comparing each
-// direction's screen-space offset to each edge's outward normal — see the
-// worked-out mapping in this file's history/PR description). Used so only
-// the realm's true outer edges get a border stroke, not every claimed
-// hex's full hexagon outline.
-const EDGE_FOR_DIR = [3, 2, 1, 0, 5, 4];
-
 /** Sort offset of a hex's front border edges in `terrainTop`: above its topping (+0 sprite, +0.5 overlay), below the next hex's. */
 const BORDER_FRONT_Z = 0.6;
 
@@ -6903,24 +6965,6 @@ function strokeBorderEdges(g: Graphics, corners: readonly ({ x: number; y: numbe
     g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
     g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
   }
-}
-
-/** Per edge (corner `i` to `i + 1` of isoTopPoints()), whether the neighbour across it belongs to the same realm. */
-function ownedAcrossEdges(worldModel: WorldModel, c: AxialCoord, ownerId: string): boolean[] {
-  const owned: boolean[] = new Array(6).fill(false);
-  NEIGHBOR_DIRS.forEach((d, i) => {
-    owned[EDGE_FOR_DIR[i]] = worldModel.getTile(c.q + d.q, c.r + d.r).ownerId === ownerId;
-  });
-  return owned;
-}
-
-/** Corner-index pairs (into isoTopPoints()) of a claimed hex's edges that face an unclaimed/rival neighbour. */
-function outerEdgesOf(ownedAcrossEdge: readonly boolean[]): [number, number][] {
-  const edges: [number, number][] = [];
-  ownedAcrossEdge.forEach((owned, edge) => {
-    if (!owned) edges.push([edge, (edge + 1) % 6]);
-  });
-  return edges;
 }
 
 function formatEta(ms: number): string {

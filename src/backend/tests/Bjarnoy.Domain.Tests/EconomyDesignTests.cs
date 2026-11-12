@@ -62,7 +62,7 @@ public class EconomyDesignTests
         var covered = Ladder.Select(l => l.Type).ToHashSet();
 
         Assert.Equal(
-            BuildingCatalogue.AllTypes.Where(t => t != BuildingType.Longhouse).ToHashSet(),
+            BuildingCatalogue.AllTypes.Where(t => t is not (BuildingType.Longhouse or BuildingType.BeachCamp)).ToHashSet(),
             covered);
     }
 
@@ -440,7 +440,8 @@ public class EconomyDesignTests
     [Fact]
     public void Every_building_has_a_build_time_curve_that_rises_with_the_level()
     {
-        foreach (var type in BuildingCatalogue.AllTypes)
+        // The Beach Camp a sea landing sets up is never built: it has one level and stands at once.
+        foreach (var type in BuildingCatalogue.AllTypes.Where(t => t != BuildingType.BeachCamp))
         {
             var previous = TimeSpan.Zero;
             for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
@@ -471,11 +472,12 @@ public class EconomyDesignTests
     public void A_late_buildings_level_1_costs_between_10_and_40_percent_of_the_longhouse_upgrade_at_its_unlock_level()
     {
         // Excluded: Storage House, Tower, Palisade and Gate are cheap infrastructure that unlock early and is built in numbers,
-        // the Bridge has its own per-level cost table, and the Great Storehouse is priced by its storage, not by this share.
+        // the Bridge has its own per-level cost table, the Great Storehouse is priced by its storage, not by this share, and the
+        // Beach Camp a sea landing sets up is never built and costs nothing.
         BuildingType[] excluded =
         [
             BuildingType.StorageHouse, BuildingType.Tower, BuildingType.Palisade, BuildingType.PalisadeGate,
-            BuildingType.Bridge, BuildingType.GreatStorehouse,
+            BuildingType.Bridge, BuildingType.GreatStorehouse, BuildingType.BeachCamp,
         ];
         var outside = new List<string>();
         foreach (var type in BuildingCatalogue.AllTypes.Except(excluded).Except(Producers).Where(t => t != BuildingType.Longhouse))
@@ -628,7 +630,7 @@ public class EconomyDesignTests
 
         Assert.Equal(BuildRejection.NewPlacementDisabled, decision.Rejection);
         Assert.Null(decision.Order);
-        Assert.Equal([BuildingType.Quarry], BuildingCatalogue.NewPlacementDisabled);
+        Assert.Equal([BuildingType.Quarry, BuildingType.BeachCamp], BuildingCatalogue.NewPlacementDisabled.OrderBy(t => t == BuildingType.BeachCamp));
     }
 
     [Fact]

@@ -7,6 +7,26 @@ namespace Bjarnoy.Domain.Tests;
 public class UnitCatalogueTests
 {
     [Fact]
+    public void The_camp_builder_has_the_settlers_stats_at_the_camp_price()
+    {
+        var builder = UnitCatalogue.Get(UnitType.CampBuilder);
+        var settler = UnitCatalogue.Get(UnitType.Settler);
+
+        Assert.Equal("campbuilder", UnitType.CampBuilder.ToWireName());
+        Assert.Equal(UnitClass.Civilian, builder.Class);
+        Assert.Equal(settler.VisionRadius, builder.VisionRadius);
+        Assert.Equal(settler.Defense, builder.Defense);
+        Assert.Equal(settler.Speed, builder.Speed);
+        Assert.Equal(settler.FoodCarryCapacity, builder.FoodCarryCapacity);
+        Assert.Equal(settler.CargoSlots, builder.CargoSlots);
+        Assert.Equal(settler.UpkeepPerHour, builder.UpkeepPerHour);
+        Assert.Equal(settler.RequiredLonghouseLevel, builder.RequiredLonghouseLevel);
+        Assert.Equal(BuildingType.CartWorkshop, builder.RequiredBuildingType);
+        Assert.Equal(new ResourceAmounts(Wood: 80, Stone: 40, Food: 40, Iron: 20), builder.TrainingCost);
+        Assert.Equal(TimeSpan.FromMinutes(12), builder.TrainingDuration);
+    }
+
+    [Fact]
     public void Every_unit_type_has_a_definition()
     {
         foreach (var type in UnitCatalogue.AllTypes)
@@ -144,14 +164,14 @@ public class UnitCatalogueTests
     }
 
     [Fact]
-    public void The_catapult_the_ram_and_the_ships_have_a_positive_siege_power_and_nothing_else_does()
+    public void The_catapult_and_the_ram_have_a_positive_siege_power_and_nothing_else_does()
     {
-        // Only these contribute to SiegeResolver's building-damage math (catapult and ram on land, the ships when a
-        // fleet attack hits a shore building) — every other unit type is 0.
+        // Only these contribute to SiegeResolver's building-damage math; ships do no damage to buildings on land.
+        // Every other unit type is 0.
         foreach (var type in UnitCatalogue.AllTypes)
         {
             var definition = UnitCatalogue.Get(type);
-            if (type is UnitType.Catapult or UnitType.Ram || definition.Class == UnitClass.Ship)
+            if (type is UnitType.Catapult or UnitType.Ram)
             {
                 Assert.True(definition.SiegePower > 0, $"{type} must have a positive siege power");
             }
@@ -285,14 +305,41 @@ public class UnitCatalogueTests
     }
 
     [Fact]
-    public void The_ships_can_damage_walls_towers_and_buildings()
+    public void Ships_do_no_siege_damage()
     {
-        // A fleet damages whatever shore building it was sent at (SiegeResolver.LevelsTakenFrom still caps a wall or bridge at one level).
         foreach (var type in UnitCatalogue.AllTypes.Where(t => UnitCatalogue.Get(t).Class == UnitClass.Ship))
         {
-            Assert.Equal(
-                SiegeTargets.Walls | SiegeTargets.Towers | SiegeTargets.Buildings,
-                UnitCatalogue.Get(type).SiegeTargets);
+            Assert.Equal(0, UnitCatalogue.Get(type).SiegePower);
+            Assert.Equal(SiegeTargets.None, UnitCatalogue.Get(type).SiegeTargets);
         }
+    }
+
+    [Fact]
+    public void The_fire_ship_has_its_starting_numbers_and_is_a_slotless_hull_without_attack()
+    {
+        var fireShip = UnitCatalogue.Get(UnitType.FireShip);
+
+        Assert.Equal(UnitClass.Ship, fireShip.Class);
+        Assert.Equal(0, fireShip.Attack);
+        Assert.Equal(25, fireShip.Defense);
+        Assert.Equal(8, fireShip.Speed);
+        Assert.Equal(0, fireShip.ShipSlots);
+        Assert.Equal(0, fireShip.CarryCapacity);
+        Assert.Equal(200, fireShip.FoodCarryCapacity);
+        Assert.Equal(5, fireShip.UpkeepPerHour);
+        Assert.Equal(6, fireShip.VisionRadius);
+        Assert.Equal(new ResourceAmounts(Wood: 300, Stone: 60, Food: 40, Iron: 80), fireShip.TrainingCost);
+        Assert.Equal(TimeSpan.FromMinutes(40), fireShip.TrainingDuration);
+        Assert.Equal("fireship", UnitType.FireShip.ToWireName());
+    }
+
+    [Fact]
+    public void The_fire_ship_needs_longhouse_12_a_dockyard_and_the_karve()
+    {
+        Assert.Equal(UnitType.Karve, UnitCatalogue.Get(UnitType.FireShip).RequiredUnitType);
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.FireShip, 11));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.FireShip, 12));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.FireShip, 12, _ => 0));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.FireShip, 12, t => t == BuildingType.Dockyard ? 1 : 0));
     }
 }

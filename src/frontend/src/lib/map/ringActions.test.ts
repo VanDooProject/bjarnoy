@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { lane1Arc } from './ringLayout';
-import { buildingEntryId, primaryActionFirst } from './ringActions';
+import { buildingEntryId, offersUpgradeAndRaze, primaryActionFirst } from './ringActions';
 
 const ids = (list: { id: string }[]) => list.map((a) => a.id);
 
@@ -37,5 +37,13 @@ describe('buildingEntryId', () => {
     expect(buildingEntryId('townsquare', 1)).toBe('feasts');
     expect(buildingEntryId('townsquare', 0)).toBeNull();
     expect(buildingEntryId('longhouse', 3)).toBeNull();
+  });
+});
+
+describe('offersUpgradeAndRaze', () => {
+  it('is false for a beach camp only: it has no levels and nothing to raze', () => {
+    expect(offersUpgradeAndRaze('beachcamp')).toBe(false);
+    expect(offersUpgradeAndRaze('longhouse')).toBe(true);
+    expect(offersUpgradeAndRaze('farm')).toBe(true);
   });
 });

@@ -245,7 +245,7 @@ public sealed class CampServiceTests : IDisposable
         var camp = new Camp(new HexCoord(10, 0), CampFamilies.Wolfden, 3, TileOrientation.E);
         var sent = new[] { new UnitStack(UnitType.Axeman, 60), new UnitStack(UnitType.Spearman, 5) };
         var before = new CampGarrison(5, 12, 2);
-        var plan = CampBattleResolver.Hunt(sent, before, camp, 3, seed: 11);
+        var plan = CampBattleResolver.Hunt(sent, before, camp, 3, seed: 11, provisionsAtBattle: double.PositiveInfinity);
         var report = CampReport.From(
             Guid.CreateVersion7(), world.Id, CampReportKind.Hunt, T0, camp, 3, home.Id, Guid.CreateVersion7(),
             sent, before, plan, seed: 11);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   constructionSlotsFor,
+  longhouseSlotCost,
   feastCost,
   feastRenown,
   isOnline,
@@ -53,7 +54,11 @@ function tiny(): BuildingDefinitionResponse[] {
 
 describe('helpers', () => {
   it('mirrors Settlement.ConstructionSlotsFor', () => {
-    expect([1, 5, 9, 10, 14, 15, 20].map(constructionSlotsFor)).toEqual([2, 2, 2, 3, 3, 4, 5]);
+    expect([1, 2, 3, 4, 10, 30].map(constructionSlotsFor)).toEqual([2, 2, 3, 4, 10, 30]);
+  });
+
+  it('mirrors Settlement.LonghouseSlotCost', () => {
+    expect([2, 3, 5, 10, 30].map(longhouseSlotCost)).toEqual([1, 2, 4, 9, 27]);
   });
 
   it('a session covers exactly its own minutes, on every day, and may wrap past midnight', () => {
@@ -415,9 +420,10 @@ describe('simulatePacing on the bundled catalogue', () => {
     }
   });
 
-  it('running producers ahead of the Longhouse makes the settlement stronger on day 60', () => {
+  it('running producers ahead of the Longhouse makes the settlement stronger on day 30', () => {
+    // By day 60 both have every producer maxed (one build slot per Longhouse level), so the mid game is where it shows.
     const base = {
-      horizonDays: 65,
+      horizonDays: 35,
       producerCounts: { lumberjack: 3, quarry: 3, reindeerherder: 3 },
       startStock: { wood: 700, stone: 700, food: 700, iron: 0 },
       settleType: 'cartworkshop',
@@ -426,7 +432,7 @@ describe('simulatePacing on the bundled catalogue', () => {
     };
     const level = simulatePacing(byType, params({ ...base, producersAhead: 0 }));
     const ahead = simulatePacing(byType, params({ ...base, producersAhead: 3 }));
-    expect(productionOnDay(ahead, 60)!).toBeGreaterThan(productionOnDay(level, 60)!);
+    expect(productionOnDay(ahead, 30)!).toBeGreaterThan(productionOnDay(level, 30)!);
   });
 });
 
@@ -605,42 +611,42 @@ describe('feasts on the bundled catalogue (economy.md §6 tuning)', () => {
     });
   const day = (minute: number | null) => (minute ?? Infinity) / 1440;
 
-  // The simulated outcomes with the build-time curves of economy.md section 9 (the long Longhouse levels 8 to 10 now bind the
-  // second settlement): active d16.3 with feasts and d21.1 without, 4 check-ins d24.5 with feasts, 2 check-ins d34.5.
-  it('the active player founds the 2nd settlement around day 16 with feasts and around day 21 without', () => {
+  // The simulated outcomes with the build-time curves of economy.md section 9 and one build slot per Longhouse level
+  // (construction-slots.md): active d9.0 with feasts and d14.5 without, 4 check-ins d15.4 with feasts, 2 check-ins d27.5.
+  it('the active player founds the 2nd settlement around day 9 with feasts and around day 14.5 without', () => {
     const withFeasts = run(PROFILE_PRESETS.active, true, 90);
     const without = run(PROFILE_PRESETS.active, false, 90);
-    expect(day(withFeasts.secondSettlementAt)).toBeGreaterThan(15.5);
-    expect(day(withFeasts.secondSettlementAt)).toBeLessThan(17.1);
-    expect(day(without.secondSettlementAt)).toBeGreaterThan(20.3);
-    expect(day(without.secondSettlementAt)).toBeLessThan(21.9);
+    expect(day(withFeasts.secondSettlementAt)).toBeGreaterThan(8.2);
+    expect(day(withFeasts.secondSettlementAt)).toBeLessThan(9.8);
+    expect(day(without.secondSettlementAt)).toBeGreaterThan(13.7);
+    expect(day(without.secondSettlementAt)).toBeLessThan(15.3);
   });
 
-  it('the Longhouse 10 unlock, not renown, is what binds the active player with feasts', () => {
+  it('renown, not the Longhouse 10 unlock, is what binds the active player with feasts', () => {
     const r = run(PROFILE_PRESETS.active, true, 90);
-    expect(day(r.lhReachedAt[10] ?? null)).toBeGreaterThan(day(r.renownReachedAt) + 1);
+    expect(day(r.renownReachedAt)).toBeGreaterThan(day(r.lhReachedAt[10] ?? null) + 0.3);
   });
 
-  it('the 4-check-ins player settles around day 24.5 with feasts and the 2-check-ins player around day 34.5', () => {
+  it('the 4-check-ins player settles around day 15.4 with feasts and the 2-check-ins player around day 27.5', () => {
     const four = run(PROFILE_PRESETS.checkins4, true, 90);
-    expect(day(four.secondSettlementAt)).toBeGreaterThan(23.7);
-    expect(day(four.secondSettlementAt)).toBeLessThan(25.3);
+    expect(day(four.secondSettlementAt)).toBeGreaterThan(14.6);
+    expect(day(four.secondSettlementAt)).toBeLessThan(16.2);
     const two = run(PROFILE_PRESETS.checkins2, true, 90);
-    expect(day(two.secondSettlementAt)).toBeGreaterThan(33.7);
-    expect(day(two.secondSettlementAt)).toBeLessThan(35.3);
+    expect(day(two.secondSettlementAt)).toBeGreaterThan(26.7);
+    expect(day(two.secondSettlementAt)).toBeLessThan(28.3);
   });
 
-  it('the active player reaches Longhouse 10 around day 16 and the 4-check-ins player around day 24.5', () => {
-    expect(day(run(PROFILE_PRESETS.active, false, 90).lhReachedAt[10] ?? null)).toBeGreaterThan(15.5);
-    expect(day(run(PROFILE_PRESETS.active, false, 90).lhReachedAt[10] ?? null)).toBeLessThan(17.1);
-    expect(day(run(PROFILE_PRESETS.checkins4, true, 90).lhReachedAt[10] ?? null)).toBeGreaterThan(23.7);
-    expect(day(run(PROFILE_PRESETS.checkins4, true, 90).lhReachedAt[10] ?? null)).toBeLessThan(25.3);
+  it('the active player reaches Longhouse 10 around day 8.3 and the 4-check-ins player around day 15.3', () => {
+    expect(day(run(PROFILE_PRESETS.active, false, 90).lhReachedAt[10] ?? null)).toBeGreaterThan(7.5);
+    expect(day(run(PROFILE_PRESETS.active, false, 90).lhReachedAt[10] ?? null)).toBeLessThan(9.1);
+    expect(day(run(PROFILE_PRESETS.checkins4, true, 90).lhReachedAt[10] ?? null)).toBeGreaterThan(14.5);
+    expect(day(run(PROFILE_PRESETS.checkins4, true, 90).lhReachedAt[10] ?? null)).toBeLessThan(16.1);
   });
 
-  it('the active player reaches Longhouse 30 around day 279', () => {
+  it('the active player reaches Longhouse 30 around day 252', () => {
     const r = run(PROFILE_PRESETS.active, false, 300);
-    expect(day(r.lhReachedAt[30] ?? null)).toBeGreaterThan(270);
-    expect(day(r.lhReachedAt[30] ?? null)).toBeLessThan(288);
+    expect(day(r.lhReachedAt[30] ?? null)).toBeGreaterThan(243);
+    expect(day(r.lhReachedAt[30] ?? null)).toBeLessThan(261);
   });
 
   it('feasts multiply day-30 renown by 2-4x, so the later thresholds still mean something', () => {

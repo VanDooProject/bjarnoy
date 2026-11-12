@@ -314,6 +314,9 @@ export interface WaterPerfStats {
   bakedOnWorker: boolean;
 }
 
+/** The foam width slider's range (hexes). WaterDebugPanel draws it and waterCoverage's ring rule is sized against its max. */
+export const FOAM_WIDTH_RANGE = { min: 0.1, max: 1.5, step: 0.05 };
+
 export const waterPerfStats: WaterPerfStats = {
   bakeMs: 0,
   maskWidth: 0,

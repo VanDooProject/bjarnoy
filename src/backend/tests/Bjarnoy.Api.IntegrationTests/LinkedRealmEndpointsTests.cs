@@ -12,6 +12,7 @@ using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -46,8 +47,7 @@ public sealed class LinkedRealmEndpointsTests : IAsyncLifetime
     {
         var client = _factory.CreateClient();
         var world = await _factory.CreateWorldAsync($"w-{Guid.CreateVersion7():N}"[..20], 21, 60, cancellationToken: Ct);
-        var islands = (await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct))!
+        var islands = (await client.GetFullIslandsAsync(world.Id, Ct))!
             .Where(i => i.StartPositions.Count > 0).ToList();
         Assert.True(islands.Count >= 2, "the world needs two islands with a start position");
 
@@ -255,7 +255,7 @@ public sealed class LinkedRealmEndpointsTests : IAsyncLifetime
         var entity = await db.Settlements
             .Include(s => s.Buildings).Include(s => s.Queue).Include(s => s.Garrison).Include(s => s.TrainingQueue).Include(s => s.Runes)
             .FirstAsync(s => s.Id == id, Ct);
-        entity.ApplyDomain(entity.ToDomain() with { Garrison = stacks });
+        entity.ApplyDomain(entity.ToDomain().WithGarrisonAt(new HexCoord(entity.CentreQ, entity.CentreR), stacks));
         await db.SaveChangesAsync(Ct);
         return true;
     });
@@ -273,6 +273,8 @@ public sealed class LinkedRealmEndpointsTests : IAsyncLifetime
         var army = new ArmyEntity
         {
             SettlementId = homeId,
+            HomeSpotQ = from.Q,
+            HomeSpotR = from.R,
             Mission = (int)mission,
             TargetSettlementId = targetId,
             AtHome = false,
@@ -335,8 +337,13 @@ public sealed class LinkedRealmEndpointsTests : IAsyncLifetime
         // The newer member held none of its own and a half share of the pool at most, yet the raid took the whole pooled stock.
         Assert.InRange(army.LootWood, 399, double.MaxValue);
         Assert.InRange(army.LootStone, 399, double.MaxValue);
-        Assert.InRange(army.LootFood, 399, double.MaxValue);
+        // The pool's food went into the raiders' provisions first (the refill; 500 axemen hold far more than 400), so none of it is
+        // loot: the army's provisions rose by what the pool held.
+        Assert.Equal(0, army.LootFood);
+        var burnedOnTheWayOut = 500 * UnitCatalogue.Get(UnitType.Axeman).UpkeepPerHour;
+        Assert.True(army.Provisions >= 1000 - burnedOnTheWayOut + 399, "the raid refilled the provisions from the pool's food");
         Assert.True(Total(oldest, newest, s => s.StockWood) < 100, "the raid left the pool nearly empty");
+        Assert.True(Total(oldest, newest, s => s.StockFood) < 100, "the raid took the pool's food too, as refill");
         AssertSharesEven(oldest, newest);
     }
 
@@ -383,7 +390,7 @@ public sealed class LinkedRealmEndpointsTests : IAsyncLifetime
             foreach (var hex in scene.NewestOnlyHexes)
             {
                 var result = await armies.DispatchAsync(
-                    scene.Newest, [new UnitStack(UnitType.Spearman, 30)], [], hex, provisions, cancellationToken: Ct);
+                    scene.Newest, scene.NewestCentre, [new UnitStack(UnitType.Spearman, 30)], [], hex, provisions, cancellationToken: Ct);
                 if (result.Accepted)
                 {
                     dispatched = result;

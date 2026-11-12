@@ -62,6 +62,50 @@ public class BogBuildingTests
     }
 
     [Fact]
+    public void Only_the_fishing_hut_may_stand_on_an_inland_lake_shore()
+    {
+        foreach (var type in BuildingCatalogue.AllTypes)
+        {
+            var definition = BuildingCatalogue.Get(type, 1);
+            Assert.Equal(
+                type == BuildingType.FishingHut,
+                definition.AllowsHex(Terrain.InlandLake, false, null, isInlandLakeShore: true));
+            Assert.False(definition.AllowsHex(Terrain.InlandLake, false, null, isInlandLakeShore: false), $"{type} on an inland lake away from land");
+            Assert.False(definition.AllowsHex(Terrain.InlandLake, false, null), $"{type} on an inland lake by default");
+        }
+    }
+
+    [Fact]
+    public void A_fishing_hut_is_planned_on_an_inland_lake_shore_and_a_dockyard_is_not()
+    {
+        var settlement = Rich(10);
+        var coord = new HexCoord(1, 0);
+
+        var hut = settlement.PlanBuild(
+            BuildingType.FishingHut, coord, Terrain.InlandLake, T0, Guid.CreateVersion7(), isInlandLakeShore: true);
+        Assert.True(hut.Accepted, $"{hut.Rejection}");
+
+        var away = settlement.PlanBuild(BuildingType.FishingHut, coord, Terrain.InlandLake, T0, Guid.CreateVersion7());
+        Assert.Equal(BuildRejection.TerrainNotAllowed, away.Rejection);
+
+        var dock = settlement.PlanBuild(
+            BuildingType.Dockyard, coord, Terrain.InlandLake, T0, Guid.CreateVersion7(), isInlandLakeShore: true);
+        Assert.Equal(BuildRejection.TerrainNotAllowed, dock.Rejection);
+    }
+
+    [Fact]
+    public void A_fishing_hut_counts_inland_lake_hexes_as_water()
+    {
+        var hut = new PlacedBuilding(Origin, BuildingType.FishingHut, 1);
+        var baseFood = BuildingCatalogue.Get(BuildingType.FishingHut, 1).ProductionPerHour.Food;
+
+        var (production, _) = BuildingCatalogue.Totals(
+            [hut], coord => coord.DistanceTo(Origin) == 1 && coord.Q >= 0 ? Terrain.InlandLake : Terrain.Grass);
+
+        Assert.True(production.Food > baseFood);
+    }
+
+    [Fact]
     public void Clay_brickworks_moved_from_grass_to_bog()
     {
         var definition = BuildingCatalogue.Get(BuildingType.ClayBrickworks, 1);

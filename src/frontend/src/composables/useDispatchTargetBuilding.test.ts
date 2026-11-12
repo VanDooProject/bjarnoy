@@ -16,7 +16,7 @@ function unit(type: string, cls: string, siegeTargets: string[] = []): UnitDefin
 }
 
 // Land at q >= 0, sea at q < 0: (0,r) is shoreline, (3,r) is inland, (-1,r) is a sea hex.
-const COAST = { isLand: (q: number) => q >= 0 };
+const COAST = { isLand: (q: number) => q >= 0, isSea: (q: number) => q < 0 };
 
 function setup(unitCounts: Record<string, number>) {
   setActivePinia(createPinia());

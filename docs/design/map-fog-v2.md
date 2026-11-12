@@ -309,6 +309,16 @@ alongside B and C, not an extension of either:
   without touching what that player personally OR-ed into their own
   record.
 
+**Trail fringe.** Explored history has no hard edge. Every unexplored hex
+within 6.75 hexes (euclidean) of explored ground gets the troop's own ramp
+in R: `trailRamp = round(255 * clamp((d - 0.75) / 6, 0, 1))` (offset 0.75,
+margin 6, `d` = distance to the nearest explored hex), and the baked value
+is `min(sourceRamp, trailRamp)`. A stored army trail therefore reads as the
+same soft path as the troop's live clearing. Constants:
+`FogMaskGenerator.TrailFringeOffsetHexes` / `TrailFringeMarginHexes`, equal to
+the frontend's `ARMY_FOG_WHITE_OFFSET` / `ARMY_FOG_WHITE_MARGIN`. The reach
+(8 steps) stays inside the one-chunk history ring of §3.
+
 ### 1f. What fog is protecting — current state, not terrain shape
 
 The same review flagged that `GET /api/v1/worlds/{id}/tiles` has no
@@ -370,15 +380,20 @@ and treats as out of scope: whether the settlement-listing endpoints
 *other* callers use (world map view, guild rosters, etc., for an
 authenticated player who has already founded) are properly scoped. That's
 an existing-endpoint audit; the landing-page fix above is scoped narrowly
-to the one genuinely pre-authentication, current-state-exposing path. (Since resolved for rival settlements: see §1g.)
+to the one genuinely pre-authentication, current-state-exposing path. (Since resolved for rival settlements: see §1h.)
 
-### 1g. Rival settlements: per-hex gate
+### 1h. Rival settlements: fog gate
 
-A rival settlement is delivered to a player as soon as its Longhouse centre or any of its standing buildings lies in the
-player's explored area. What is delivered is decided hex by hex: a rival building is only sent when its own hex is explored,
-so nothing about an unexplored hex (type, level) leaves the server. The summary of a visible rival is full: name, owner,
-relation, Longhouse position and level. Its label sits on the Longhouse when that hex is explored, otherwise on the explored
-standing building closest to it (ties go to the lower q, then r). A foundation (level 0) alone does not make a rival visible.
+A rival settlement is delivered as soon as you can see any of it through the fog: its Longhouse centre or one of its
+standing buildings lies where your fog is not fully opaque, or such ground lies inside the claim disc of its Longhouse or of
+one of its towers. A building is only sent when its own hex lies in that area; a Longhouse or tower is sent as soon as any
+hex of its claim disc does, wherever it stands itself. A building under construction is shown as a construction site
+(level 0) when its hex lies in that area. The realm border is drawn from the full discs of the Longhouse and
+every tower sent, without the chain rule, and clipped by fog. "Not fully opaque" reaches 11.2 hexes (straight-line
+distance) past the explored ring of each of your settlements and towers and 5.55 hexes past the vision of each of your
+marching armies. Stored explored ground gets the same 5.55 hexes as a marching army's vision, because the fog fades out
+from it the same way (the mask bakes that fringe around it). The label rule stays: on the Longhouse when its
+hex is explored, otherwise on the nearest visible hex of the realm.
 
 ### 1g. Foreign troops
 

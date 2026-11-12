@@ -172,3 +172,21 @@ describe('wasted islands and the min gap', () => {
     expect(enumerateIslandShapes(world, true).some((w) => green.some((g) => islandsTooClose(w, g, 24)))).toBe(true);
   });
 });
+
+describe('generateTile and inland lakes', () => {
+  const world: WorldSeed = { seed: 1, generation: DEFAULT_GENERATION };
+  const lake = { q: 0, r: 0 };
+
+  it('treats an inland lake as water in the coastal mask: coastal beside land, not coastal among other lake hexes', () => {
+    const besideLand = (q: number, r: number) => (q === lake.q && r === lake.r ? 'inlandlake' : 'grass');
+    expect(generateTile(lake.q, lake.r, world, besideLand)).toMatchObject({ terrain: 'inlandlake', isCoastalWater: true });
+
+    const allLake = () => 'inlandlake' as const;
+    expect(generateTile(lake.q, lake.r, world, allLake).isCoastalWater).toBeFalsy();
+  });
+
+  it('does not count a neighbouring inland-lake hex as land for a sea hex', () => {
+    const terrainOf = (q: number, r: number) => (q === 1 && r === 0 ? 'inlandlake' : 'sea');
+    expect(generateTile(0, 0, world, terrainOf).isCoastalWater).toBeFalsy();
+  });
+});

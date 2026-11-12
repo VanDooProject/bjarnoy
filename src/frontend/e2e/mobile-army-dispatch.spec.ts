@@ -9,8 +9,8 @@ import { DOUBLE_TAP_SLOP_PX } from '../src/lib/map/doubleTap';
 /**
  * Issue: mobile army dispatch. Phones (<=768px) get no ArmyPanel — a 260px
  * status card is too much of a small screen — so dispatching/tracking
- * armies has to work entirely through the ring's "Send army here"/"Attack"/
- * "Support" bubble, the new `MobileDispatchSheet`, and QueueDrawer's Armies
+ * armies has to work entirely through the ring's "Send army here"/"Attack"
+ * bubble, the new `MobileDispatchSheet`, and QueueDrawer's Armies
  * section instead. Store state is seeded via `__demoWorld` the same way
  * army-overlay.spec.ts and queue-drawer.spec.ts do — demo mode has no
  * backend to dispatch against, so nothing overwrites what a test puts in.
@@ -31,11 +31,15 @@ interface DemoWindow {
  * which fails ("object reference chain is too long") once the model holds
  * enough tiles.
  */
-function demoWorld(page: Page): Promise<{ dispatchDraft: any; selectedArmyId: string | null }> {
+function demoWorld(page: Page): Promise<{ dispatchDraft: any; sendPicker: any; selectedArmyId: string | null }> {
   return page.evaluate(() => {
     const world = (window as unknown as DemoWindow).__demoWorld();
     return JSON.parse(
-      JSON.stringify({ dispatchDraft: world.dispatchDraft ?? null, selectedArmyId: world.selectedArmyId ?? null }),
+      JSON.stringify({
+        dispatchDraft: world.dispatchDraft ?? null,
+        sendPicker: world.sendPicker ?? null,
+        selectedArmyId: world.selectedArmyId ?? null,
+      }),
     );
   });
 }
@@ -44,6 +48,11 @@ async function seedGarrison(page: Page) {
   await page.evaluate(() => {
     const world = (window as unknown as DemoWindow).__demoWorld();
     world.hud.garrison = [{ unit: 'spearman', count: 10 }];
+    // The one garrison spot the demo has: the longhouse on the settlement's centre hex.
+    const home = world.model.getSettlement(world.selectedSettlementId);
+    world.hud.garrisonSpots = [
+      { kind: 'longhouse', q: home?.q ?? 0, r: home?.r ?? 0, stacks: [{ unit: 'spearman', count: 10 }], guests: [], holdsLand: true, holdsShips: false },
+    ];
   });
 }
 
@@ -73,7 +82,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
 
     await ring.action('Send army here').click();
     // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
-    await page.locator('.send-picker [data-source="home"] .send-row-head').click();
+    await page.locator('.send-picker [data-source^="home:"] .send-row-head').click();
 
     const sheet = page.locator('.dispatch-sheet');
     await expect(sheet).toBeVisible();
@@ -122,6 +131,39 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect(ring.action('Send army here')).toBeVisible();
   });
 
+  test('with the send picker open, a tap on the map moves its target there instead of opening the ring', async ({ page }) => {
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.found(page);
+    await seedGarrison(page);
+    const ring = new RingMenuComponent(page);
+
+    const first = await settlement.findHex();
+    await settlement.clickHex(first);
+    await ring.action('Send army here').click();
+    await expect(page.locator('.send-picker')).toBeVisible();
+    await expect.poll(async () => (await demoWorld(page)).sendPicker?.coord).toEqual(first.hex);
+
+    // A hex near the first one that sits on screen above the picker sheet (it covers the lower half on a phone).
+    const second = await page.evaluate((from) => {
+      const renderer = (window as unknown as DemoWindow).__settlementRenderer();
+      for (const [dq, dr] of [[1, -2], [2, -2], [-1, -1], [2, -3], [0, -2], [1, -1]]) {
+        const at = { q: from.q + dq!, r: from.r + dr! };
+        const screen = renderer.hexCenterScreen(at);
+        if (screen.x > 40 && screen.x < window.innerWidth - 40 && screen.y > 80 && screen.y < window.innerHeight * 0.45) {
+          return { hex: at, screen };
+        }
+      }
+      return null;
+    }, first.hex);
+    expect(second).not.toBeNull();
+    await settlement.clickHex(second!);
+
+    await expect.poll(async () => (await demoWorld(page)).sendPicker?.coord).toEqual(second!.hex);
+    expect((await demoWorld(page)).sendPicker?.mission).toBe('move');
+    await expect(ring.bubbles).toHaveCount(0);
+    await expect(page.locator('.send-picker')).toBeVisible();
+  });
+
   test('tapping a rival-owned tile starts an Attack draft targeting it', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
@@ -154,7 +196,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
 
     await ring.action('Attack').click();
     // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
-    await page.locator('.send-picker [data-source="home"] .send-row-head').click();
+    await page.locator('.send-picker [data-source^="home:"] .send-row-head').click();
 
     await expect(page.locator('.dispatch-sheet')).toBeVisible();
     const draft = await demoWorld(page).then((w) => w.dispatchDraft);
@@ -189,7 +231,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await settlement.clickHex(hex);
     await ring.action('Send army here').click();
     // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
-    await page.locator('.send-picker [data-source="home"] .send-row-head').click();
+    await page.locator('.send-picker [data-source^="home:"] .send-row-head').click();
 
     const sheet = page.locator('.dispatch-sheet');
     await expect(sheet).toBeVisible();

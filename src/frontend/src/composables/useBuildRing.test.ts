@@ -124,12 +124,66 @@ describe('useBuildRing', () => {
     expect(ring.placeBuildingDemo('reindeerherder', hex)).toBe(false);
   });
 
+  // The landing bug: the onboarding ring offered buildings on a guarded camp hex in the claim, and placing then failed
+  // (couldNotQueueBuild in demo, HexOccupiedByCamp live). Build stays shown there, locked until the camp is cleared.
+  describe('Build on a hex something holds', () => {
+    const guarded = { family: 'wolfden', level: 1, orientation: 'NE', strong: false, guardRange: 1 } as const;
+    function selectWith(extra: Partial<Tile>) {
+      const mounted = mountRing();
+      const hex = emptyHex(world, 'grass');
+      mounted.select(hex);
+      mounted.tile.value = { ...mounted.tile.value!, ...extra };
+      return { ...mounted, hex };
+    }
+
+    it('is offered and unlocked on a free grass hex', () => {
+      const { ring } = selectWith({});
+      expect(ring.buildAction.value).toEqual({ id: 'build', label: 'Build', disabled: false, hint: undefined });
+    });
+
+    it('is locked on a guarded camp hex with "clear their camp first"', () => {
+      const { ring } = selectWith({ camp: { ...guarded } });
+      expect(ring.buildAction.value).toMatchObject({ id: 'build', disabled: true, hint: 'Wild beasts hold this hex: clear their camp first' });
+    });
+
+    it('is unlocked on a cleared camp hex', () => {
+      const { ring } = selectWith({ camp: { ...guarded, empty: true } });
+      expect(ring.buildAction.value).toMatchObject({ disabled: false, hint: undefined });
+    });
+
+    it("stays locked on Fenrir's brood, cleared or not", () => {
+      for (const empty of [false, true]) {
+        const { ring } = selectWith({ camp: { ...guarded, family: 'fenrirbrood', empty } });
+        expect(ring.buildAction.value).toMatchObject({ disabled: true, hint: "Fenrir's brood always regrows: nothing can be built here" });
+      }
+    });
+
+    it('is locked on a giant hex and on an Utgard wall or Jötunn watchtower', () => {
+      const giant = selectWith({ giant: { family: 'giantmountain', anchor: { q: 0, r: 0 }, part: 'C', orientation: 'NE' } });
+      expect(giant.ring.buildAction.value).toMatchObject({ disabled: true, hint: 'Occupied by a giant landmark' });
+      const tower = selectWith({ jotunTower: { orientation: 'NE', level: 2 } });
+      expect(tower.ring.buildAction.value).toMatchObject({ disabled: true, hint: 'An Utgard wall or a Jötunn watchtower stands here' });
+    });
+
+    it('is not offered at all where the ground takes nothing, camp or not', () => {
+      const { ring } = selectWith({ terrain: 'lake', camp: { ...guarded } });
+      expect(ring.buildAction.value).toBeUndefined();
+    });
+  });
+
   it('keys the placement filter by terrain', () => {
     // Mountains offer nothing while quarries are off: no Build action at all.
     expect(categoriesFor({ terrain: 'mountain' } as Tile)).toEqual([]);
     expect(categoriesFor({ terrain: 'lake' } as Tile)).toEqual([]);
     expect(categoriesFor({ terrain: 'sea', isCoastalWater: false } as Tile)).toEqual([]);
     expect(categoriesFor({ terrain: 'sea', isCoastalWater: true } as Tile).map((c) => c.id)).toEqual(['water', 'defense']);
+  });
+
+  it('offers an inland-lake hex beside land only the Fishing Hut, and an interior one nothing', () => {
+    const shore = categoriesFor({ terrain: 'inlandlake', isCoastalWater: true } as Tile);
+    expect(shore.map((c) => c.id)).toEqual(['water']);
+    expect(shore[0].buildings.map((b) => b.type)).toEqual(['fishinghut']);
+    expect(categoriesFor({ terrain: 'inlandlake', isCoastalWater: false } as Tile)).toEqual([]);
   });
 
   it('offers sand only the tower and the walls, and a lake\'s half shore only the Fishing Hut', () => {

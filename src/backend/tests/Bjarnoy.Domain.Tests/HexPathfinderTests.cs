@@ -651,6 +651,36 @@ public class HexPathfinderTests
     }
 
     [Fact]
+    public void A_fleet_beaching_on_sand_pays_twice_a_sea_hex_for_that_endpoint_while_other_land_stays_at_one()
+    {
+        var path = Line(4);
+        Terrain Sand(HexCoord c) => c.Q == 3 ? Terrain.Sand : Terrain.Sea;
+        Terrain Grass(HexCoord c) => c.Q == 3 ? Terrain.Grass : Terrain.Sea;
+
+        var sandHours = HexPathfinder.CumulativeHours(path, Sand, hexesPerHour: 1.0, isLandUnit: false);
+        var grassHours = HexPathfinder.CumulativeHours(path, Grass, hexesPerHour: 1.0, isLandUnit: false);
+
+        // the last step is half a sea hex plus half the beach
+        Assert.Equal([0.0, 1.0, 2.0, 3.0], grassHours);
+        Assert.Equal([0.0, 1.0, 2.0, 3.5], sandHours);
+        Assert.Equal([0.0, 0.5, 1.5, 2.5], HexPathfinder.EdgeHours(path, Sand, 1.0, isLandUnit: false));
+        Assert.Equal(HexPathfinder.FleetSandCost, 2.0);
+        Assert.Equal(path, HexPathfinder.FindPath(path[0], path[^1], Sand, isLandUnit: false));
+    }
+
+    [Fact]
+    public void A_fleet_pushing_off_a_sand_harbour_pays_the_sand_price_for_that_endpoint_too()
+    {
+        Terrain Harbour(HexCoord c) => c.Q == 0 ? Terrain.Sand : Terrain.Sea;
+        var path = Line(3);
+
+        var hours = HexPathfinder.CumulativeHours(path, Harbour, hexesPerHour: 1.0, isLandUnit: false);
+
+        Assert.Equal([0.0, 1.5, 2.5], hours);
+        Assert.Equal([0.0, 1.0, 2.0], HexPathfinder.EdgeHours(path, Harbour, 1.0, isLandUnit: false));
+    }
+
+    [Fact]
     public void Open_sea_route_follows_the_straight_line_between_the_endpoints()
     {
         var from = new HexCoord(0, 0);
@@ -692,6 +722,27 @@ public class HexPathfinderTests
         Assert.NotNull(search.Path);
         Assert.Equal(goal, search.Path![^1]);
         Assert.Equal(ShortestHexCount(from, goal, TerrainAt), search.Path.Count);
+    }
+
+    [Fact]
+    public void Finds_a_long_sea_route_that_detours_around_a_land_barrier()
+    {
+        // The shape of a real fleet dispatch: 300 hexes straight, but a land barrier across the way
+        // (row r = -150 up to q = 150) forces a ~450-hex detour. A* has to expand everything cheaper than
+        // that route, which is far more than the old 20,000-node cap allowed.
+        var from = new HexCoord(0, 0);
+        var to = new HexCoord(0, -300);
+        Terrain TerrainAt(HexCoord c) => c.R == -150 && c.Q <= 150 ? Terrain.Mountain : Terrain.Sea;
+
+        var search = HexPathfinder.Search(from, to, TerrainAt, isLandUnit: false);
+
+        Assert.False(search.LimitReached);
+        Assert.NotNull(search.Path);
+        Assert.Equal(to, search.Path![^1]);
+        // The route crosses the barrier row at its open end (151, -150).
+        var gap = new HexCoord(151, -150);
+        Assert.Equal(from.DistanceTo(gap) + gap.DistanceTo(to) + 1, search.Path.Count);
+        Assert.True(search.Path.Count > from.DistanceTo(to) * 1.4);
     }
 
     /// <summary>Breadth-first hex count of the shortest route over sea (uniform cost), inside the search's own bounding box.</summary>

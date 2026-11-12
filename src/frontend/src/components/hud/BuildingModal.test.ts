@@ -218,6 +218,14 @@ describe('BuildingModal actions', () => {
     expect(wrapper.text()).not.toMatch(/upgrade/i);
     expect(wrapper.find('button.primary').exists()).toBe(false);
   });
+
+  it('says what holds an empty hex (a guarded camp, an endgame site), not "open water"', () => {
+    const camp = mountModal({ q: 1, r: 1, terrain: 'grass', camp: { family: 'wolfden', level: 1, orientation: 'NE', strong: false, guardRange: 1 } } as Tile);
+    expect(camp.find('[data-testid="occupied-lock"]').text()).toBe('Wild beasts hold this hex: clear their camp first');
+    expect(camp.text()).not.toContain('Open water');
+    const tower = mountModal({ q: 1, r: 1, terrain: 'grass', jotunTower: { orientation: 'NE', level: 2 } } as Tile);
+    expect(tower.find('[data-testid="occupied-lock"]').text()).toBe('An Utgard wall or a Jötunn watchtower stands here');
+  });
 });
 
 describe('BuildingModal outside the realm', () => {

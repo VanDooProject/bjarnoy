@@ -15,7 +15,7 @@ import { formatMinutes } from '../lib/docs/landMovementDocs';
 import { TOWER_DEFENCE_PERCENT_PER_LEVEL, minutesPerSeaHex } from '../lib/docs/shipDocs';
 import { SETTLERS_PER_FOUNDING } from '../lib/founding';
 
-// The ships page: the dockyard, a table of the two ships and the rules for fleets at sea. Ship figures come from the
+// The ships page: the dockyard, a table of the ships and the rules for fleets at sea. Ship figures come from the
 // unit catalogue, the dockyard's from the building catalogue; the sea rules are mirrored in shipDocs.ts.
 
 const { n, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -134,6 +134,11 @@ const loc = computed(() => String(locale.value));
       <ul class="rules">
         <li>{{ $t('docs.ships.sailing.sea') }}</li>
         <li>{{ $t('docs.ships.sailing.targets') }}</li>
+        <i18n-t keypath="docs.ships.sailing.camp" tag="li" scope="global">
+          <template #camp>
+            <DocsPageLink to="/docs/beach-camp">{{ $t('docs.ships.sailing.campLink') }}</DocsPageLink>
+          </template>
+        </i18n-t>
         <i18n-t keypath="docs.ships.sailing.walls" tag="li" scope="global">
           <template #walls>
             <DocsPageLink to="/docs/walls">{{ $t('docs.ships.sailing.wallsLink') }}</DocsPageLink>

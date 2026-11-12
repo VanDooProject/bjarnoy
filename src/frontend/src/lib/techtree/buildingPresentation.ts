@@ -156,15 +156,15 @@ export function graphCategoryOf(type: string): GraphCategory {
   return GRAPH_CATEGORY_OF[type] ?? 'production';
 }
 
-/** The colour token each graph category is drawn in — all already in style.css. */
+/** The colour token each graph category is drawn in: the build ring's category tints (style.css `--cat-*`). */
 export const GRAPH_CATEGORY_COLOR: Record<GraphCategory, string> = {
   anchor: 'var(--gold)',
-  production: 'var(--food)',
-  military: 'var(--iron)',
-  defense: 'var(--wood)',
-  logistics: 'var(--stone)',
-  religion: 'var(--shrine)',
-  water: 'var(--water)',
+  production: 'var(--cat-resource)',
+  military: 'var(--cat-military)',
+  defense: 'var(--cat-defense)',
+  logistics: 'var(--cat-logistics)',
+  religion: 'var(--cat-religion)',
+  water: 'var(--cat-water)',
 };
 
 /**

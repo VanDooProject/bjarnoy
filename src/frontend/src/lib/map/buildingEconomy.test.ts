@@ -297,7 +297,7 @@ describe('bog buildings', () => {
 
   it('counts bog and lake neighbours for the bog-ore works, sea and lake for the fishing hut', () => {
     expect(BOOST_TERRAIN.bogoreworks).toEqual(['bog', 'lake']);
-    expect(BOOST_TERRAIN.fishinghut).toEqual(['sea', 'lake']);
+    expect(BOOST_TERRAIN.fishinghut).toEqual(['sea', 'lake', 'inlandlake']);
     const mixed = (q: number, r: number): Tile => {
       const kinds: Terrain[] = ['bog', 'lake', 'bog', 'grass', 'grass', 'forest'];
       const index = neighbors({ q: 0, r: 0 }).findIndex((c) => c.q === q && c.r === r);
@@ -305,6 +305,12 @@ describe('bog buildings', () => {
     };
     expect(matchingNeighbourCount({ q: 0, r: 0 }, ['bog', 'lake'], mixed)).toBe(3);
     expect(matchingNeighbourCount({ q: 0, r: 0 }, 'bog', mixed)).toBe(2);
+  });
+
+  it('counts inland-lake neighbours for the fishing hut like open sea', () => {
+    const neighbourhood = terrainMap('inlandlake', 3);
+    expect(matchingNeighbourCount({ q: 0, r: 0 }, BOOST_TERRAIN.fishinghut!, neighbourhood)).toBe(3);
+    expect(matchingNeighbourCount({ q: 0, r: 0 }, ['sea', 'lake'], neighbourhood)).toBe(0);
   });
 
   it('stats on a tile: a lake fishing hut boosts by lake water, a coastal one by sea', () => {

@@ -2,7 +2,8 @@
 // call is recorded, and `finished` resolves after delay + duration on the
 // (fake) timer clock, so a test can drive a choreography with
 // `vi.advanceTimersByTimeAsync`.
-import { vi } from 'vitest';
+import { vi, type MockInstance } from 'vitest';
+import { animationPreference } from '../lib/perf/animationPreference';
 
 export interface RecordedAnimation {
   el: Element;
@@ -14,6 +15,8 @@ export function installWaapi(reduced = false) {
   const calls: RecordedAnimation[] = [];
   const original = Element.prototype.animate;
   const originalMatchMedia = window.matchMedia;
+  // The HUD motion check reads the (reactive, load-time) device flag of animationPreference, not matchMedia directly.
+  const deviceFlag: MockInstance = vi.spyOn(animationPreference, 'reducedMotion', 'get').mockReturnValue(reduced);
   Element.prototype.animate = function (this: Element, frames: Keyframe[], options: KeyframeAnimationOptions) {
     calls.push({ el: this, frames, options });
     const ms = Number(options.delay ?? 0) + Number(options.duration ?? 0);
@@ -39,6 +42,7 @@ export function installWaapi(reduced = false) {
     uninstall() {
       Element.prototype.animate = original;
       window.matchMedia = originalMatchMedia;
+      deviceFlag.mockRestore();
       vi.useRealTimers();
     },
   };

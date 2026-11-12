@@ -63,6 +63,8 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   smithy: 'smithy',
   druidhut: 'druidhut',
   cartworkshop: 'cartworkshop',
+  // The beach camp's showcase art is not in the pack yet; the lookup is for the finished state.
+  beachcamp: 'beachcamp',
   claybrickworks: 'claybrickworks',
   bogoreworks: 'bogoreworks',
   // The river hammer mill: a placeholder for the Hammer Forge on a bog creek (TODO(art): bog-creek Hammer Forge).
@@ -96,6 +98,7 @@ function pngBuildingArt(family: string, level: number): string | undefined {
 
 const TERRAIN_SHOWCASE_FAMILY: Record<string, string> = {
   sea: 'watertile',
+  inlandlake: 'watertile',
   sand: 'sandtile',
   grass: 'grasstile',
   forest: 'foresttile',

@@ -2,6 +2,13 @@
   "title": "Create troops",
   "empty": "Garrison empty.",
   "unit": "Unit",
+  "spot": "Spot",
+  "spots": {
+    "longhouse": "Longhouse",
+    "tower": "Tower",
+    "dock": "Dock",
+    "beachcamp": "Beach camp"
+  },
   "count": "Count",
   "working": "Working…",
   "create": "Create",

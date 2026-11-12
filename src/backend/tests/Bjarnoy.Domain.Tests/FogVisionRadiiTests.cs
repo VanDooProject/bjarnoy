@@ -62,6 +62,20 @@ public class FogVisionRadiiTests
         Assert.Equal(FogVisionRadii.VisibleRadius(3), source.VisibleRadius);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(5)]
+    public void A_beach_camp_sees_like_a_level_1_longhouse_whatever_its_own_level(int longhouseLevel)
+    {
+        var camp = FogVisionRadii.ToVisionSource(HexCoord.Origin, longhouseLevel, isBeachCamp: true)!.Value;
+        var ravens = FogVisionRadii.ToVisionSource(HexCoord.Origin, longhouseLevel, bonusRings: 4, isBeachCamp: true)!.Value;
+
+        Assert.Equal(FogVisionRadii.ExploredRadius(1), camp.ExploredRadius);
+        Assert.Equal(FogVisionRadii.VisibleRadius(1), camp.VisibleRadius);
+        Assert.Equal(camp.ExploredRadius + 4, ravens.ExploredRadius);
+        Assert.Equal(camp.VisibleRadius + 4, ravens.VisibleRadius);
+    }
+
     [Fact]
     public void Odins_ravens_add_rings_to_the_settlements_and_a_towers_explored_and_visible_radii()
     {
@@ -144,5 +158,20 @@ public class FogVisionRadiiTests
                 Settlement.LonghouseDisc(HexCoord.Origin, level) is not null,
                 FogVisionRadii.ToVisionSource(HexCoord.Origin, level) is not null);
         }
+    }
+
+    // The rival-data gate (docs/design/map-fog-v2.md section 1h) reads these; the frontend files below must equal them:
+    //   fogRamp.ts FOG_MIST_OPAQUE_AT_RAMP = 0.8; FogMaskLayer.ts ARMY_FOG_WHITE_OFFSET = 0.75 and ARMY_FOG_WHITE_MARGIN = 6;
+    //   the unknown ramp's width (FogMaskOptions.UnknownMarginHexes, FOG_RAMP_MARGIN_HEXES) = 14.
+    [Fact]
+    public void The_fog_opacity_constants_the_rival_gate_reads_are_pinned()
+    {
+        Assert.Equal(0.8, FogVisionRadii.MistOpaqueAtRamp);
+        Assert.Equal(14, FogMaskOptions.DefaultUnknownMarginHexes);
+        Assert.Equal(14, new FogMaskOptions().UnknownMarginHexes);
+        Assert.Equal(0.75, FogVisionRadii.ArmyFogWhiteOffsetHexes);
+        Assert.Equal(6, FogVisionRadii.ArmyFogWhiteMarginHexes);
+        Assert.Equal(11.2, FogVisionRadii.SourceMistOpaqueMargin, 9);
+        Assert.Equal(5.55, FogVisionRadii.ArmyMistOpaqueMargin, 9);
     }
 }

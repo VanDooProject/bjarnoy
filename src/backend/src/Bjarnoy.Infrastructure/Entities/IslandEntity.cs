@@ -94,6 +94,12 @@ public class IslandEntity
     public List<BogTileRecord> BogTiles { get; set; } = [];
 
     /// <summary>
+    /// Enclosed water the bog did not fill; see <c>Bjarnoy.Domain.World.GeneratedIsland.InlandLakeTiles</c>. Empty for islands stored
+    /// before inland lakes; a reseed adds them. Stored like <see cref="StartPositions"/>, see <see cref="Persistence.HexListConverter"/>.
+    /// </summary>
+    public List<HexPoint> InlandLakeTiles { get; set; } = [];
+
+    /// <summary>
     /// This island's 7-hex giant features — see
     /// <c>Bjarnoy.Domain.World.GiantGenerator</c>.
     /// </summary>
@@ -241,3 +247,20 @@ public readonly record struct RiverTileRecord(
         return hash.ToHashCode();
     }
 }
+
+/// <summary>
+/// An island without its terrain columns (bog tiles, river tiles, start positions): what the island list needs, read by
+/// <see cref="Services.WorldService.GetIslandSummariesAsync"/>.
+/// </summary>
+public sealed record IslandSummary(
+    Guid Id,
+    int Index,
+    string Name,
+    int CentreQ,
+    int CentreR,
+    int TileCount,
+    bool IsWasted,
+    List<GiantRecord> Giants,
+    List<CampRecord> Camps,
+    List<UtgardWallRecord> UtgardWalls,
+    List<JotunTowerRecord> JotunTowers);

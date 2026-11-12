@@ -65,7 +65,7 @@ const emit = defineEmits<{
   // A draft waypoint pin was tapped (grabbed and released without crossing
   // into another hex) — see HexMapRendererOptions.onWaypointTap.
   'waypoint-tap': [index: number];
-  // An army's marker was tapped while the send picker is open — see HexMapRendererOptions.onArmyTap.
+  // An army's marker was tapped — see HexMapRendererOptions.onArmyTap.
   'army-tap': [armyId: string, screen: { x: number; y: number }];
   // Docs/design/zoom-transition.md: a wheel/pinch zoom crossed the enter- or
   // exit-threshold — see HexMapRendererOptions.onZoomModeChange.

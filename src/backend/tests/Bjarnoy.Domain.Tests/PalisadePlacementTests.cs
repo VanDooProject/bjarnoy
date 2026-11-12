@@ -130,6 +130,7 @@ public sealed class PalisadePlacementTests
     [Theory]
     [InlineData(Terrain.Mountain)]
     [InlineData(Terrain.Lake)]
+    [InlineData(Terrain.InlandLake)]
     public void A_palisade_is_refused_on_a_mountain_bog_or_lake(Terrain terrain) =>
         Assert.Equal(BuildRejection.TerrainNotAllowed, Plan(Walled(), BuildingType.Palisade, new HexCoord(1, 0), terrain).Rejection);
 

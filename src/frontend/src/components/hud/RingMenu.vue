@@ -1214,8 +1214,9 @@ function onBackdropPointerDown(e: PointerEvent) {
      piece that has none, so nothing runs out of the circle. */
   overflow-wrap: anywhere;
   background: rgba(8, 18, 26, 0.9);
-  border: 1px solid color-mix(in oklab, var(--tint) 50%, transparent);
-  color: var(--tint);
+  /* White label, the category colour only in the rim: a tinted label on the dark bubble is too faint for some tints. */
+  border: 1px solid var(--tint);
+  color: #fff;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
 .ring-bubble:hover:not(.disabled):not(.is-locked):not(.is-waiting) {
@@ -1241,10 +1242,11 @@ function onBackdropPointerDown(e: PointerEvent) {
   color: var(--text);
   background: rgba(8, 18, 26, 0.9);
 }
+/* Locked by the tech tree: neutral grey, not red — red is kept for "not possible here" (.disabled). */
 .ring-bubble.is-locked {
   cursor: not-allowed;
-  border: 1.5px dashed rgba(226, 112, 95, 0.55);
-  color: rgba(240, 163, 150, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #a3b0b8;
 }
 .ring-bubble.is-locked.category {
   /* All its buildings are locked, but it still opens to show them. */
@@ -1279,8 +1281,8 @@ function onBackdropPointerDown(e: PointerEvent) {
   stroke-linejoin: round;
 }
 .ring-badge.locked {
-  background: #7d2e24;
-  color: #ffd9d2;
+  background: #3a4852;
+  color: #e8f0f5;
 }
 .ring-badge.ban {
   background: #4a2a26;
@@ -1292,8 +1294,8 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .ring-bubble.back {
   background: rgba(8, 18, 26, 0.92);
-  border: 1px solid rgba(255, 197, 92, 0.6);
-  color: var(--gold);
+  border: 1px solid var(--gold);
+  color: #fff;
   font-size: calc(8.6px * var(--ring-scale, 1));
   font-weight: 700;
   white-space: nowrap;
@@ -1308,8 +1310,8 @@ function onBackdropPointerDown(e: PointerEvent) {
   font-weight: 700;
 }
 .ring-bubble.child.locked {
-  border: 1.5px dashed rgba(226, 112, 95, 0.55);
-  color: rgba(240, 163, 150, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #a3b0b8;
   background: rgba(14, 24, 20, 0.94);
   cursor: not-allowed;
 }
@@ -1329,7 +1331,7 @@ function onBackdropPointerDown(e: PointerEvent) {
   color: rgba(232, 240, 245, 0.55);
 }
 .ring-bubble.child.locked.hot {
-  color: rgba(240, 163, 150, 0.85);
+  color: #a3b0b8;
 }
 .ring-card {
   position: absolute;

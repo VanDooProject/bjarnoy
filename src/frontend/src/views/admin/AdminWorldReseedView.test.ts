@@ -263,6 +263,7 @@ describe('AdminWorldReseedView', () => {
           giants: [],
           camps: [],
           bogTiles: [],
+          inlandLakeTiles: [],
           wasted: true,
         },
       ],

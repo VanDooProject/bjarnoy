@@ -498,6 +498,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     "/docs/production",
     "/docs/training",
     "/docs/founding",
+    "/docs/beach-camp",
     "/docs/realm",
     "/docs/land-movement",
     "/docs/ships",
@@ -641,7 +642,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   });
 
   test.describe("docs hub", () => {
-    test("shows the five groups and fourteen art cards, and the cards and footer link through", async ({
+    test("shows the five groups and fifteen art cards, and the cards and footer link through", async ({
       page,
     }) => {
       await page.goto("/docs");
@@ -664,12 +665,12 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         ).toBeVisible();
       }
       await expect(page.locator(".groups .group")).toHaveCount(5);
-      await expect(page.locator(".groups .group a.card")).toHaveCount(14);
+      await expect(page.locator(".groups .group a.card")).toHaveCount(15);
       for (const [group, count] of [
         ["story", 1],
         ["island", 2],
         ["building", 4],
-        ["move", 5],
+        ["move", 6],
         ["beyond", 2],
       ] as const) {
         await expect(
@@ -678,7 +679,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       }
 
       const cards = page.locator(".groups a.card");
-      await expect(cards).toHaveCount(14);
+      await expect(cards).toHaveCount(15);
       for (const title of [
         "The saga",
         "Tiles",
@@ -689,6 +690,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         "Walls",
         "Training troops",
         "Founding settlements",
+        "Beach camp",
         "Extending the realm",
         "Land movement",
         "Ships and water",
@@ -704,8 +706,8 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       // Every card's art is drawn from the atlas: a sprite with a background
       // image, or the animated camp's layers.
       const arts = page.getByTestId("docs-card-art");
-      await expect(arts).toHaveCount(14);
-      for (let i = 0; i < 14; i++) {
+      await expect(arts).toHaveCount(15);
+      for (let i = 0; i < 15; i++) {
         const layer = arts
           .nth(i)
           .locator(
@@ -746,7 +748,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     test("does not overflow horizontally on a phone", async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/docs");
-      await expect(page.locator(".groups a.card")).toHaveCount(14);
+      await expect(page.locator(".groups a.card")).toHaveCount(15);
       const overflow = await page
         .locator(".docs-page")
         .evaluate((el) => el.scrollWidth - el.clientWidth);
@@ -844,13 +846,15 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     ).toBeVisible();
   });
 
-  test("founding page prices the next settlements and hides the admin note", async ({
+  test("founding page lists the renown for the next settlements and hides the admin note", async ({
     page,
   }) => {
     await page.goto("/docs/founding");
     await expectPlayerPage(page, "Founding settlements", "price-table");
     await expect(page.locator('[data-settlement="2"]')).toContainText("80,000");
-    await expect(page.locator('[data-settlement="3"]')).toContainText("240 / 180 / 120 / 120");
+    // Settlers cost the same for every settlement; only the renown doubles.
+    await expect(page.locator('[data-settlement="3"]')).toContainText("160,000");
+    await expect(page.getByTestId("settler-table")).toContainText("120 / 90 / 60 / 60");
     await expect(page.getByText("issue #447")).toHaveCount(0);
   });
 
@@ -1005,12 +1009,12 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       page.getByTestId("wall-movement-legend").locator("li"),
     ).toHaveCount(11);
 
-    // Sieges are player content now: rams take one level per won siege, three levels per wall hex, and a fleet sent at
+    // Sieges are player content now: rams take one level per won siege, three levels per wall hex, and a Fire Ship sent at
     // the sea end of a wall takes a level too.
     const sieges = page.locator("#sieges");
     await expect(sieges.getByRole("heading", { name: "Sieges" })).toBeVisible();
     await expect(sieges.locator("li")).toHaveCount(6);
-    await expect(sieges).toContainText("the sea end of a wall included");
+    await expect(sieges).toContainText("A Fire Ship sent at a wall's sea end");
     await expect(sieges).toContainText("exactly one level");
     await expect(sieges).toContainText("3 levels");
     // The note on what is still not built (fire) stays admin-only.

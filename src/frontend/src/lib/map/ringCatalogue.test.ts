@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, scaledBuildSeconds, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, greatStorehouseLock, towerLimitLock } from './ringCatalogue';
+import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, hexOccupant, cropAllowedHere, formatBuildTime, formatMissingResources, scaledBuildSeconds, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, greatStorehouseLock, towerLimitLock } from './ringCatalogue';
 
 describe('scaledBuildSeconds', () => {
   it('divides the catalogue time by the world speed factor and applies Odin\'s Wisdom', () => {
@@ -264,6 +264,20 @@ describe('buildingAllowedOnHex', () => {
     expect(buildingAllowedOnHex('fishinghut', { terrain: 'grass' })).toBe(false);
   });
 
+  it('only the Fishing Hut stands on an inland-lake hex, and only one beside land', () => {
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'inlandlake', isCoastalWater: true })).toBe(true);
+    for (const type of ['dockyard', 'shrineofnjord', 'palisade', 'palisadegate', 'farm', 'tower']) {
+      expect(buildingAllowedOnHex(type, { terrain: 'inlandlake', isCoastalWater: true }), type).toBe(false);
+    }
+    // An interior inland-lake hex takes nothing, the Fishing Hut included.
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'inlandlake' })).toBe(false);
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'inlandlake', isCoastalWater: false })).toBe(false);
+  });
+
+  it('is not buildable as an empty inland-lake hex', () => {
+    expect(tileIsBuildable({ terrain: 'inlandlake' })).toBe(false);
+  });
+
   it('the other water buildings never stand on the bog', () => {
     for (const type of ['dockyard', 'shrineofnjord']) {
       expect(buildingAllowedOnHex(type, { terrain: 'sea', isCoastalWater: true })).toBe(true);
@@ -404,5 +418,25 @@ describe('riverBuildingAllowedHere — no ordinary building on a river hex', () 
       for (const type of ['sawmill', 'cropmill', 'bridge']) expect(riverBuildingAllowedHere(type, 'straight', 'plain', width), `${type}/${width}`).toBe(false);
     }
     expect(riverBuildingAllowedHere('sawmill', 'spring', 'plain', 'river')).toBe(false);
+  });
+});
+
+describe('hexOccupant', () => {
+  const camp = (family: string, empty?: boolean) => ({ camp: { family, empty } });
+  it('names what holds a hex against every building', () => {
+    expect(hexOccupant({})).toBeUndefined();
+    expect(hexOccupant({ giant: {} })).toBe('giant');
+    expect(hexOccupant(camp('wolfden'))).toBe('camp');
+    expect(hexOccupant(camp('wolfden', true))).toBeUndefined();
+    expect(hexOccupant(camp('fenrirbrood'))).toBe('fenrirBrood');
+    expect(hexOccupant(camp('fenrirbrood', true))).toBe('fenrirBrood');
+    expect(hexOccupant({ utgardWall: {} })).toBe('endgameSite');
+    expect(hexOccupant({ jotunTower: {} })).toBe('endgameSite');
+  });
+
+  it('keeps the building modal off an empty giant or endgame hex, but not off a building standing there', () => {
+    expect(tileIsBuildable({ terrain: 'grass', giant: {} })).toBe(false);
+    expect(tileIsBuildable({ terrain: 'grass', jotunTower: {} })).toBe(false);
+    expect(tileIsBuildable({ terrain: 'grass', camp: { family: 'wolfden', empty: true }, buildingType: 'farm' })).toBe(true);
   });
 });

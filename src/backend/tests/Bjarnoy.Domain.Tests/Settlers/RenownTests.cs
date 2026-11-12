@@ -16,6 +16,17 @@ public class RenownTests
     }
 
     [Fact]
+    public void SettleTo_multiplies_the_accrual_by_the_world_speed_factor()
+    {
+        var account = RenownAccount.Empty(T0);
+
+        // 10 levels for 3 hours on a 4x world: 4x the 1x figure of 30.
+        var settled = account.SettleTo(T0.AddHours(3), totalBuildingLevels: 10, speedFactor: 4);
+
+        Assert.Equal(120, settled.Total);
+    }
+
+    [Fact]
     public void SettleTo_accrues_points_per_level_per_hour()
     {
         var account = RenownAccount.Empty(T0);

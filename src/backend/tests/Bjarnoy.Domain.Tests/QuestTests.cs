@@ -194,8 +194,8 @@ public class QuestTests
         static (int, int) P(Settlement s) { var p = Quests.Find("spearmen5")!.Progress!(s); return (p.Current, p.Target); }
 
         Assert.Equal((0, 5), P(Found()));
-        Assert.Equal((3, 5), P(Found() with { Garrison = [new UnitStack(UnitType.Spearman, 3), new UnitStack(UnitType.Thrall, 9)] }));
-        Assert.Equal((5, 5), P(Found() with { Garrison = [new UnitStack(UnitType.Spearman, 9)] }));
+        Assert.Equal((3, 5), P(Found().WithGarrison([new UnitStack(UnitType.Spearman, 3), new UnitStack(UnitType.Thrall, 9)])));
+        Assert.Equal((5, 5), P(Found().WithGarrison([new UnitStack(UnitType.Spearman, 9)])));
         Assert.Equal((5, 5), P(Found() with { TroopsTrained = true }));
     }
 
@@ -215,38 +215,32 @@ public class QuestTests
         var home = Found();
 
         Assert.False(q.IsCompleted(home));
-        Assert.False(q.IsCompleted(home with { Garrison = [new UnitStack(UnitType.Spearman, 4)] }));
-        Assert.True(q.IsCompleted(home with { Garrison = [new UnitStack(UnitType.Spearman, 5)] }));
-        Assert.True(q.IsCompleted(home with
-        {
-            Garrison = [new UnitStack(UnitType.Axeman, 2), new UnitStack(UnitType.Spearman, 3)],
-        }));
-        Assert.False(q.IsCompleted(home with
-        {
-            Garrison = [new UnitStack(UnitType.Spearman, 2), new UnitStack(UnitType.Thrall, 10), new UnitStack(UnitType.Karve, 3)],
-        }));
+        Assert.False(q.IsCompleted(home.WithGarrison([new UnitStack(UnitType.Spearman, 4)])));
+        Assert.True(q.IsCompleted(home.WithGarrison([new UnitStack(UnitType.Spearman, 5)])));
+        Assert.True(q.IsCompleted(home.WithGarrison([new UnitStack(UnitType.Axeman, 2), new UnitStack(UnitType.Spearman, 3)])));
+        Assert.False(q.IsCompleted(home.WithGarrison([new UnitStack(UnitType.Spearman, 2), new UnitStack(UnitType.Thrall, 10), new UnitStack(UnitType.Karve, 3)])));
     }
 
     [Fact]
     public void The_spearmen_quest_stays_completed_once_the_troops_were_trained()
     {
         var q = Quests.Find("spearmen5")!;
-        var trained = Found() with { Garrison = [new UnitStack(UnitType.Axeman, 5)] };
+        var trained = Found().WithGarrison([new UnitStack(UnitType.Axeman, 5)]);
         var latched = trained.SettleTo(T0).Settlement;
 
         Assert.True(latched.TroopsTrained);
         Assert.False(Found().SettleTo(T0).Settlement.TroopsTrained);
 
-        var gone = latched with { Garrison = [new UnitStack(UnitType.Axeman, 1)] };
+        var gone = latched.WithGarrison([new UnitStack(UnitType.Axeman, 1)]);
         Assert.True(q.IsCompleted(gone));
         Assert.True(gone.SettleTo(T0).Settlement.TroopsTrained);
-        Assert.False(q.IsCompleted(Found() with { Garrison = [new UnitStack(UnitType.Axeman, 4)] }));
+        Assert.False(q.IsCompleted(Found().WithGarrison([new UnitStack(UnitType.Axeman, 4)])));
     }
 
     [Fact]
     public void Settling_reports_a_change_when_only_the_troops_latch_flips()
     {
-        var result = (Found() with { Garrison = [new UnitStack(UnitType.Spearman, 6)] }).SettleTo(T0);
+        var result = (Found().WithGarrison([new UnitStack(UnitType.Spearman, 6)])).SettleTo(T0);
 
         Assert.True(result.Changed);
         Assert.True(result.Settlement.TroopsTrained);

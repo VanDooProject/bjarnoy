@@ -157,6 +157,29 @@ public class WhaleRoadTests
     }
 
     [Fact]
+    public void No_road_lies_on_water_the_island_encloses()
+    {
+        // A ring island: the water inside it is no sea, though its middle is 9 hexes from the nearest land.
+        var origin = new HexCoord(0, 0);
+        var island = Blob(origin, 18).Where(t => t.DistanceTo(origin) > 9).ToList();
+        var own = island.ToHashSet();
+        var enclosed = EnclosedWater.Tiles(island, own.Contains).ToHashSet();
+        Assert.NotEmpty(enclosed);
+
+        var placed = 0;
+        for (var seed = 1; seed <= 25; seed++)
+        {
+            foreach (var p in CampGenerator.PlaceWhaleRoads(island, own.Contains, seed, 3))
+            {
+                placed++;
+                Assert.DoesNotContain(p.Coord, enclosed);
+            }
+        }
+
+        Assert.True(placed > 0, "the outside sea should still take roads");
+    }
+
+    [Fact]
     public void Another_islands_land_within_five_or_as_near_as_the_own_coast_rules_a_hex_out()
     {
         var island = BigIsland(300);

@@ -118,6 +118,51 @@ public sealed class SimulatorEndpointsTests(SqliteApiFixture fixture) : IClassFi
     }
 
     [Fact]
+    public async Task A_fleet_simulation_fights_the_ships_first_and_then_the_troops_aboard_exactly_like_AttackResolver()
+    {
+        using var client = _fixture.CreateClient();
+        var (accessToken, _) = await CreatePremiumUserAsync(client);
+        Authorize(client, accessToken);
+
+        const int seed = 4242;
+        var request = new SimulatorRequest(
+            AttackerStacks: [new UnitCountRequest("longship", 5), new UnitCountRequest("axeman", 80)],
+            DefenderStacks: [new UnitCountRequest("longship", 1), new UnitCountRequest("spearman", 10)],
+            GuestDefenderStacks: [new UnitCountRequest("spearman", 10)],
+            TowerLevel: 2,
+            LandAttackBonusPercent: 10,
+            ShipAttackBonusPercent: 50,
+            Mission: "attack",
+            Seed: seed);
+        var response = await client.PostJsonAsync("/api/v1/simulator", request, Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.ReadStrictAsync<SimulatorResponse>(Ct);
+
+        var expected = AttackResolver.Resolve(
+            [new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 80)],
+            [new UnitStack(UnitType.Longship, 1), new UnitStack(UnitType.Spearman, 10)],
+            [new UnitStack(UnitType.Spearman, 10)],
+            Bjarnoy.Domain.Buildings.BuildingCatalogue.TowerDefenseBonusPercent(2), ResourceAmounts.Uniform(1_000_000), seed,
+            raid: false, landAttackBonusPercent: 10, shipAttackBonusPercent: 50,
+            targetBuildingCoord: null, [new(new Bjarnoy.Domain.World.HexCoord(0, 0), Bjarnoy.Domain.Buildings.BuildingType.Longhouse, 1)],
+            _ => Bjarnoy.Domain.World.Terrain.Grass, provisionsAtBattle: double.PositiveInfinity);
+
+        // The ship fight: the ship bonus applies there only (5 longships: 5 x 60 x 1.5), the tower bonus on the one defending ship.
+        Assert.NotNull(result.ShipFight);
+        Assert.Equal(expected.ShipFight!.AttackPower, result.ShipFight.AttackPower);
+        Assert.Equal(450, result.ShipFight.AttackPower);
+        Assert.Equal(expected.ShipFight.DefensePower, result.ShipFight.DefensePower);
+        Assert.Equal(expected.ShipFight.Winner.ToString().ToLowerInvariant(), result.ShipFight.Winner);
+        // The land fight: the land bonus applies there only against the land units.
+        Assert.Equal(expected.LandFight!.AttackPower, result.AttackPower);
+        Assert.Equal(expected.LandFight.DefensePower, result.DefensePower);
+        Assert.Equal(expected.Winner.ToString().ToLowerInvariant(), result.Winner);
+        Assert.Equal(expected.Drowned.Sum(d => d.Count), result.Drowned.Sum(d => d.Count));
+        Assert.Equal(expected.Loot.Wood, result.LootTaken.Wood, 6);
+        Assert.Equal(0, result.FireShipsBurned);
+    }
+
+    [Fact]
     public async Task A_premium_users_raid_simulation_produces_smaller_losses_than_the_same_fight_simulated_as_an_attack()
     {
         using var client = _fixture.CreateClient();

@@ -6,10 +6,9 @@
 // `armies` comment), this one is specifically about dispatched bodies
 // (in transit / returning / supporting) plus the flow for creating a new one.
 //
-// Bottom-right HUD corner: BuildQueuePanel is top-left, TrainingQueuePanel
-// top-right (see each panel's own `position: absolute` in their <style>) —
-// bottom-left is open since RealmPanel's removal (zoom now drives
-// settlement<->world switching, so its manual override button is gone).
+// Bottom-right HUD corner by default. In the desktop settlement view the panel
+// is one of the four dockable ones (HudPanelDock.vue puts it in the corner the
+// player chose); in the world view it keeps its own `position: absolute` below.
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
@@ -19,9 +18,12 @@ import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
 import { missionName, unitName } from '../../i18n/catalogueNames';
 import {
+  dispatchHasDestination,
+  isRouteDestination,
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
 import { useDispatchTargetBuilding } from '../../composables/useDispatchTargetBuilding';
+import CampInstructions from './CampInstructions.vue';
 import HuntTargetSummary from './HuntTargetSummary.vue';
 import DispatchTargetBuildingPicker from './DispatchTargetBuildingPicker.vue';
 import SendArmyPicker from './SendArmyPicker.vue';
@@ -29,6 +31,7 @@ import DispatchSlots from './DispatchSlots.vue';
 import { useDispatchUnitPicker } from '../../composables/useDispatchUnitPicker';
 import { useArmyRows } from '../../composables/useArmyRows';
 import { useArmyRowTap } from '../../composables/useArmyRowTap';
+import { useArmyRecall } from '../../composables/useArmyRecall';
 
 const emit = defineEmits<{ 'focus-army': [armyId: string] }>();
 const world = useWorldStore();
@@ -45,13 +48,13 @@ const draft = computed(() => world.dispatchDraft);
 // Only garrison units can be sent — the wire-name -> count map the quantity
 // inputs below read/write against, filtered to what's actually standing here.
 const garrisonRows = computed(() =>
-  world.hud.garrison
+  (world.dispatchSource?.garrison ?? world.hud.garrison)
     .filter((g) => g.count > 0)
     .map((g) => ({ unit: g.unit, label: unitName(g.unit), available: g.count })),
 );
 
 const picker = useDispatchUnitPicker(garrisonRows);
-const { isRowSelectable, hasLockedOutUnits } = picker;
+const { isRowSelectable, hasLockedOutUnits, sandHuntLacksTroops, unitSourceText } = picker;
 
 function quantityFor(unit: string): number {
   return draft.value?.unitCounts[unit] ?? 0;
@@ -67,7 +70,7 @@ function setQuantity(unit: string, value: string, max: number) {
     // Issue #158: provisions come out of `available`, not raw stock — food
     // reserved for the waiting build queue is not free to load onto an army.
     world.setDispatchProvisions(
-      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.hud.available.food),
+      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.dispatchSource?.availableFood ?? world.hud.available.food),
     );
   }
 }
@@ -81,7 +84,7 @@ const routeRows = computed(() =>
   (draft.value?.route ?? []).map((c, i) => ({
     index: i,
     label: `${i + 1}. (${c.q}, ${c.r})`,
-    isDestination: draft.value?.mission === 'move' && i === (draft.value?.route.length ?? 0) - 1,
+    isDestination: isRouteDestination(draft.value?.mission, i, draft.value?.route.length ?? 0),
   })),
 );
 const hasUnitsSelected = computed(() =>
@@ -91,13 +94,7 @@ const hasUnitsSelected = computed(() =>
 // an attack/support dispatch needs a target settlement instead — a route is
 // optional waypoints along the way (see buildAttackDispatchRequest's own
 // comment; buildSupportDispatchRequest mirrors it exactly).
-const hasDestination = computed(() =>
-  draft.value?.mission === 'attack' || draft.value?.mission === 'support'
-    ? !!draft.value.targetSettlementId
-    : draft.value?.mission === 'hunt'
-      ? !!draft.value.targetCamp
-      : routeLength.value > 0,
-);
+const hasDestination = computed(() => !!draft.value && dispatchHasDestination(draft.value));
 const canConfirm = computed(
   () => hasUnitsSelected.value && hasDestination.value && picker.selectionSendable.value && !buildingPicker.isMissingRequiredPick.value && !draft.value?.submitting,
 );
@@ -166,16 +163,7 @@ const armyRows = useArmyRows();
 // Click selects / deselects the row's army; a double click focuses it on the map.
 const onRowClick = useArmyRowTap((armyId) => emit('focus-army', armyId));
 
-const recallingId = ref<string | null>(null);
-const recalling = computed(() => (id: string) => recallingId.value === id);
-async function recall(armyId: string) {
-  recallingId.value = armyId;
-  try {
-    await world.recallArmyLive(armyId);
-  } finally {
-    recallingId.value = null;
-  }
-}
+const { isRecalling, recall, refusalFor } = useArmyRecall();
 
 // Issue #156 phase 1: field-order composing — a separate, lighter draft from
 // the dispatch one above (no unit picker, just a plotted route against an
@@ -200,8 +188,8 @@ async function confirmFieldOrderClick() {
 </script>
 
 <template>
-  <div class="status-card army-panel">
-    <div class="status-card-header">
+  <div class="status-card army-panel" data-testid="army-panel">
+    <div class="status-card-header" data-dock-handle>
       <span class="status-card-title">{{ t('hud.armyPanel.title') }}</span>
       <span class="status-card-count">{{ armyRows.length }}</span>
     </div>
@@ -242,12 +230,13 @@ async function confirmFieldOrderClick() {
             <button
               v-if="row.canRecall"
               class="recall"
-              :disabled="recalling(row.id)"
+              :disabled="isRecalling(row.id)"
               @click.stop="recall(row.id)"
             >
-              {{ recalling(row.id) ? t('hud.armyPanel.recalling') : t('hud.armyPanel.recall') }}
+              {{ isRecalling(row.id) ? t('hud.armyPanel.recalling') : t('hud.armyPanel.recall') }}
             </button>
           </div>
+          <p v-if="refusalFor(row.id)" class="status-subtext error-note recall-refusal">{{ refusalFor(row.id) }}</p>
         </div>
       </div>
       <div v-else class="status-subtext garrison-empty">{{ t('hud.armyPanel.noArmies') }}</div>
@@ -357,6 +346,20 @@ async function confirmFieldOrderClick() {
           >
             {{ missionName('hunt') }}
           </button>
+          <button
+            v-if="draft.mission === 'found'"
+            type="button"
+            class="mission-tab active"
+          >
+            {{ missionName('found') }}
+          </button>
+          <button
+            v-if="draft.mission === 'setupcamp'"
+            type="button"
+            class="mission-tab active"
+          >
+            {{ missionName('setupcamp') }}
+          </button>
         </div>
 
         <template v-if="draft.mission === 'hunt'">
@@ -365,6 +368,10 @@ async function confirmFieldOrderClick() {
           </p>
           <HuntTargetSummary :target="draft.targetCamp" :unit-counts="draft.unitCounts" />
         </template>
+        <p v-else-if="draft.mission === 'found'" class="status-subtext instructions">
+          {{ t('hud.armyPanel.foundInstructions') }}
+        </p>
+        <CampInstructions v-else-if="draft.mission === 'setupcamp'" />
         <p v-else-if="draft.mission === 'move'" class="status-subtext instructions">
           {{ t('hud.armyPanel.dispatchInstructions', {
             count: routeLength,
@@ -431,6 +438,7 @@ async function confirmFieldOrderClick() {
         </div>
 
         <p v-if="hasLockedOutUnits" class="status-subtext fleet-note">{{ t('hud.armyPanel.huntLandOnlyNote') }}</p>
+        <p v-if="sandHuntLacksTroops" class="status-subtext fleet-note" role="alert">{{ t('apiErrors.rejections.HuntRequiresLandUnits') }}</p>
         <div class="unit-picker">
           <div
             v-for="row in garrisonRows"
@@ -438,7 +446,10 @@ async function confirmFieldOrderClick() {
             class="unit-picker-row"
             :class="{ 'is-locked-out': !isRowSelectable(row.unit) }"
           >
-            <span class="unit-picker-name">{{ row.label }}</span>
+            <span class="unit-picker-name">
+              {{ row.label }}
+              <span v-if="unitSourceText(row.unit)" class="unit-source" data-testid="unit-source">{{ unitSourceText(row.unit) }}</span>
+            </span>
             <input
               type="number"
               min="0"
@@ -485,42 +496,22 @@ async function confirmFieldOrderClick() {
 </template>
 
 <style scoped>
-/* Mirrors TrainingQueuePanel.vue's `.status-card`/`.status-row` rules
-   (scoped styles don't leak across components — see that file's own comment
-   for why they're duplicated rather than shared). */
+.unit-source {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+}
+/* The card box and header are shared (style.css `.status-card`); this panel sets its place and size. `.status-row` mirrors
+   TrainingQueuePanel.vue's. */
 .status-card {
-  position: absolute;
   right: 16px;
   /* --hud-inset-bottom only differs from 0px on a mobile-docked-bottom HUD
      bar (see MapView.vue's own hudInsetBottomPx). */
   bottom: calc(16px + var(--hud-inset-bottom, 0px));
-  z-index: 10;
   width: 260px;
   max-height: 60vh;
   overflow-y: auto;
-  padding: 14px 15px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 0;
-}
-.status-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--panel-border);
-}
-.status-card-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text);
-}
-.status-card-count {
-  font-size: 12px;
-  color: var(--muted);
 }
 .status-row {
   padding: 8px 0;

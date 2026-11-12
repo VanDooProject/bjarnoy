@@ -108,9 +108,14 @@ export interface PacingResult {
   series: PacingSeries;
 }
 
-/** Construction slots — mirrors Settlement.ConstructionSlotsFor in the backend: 2 + max(0, (lh - 5) / 5). */
+/** Construction slots — mirrors Settlement.ConstructionSlotsFor in the backend: max(2, lh). */
 export function constructionSlotsFor(longhouseLevel: number): number {
-  return 2 + Math.max(0, Math.floor((longhouseLevel - 5) / 5));
+  return Math.max(2, longhouseLevel);
+}
+
+/** Slots a Longhouse upgrade occupies — mirrors Settlement.LonghouseSlotCost: 90 % rounded down, min 1. */
+export function longhouseSlotCost(slots: number): number {
+  return Math.max(1, Math.floor(slots * 0.9));
 }
 
 /** 'HH:MM' -> minutes since midnight. Unparseable input gives 0. */
@@ -187,7 +192,7 @@ function compile(defs: BuildingDefinitionResponse[] | undefined): Compiled[] {
       reqLh: d.requiredLonghouseLevel,
       prereqs: d.prerequisites,
       slotCost: d.slotCost,
-      occupiesAll: d.occupiesAllSlots,
+      occupiesAll: d.occupiesMostSlots,
     };
   }
   return out;
@@ -444,7 +449,7 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
 
   function startOne(minute: number, slots: number) {
     // (a) Longhouse: wanted once every producer has caught up with it. It
-    // can only start with nothing building, but while it is wanted the
+    // can only start with 90 % of the slots free, but while it is wanted the
     // player saves for it — producer upgrades (c) are skipped — otherwise a
     // player who is online every minute keeps spending the stock the
     // Longhouse needs and levels it *later* than one who checks in rarely.
@@ -461,10 +466,11 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
         for (let r = 0; !blocked && r < 4; r++) if (up.cost[r] > capacity[r]) blocked = true;
         if (!blocked) lhWanted = false;
       }
-      if (lhWanted && jobs.length === 0 && affordable(next)) {
+      const lhSlotCost = longhouseSlotCost(slots);
+      if (lhWanted && usedSlots + lhSlotCost <= slots && affordable(next)) {
         spend(next);
-        jobs.push({ kind: 'lh', index: 0, finishMinute: minute + Math.ceil(next.buildMinutes), slotCost: slots });
-        usedSlots += slots;
+        jobs.push({ kind: 'lh', index: 0, finishMinute: minute + Math.ceil(next.buildMinutes), slotCost: lhSlotCost });
+        usedSlots += lhSlotCost;
         lhBusy = true;
         return;
       }

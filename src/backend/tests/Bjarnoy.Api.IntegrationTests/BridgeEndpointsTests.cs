@@ -13,6 +13,7 @@ using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -42,7 +43,7 @@ public sealed class BridgeEndpointsTests : IAsyncLifetime
 
     private sealed record Player(SettlementResponse Settlement, AuthResponse Auth);
 
-    private static async Task<Player> FoundAsync(HttpClient client, Guid worldId, IslandResponse island, TileCoordinate plot, string name)
+    private static async Task<Player> FoundAsync(HttpClient client, Guid worldId, FullIslandResponse island, TileCoordinate plot, string name)
     {
         var ownerId = Unique("local-owner-");
         var settlement = await (await client.PostJsonAsync(
@@ -55,12 +56,11 @@ public sealed class BridgeEndpointsTests : IAsyncLifetime
         return new Player(settlement, auth);
     }
 
-    private async Task<(HttpClient Client, WorldEntity World, IslandResponse Island, Player Owner, HashSet<HexCoord> Rivers)> SetUpAsync()
+    private async Task<(HttpClient Client, WorldEntity World, FullIslandResponse Island, Player Owner, HashSet<HexCoord> Rivers)> SetUpAsync()
     {
         var client = _factory.CreateClient();
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.Where(i => i.StartPositions.Count > 3).OrderByDescending(i => i.TileCount).First();
         var owner = await FoundAsync(client, world.Id, island, island.StartPositions[0], "Ulf");
         var rivers = island.RiverTiles.Select(t => new HexCoord(t.Q, t.R)).ToHashSet();
@@ -122,5 +122,40 @@ public sealed class BridgeEndpointsTests : IAsyncLifetime
             $"/api/v1/settlements/{owner.Settlement.Id}", SqliteApiFixture.StrictJson, Ct);
         var bridge = Assert.Single(snapshot!.Buildings, b => b.Type == "bridge");
         Assert.Equal((wide.Q, wide.R, 0), (bridge.Q, bridge.R, bridge.Level));
+    }
+
+    [Fact]
+    public async Task A_bridge_is_refused_on_a_wide_river_of_a_wasted_island()
+    {
+        var (client, world, _, owner, _) = await SetUpAsync();
+        using var _ = client;
+        var centre = new HexCoord(owner.Settlement.Q, owner.Settlement.R);
+        var terrain = await TerrainAroundAsync(client, world.Id, centre, 4);
+        var wide = centre.WithinRadius(2)
+            .Where(c => c != centre && terrain.TryGetValue(c, out var t) && t is "grass" or "sand" or "forest")
+            .OrderBy(c => c.Q).ThenBy(c => c.R)
+            .First();
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            (await db.PlacedBuildings.SingleAsync(b => b.SettlementId == owner.Settlement.Id && b.Type == BuildingType.Longhouse, Ct)).Level = 7;
+            var townSquareHex = centre.WithinRadius(2).First(c => c != centre && c != wide && terrain.TryGetValue(c, out var t) && t is "grass" or "sand");
+            db.PlacedBuildings.Add(new PlacedBuildingEntity { SettlementId = owner.Settlement.Id, Q = townSquareHex.Q, R = townSquareHex.R, Type = BuildingType.TownSquare, Level = 1 });
+
+            var island = await db.Islands.SingleAsync(i => i.Id == owner.Settlement.IslandId, Ct);
+            island.IsWasted = true;
+            island.RiverTiles =
+            [
+                new RiverTileRecord(wide.Q, wide.R, (int)RiverTileShape.Straight, [(int)TileOrientation.W], (int)TileOrientation.E, (int)RiverWidth.River),
+            ];
+            await db.SaveChangesAsync(Ct);
+        }
+
+        WorldIslandCaches.Invalidate(world.Id);
+        Authorize(client, owner.Auth.AccessToken);
+        var refused = await client.PostJsonAsync($"/api/v1/settlements/{owner.Settlement.Id}/builds", new QueueBuildRequest("bridge", wide.Q, wide.R), Ct);
+
+        Assert.Equal("TerrainNotAllowed", await refused.RejectionAsync(Ct));
     }
 }

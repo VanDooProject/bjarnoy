@@ -1,6 +1,7 @@
 // See RingMenuComponent.ts for why `expect` comes from here, not `../fixtures`.
 import { expect, type Locator, type Page } from '@playwright/test';
 import { captureCanvas, claimLandfall, foundSettlement, placeGuidedBuildings, waitForMapReady } from '../helpers';
+import { BuildingHudComponent } from './BuildingHudComponent';
 import { RingMenuComponent } from './RingMenuComponent';
 
 export interface HexCoord {
@@ -45,6 +46,13 @@ export interface HexQuery {
    * spec gets back — is unchanged.
    */
   reach?: number;
+  /** A hex no settlement claims (the ring's Send settlers / Land here) instead of one of the realm's own. */
+  unclaimed?: boolean;
+  /**
+   * `true`: only a shoreline hex (land with an open-sea neighbour, where the ring offers Land here); `false`: never one
+   * (the ring offers Send settlers). Unset: either.
+   */
+  shoreline?: boolean;
   /**
    * Of the matching hexes, the one drawn closest to this canvas point rather
    * than the first in scan order — for a spec that needs the ring opened at a
@@ -79,6 +87,8 @@ export class SettlementPage {
   /** The onboarding quest tray (QuestTray.vue) shown in the settlement view. */
   readonly questTray: Locator;
   readonly ring: RingMenuComponent;
+  /** The building HUD: markers over the own buildings and its toggle. */
+  readonly hud: BuildingHudComponent;
   /** Design handoff "2a": the animated next-step arrow (GuidancePointer.vue). */
   readonly guidancePointer: Locator;
   /** The guided-onboarding checklist tray (OnboardingChecklist.vue). */
@@ -117,6 +127,7 @@ export class SettlementPage {
     this.statusCard = page.locator('.status-card');
     this.questTray = page.getByTestId('quest-tray');
     this.ring = new RingMenuComponent(page);
+    this.hud = new BuildingHudComponent(page);
     this.guidancePointer = page.getByTestId('guidance-pointer');
     this.checklist = page.getByTestId('onboarding-checklist');
     this.banner = page.getByTestId('onboarding-banner');
@@ -199,11 +210,17 @@ export class SettlementPage {
           if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
           const at = { q: settlement.q + dq, r: settlement.r + dr };
           const tile = world.model.getTile(at.q, at.r);
-          if (tile.ownerId !== world.selectedSettlementId) continue;
+          if (q.unclaimed ? tile.ownerId : tile.ownerId !== world.selectedSettlementId) continue;
           if (tile.buildingType) continue;
           if (q.terrain !== undefined && tile.terrain !== q.terrain) continue;
           if (q.notTerrain !== undefined && tile.terrain === q.notTerrain) continue;
           if (q.coastalWater && !tile.isCoastalWater) continue;
+          if (q.shoreline !== undefined) {
+            const sides = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+            const land = tile.terrain !== 'sea' && tile.terrain !== 'lake';
+            const shore = land && sides.some(([sq, sr]) => world.model.terrainOf(at.q + sq, at.r + sr) === 'sea');
+            if (shore !== q.shoreline) continue;
+          }
           if (q.nearest) {
             const screen = renderer.hexCenterScreen(at);
             const d = Math.hypot(screen.x - q.nearest.x, screen.y - q.nearest.y);
@@ -225,7 +242,7 @@ export class SettlementPage {
         return { hex: best.hex, screen: best.screen };
       }
       throw new Error(
-        `no empty, owned hex matching ${JSON.stringify(q)} found inside the realm — pick a different demo seed`,
+        `no empty ${q.unclaimed ? 'unclaimed' : 'owned'} hex matching ${JSON.stringify(q)} found inside the realm — pick a different demo seed`,
       );
     }, query);
   }
@@ -299,6 +316,20 @@ export class SettlementPage {
     const screen = 'screen' in target ? target.screen : target;
     const box = await this.canvasBox();
     await this.page.mouse.click(box.x + screen.x, box.y + screen.y);
+  }
+
+  /**
+   * Sets the camera zoom with one real wheel gesture at the canvas centre (the renderer zooms by `exp(-deltaY * 0.001)`), then
+   * parks the mouse in the canvas corner so no hover grows a marker or hides the tier the zoom gives it.
+   */
+  async zoomTo(target: number): Promise<void> {
+    const box = await this.canvasBox();
+    const centre = await this.canvasCentre();
+    const current = await this.hud.cameraZoom();
+    await this.page.mouse.move(centre.x, centre.y);
+    await this.page.mouse.wheel(0, -Math.log(target / current) * 1000);
+    await expect.poll(() => this.hud.cameraZoom()).toBeCloseTo(target, 1);
+    await this.page.mouse.move(box.x + 5, box.y + 5);
   }
 
   /** How many buildings this settlement has — the deterministic "did the build land" signal. */

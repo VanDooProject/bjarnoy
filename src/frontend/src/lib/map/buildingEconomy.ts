@@ -64,8 +64,8 @@ export const BOOST_TERRAIN: Partial<Record<BuildingKind, Terrain | readonly Terr
   quarry: 'mountain',
   // The hut itself already stands on coastal water; more open sea around it
   // is what the backend rewards, not the land it backs onto. A hut on a bog
-  // lake's half shore counts the lake hexes around it the same way.
-  fishinghut: ['sea', 'lake'],
+  // lake's half shore counts the lake hexes around it the same way; so does one beside an inland lake.
+  fishinghut: ['sea', 'lake', 'inlandlake'],
   // The bog around a bog-ore works: any bog hex (moss, shore, creek, mouth, spring) or lake water.
   bogoreworks: ['bog', 'lake'],
 };
@@ -272,9 +272,21 @@ export function buildingStatsAt(
   tile: AxialCoord & { bog?: Tile['bog'] },
   getTile: (q: number, r: number) => Tile,
 ): BuildingLevelStats {
+  const { matchingNeighbours, onLake } = boostContextAt(type, tile, getTile);
+  return buildingStatsFor(type, level, matchingNeighbours, onLake);
+}
+
+/** The map-dependent inputs of `buildingStatsFor` for a building of `type` standing on `tile`. */
+export function boostContextAt(
+  type: BuildingKind,
+  tile: AxialCoord & { bog?: Tile['bog'] },
+  getTile: (q: number, r: number) => Tile,
+): { matchingNeighbours: number; onLake: boolean } {
   const boostTerrain = BOOST_TERRAIN[type];
-  const matching = boostTerrain ? matchingNeighbourCount(tile, boostTerrain, getTile) : 0;
-  return buildingStatsFor(type, level, matching, type === 'fishinghut' && tile.bog?.kind === 'half');
+  return {
+    matchingNeighbours: boostTerrain ? matchingNeighbourCount(tile, boostTerrain, getTile) : 0,
+    onLake: type === 'fishinghut' && tile.bog?.kind === 'half',
+  };
 }
 
 /** Whether any of `tile`'s six direct neighbours is one of `terrains`. */
@@ -570,6 +582,7 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   greatstorehouse: line(4500, 3000, 0),
   archeryrange: line(470, 200, 58),
   siegeworkshop: line(26500, 13000, 2200),
+  beachcamp: line(0, 0, 0),
   dockyard: line(410, 99, 33),
   barracks: line(100, 78, 43),
   sawmill: line(41500, 59500, 5950),

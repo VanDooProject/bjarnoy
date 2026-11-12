@@ -35,9 +35,8 @@ public sealed class LinkedStoreTests
             Centre = centre,
             Buildings = [new PlacedBuilding(centre, BuildingType.Longhouse, longhouse), .. extra ?? []],
             Queue = queue ?? [],
-            Garrison = garrison ?? [],
             Resources = ResourcePool.Create(ResourceAmounts.Zero, ResourceAmounts.Zero, ResourceAmounts.Zero, T0),
-        };
+        }.WithGarrison(garrison ?? []);
         var (production, capacity) = bare.CurrentTotals(1.0, guests);
         return bare with { Resources = ResourcePool.Create(stock, production, capacity, settledAt ?? T0) };
     }
@@ -281,22 +280,24 @@ public sealed class LinkedStoreTests
     }
 
     [Fact]
-    public void A_longhouse_upgrade_occupies_every_slot_of_the_group()
+    public void A_longhouse_upgrade_occupies_90_percent_of_the_slots_of_the_group()
     {
-        var busyB = Order(BuildingType.Farm, new HexCoord(5, 0));
+        var busyB = new[] { Order(BuildingType.Farm, new HexCoord(5, 0)), Order(BuildingType.Farm, new HexCoord(6, 0)) };
         var upgrade = Order(BuildingType.Longhouse, CentreA, level: 2, waiting: true, queuedSeconds: 1);
         var behind = Order(BuildingType.Farm, new HexCoord(-1, 0), waiting: true, queuedSeconds: 2);
-        var a = Member(CentreA, ResourceAmounts.Uniform(10_000), queue: [upgrade, behind]);
-        var b = Member(CentreB, ResourceAmounts.Uniform(10_000), queue: [busyB]);
+        var behindToo = Order(BuildingType.Farm, new HexCoord(-1, 1), waiting: true, queuedSeconds: 3);
+        var a = Member(CentreA, ResourceAmounts.Uniform(10_000), queue: [upgrade, behind, behindToo]);
+        var b = Member(CentreB, ResourceAmounts.Uniform(10_000), queue: busyB);
         var store = Store(a, b);
 
-        // B's order holds a slot, so the upgrade (all 4) and the order behind it wait.
+        // The group has 4 slots and the upgrade needs 3; B's two orders leave only 2 free, so everything waits.
         Assert.True(store.Outcome(a.Id).Settlement.Queue.All(o => o.IsWaiting));
 
         store.SettleTo(T0.AddMinutes(11));
         var queueA = store.Outcome(a.Id).Settlement.Queue;
         Assert.Equal(T0.AddMinutes(10), queueA.Single(o => o.Id == upgrade.Id).StartedAt);
-        Assert.True(queueA.Single(o => o.Id == behind.Id).IsWaiting, "the upgrade holds every slot of the group");
+        Assert.False(queueA.Single(o => o.Id == behind.Id).IsWaiting, "the slot the upgrade leaves free goes to the next order");
+        Assert.True(queueA.Single(o => o.Id == behindToo.Id).IsWaiting, "the upgrade and one farm fill the group's 4 slots");
     }
 
     [Fact]
@@ -373,7 +374,7 @@ public sealed class LinkedStoreTests
         var b = Member(CentreB, new ResourceAmounts(0, 0, 10, 0), garrison: [new UnitStack(UnitType.Catapult, 20)]);
         var store = Store([guestsA, []], a, b);
 
-        var gross = Rate(a with { Garrison = [] }).Food + Rate(b with { Garrison = [] }).Food;
+        var gross = Rate(a.WithGarrison([])).Food + Rate(b.WithGarrison([])).Food;
         var upkeep = (80 * thrallUpkeep) + (30 * catapultUpkeep);
         Assert.True(upkeep > gross);
         var kills = (int)Math.Ceiling((upkeep - gross) / catapultUpkeep);

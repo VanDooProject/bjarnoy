@@ -51,6 +51,9 @@
     "UnreachableLeg": "Kein Landweg: Berge und breite Flüsse lassen sich nicht überqueren.",
     "NoSeaRoute": "Kein Seeweg: Dorthin kommen deine Schiffe übers Wasser nicht.",
     "RouteTooLong": "Die Reise ist zu weit. Wähle ein näheres Ziel.",
+    "NothingToRecall": "Die Armee ist schon auf dem Heimweg.",
+    "NoRouteHome": "Von ihrem jetzigen Standort aus findet die Armee keinen Weg nach Hause.",
+    "RouteRateLimited": "Zu viele Marschbefehle auf einmal. Warte kurz und versuch es dann noch mal.",
     "TargetNotReachable": "Kein Landweg: Berge und breite Flüsse lassen sich nicht überqueren.",
     "InsufficientProvisionsForRoundTrip": "Nicht genug Vorräte für die Hin- und Rückreise.",
     "TargetSettlementRequired": "Für diese Mission wird eine Zielsiedlung benötigt.",
@@ -91,9 +94,12 @@
     "NotCompleted": "Diese Aufgabe ist noch nicht erledigt.",
     "UnknownQuest": "Diese Aufgabe gibt es nicht.",
     "NoCampAtDestination": "Auf diesem Feld steht kein Wildtierlager.",
-    "HuntRequiresLandUnits": "Schiffe können kein Lager an Land jagen. Schick Landeinheiten.",
+    "HuntRequiresLandUnits": "Mit einer Flotte jagst du nur Lager am Strand, und nur mit Landtruppen an Bord.",
     "HuntRequiresFleet": "Ein Lager auf See kannst du nur mit Schiffen jagen. Landeinheiten erreichen es nicht.",
     "HexOccupiedByCamp": "Wilde Tiere halten dieses Feld noch.",
-    "HexOccupiedByEndgameSite": "Auf diesem Feld steht eine Utgardmauer oder ein Jötunn-Wachturm."
+    "HexOccupiedByEndgameSite": "Auf diesem Feld steht eine Utgardmauer oder ein Jötunn-Wachturm.",
+    "WrongCampBuilderCount": "Für ein Strandlager brauchst du genau zwei Lagerbauer.",
+    "CampSiteNotSandShore": "Ein Strandlager kannst du nur auf einem Sandfeld am Ufer errichten.",
+    "CampSiteNotFree": "Dieses Feld ist belegt: Hier steht schon etwas."
   }
 }

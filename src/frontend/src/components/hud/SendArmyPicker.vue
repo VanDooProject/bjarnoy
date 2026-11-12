@@ -1,9 +1,11 @@
 <script setup lang="ts">
-// The source picker behind the ring's "Send army here" / Attack / Support / Hunt bubbles: lists the home garrison and every army already
-// out in the field, home first and then the armies that can go, quickest first; the ones that cannot stay in the list, dimmed, with
-// the reason. One component for both surfaces: ArmyPanel.vue on desktop and MobileDispatchSheet.vue on phones. Tapping a row (or the
+// The source picker behind the ring's "Send army here" / Attack / Hunt bubbles: lists the home garrison of every realm the player owns
+// and every army they have out in the field. The open realm's rows come first, then the other realms' by travel time; the ones that
+// cannot go stay in the list, dimmed, with the reason. Each row names its realm, what it is (home garrison or army) and the mission it
+// would fly there: a Move for the realm that owns the tapped hex, a Support for the player's other realms. One component for both surfaces: ArmyPanel.vue on desktop and MobileDispatchSheet.vue on phones. Tapping a row (or the
 // army's marker on the map, MapView) selects it: the map frames the target and the armies that can go and draws the route, and the row
-// expands to pick the units (a standing army can be split) and send. Home hands over to the dispatch form for the garrison.
+// expands to pick the units (a standing army can be split) and send. A home row hands over to the dispatch form for that garrison.
+// Sending never changes the open realm.
 // Which sources can go is decided in lib/units/sendSources.ts, the same answer the ring menu used to enable its bubble.
 import { computed, nextTick, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -13,8 +15,8 @@ import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
 import { campName, missionName, unitName } from '../../i18n/catalogueNames';
 import { motionEnabled } from '../../lib/motion';
-import { isHuntUnit } from '../../lib/units/armyDispatch';
-import { stackCounts } from '../../lib/units/fieldOrderFeasibility';
+import { fleetLacksLandTroops, isHuntUnit } from '../../lib/units/armyDispatch';
+import { stackCounts, type SendMission } from '../../lib/units/fieldOrderFeasibility';
 import type { SendSource } from '../../lib/units/sendSources';
 import { useSendBlockText, useSendPickerRows } from '../../composables/useSendSources';
 import { useDispatchTargetBuilding } from '../../composables/useDispatchTargetBuilding';
@@ -26,7 +28,7 @@ const world = useWorldStore();
 const catalogue = useUnitCatalogueStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-// The home row's icon: a house glyph, no art needed.
+// A home row's icon: a house glyph, no art needed.
 const HOME_GLYPH = '\u2302';
 
 const picker = computed(() => world.sendPicker);
@@ -44,7 +46,13 @@ const targetName = computed(() => {
   }
   return t('hud.sendPicker.hex', { q: p.coord.q, r: p.coord.r });
 });
-const title = computed(() => t('hud.sendPicker.title', { mission: missionName(picker.value?.mission ?? 'move'), target: targetName.value }));
+// A hex of the player's own realms mixes missions between rows (Move for the realm that owns it, Support for the others), so the title
+// names no mission there; every other target has one mission for all rows.
+const title = computed(() =>
+  picker.value?.targetRealmId
+    ? t('hud.sendPicker.titleOwnRealm', { target: targetName.value })
+    : t('hud.sendPicker.title', { mission: missionName(picker.value?.mission ?? 'move'), target: targetName.value }),
+);
 
 function countUnits(stacks: ReadonlyArray<{ count: number }>): number {
   return stacks.reduce((sum, s) => sum + Math.max(0, s.count), 0);
@@ -65,8 +73,12 @@ function reasonFor(source: SendSource): string {
 
 interface PickerRow {
   source: SendSource;
+  /** The realm's name. */
   title: string;
   sub: string;
+  /** The mission this row flies at the target. */
+  mission: string;
+  missionKind: SendMission;
   eta: string | null;
   icon: string | null;
   selected: boolean;
@@ -77,15 +89,20 @@ const pickerRows = computed<PickerRow[]>(() =>
     const home = source.kind === 'home';
     const isFleet = !!army && army.stacks.some((s) => s.count > 0 && catalogue.byType[s.unit]?.class === 'ship');
     const standingAt = army?.movement ? army.movement.path[army.movement.path.length - 1]! : army?.position;
-    const sub = source.ok
-      ? home
-        ? t('hud.sendPicker.garrison')
-        : t(source.standing ? 'hud.sendPicker.standingAt' : 'hud.sendPicker.marchingTo', { q: standingAt?.q ?? 0, r: standingAt?.r ?? 0 })
-      : reasonFor(source);
+    const n = source.unitCount;
+    const sub = !source.ok
+      ? source.block === 'noUnits'
+        ? t('hud.sendPicker.homeEmpty')
+        : reasonFor(source)
+      : home
+        ? t('hud.sendPicker.homeUnits', { count: n }, n)
+        : t(source.standing ? 'hud.sendPicker.armyStandingAt' : 'hud.sendPicker.armyMarchingTo', { count: n, q: standingAt?.q ?? 0, r: standingAt?.r ?? 0 }, n);
     return {
       source,
-      title: home ? t('hud.sendPicker.home') : unitsLabel(countUnits(army?.stacks ?? [])),
+      title: source.realmName,
       sub,
+      mission: missionName(source.mission),
+      missionKind: source.mission,
       eta: source.travelMinutes !== null && (source.ok || source.locked) ? formatTravel(source.travelMinutes) : null,
       icon: home ? null : isFleet ? shipIconUrl : flagIconUrl,
       selected: picker.value?.selectedId === source.id,
@@ -123,7 +140,12 @@ const splitNote = computed(() => {
   if (leavingCount.value >= wholeCount.value) return t('hud.sendPicker.wholeArmy');
   return t('hud.sendPicker.splits', { go: leavingCount.value, stay: wholeCount.value - leavingCount.value });
 });
+// A hunt at a sand camp with ships leaving and no land troops aboard: the ships do not fight there (`HuntRequiresLandUnits`).
+const sandHuntLacksTroops = computed(
+  () => draft.value?.mission === 'hunt' && !!target.value?.campOnSand && fleetLacksLandTroops(leaving.value, catalogue.byType),
+);
 const verdictNote = computed(() => {
+  if (sandHuntLacksTroops.value) return t('apiErrors.rejections.HuntRequiresLandUnits');
   const v = verdict.value;
   if (!v || v.ok) return '';
   return v.reason === 'noFood' ? t('hud.sendPicker.reasons.noFood') : v.reason === 'unreachable' ? t('hud.sendPicker.reasons.unreachable') : '';
@@ -135,11 +157,12 @@ const canSend = computed(
     !draft.value.submitting &&
     leavingCount.value > 0 &&
     !!verdict.value?.ok &&
+    !sandHuntLacksTroops.value &&
     !buildingPicker.isMissingRequiredPick.value,
 );
-// A hunt on land cannot take ships along: their rows are locked at 0 (see trimToHuntUnits).
+// A hunt on a land camp other than sand cannot take ships along: their rows are locked at 0 (see trimToHuntUnits).
 function unitLocked(unit: string): boolean {
-  return draft.value?.mission === 'hunt' && !isHuntUnit(unit, catalogue.byType, !!target.value?.campAtSea);
+  return draft.value?.mission === 'hunt' && !isHuntUnit(unit, catalogue.byType, !!target.value?.campAtSea, !!target.value?.campOnSand);
 }
 const sendLabel = computed(() => {
   if (draft.value?.submitting) return t('hud.dispatchSheet.starting');
@@ -198,7 +221,10 @@ watch(
             <span class="send-row-title"><span v-if="row.source.locked" aria-hidden="true">🔒 </span>{{ row.title }}</span>
             <span class="send-row-sub">{{ row.sub }}</span>
           </span>
-          <span class="send-row-eta">{{ row.eta ?? '' }}</span>
+          <span class="send-row-side">
+            <span class="send-row-mission" :data-mission="row.missionKind">{{ row.mission }}</span>
+            <span class="send-row-eta">{{ row.eta ?? '' }}</span>
+          </span>
         </button>
 
         <div v-if="row.selected && draft" class="send-row-body">
@@ -346,15 +372,39 @@ watch(
   font-size: 13px;
   font-weight: 700;
 }
+.send-row-title,
+.send-row-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .send-row-sub {
   font-size: 11px;
   color: var(--muted);
 }
-.send-row-eta {
+.send-row-side {
   flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+.send-row-mission {
   font-size: 12px;
-  font-variant-numeric: tabular-nums;
+  font-weight: 700;
   color: var(--gold);
+}
+.send-row-mission[data-mission='support'] {
+  color: var(--realm-own);
+}
+.send-row-mission[data-mission='attack'],
+.send-row-mission[data-mission='hunt'] {
+  color: var(--rival);
+}
+.send-row-eta {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
 }
 .send-row-body {
   display: flex;

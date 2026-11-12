@@ -13,12 +13,14 @@ import { ref } from 'vue';
 import type { AtlasFrameRect } from '../lib/map/atlas';
 import type { BuildingLayers } from '../lib/map/buildingArt';
 import { clipFrameIndex, clipTimingOf } from '../lib/map/clipPlayback';
+import { animationPreference } from '../lib/perf/animationPreference';
 
 const props = defineProps<{
   layers: BuildingLayers;
   /**
    * Elapsed playback time in ms from a caller-owned clock (`useAnimationClock`, which holds still under reduced
-   * motion, Save-Data or an "animations off" setting). Without it the sprite runs its own timer.
+   * motion, Save-Data or an "animations off" setting). Without it the sprite runs its own timer, held by the same
+   * rule (`animationPreference.clipsEnabled`).
    */
   elapsedMs?: number;
 }>();
@@ -83,14 +85,14 @@ function startAnimation() {
   stopAnimation();
   elapsed.value = 0;
   const clip = props.layers.clip;
-  if (props.elapsedMs !== undefined || !clip || clip.frameRects.length <= 1) return;
+  if (props.elapsedMs !== undefined || !clip || clip.frameRects.length <= 1 || !animationPreference.clipsEnabled) return;
   const period = 1000 / clip.fps;
   timer = setInterval(() => {
     elapsed.value += period;
   }, period);
 }
 
-watch(() => props.layers.clip, startAnimation, { immediate: true });
+watch([() => props.layers.clip, () => animationPreference.clipsEnabled], startAnimation, { immediate: true });
 onBeforeUnmount(stopAnimation);
 </script>
 

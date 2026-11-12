@@ -4,7 +4,7 @@
 // drawer don't each re-derive the rows or the pending/error handling.
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { ApiError } from '../api/client';
+import { apiErrorMessage } from '../i18n/apiErrors';
 import { useWorldStore } from '../stores/world';
 import { unitName } from '../i18n/catalogueNames';
 import type { MessageSchema } from '../i18n/schema';
@@ -39,7 +39,7 @@ export function useGuestRows() {
     try {
       await world.sendGuestHomeLive(armyId);
     } catch (err) {
-      error.value = err instanceof ApiError ? err.message : t('hud.trainingQueue.sendHomeError');
+      error.value = apiErrorMessage(err, t('hud.trainingQueue.sendHomeError'));
     } finally {
       sendingId.value = null;
     }

@@ -7,28 +7,6 @@ namespace Bjarnoy.Domain.Tests.Settlers;
 
 public class FoundingTests
 {
-    [Theory]
-    [InlineData(0, 1)]
-    [InlineData(1, 1)]
-    [InlineData(2, 2)]
-    [InlineData(3, 4)]
-    [InlineData(4, 8)]
-    public void CostMultiplier_roughly_doubles_per_existing_settlement(int existingCount, double expected)
-    {
-        Assert.Equal(expected, Founding.CostMultiplier(existingCount));
-    }
-
-    [Fact]
-    public void ScaledSettlerCost_applies_the_multiplier_to_the_catalogue_base_cost()
-    {
-        var baseCost = UnitCatalogue.Get(UnitType.Settler).TrainingCost;
-
-        var scaled = Founding.ScaledSettlerCost(existingSettlementCount: 3);
-
-        Assert.Equal(baseCost.Wood * 4, scaled.Wood);
-        Assert.Equal(baseCost.Iron * 4, scaled.Iron);
-    }
-
     [Fact]
     public void Five_settlers_cost_the_same_in_total_as_the_former_three_settler_units()
     {

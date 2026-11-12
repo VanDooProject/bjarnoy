@@ -25,7 +25,7 @@ formula changes, re-run the lab and check all of them.
 
 Each world has a speed factor (1 = normal). It scales:
 
-- production (×)
+- production (×), including the renown from buildings (§6)
 - build, training and feast times (÷); build times also take Odin's Wisdom
 - the decay of buildings outside the realm (÷)
 - travel time of armies and fleets (÷)
@@ -35,7 +35,8 @@ per real hour on every world. So on a fast world a full load of provisions reach
 
 ## 2. Resources
 
-Wood, Brick, Food, Iron. (The internal key stays `stone` in the API, stores and i18n keys; the German name is Stein.)
+Wood, Brick, Food, Iron. Brick (made from clay) is the resource. The code still calls it `stone` internally (API, stores, i18n
+keys); it can be renamed to brick or clay when we work on those parts. The German name is Stein.
 
 - **Wood** — Lumberjack (forest).
 - **Brick** — the **Clay Brickworks** on bog ground is the start's brick
@@ -165,7 +166,7 @@ has 3–8 stages per building, and each level maps onto a stage
 | Palisade | 3 |
 | Bridge | 4 |
 
-Construction slots: `2 + ⌊(LH − 5) / 5⌋` → 2 at LH 1–9, 7 at LH 30.
+Construction slots: `max(2, LH)` → 2 at LH 1–2, then one more per level (10 at LH 10, 30 at LH 30). A Longhouse upgrade occupies 90 % of them, rounded down (min 1): 1 of 2 at LH 1–2, 9 of 10 at LH 10.
 
 **What caps a building's level.** Most buildings can never be a higher level
 than the Longhouse (level `L` needs LH `max(unlock, L)`). The **resource producers** (Lumberjack, Quarry, Clay Brickworks,
@@ -263,6 +264,7 @@ play.
   bog shore, creek, spring or lake). It replaces the tile it stands on; its
   art keeps that ground round it, so each ground has its own version of the
   tower.
+- **The Druid Hut and the Shrine of Ullr stand in the forest** (not on grass); the other land shrines stand on grass.
 - **Towers have to be chained to a longhouse.** A tower claims its ground only
   while it is connected: it stands on ground claimed by one of your
   longhouses, or by a tower that is itself connected. All of your longhouses
@@ -313,6 +315,8 @@ play.
 - A linked realm's units eat from the shared food. When it runs out, the units with the highest upkeep across the whole realm starve first, until the shared food stops falling.
 - Leaderboards show a linked realm once, under the oldest settlement's name, with the members' scores added up; battle and trade reports use the realm's name.
 - A linked realm holds one shrine in total, like a settlement: while it holds one or more, no new shrine can be built in it. Settlements that each raised a shrine before they linked keep them all, and all of them keep working, so linking settlements is a way to combine favours.
+- **Switching between your realms.** In the settlement view, tapping a hex of another of your realms switches to it right away: the top bar shows its name, Longhouse level and stock, the queues and garrison are its own, and you can build there as at home. Clicking the realm name in the top bar centres the map on your realm; the arrow beside it lists your realms, and picking one switches to it and centres the map on it.
+- **Sending troops between your realms.** When you send troops, you can pick the home garrison of any of your realms or any of their armies in the field. Troops from the realm you send them to move there; troops from another of your realms go as support.
 - **Producers are limited only by territory:** every matching hex inside
   the claim can hold one.
 - **Rivers and bog creeks block space but pay for it.** A river hex can't
@@ -322,7 +326,8 @@ play.
   the same for bog-ore works. A river or creek running through a claim is a
   trade: fewer producer hexes, and a much stronger boost on the ones that are
   left.
-- **Which ground takes what.** Sand takes only towers and walls. Every other
+- **Which ground takes what.** Sand takes only towers, walls and the Longhouse of a settlement founded on the shore (it
+  is never placed anew, only levelled where it stands). Every other
   ordinary building (Smithy, Archery Range, Barracks, Siege Workshop and the
   rest) stands on grass only. A stream, a widening or a river spring takes no
   building. A full-width river hex takes only what has art for its shape:
@@ -415,7 +420,7 @@ for friend and foe, a half-open end and a sealed end), the dispatch is refused w
 land route is left, and the range tint applies the same rules for the selected
 settlement's owner (friends come from the guild store: `friendlyUserIds`).
 
-**Siege.** On land a wall hex falls to **battering rams only** (a fleet can hit a wall's sea end, see below): a won Attack or Raid that names the wall hex
+**Siege.** On land a wall hex falls to **battering rams only**: a won Attack or Raid that names the wall hex
 as `TargetBuildingCoord` takes **one level** off it, however many rams survive
 (`SiegeResolver.LevelsTakenFrom`, the same rule as a bridge): a level-3 palisade needs three won
 sieges to be breached, and the hex is gone at level 0. Catapults do nothing to a wall. There is no
@@ -423,12 +428,12 @@ separate siege mission: the in-game "Siege" action on a rival wall opens an Atta
 settlement with the wall hex as the preferred target building. Which engine damages which
 building is one table (`UnitDefinition.SiegeTargets`, asked through `SiegeResolver.CanDamage`):
 
-| Target | Rams | Catapults | Ships (shore only) | Levels per won siege |
-|---|---|---|---|---|
-| Wall hex (Palisade, Palisade Gate) | yes | no | yes | 1 |
-| Tower | yes | yes | yes | `LevelsDestroyed` of the surviving power that can damage it |
-| Bridge | no | yes | yes | 1 |
-| Every other building (Longhouse included) | no | yes | yes | `LevelsDestroyed` |
+| Target | Rams | Catapults | Levels per won siege |
+|---|---|---|---|
+| Wall hex (Palisade, Palisade Gate) | yes | no | 1 |
+| Tower | yes | yes | `LevelsDestroyed` of the surviving power that can damage it |
+| Bridge | no | yes | 1 |
+| Every other building (Longhouse included) | no | yes | `LevelsDestroyed` |
 
 Only the surviving engines that can damage the target count towards its levels. A named target
 the surviving engines cannot damage takes no damage (the report has no siege line). Without a
@@ -436,27 +441,32 @@ named target, or when it is gone, the pick is random (seeded) among the building
 engines can damage; if there are none, no siege happens. Rams and catapults are trained at the Siege Workshop
 (section 8, the iron ladder).
 
-**Fleets.** A fleet Attack or Raid is always sent at one building on the target's shore: a building inside the target's
-claim on a shoreline land hex or on a sea hex (Dockyard, Fishing Hut, Shrine of Njörd, a wall's sea end). Without one the
-dispatch is refused (`FleetTargetBuildingRequired`, `FleetTargetBuildingNotOnShore`). The fleet's route ends at that
-building's hex and the target's Longhouse may be inland. The battle there is fought by the ships standing on that hex
-only: the defender's ships at home when the target is the hex they are anchored at (its Dockyard, or a centre on the
-shore), and allied fleets supporting it when the target is its centre. Land troops on either side stay out of it. With no
-ships on that hex there is no battle and the fleet's siege hits the building.
-A won fight damages only that building, by `LevelsDestroyed` of the surviving ships' siege power (Karve 10, Longship 20,
-starting values to be tuned; catapult 40), walls and bridges one level as above. A fleet has no random fallback: if the
-building is gone when it arrives, nothing is damaged.
+**Fleets.** Ships do no damage to buildings on land; fleet attacks are in [`skirmish/conquest.md`](skirmish/conquest.md).
 
 **Troops on ships.** Ships carry land units in slots (`ShipCargo`); every mission a fleet can take can carry them, and a
 dispatch whose passengers need more slots than its ships have is refused (`InsufficientShipCapacity`). A fleet moves at the
-speed of its slowest ship; passengers do not slow it. Passengers eat from the fleet's provisions. They stay on board during a
-fleet battle and do not fight; they only go ashore at a beach camp (`skirmish/beach-camp.md`). When ships are lost, the
+speed of its slowest ship; passengers do not slow it. Passengers eat from the fleet's provisions. They do not take part in the ship
+fight; in the land fight they fight from on board. They go ashore only at a beach camp or a home dock (`skirmish/conquest.md`). When ships are lost, the
 passengers beyond what the surviving ships can carry drown, the units that take the most slots first. Starting values, to be tuned:
 
 | Ship | Slots |
 |---|---|
 | Karve | 10 |
 | Longship | 20 |
+| Fire Ship | 0 |
+
+The **Fire Ship** is a ship hull that carries nothing and does not attack. Starting values, to be tuned:
+
+| Fire Ship | |
+|---|---|
+| Cost (wood / stone / food / iron) | 300 / 60 / 40 / 80 |
+| Training time | 40 min |
+| Needs | Longhouse 12, the Karve, a Dockyard |
+| Attack / defence | 0 / 25 |
+| Speed | 8 |
+| Troop slots / loot capacity | 0 / 0 |
+| Food capacity | 200 |
+| Upkeep per hour | 5 |
 
 | Unit | Slots |
 |---|---|
@@ -497,6 +507,11 @@ under the river (grass, forest or sand).
 **Movement** (land armies; fleets are unaffected). Only standing bridges count (level 1
 or more): a foundation leaves the river shut. The bridge's price replaces the
 impassable wide river in `HexPathfinder.LandStepCost`; streams keep their own price.
+A build or raze order is applied when its owner's settlement is next settled, but the river opens
+or shuts for every army from the instant the order **completes**: a finished build order counts at
+the level it reaches (the price table below is by level), a finished raze at the level it leaves
+(0: no bridge). `WorldBridges.TimelineAsync` reads that, and route planning asks it for the
+instant it plans at, like the walls (`WorldPalisades.TimelineAsync`).
 
 | Level | Land army |
 |---|---|
@@ -543,10 +558,14 @@ shuts the river again.
 A new settlement needs:
 
 1. a Cart Workshop (LH 10, Town Square 3), so troops come first (T6);
-2. 5 Settlers (the settler cost doubles per settlement already held);
-3. **renown**: +1 per building level per hour, across all settlements
+2. 5 Settlers, at the same price for every settlement;
+3. **renown**: +1 per building level per hour × world speed, across all settlements
    (`Renown.cs`), never spent. Thresholds: **80 000** for the 2nd, then
    ×2 per settlement.
+
+Ships and land escorts may travel with the settlers, overland and by sea. With a ship in it the convoy is a fleet: it
+sails from the Dockyard and lands on a land hex next to the sea. Every unit but the settlers stays as the new settlement's
+garrison.
 
 **Feasts (Town Square)** are what lets a strong player settle early:
 Travian's celebrations.
@@ -681,7 +700,9 @@ their renown.
   - **Exactly once per settlement.** Each quest has a bit in the settlement's
     claimed-quests mask, set in the same save that pays the reward, so a
     double click or a retry gets a 409 (`AlreadyClaimed`), never a second
-    payment. A second settlement has its own list.
+    payment. Quests are enabled only on a player's first settlement in a world
+    (the oldest by founding time): any later settlement lists none, and claiming one there gets a 409
+    (`NotFirstSettlement`).
   - **Only standing buildings count.** Queued and under-construction orders do
     not; a producer is any building (other than the Longhouse) that yields
     wood, brick, food or iron of its own, so storage, towers and the
@@ -756,6 +777,7 @@ them so the levels match. *Implemented:*
   | Spearman | Barracks | 5 (1) |
   | Axeman | Barracks | 6 (3): three levels after the bog-ore works open (LH 3) |
   | Karve | Dockyard | 8 (5) |
+  | Fire Ship | Dockyard | 12: after the Karve |
   | Bowman | Archery Range | 9 (4) |
   | Provisioner, Settler | Cart Workshop | 10 (4, 5) |
   | Berserker, Catapult, Longship | Barracks, Siege Workshop, Dockyard | 20 (6, 10, 8): with the Hammer Forge |
@@ -921,8 +943,6 @@ oases and NPC villages. Bjarnoy's version:
   clearing new islands must pay much more than farming smaller players.**
   Spawn, levels and guard ranges are implemented (no gameplay yet): see
   [`wildlife-camps.md`](./wildlife-camps.md).
-- **Beast dens** are the oasis equivalent: raidable spots whose loot grows
-  back over time, and which can later be annexed for a production bonus.
 - **Merchant ships** sail NPC routes between islands and can be raided at
   sea.
 - **Inactive players** become raidable, but only after several days of

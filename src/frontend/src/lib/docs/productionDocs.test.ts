@@ -74,7 +74,7 @@ describe('productionDocs', () => {
   it('adds 10% per matching neighbour up to 50%, only for the four terrain producers', () => {
     expect(neighbourBoost()).toEqual({ perNeighbour: 10, max: 50 });
     expect(boostTerrainsOf('lumberjack')).toEqual(['forest']);
-    expect(boostTerrainsOf('fishinghut')).toEqual(['sea', 'lake']);
+    expect(boostTerrainsOf('fishinghut')).toEqual(['sea', 'lake', 'inlandlake']);
     expect(boostTerrainsOf('bogoreworks')).toEqual(['bog', 'lake']);
     for (const none of ['farm', 'pumpkinfarm', 'reindeerherder', 'claybrickworks'] as const) {
       expect(boostTerrainsOf(none), none).toEqual([]);

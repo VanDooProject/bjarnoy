@@ -358,6 +358,7 @@ public sealed class AdminGodModeTests
         {
             Id = Guid.CreateVersion7(),
             SettlementId = Guid.CreateVersion7(),
+            HomeSpot = new HexCoord(0, 0),
             Stacks = [new UnitStack(UnitType.Thrall, 5)],
             Location = new ArmyLocation.InTransit(movement),
             Provisions = 1_000,
