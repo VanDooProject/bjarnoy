@@ -4,13 +4,13 @@
 // centres on it. On a hover-capable pointer the other rows show the same two buttons on hover: "Go to" pans without switching,
 // "Rename" switches first. The one menu for both the desktop bar and the phone bubble (`touch`); it renders through a teleport
 // so no stacking context of the bar or the bubble can put the queue drawer over it.
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { routerKey } from 'vue-router';
+import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
 import { buildingName } from '../../i18n/catalogueNames';
 import { fadePopover } from '../../lib/hud/chipMotion';
-import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
+import { vPhoneHidden } from '../../composables/usePhoneLayer';
+import { useAnchoredMenu } from '../../composables/useAnchoredMenu';
 import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{ name: string; /** The phone bubble's arrow: a 24px box with a 44px tap area. */ touch?: boolean }>();
@@ -32,13 +32,24 @@ interface RealmRow {
   r: number | null;
 }
 
-const open = ref(false);
-const layer = usePhoneLayer(open);
 const busy = ref(false);
 const rootEl = ref<HTMLElement | null>(null);
 const triggerEl = ref<HTMLButtonElement | null>(null);
 const menuEl = ref<HTMLElement | null>(null);
-const menuStyle = ref<Record<string, string>>({});
+
+// The phone bubble's menu spans the screen; the bar's hangs from the brand, 320px wide.
+const { open, layer, style: menuStyle, toggle: toggleMenu, close } = useAnchoredMenu({
+  trigger: triggerEl,
+  root: rootEl,
+  panel: menuEl,
+  anchor: (trigger) => trigger.closest<HTMLElement>(props.touch ? '.settlement-bubble' : '.hud-bar') ?? trigger,
+  horizontal: (a, trigger): Record<string, string> => {
+    if (props.touch) return { left: '16px', right: '16px' };
+    const brand = trigger.closest<HTMLElement>('.brand');
+    const left = brand ? brand.getBoundingClientRect().left : a.left;
+    return { left: `${Math.max(16, left)}px`, width: '320px', maxWidth: 'calc(100vw - 32px)' };
+  },
+});
 
 /** With 2+ realms the list; otherwise the one realm being run, from what the bar already knows. */
 const showList = computed(() => world.realmList.length > 1);
@@ -49,82 +60,13 @@ const rows = computed<RealmRow[]>(() =>
 );
 const isCurrent = (id: string) => id === (world.selectedSettlementId ?? '');
 
-function place() {
-  const trigger = triggerEl.value;
-  if (!trigger) return;
-  const phone = !!props.touch;
-  const anchor = trigger.closest<HTMLElement>(phone ? '.settlement-bubble' : '.hud-bar') ?? trigger;
-  const a = anchor.getBoundingClientRect();
-  const vertical: Record<string, string> =
-    a.bottom <= window.innerHeight / 2 ? { top: `${a.bottom + 8}px` } : { bottom: `${window.innerHeight - a.top + 8}px` };
-  if (phone) {
-    menuStyle.value = { ...vertical, left: '16px', right: '16px' };
-  } else {
-    const brand = trigger.closest<HTMLElement>('.brand');
-    const left = brand ? brand.getBoundingClientRect().left : a.left;
-    menuStyle.value = { ...vertical, left: `${Math.max(16, left)}px`, width: '320px', maxWidth: 'calc(100vw - 32px)' };
-  }
-}
-
-function close(returnFocus = false) {
-  if (!open.value) return;
-  open.value = false;
-  if (returnFocus) void nextTick(() => triggerEl.value?.focus());
-}
-
 function toggle() {
-  if (open.value) {
-    close();
-    return;
-  }
-  place();
-  open.value = true;
-  void world.refreshMyRealms();
+  const wasOpen = open.value;
+  toggleMenu();
+  if (!wasOpen) void world.refreshMyRealms();
 }
 
-function menuItems(): HTMLElement[] {
-  return menuEl.value ? Array.from(menuEl.value.querySelectorAll<HTMLElement>('[role="menuitem"]')) : [];
-}
-
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') {
-    e.stopPropagation();
-    close(true);
-    return;
-  }
-  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-  const items = menuItems();
-  if (!items.length) return;
-  e.preventDefault();
-  const at = items.indexOf(document.activeElement as HTMLElement);
-  const next = e.key === 'ArrowDown' ? (at + 1) % items.length : (at <= 0 ? items.length - 1 : at - 1);
-  items[next]?.focus();
-}
-
-function onOutsidePointerDown(e: Event) {
-  const target = e.target as Node;
-  if (rootEl.value?.contains(target) || menuEl.value?.contains(target)) return;
-  close();
-}
-
-watch(open, (isOpen) => {
-  if (isOpen) {
-    document.addEventListener('pointerdown', onOutsidePointerDown, true);
-    document.addEventListener('keydown', onKeydown);
-    void nextTick(() => menuItems()[0]?.focus({ preventScroll: true }));
-  } else {
-    document.removeEventListener('pointerdown', onOutsidePointerDown, true);
-    document.removeEventListener('keydown', onKeydown);
-  }
-});
-const router = inject(routerKey, null);
-const stopRouteWatch = router?.afterEach(() => close());
 onMounted(() => void world.refreshMyRealms());
-onBeforeUnmount(() => {
-  document.removeEventListener('pointerdown', onOutsidePointerDown, true);
-  document.removeEventListener('keydown', onKeydown);
-  stopRouteWatch?.();
-});
 
 /** Another realm's row: switch to it, then centre on it. The current row only closes. */
 async function pick(row: RealmRow) {
