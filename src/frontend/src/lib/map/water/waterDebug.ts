@@ -312,9 +312,10 @@ export interface WaterPerfStats {
    * like a broken counter unless the panel says where it ran.
    */
   bakedOnWorker: boolean;
-  /** Wall-clock of the last water mesh rebuild (which hexes the mesh covers, and its geometry), in ms — always on this thread. */
-  coverMs: number;
 }
+
+/** The foam width slider's range (hexes). WaterDebugPanel draws it and waterCoverage's ring rule is sized against its max. */
+export const FOAM_WIDTH_RANGE = { min: 0.1, max: 1.5, step: 0.05 };
 
 export const waterPerfStats: WaterPerfStats = {
   bakeMs: 0,
@@ -323,5 +324,4 @@ export const waterPerfStats: WaterPerfStats = {
   bakes: 0,
   frameMs: 0,
   bakedOnWorker: false,
-  coverMs: 0,
 };

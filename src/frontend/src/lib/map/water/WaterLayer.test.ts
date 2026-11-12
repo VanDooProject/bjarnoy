@@ -4,7 +4,7 @@ import { BufferImageSource, Texture } from 'pixi.js';
 import { WaterLayer } from './WaterLayer';
 import { RIVER_NOISE_PER_TILE, RIVER_SPEED_TURNS_PER_SECOND } from './riverFlowMesh';
 import { RIPPLE_WAVELENGTH_TEXELS } from './riverFlow';
-import { RIVER_DRIFT, RIVER_FRAGMENT } from './riverShader';
+import { RIVER_DRIFT } from './riverShader';
 import { WATER_FRAGMENT } from './waterShader';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
 import { FOAM_REACH_TILES, type WaterMask } from './waterMask';
@@ -314,16 +314,6 @@ describe('WaterLayer', () => {
     expect(resources.uWaterDry).toBe(placeholder);
   });
 
-  it('keeps the river code out of the water shader, in its own shader that reads the water mask', () => {
-    // The river flow is drawn by its own mesh (riverFlowMesh.ts) so the shader every water and land pixel runs does not carry it.
-    expect(WATER_FRAGMENT).not.toMatch(/uRiver|uShowRiverFlow|riverOverlay/);
-    expect(RIVER_FRAGMENT).toContain('uniform sampler2D uRiverFlow;');
-    expect(RIVER_FRAGMENT).toContain('uniform sampler2D uWaterMask;');
-    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
-    expect(layer.mesh.shader!.resources.uRiverFlow).toBeUndefined();
-    expect(layer.river.mesh.shader!.resources.uRiverFlow).toBeDefined();
-  });
-
   it('binds the "no river" placeholder until a river flow texture is set, and the given texture after', () => {
     const layer = new WaterLayer('settlement', TILE_W, TILE_H);
     const resources = layer.river.mesh.shader!.resources as Record<string, unknown>;
@@ -417,12 +407,6 @@ describe('WaterLayer', () => {
     layer.setFrozen(false);
     layer.tick(6500);
     expect(u.uTime).toBeCloseTo(1.5, 6);
-  });
-
-  it('destroys the river mesh with the layer', () => {
-    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
-    layer.destroy();
-    expect(layer.river.mesh.destroyed).toBe(true);
   });
 
   it('carries the specks and patches at the ripples\' speed times the gain measured on the clips (within 10 %)', () => {

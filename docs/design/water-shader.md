@@ -489,9 +489,15 @@ draw in two places, so the mesh is the hexagons of exactly those
 
 - **sea hexes**, read off the mask (`R` at the hex centre is above 0.5);
 - **the shore ring**: every land hex touching a sea hex. Foam reaches onto the
-  beach by `uFoamWidth * uFoamLandReach` tile widths (0.036 at the defaults, a
-  tenth of a tile at most), and a hex is ~0.87 tile across, so one ring is
-  enough.
+  beach by `uFoamWidth * uFoamLandReach` tile widths: 0.036 at the defaults,
+  and at the slider's highest (`FOAM_WIDTH_RANGE.max = 1.5`) 1.5 * 0.12 = 0.18.
+  A land hex that touches no sea is at least a hex across the flats (~0.87
+  tile) from it, so one ring is enough (a unit test pins the inequality).
+
+Only hexes overlapping the mask's rect are emitted, and both shaders discard
+where the mask UV is outside 0..1 (one shared GLSL snippet), so nothing is drawn
+past the baked rect. The `showWaterMask` debug view therefore shows only over the
+covered hexes.
 
 Rivers are not part of it: `RiverFlowMesh` draws them on its own quad over the river rect (§4.4e), so an
 inland river hex has no water mesh under it.
@@ -501,7 +507,7 @@ world position against the mask rect, so the fragment shader sees the same
 inputs it saw on the quad. Corners are computed from integer lattice
 coordinates, so neighbours share bit-identical vertices: no cracks, and no
 margin to overdraw, which matters because the blend is not idempotent. The
-mesh is rebuilt with each mask bake (about 1 ms, in reused buffers). World mode uses the same rule; there the sea covers most of
+mesh is rebuilt with each mask bake, in reused buffers; the cost scales with the hex count: ~0.3 ms in settlement view, ~5 ms for ~40k hexes on a world map zoomed far out. World mode uses the same rule; there the sea covers most of
 the viewport, so the mesh is simply large.
 
 ---
@@ -707,26 +713,18 @@ On a GPU a blended full-screen quad is a fraction of a millisecond, so this is a
 software-rasteriser figure and not a shipping one. The only lever with the right
 magnitude is *fewer fragments*.
 
-**And the obvious way to get them does not work here — measured, not assumed.**
-Covering the water with geometry instead of the viewport (a coarse grid over the
-mask region, emitting only the cells that hold water) is exactly the right shape
-of fix: those land fragments discard today, so dropping their cells changes
-nothing on screen. Built and measured, at one tile per cell, it dropped **2-3% of
-cells** — 640 of 660, 351 of 357 — and moved the frame by nothing.
+**Covering the water with geometry instead of the viewport does pay, when the cover is hex-exact.** An earlier attempt used a
+coarse grid over the mask region (one tile per cell) and dropped a cell only when it and all eight neighbours were pure land. That
+kept a ring one tile wide around every coastline, so the saving was the land's *area minus its perimeter* — and this game's islands
+are about six to eight tiles across, which is nearly all perimeter. It dropped **2-3% of cells** — 640 of 660, 351 of 357 — and
+moved the frame by nothing.
 
-The reason is the safety margin, and it is structural rather than a tuning
-problem. A cell can only be dropped when it and all eight neighbours are pure
-land, because the foam licks onto the beach and the mask's own filtering reaches
-a texel past the coast. That keeps a ring one tile wide around every coastline,
-so the saving is the land's *area minus its perimeter* — and this game's islands
-are about six to eight tiles across, which is nearly all perimeter. It would pay
-on a continent and does not pay on an archipelago. Finer cells do not rescue it:
-the ring is one cell wide either way, so shrinking cells shrinks the ring and the
-dropped interior together.
-
-What is left, then, is not an optimisation but a choice about the feature: accept
-that the settlement view costs a full-screen blended pass on a software
-rasteriser (free on any GPU), or do not draw water there.
+The shipped mesh (§3.7) is not that attempt. It is the exact top-face hexagon of every sea hex plus **one ring of land hexes**, and
+the ring is as thin as it can be: the foam reaches at most 0.18 tile onto the beach, far less than a hex. Together with moving the
+river flow out of the water shader into its own mesh (§4.4e), measured in settlement view on the Chromium software renderer at
+1280x800: **~700 ms to ~530 ms per frame**. Separately, the tight mesh alone is about -15% and the river split alone about -28%.
+These are software-renderer numbers; on a GPU the full-screen pass was already a fraction of a millisecond (see above), so they
+show where the software renderer's cost went, not a shipping gain.
 
 #### The breakdown is a button now
 
@@ -1343,7 +1341,7 @@ export interface WaterDebugFlags {
   /** The world map's Graphics wave squiggles (waveLayer) — its surface pattern of record. */
   legacyWaveSquiggles: boolean; // default true
   /** Debug: render the water mask's channels instead of water. */
-  showWaterMask: boolean;       // default false
+  showWaterMask: boolean;       // default false; shows only over the hexes the mesh covers (§3.7), not over inland land
   /** The moving marks on river, stream and bog-creek water (§4.4e). */
   riverFlow: boolean;           // default true
   /** Debug: colour river pixels by the static ripple phase (hue) and intensity (brightness). */

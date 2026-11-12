@@ -4,9 +4,10 @@
 // explains why at length).
 import { BufferImageSource, GlProgram, Mesh, MeshGeometry, Shader, Texture, UniformGroup } from 'pixi.js';
 import { noiseLatticeTexture } from '../shaderNoise';
+import { hexToRgb01, placeholderDryTexture } from '../shaderResources';
 import { FOAM_REACH_TILES, NEAR_SPAN_TILES, groundSquash, type WaterMask } from './waterMask';
-import { waterDebugFlags, waterDebugTuning, waterPerfStats } from './waterDebug';
-import { WaterMeshBuffers, seaAndShoreHexes, type OffsetHex } from './waterCoverage';
+import { waterDebugFlags, waterDebugTuning } from './waterDebug';
+import { WaterMeshBuffers, seaAndShoreHexes } from './waterCoverage';
 import { WATER_FRAGMENT, WATER_VERTEX } from './waterShader';
 import { RiverFlowMesh } from './riverFlowMesh';
 
@@ -111,7 +112,7 @@ const FOAM_INNER_FRACTION = 0.35;
  * further than the water side and at full strength — which put the whole band
  * on the sand.
  */
-const FOAM_LAND_REACH = 0.12;
+export const FOAM_LAND_REACH = 0.12;
 
 /** Peak alpha of the two tiers: [inner line, outer lace]. */
 const FOAM_ALPHA: [number, number] = [0.9, 0.6];
@@ -267,10 +268,6 @@ const CAUSTIC_BLOB_SOFT = 0.18;
 const CAUSTIC_BLOB_ALPHA = 0.42;
 const CAUSTIC_BLOB_COLOR = 0x0d1728;
 
-function hexToRgb01(hex: number): [number, number, number] {
-  return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
-}
-
 let sharedGlProgram: GlProgram | null = null;
 function waterGlProgram(): GlProgram {
   sharedGlProgram ??= new GlProgram({ vertex: WATER_VERTEX, fragment: WATER_FRAGMENT, name: 'water' });
@@ -300,18 +297,6 @@ function placeholderTaintTexture(): Texture {
   return sharedPlaceholderTaintTexture;
 }
 
-let sharedPlaceholderDryTexture: Texture | null = null;
-/**
- * A 1x1 fully clear texture (alpha 0): "nothing is dry" for the water shader, "no lake water" for the bog lake shader. Bound in world mode
- * and before the art masks are ready.
- */
-export function placeholderDryTexture(): Texture {
-  sharedPlaceholderDryTexture ??= new Texture({
-    source: new BufferImageSource({ resource: new Uint8Array([0, 0, 0, 0]), width: 1, height: 1 }),
-  });
-  return sharedPlaceholderDryTexture;
-}
-
 let sharedPlaceholderNoFoamTexture: Texture | null = null;
 /** A 1x1 "foam everywhere" (field = 0) texture, for the same reason `placeholderTexture` exists — a frame drawn before the first bake gets ordinary foam. */
 function placeholderNoFoamTexture(): Texture {
@@ -331,7 +316,6 @@ export class WaterLayer {
   private readonly tileWidth: number;
   private readonly tileHeight: number;
   // The hexes the mesh covers (waterCoverage.ts), rebuilt with every mask.
-  private seaAndShoreHexes: OffsetHex[] = [];
   // Not readonly: setMode() rewrites this (and the three foam uniforms baked
   // from it below) so the zoom-driven mode switch can flip it in place
   // instead of reconstructing the layer — see setMode's own doc comment.
@@ -460,17 +444,18 @@ export class WaterLayer {
         },
       }),
     });
-    // Like the fog quads: this covers the whole viewport and would otherwise
-    // sit directly over every hex, army marker and waypoint pin under it.
+    // Like the fog quads: this mesh sits directly over every hex, army marker and waypoint pin of the
+    // sea and shore it covers, and would otherwise swallow their clicks.
     this.mesh.eventMode = 'none';
     this.mesh.visible = false;
     this.river = new RiverFlowMesh(tileWidth, tileHeight);
   }
 
   /**
-   * Uploads a freshly-baked mask and moves the quad onto the exact world rect
-   * it was baked over, so mask UV and world position stay locked together
-   * however the camera moves.
+   * Uploads a freshly-baked mask and rebuilds the hexagon mesh (sea hexes plus
+   * the shore ring, waterCoverage.ts) in world space with UVs over the exact
+   * world rect it was baked over, so mask UV and world position stay locked
+   * together however the camera moves.
    *
    * Two things here are about texture lifetime rather than water. A re-bake at
    * the same zoom produces the same texel dimensions, so the common case
@@ -501,9 +486,9 @@ export class WaterLayer {
           // between a foam band that traces the coast and one that reads as
           // stair-stepped.
           scaleMode: 'linear',
-          // The quad covers exactly the baked rect, so UVs never leave 0..1;
-          // clamping is belt-and-braces against a filter tap at the very edge
-          // wrapping around to the far side of the mask.
+          // The mesh's hexes may reach past the baked rect, so UVs can leave 0..1: the shaders
+          // discard there, and clamping keeps a filter tap at the very edge from wrapping
+          // around to the far side of the mask.
           addressMode: 'clamp-to-edge',
           // This is data, not an image. Without this Pixi premultiplies RGB by
           // A on upload — and A here is water coverage, so every land texel
@@ -567,13 +552,11 @@ export class WaterLayer {
     this.river.setMask(this.texture!.source, mask.region.rect);
 
     // The mesh covers only the hexes the shader can draw on (waterCoverage.ts), not the whole baked rect.
-    const coverStart = performance.now();
-    this.seaAndShoreHexes = seaAndShoreHexes(mask, this.tileWidth, this.tileHeight);
-    const { positions, uvs, indices } = this.meshBuffers.fill(this.seaAndShoreHexes, this.tileWidth, this.tileHeight, mask.region.rect);
+    const hexes = seaAndShoreHexes(mask, this.tileWidth, this.tileHeight);
+    const { positions, uvs, indices } = this.meshBuffers.fill(hexes, this.tileWidth, this.tileHeight, mask.region.rect);
     this.geometry.getBuffer('aPosition').data = positions;
     this.geometry.getBuffer('aUV').data = uvs;
     this.geometry.indexBuffer.data = indices;
-    waterPerfStats.coverMs = performance.now() - coverStart;
     this.hasMask = true;
   }
 

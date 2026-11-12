@@ -1,4 +1,4 @@
-// The river shader — docs/design/water-shader.md §4.4e. The river flow drawing, on its own mesh (RiverLayer) over the river flow
+// The river shader — docs/design/water-shader.md §4.4e. The river flow drawing, on its own mesh (RiverFlowMesh) over the river flow
 // texture's world rect only, so the water shader (waterShader.ts) that every water and land pixel runs carries none of this code.
 //
 // Same portable GLSL convention as the water shader (no `#version` pragma, `in`/`out`/`texture()`, an output named `finalColor`).
@@ -6,7 +6,7 @@
 // (NOISE_LATTICE_GLSL) and `fbm` (WATER_FBM_GLSL) instead of repeating them.
 
 import { NOISE_LATTICE_GLSL } from "../shaderNoise";
-import { WATER_FBM_GLSL } from "./waterShader";
+import { WATER_FBM_GLSL, WATER_SPACE_GLSL } from "./waterShader";
 
 /**
  * How the river looks that drift downstream (cartoon patches, flow streaks' dashes, specks) are carried: each is a noise grid of
@@ -34,8 +34,6 @@ uniform float uTime;
 uniform float uGroundSquash;
 // The water mask's world rect: (minX, minY, 1 / width, 1 / height). The mask has its own UVs, not this mesh's.
 uniform vec4 uMaskRect;
-// The mask's signed near field is decoded back into tile widths with this, the same as the water shader does.
-uniform float uNearSpan;
 uniform float uShowRiverFlow;
 uniform float uRiverStyle;
 uniform vec4 uRiverRect;
@@ -48,6 +46,7 @@ uniform float uRiverScale;
 
 ${NOISE_LATTICE_GLSL}
 ${WATER_FBM_GLSL}
+${WATER_SPACE_GLSL}
 
 // The river ripple field (docs/design/water-shader.md §4.4e), premultiplied RGBA: rg = (cos, sin) of the ripple phase
 // * 0.5 + 0.5, b = intensity (0 at the bank), a = 1 where the river hex has flow. Its own UVs (riverUV). Returns the
@@ -228,15 +227,6 @@ float noiseQuintic(vec2 p) {
   vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
   return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
-float fbmRotated(vec2 p) {
-  const mat2 R = mat2(0.8, 0.6, -0.6, 0.8);
-  float sum = noiseQuintic(p) * 0.55;
-  p = R * p * 2.03 + 17.0;
-  sum += noiseQuintic(p) * 0.3;
-  p = R * p * 2.01 + 31.0;
-  sum += noiseQuintic(p) * 0.15;
-  return sum;
-}
 
 // Lobed blobs of a hashed cell grid carried downstream (see riverDrift): one per cell with a probability, centre jittered, stretched
 // along the flow, with a wavy edge from noise sampled in the carried grid coordinates, so the wobble travels with the blob.
@@ -367,10 +357,10 @@ void main() {
   // only where the mask says land. The flow texture is clipped to the river hex's own top face, which tessellates exactly with its
   // neighbours', so nothing else needs masking.
   vec2 maskUV = (vWorld - uMaskRect.xy) * uMaskRect.zw;
-  // The water mesh covers the mask's rect and nothing outside it.
-  if (maskUV.x < 0.0 || maskUV.x > 1.0 || maskUV.y < 0.0 || maskUV.y > 1.0) discard;
-  float dist = (texture(uWaterMask, maskUV).r - 0.5) * uNearSpan * 2.0;
-  if (dist > 0.0) discard;
+  // The water mesh draws sea and shore hexes inside the mask's rect and nothing outside it; the river does the same.
+  if (outsideMask(maskUV)) discard;
+  // R above 0.5 is water (0.5 is the coastline).
+  if (texture(uWaterMask, maskUV).r > 0.5) discard;
 
   vec4 flow = sampleRiverFlow();
   if (flow.a <= 0.5) discard;
@@ -381,8 +371,7 @@ void main() {
   }
   if (flow.b <= 0.01) discard;
 
-  // Ground space: world space with y un-foreshortened, as in the water shader.
-  vec2 vGround = vec2(vWorld.x, vWorld.y / uGroundSquash);
+  vec2 vGround = groundSpace(vWorld);
   vec4 river = riverOverlay(ripple, flow.b, vGround);
   if (river.a < 0.004) discard;
   finalColor = river;

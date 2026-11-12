@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { hexesInRadius, neighbors, oddQToAxial, axialToOddQ, type AxialCoord } from '../../hex/coords';
-import { isoGridPosition, isoTopPoints } from '../../hex/geometry';
-import { bakeWaterMask } from './waterMask';
+import { isoGridPosition, isoPixelToAxial, isoTopPoints } from '../../hex/geometry';
+import { bakeWaterMask, NEAR_SPAN_TILES } from './waterMask';
+import { FOAM_WIDTH_RANGE } from './waterDebug';
+import { FOAM_LAND_REACH } from './WaterLayer';
 import { waterMaskRegion } from './waterMaskLayout';
-import { WaterMeshBuffers, seaAndShoreHexes } from './waterCoverage';
+import { HEX_ACROSS_FLATS_TILES, WaterMeshBuffers, seaAndShoreHexes } from './waterCoverage';
 
 const TILE_W = 168;
 const TILE_H = (TILE_W * 92) / 200;
@@ -47,6 +49,70 @@ describe('water mesh coverage', () => {
       const cy = g.y + TILE_H / 2;
       if (cx < rect.minX || cx > rect.maxX || cy < rect.minY || cy > rect.maxY) continue;
       expect(covered.has(key(c.q, c.r)), `sea ${c.q},${c.r}`).toBe(true);
+    }
+  });
+});
+
+describe('shore ring assumption', () => {
+  it('keeps the foam reach onto land, at the slider highest, inside the ring', () => {
+    // A land hex with no sea neighbour is at least a hex-across-the-flats from the sea; the ring only covers what foam can reach.
+    expect(FOAM_WIDTH_RANGE.max * FOAM_LAND_REACH).toBeLessThan(HEX_ACROSS_FLATS_TILES);
+  });
+});
+
+describe('water mesh pixel coverage', () => {
+  // A deterministic archipelago whose land and sea both touch the baked rect's edges.
+  function archipelago() {
+    let s = 12345;
+    const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    const landSet = new Set<string>();
+    for (const c of hexesInRadius({ q: 0, r: 0 }, 9)) if (rnd() < 0.45) landSet.add(key(c.q, c.r));
+    const region = waterMaskRegion({ minX: -500, minY: -300, maxX: 500, maxY: 300 }, TILE_W);
+    return bakeWaterMask(region, TILE_W, TILE_H, { isLand: (q, r) => landSet.has(key(q, r)) });
+  }
+
+  it('covers every texel the shader would draw on, and no hex lies outside the rect', () => {
+    const mask = archipelago();
+    const hexes = seaAndShoreHexes(mask, TILE_W, TILE_H);
+    const covered = asKeys(hexes);
+    const { rect, width, texelWorldSize } = mask.region;
+    const reach = FOAM_WIDTH_RANGE.max * FOAM_LAND_REACH;
+
+    let drawn = 0;
+    let landDrawn = 0;
+    const missed: string[] = [];
+    for (let y = 0; y < mask.height; y++) {
+      for (let x = 0; x < width; x++) {
+        const dist = (mask.data[(y * width + x) * 4]! / 255 - 0.5) * NEAR_SPAN_TILES * 2;
+        // The water shader discards land farther than the foam's reach from the coast.
+        if (dist <= 0 && -dist > reach) continue;
+        drawn++;
+        if (dist <= 0) landDrawn++;
+        const a = isoPixelToAxial({ x: rect.minX + (x + 0.5) * texelWorldSize, y: rect.minY + (y + 0.5) * texelWorldSize }, TILE_W, TILE_H);
+        if (!covered.has(key(a.q, a.r))) missed.push(`${x},${y}`);
+      }
+    }
+    expect(drawn).toBeGreaterThan(0);
+    expect(landDrawn).toBeGreaterThan(0);
+    expect(missed).toEqual([]);
+
+    // Sea and land both reach the rect's edge in this fixture, and nothing is emitted that the rect does not touch.
+    const { positions } = new WaterMeshBuffers().fill(hexes, TILE_W, TILE_H, rect);
+    for (let k = 0; k < hexes.length; k++) {
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (let v = 0; v < 6; v++) {
+        const px = positions[(k * 6 + v) * 2]!;
+        const py = positions[(k * 6 + v) * 2 + 1]!;
+        minX = Math.min(minX, px);
+        maxX = Math.max(maxX, px);
+        minY = Math.min(minY, py);
+        maxY = Math.max(maxY, py);
+      }
+      const overlaps = maxX > rect.minX && minX < rect.maxX && maxY > rect.minY && minY < rect.maxY;
+      expect(overlaps, `hex ${hexes[k]!.col},${hexes[k]!.row}`).toBe(true);
     }
   });
 });

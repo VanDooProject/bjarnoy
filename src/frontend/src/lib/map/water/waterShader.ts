@@ -73,6 +73,21 @@ float fbm(vec2 p) {
 }
 `;
 
+/**
+ * GLSL both the water shader and the river shader (riverShader.ts) use: the mask UV range check and the ground-space line. Needs
+ * `uGroundSquash` declared in front of it.
+ */
+export const WATER_SPACE_GLSL = `
+// True where a mask UV is off the baked rect: the mask does not describe the world there, so nothing is drawn.
+bool outsideMask(vec2 uv) {
+  return uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0;
+}
+// Ground space: world space with y un-foreshortened, so a pattern built there reads as lying on the isometric ground plane.
+vec2 groundSpace(vec2 world) {
+  return vec2(world.x, world.y / uGroundSquash);
+}
+`;
+
 export const WATER_FRAGMENT = `
 precision highp float;
 
@@ -145,6 +160,7 @@ uniform vec3 uTaintFoamColor;
 // only takes whole numbers.
 ${NOISE_LATTICE_GLSL}
 ${WATER_FBM_GLSL}
+${WATER_SPACE_GLSL}
 // The same value noise, returning its **analytic derivative** alongside its
 // value: vec3(value, d/dx, d/dy).
 //
@@ -489,6 +505,8 @@ vec4 maskDebugColor(vec4 m, float dry) {
 }
 
 void main() {
+  // The mesh's hexes may reach past the baked rect; the mask says nothing out there.
+  if (outsideMask(vUV)) discard;
   vec4 m = sampleMask();
   float taint = sampleTaint();
 
@@ -499,7 +517,7 @@ void main() {
   // than in vWorld. (The wave arcs of §4.2 are the deliberate exception: they
   // are the prototype's stroked marks *on* the sea, and it draws them in screen
   // space.)
-  vec2 vGround = vec2(vWorld.x, vWorld.y / uGroundSquash);
+  vec2 vGround = groundSpace(vWorld);
 
   if (uShowMask > 0.5) {
     vec4 dbg = maskDebugColor(m, sampleDry());

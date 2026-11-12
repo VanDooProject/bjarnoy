@@ -1,9 +1,10 @@
 // The river flow mesh — docs/design/water-shader.md §4.4e. Draws the river flow (riverShader.ts) on its own quad over the river
 // flow texture's world rect, right above the water mesh (worldLayerOrder), instead of inside the water shader that every water and
 // land pixel runs. WaterLayer owns one and feeds it the mask, the clock and the debug flags, so the two always agree.
-import { BufferImageSource, GlProgram, Mesh, MeshGeometry, Shader, Texture, UniformGroup, type TextureSource } from 'pixi.js';
+import { GlProgram, Mesh, MeshGeometry, Shader, type Texture, UniformGroup, type TextureSource } from 'pixi.js';
 import { noiseLatticeTexture } from '../shaderNoise';
-import { NEAR_SPAN_TILES, groundSquash } from './waterMask';
+import { hexToRgb01, placeholderDryTexture } from '../shaderResources';
+import { groundSquash } from './waterMask';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
 import { RIVER_FRAGMENT } from './riverShader';
 import { WATER_VERTEX } from './waterShader';
@@ -22,23 +23,10 @@ const RIVER_ARC_PERIODS = 0.35;
 
 type Rect = { minX: number; minY: number; maxX: number; maxY: number };
 
-function hexToRgb01(hex: number): [number, number, number] {
-  return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
-}
-
 let sharedGlProgram: GlProgram | null = null;
 function riverGlProgram(): GlProgram {
   sharedGlProgram ??= new GlProgram({ vertex: WATER_VERTEX, fragment: RIVER_FRAGMENT, name: 'river' });
   return sharedGlProgram;
-}
-
-let sharedPlaceholderTexture: Texture | null = null;
-/** A 1x1 transparent texture (alpha 0: "no river here" for the flow and psi samplers, "all land" for the water mask), bound until the real ones are set. */
-function placeholderTexture(): Texture {
-  sharedPlaceholderTexture ??= new Texture({
-    source: new BufferImageSource({ resource: new Uint8Array([0, 0, 0, 0]), width: 1, height: 1 }),
-  });
-  return sharedPlaceholderTexture;
 }
 
 export class RiverFlowMesh {
@@ -54,7 +42,6 @@ export class RiverFlowMesh {
       uGroundSquash: { value: groundSquash(tileWidth, tileHeight), type: 'f32' },
       // The water mask's world rect: (minX, minY, 1 / width, 1 / height).
       uMaskRect: { value: new Float32Array([0, 0, 1, 1]), type: 'vec4<f32>' },
-      uNearSpan: { value: NEAR_SPAN_TILES, type: 'f32' },
       uShowRiverFlow: { value: 0, type: 'f32' },
       uRiverStyle: { value: 0, type: 'f32' },
       // The river flow texture's own world rect: (minX, minY, 1 / width, 1 / height).
@@ -79,9 +66,9 @@ export class RiverFlowMesh {
         glProgram: riverGlProgram(),
         resources: {
           riverUniforms: this.uniforms,
-          uWaterMask: placeholderTexture().source,
-          uRiverFlow: placeholderTexture().source,
-          uRiverPsi: placeholderTexture().source,
+          uWaterMask: placeholderDryTexture().source,
+          uRiverFlow: placeholderDryTexture().source,
+          uRiverPsi: placeholderDryTexture().source,
           uNoiseLattice: noiseLatticeTexture().source,
         },
       }),
@@ -103,8 +90,8 @@ export class RiverFlowMesh {
    */
   setRiverFlowTexture(texture: Texture | null, rect: Rect | null = null, psi: Texture | null = null): void {
     this.hasRiver = texture !== null && rect !== null;
-    this.mesh.shader!.resources.uRiverFlow = (texture ?? placeholderTexture()).source;
-    this.mesh.shader!.resources.uRiverPsi = (texture && psi ? psi : placeholderTexture()).source;
+    this.mesh.shader!.resources.uRiverFlow = (texture ?? placeholderDryTexture()).source;
+    this.mesh.shader!.resources.uRiverPsi = (texture && psi ? psi : placeholderDryTexture()).source;
     const r = texture && rect ? rect : { minX: 0, minY: 0, maxX: 1, maxY: 1 };
     this.uniforms.uniforms.uRiverRect = new Float32Array([r.minX, r.minY, 1 / (r.maxX - r.minX), 1 / (r.maxY - r.minY)]);
     const positions = this.geometry.getBuffer('aPosition');

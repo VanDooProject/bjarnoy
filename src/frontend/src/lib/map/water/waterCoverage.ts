@@ -12,8 +12,13 @@
 //   2. the shore ring: every land hex touching a sea hex, because the foam
 //      reaches onto the beach by `uFoamWidth * uFoamLandReach` tile widths
 //      (0.3 * 0.12 = 0.036 of a tile in settlement view at the default tuning,
-//      0.4 * 0.12 at the slider's highest; a hex is ~0.87 tile across the
-//      ground), which one ring of land covers many times over.
+//      `FOAM_WIDTH_RANGE.max * 0.12 = 0.18` at the slider's highest; a hex is
+//      `HEX_ACROSS_FLATS_TILES` ~0.87 tile across the ground, so a hex that
+//      does not touch the sea is at least that far from it), which one ring of
+//      land covers many times over.
+//
+// Only hexes that overlap the mask's rect are emitted: the mask says nothing
+// outside it, and the shaders discard there.
 //
 // Each covered hex is its exact top-face hexagon (`isoTopPoints`), built from
 // shared lattice coordinates, so neighbouring hexes share bit-identical edge
@@ -29,6 +34,9 @@ export interface OffsetHex {
   row: number;
 }
 
+/** Distance across a hex between two opposite flats, in tile widths: how far from the sea a land hex that does not touch it is. */
+export const HEX_ACROSS_FLATS_TILES = Math.sqrt(3) / 2;
+
 /** R byte of the mask at or above this is water (`R = 0.5` is the coastline). */
 const WATER_R_BYTE = 128;
 
@@ -39,7 +47,8 @@ const WATER_R_BYTE = 128;
  * with what the bake saw whichever thread baked it.
  *
  * One extra hex past the region on every side is classified with the nearest
- * texel, so hexes straddling the region's edge are still judged.
+ * texel so hexes straddling the region's edge are judged right (and are seen
+ * as neighbours), but only hexes overlapping the region's rect are returned.
  */
 export function seaAndShoreHexes(mask: WaterMask, tileWidth: number, tileHeight: number): OffsetHex[] {
   const { rect, width, height, texelWorldSize } = mask.region;
@@ -72,7 +81,12 @@ export function seaAndShoreHexes(mask: WaterMask, tileWidth: number, tileHeight:
     // Odd columns sit half a hex lower, so their side neighbours are rows r and r + 1; even columns', r - 1 and r.
     const sideLo = odd ? 0 : -1;
     const sideHi = odd ? 1 : 0;
+    const x0 = (col0 + c) * colPitch;
+    if (x0 >= rect.maxX || x0 + tileWidth <= rect.minX) continue;
+    const yShift = odd ? tileHeight / 2 : 0;
     for (let r = 0; r < rows; r++) {
+      const y0 = (row0 + r) * tileHeight + yShift;
+      if (y0 >= rect.maxY || y0 + tileHeight <= rect.minY) continue;
       const covered =
         isSea[c * rows + r] === 1 ||
         seaAt(c, r - 1) ||
