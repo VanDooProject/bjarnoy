@@ -122,7 +122,7 @@ its own already-computed live army render positions (`resolveArmyPoint`,
 reused as-is), composited as a `min()` of the troop's own ramps with the
 mask's ramp values — never written into `uMask`/`uMaskPrev`, exactly as designed below. The uniforms are `uArmyVisionSources` (x, y), `uArmyVisionRadii` (one radius in hexes per source), `uArmyVisionCount`,
 `uArmyHexSize` and `uArmyRamp`; the ramp offsets and margins are relative to each source's own radius. Vision is a
-per-unit-type stat (`UnitDefinition.VisionRadius`, in rings): Thrall 3; Spearman, Axeman, Bowman, Berserker,
+per-unit-type stat (`UnitDefinition.VisionRadius`, in rings): Thrall 3; Spearman, Axeman, Bowman, Skirmisher, Berserker,
 Provisioner and Settler 2; Catapult and Ram 1; Karve 6; Longship 4. Faster units see a little more (scouts), stronger
 ones less. An army or fleet sees as far as the highest value among the unit types actually in it (count above zero),
 plus the Ravens' rings of its home settlement (additive). The backend computes this once

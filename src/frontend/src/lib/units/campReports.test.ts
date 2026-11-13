@@ -9,6 +9,6 @@ describe('campReports', () => {
   it('totals loot and losses', () => {
     expect(totalCampLoot({ wood: 1, stone: 2, food: 3.4, iron: 4 })).toBe(10);
     expect(totalUnitsLost({ units: [{ type: 'a', sent: 5, lost: 2 }, { type: 'b', sent: 1, lost: 1 }] })).toBe(3);
-    expect(totalBeastsLost({ beasts: [{ tier: 'young', before: 3, lost: 3 }, { tier: 'adult', before: 6, lost: 1 }] })).toBe(4);
+    expect(totalBeastsLost({ beasts: [{ tier: 'young', before: 3, lost: 3, volleyLost: 0 }, { tier: 'adult', before: 6, lost: 1, volleyLost: 0 }] })).toBe(4);
   });
 });

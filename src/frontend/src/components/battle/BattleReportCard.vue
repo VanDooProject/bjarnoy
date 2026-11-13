@@ -29,6 +29,9 @@ export interface BattleReportCardData {
   winner: string;
   attackPower: number;
   defensePower: number;
+  /** The ranged attack each side threw in the land fight's volley; 0 without ranged units. */
+  attackerVolleyPower?: number;
+  defenderVolleyPower?: number;
   lootTaken: ResourceLine;
   attackerLines: BattleReportAttackerLine[];
   defenderLines: BattleReportDefenderLine[];

@@ -2191,6 +2191,16 @@ describe('palisade art', () => {
     expect(baseTextureFor(textures, tile)).toBe('beach-base-1');
   });
 
+  it('a building without base art of its own on an inland lake takes the sea base, like the lake itself', () => {
+    // Regression: the Fishing Hut on an `inlandlake` hex (the showcase re-roll picked such seeds at random) fell back to
+    // `base['inlandlake']`, which does not exist: the lake draws with the sea's art.
+    const textures = emptyTextures();
+    textures.base.sea = orientationMap('sea-base' as unknown as never);
+    const tile: Tile = { q: 0, r: 0, terrain: 'inlandlake', isCoastalWater: true, orientation: 'NW', buildingType: 'fishinghut', buildingLevel: 7 };
+
+    expect(baseTextureFor(textures, tile)).toBe('sea-base');
+  });
+
   it('keeps the sea end on its own coastal base', () => {
     const textures = emptyTextures();
     textures.base.sea = orientationMap('sea-base' as unknown as never);

@@ -62,6 +62,12 @@ public enum UnitType
     /// shore, build it and are used up doing so. See <c>docs/design/skirmish/beach-camp.md</c>.
     /// </summary>
     CampBuilder = 12,
+
+    /// <summary>
+    /// Fast, cheap ranged foot unit trained at the Archery Range: throws spears in the volley before the main fight
+    /// (<c>docs/design/units-and-ships.md</c> section 4), weak in the fight itself.
+    /// </summary>
+    Skirmisher = 13,
 }
 
 public static class UnitTypeExtensions
@@ -81,6 +87,7 @@ public static class UnitTypeExtensions
         UnitType.Ram => "ram",
         UnitType.FireShip => "fireship",
         UnitType.CampBuilder => "campbuilder",
+        UnitType.Skirmisher => "skirmisher",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown unit type"),
     };
 }

@@ -213,6 +213,7 @@ public class UnitCatalogueTests
     [InlineData(UnitType.Axeman, 6)]
     [InlineData(UnitType.Karve, 8)]
     [InlineData(UnitType.Bowman, 9)]
+    [InlineData(UnitType.Skirmisher, 9)]
     [InlineData(UnitType.Provisioner, 10)]
     [InlineData(UnitType.Settler, 10)]
     [InlineData(UnitType.Berserker, 20)]
@@ -341,5 +342,54 @@ public class UnitCatalogueTests
         Assert.True(UnitCatalogue.IsAvailable(UnitType.FireShip, 12));
         Assert.False(UnitCatalogue.IsAvailable(UnitType.FireShip, 12, _ => 0));
         Assert.True(UnitCatalogue.IsAvailable(UnitType.FireShip, 12, t => t == BuildingType.Dockyard ? 1 : 0));
+    }
+
+    [Fact]
+    public void The_skirmisher_is_a_fast_cheap_ranged_unit_of_the_archery_range()
+    {
+        var skirmisher = UnitCatalogue.Get(UnitType.Skirmisher);
+
+        Assert.Equal(13, (int)UnitType.Skirmisher);
+        Assert.Equal("skirmisher", UnitType.Skirmisher.ToWireName());
+        Assert.Equal(BuildingType.ArcheryRange, skirmisher.RequiredBuildingType);
+        Assert.Equal(9, skirmisher.RequiredLonghouseLevel);
+        Assert.Equal(10, skirmisher.Attack);
+        Assert.Equal(3, skirmisher.Defense);
+        Assert.Equal(6, skirmisher.Speed);
+        Assert.Equal(2, skirmisher.CarryCapacity);
+        Assert.Equal(30, skirmisher.FoodCarryCapacity);
+        Assert.Equal(0.25, skirmisher.UpkeepPerHour);
+        Assert.Equal(1, skirmisher.CargoSlots);
+        Assert.Equal(2, skirmisher.VisionRadius);
+        Assert.Equal(new ResourceAmounts(Wood: 60, Stone: 25, Food: 20, Iron: 15), skirmisher.TrainingCost);
+        Assert.Equal(TimeSpan.FromMinutes(8), skirmisher.TrainingDuration);
+    }
+
+    [Fact]
+    public void Only_the_bowman_and_the_skirmisher_are_ranged()
+    {
+        Assert.Equal(
+            [UnitType.Bowman, UnitType.Skirmisher],
+            UnitCatalogue.AllTypes.Where(t => UnitCatalogue.Get(t).Ranged).OrderBy(t => t).ToArray());
+    }
+
+    [Fact]
+    public void The_rebalanced_land_units_follow_the_spec_table()
+    {
+        var axeman = UnitCatalogue.Get(UnitType.Axeman);
+        Assert.Equal(40, axeman.CarryCapacity);
+
+        var berserker = UnitCatalogue.Get(UnitType.Berserker);
+        Assert.Equal(new ResourceAmounts(Wood: 140, Stone: 60, Food: 30, Iron: 90), berserker.TrainingCost);
+        Assert.Equal(TimeSpan.FromMinutes(30), berserker.TrainingDuration);
+        Assert.Equal(15, berserker.CarryCapacity);
+        Assert.Equal(3, berserker.CargoSlots);
+
+        var bowman = UnitCatalogue.Get(UnitType.Bowman);
+        Assert.Equal(20, bowman.Attack);
+        Assert.Equal(12, bowman.Defense);
+        Assert.Equal(2, bowman.CarryCapacity);
+        Assert.Equal(new ResourceAmounts(Wood: 80, Stone: 50, Food: 20, Iron: 35), bowman.TrainingCost);
+        Assert.Equal(TimeSpan.FromMinutes(15), bowman.TrainingDuration);
     }
 }

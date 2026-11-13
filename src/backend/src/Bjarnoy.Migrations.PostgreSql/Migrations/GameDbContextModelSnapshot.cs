@@ -523,6 +523,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("UnitType")
                         .HasColumnType("integer");
 
+                    b.Property<int>("VolleyLost")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("BattleReportId");
@@ -548,6 +551,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("UnitType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("VolleyLost")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
@@ -576,6 +582,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("AttackerSettlementId")
                         .HasColumnType("uuid");
 
+                    b.Property<double>("AttackerVolleyPower")
+                        .HasColumnType("double precision");
+
                     b.Property<string>("DefenderOwnerId")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -583,6 +592,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<Guid>("DefenderSettlementId")
                         .HasColumnType("uuid");
+
+                    b.Property<double>("DefenderVolleyPower")
+                        .HasColumnType("double precision");
 
                     b.Property<double>("DefensePower")
                         .HasColumnType("double precision");
@@ -735,6 +747,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("Tier")
                         .HasColumnType("integer");
 
+                    b.Property<int>("VolleyLost")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CampReportId");
@@ -751,6 +766,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<double>("ArmyPower")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("ArmyVolleyPower")
                         .HasColumnType("double precision");
 
                     b.Property<bool>("CampCleared")
@@ -953,6 +971,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("SideASettlementId")
                         .HasColumnType("uuid");
 
+                    b.Property<double>("SideAVolleyPower")
+                        .HasColumnType("double precision");
+
                     b.Property<bool>("SideAWasDefending")
                         .HasColumnType("boolean");
 
@@ -969,6 +990,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<Guid>("SideBSettlementId")
                         .HasColumnType("uuid");
+
+                    b.Property<double>("SideBVolleyPower")
+                        .HasColumnType("double precision");
 
                     b.Property<bool>("SideBWasDefending")
                         .HasColumnType("boolean");
@@ -1010,6 +1034,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("UnitType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("VolleyCount")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");

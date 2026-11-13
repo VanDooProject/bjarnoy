@@ -779,7 +779,7 @@ late add-on. The unit costs and unlock levels are reworked together with
 them so the levels match. *Implemented:*
 
 - the Thrall costs no iron (it was 15); every other unit still does (Spearman
-  40, Axeman 60, Bowman 50, Berserker 120, Provisioner 20, Karve 100,
+  40, Axeman 60, Bowman 35, Skirmisher 15, Berserker 90, Provisioner 20, Karve 100,
   Longship 220, Settler 60, Catapult 250);
 - each unit's Longhouse gate follows the building that trains it:
 
@@ -790,7 +790,7 @@ them so the levels match. *Implemented:*
   | Axeman | Barracks | 6 (3): three levels after the bog-ore works open (LH 3) |
   | Karve | Dockyard | 8 (5) |
   | Fire Ship | Dockyard | 12: after the Karve |
-  | Bowman | Archery Range | 9 (4) |
+  | Bowman, Skirmisher | Archery Range | 9 (4) |
   | Provisioner, Settler | Cart Workshop | 10 (4, 5) |
   | Berserker, Catapult, Longship | Barracks, Siege Workshop, Dockyard | 20 (6, 10, 8): with the Hammer Forge |
   | Ram | Siege Workshop | 20: after the Berserker, like the Catapult |
