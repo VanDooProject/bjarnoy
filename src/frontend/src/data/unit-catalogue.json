@@ -85,6 +85,7 @@
       "requiredLonghouseLevel": 9,
       "requiredUnitType": null,
       "requiredBuildingType": "archeryrange",
+      "requiredBuildingLevel": 1,
       "siegeTargets": []
     },
     {
