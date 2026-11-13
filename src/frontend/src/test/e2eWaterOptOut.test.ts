@@ -38,6 +38,15 @@ const PLAYS_MOTION = /reducedMotion:\s*'no-preference'/;
  */
 const IMAGE_CHECKS = [/toHaveScreenshot\s*\(/, /toMatchSnapshot\s*\(/, /screenshot\(\s*\{[^}]*\bpath\s*:/s];
 
+const VISUAL_DIR = join(E2E_DIR, 'visual');
+
+/**
+ * User-approved 2026-11-13 (visual regression session): specs in e2e/visual/ may turn water and fog off because every
+ * screenshot goes through expectScreen, which hides the map canvas via stylePath; map pixels are never judged there.
+ * They are held to that below instead of to IMAGE_CHECKS.
+ */
+const visualSpecs = readdirSync(VISUAL_DIR).filter((name) => name.endsWith('.visual.spec.ts'));
+
 const specs = readdirSync(E2E_DIR).filter((name) => name.endsWith('.spec.ts'));
 const optedOut = specs.filter((name) => OPT_OUT.test(readFileSync(join(E2E_DIR, name), 'utf8')));
 
@@ -58,5 +67,23 @@ describe('e2e water/fog opt-out', () => {
   it.each(optedOut)('%s makes no golden-image or saved-screenshot check', (name) => {
     const source = readFileSync(join(E2E_DIR, name), 'utf8');
     expect(IMAGE_CHECKS.filter((check) => check.test(source)).map(String)).toEqual([]);
+  });
+});
+
+describe('e2e visual specs', () => {
+  it('exist (the file pattern above still matches)', () => {
+    expect(visualSpecs.length).toBeGreaterThan(0);
+  });
+
+  it.each(visualSpecs)('%s takes screenshots only through expectScreen', (name) => {
+    const source = readFileSync(join(VISUAL_DIR, name), 'utf8');
+    expect(IMAGE_CHECKS.filter((check) => check.test(source)).map(String)).toEqual([]);
+    expect(source).toMatch(/from '\.\/screen'/);
+    expect(source).toMatch(/from '\.\.\/fixtures'/);
+  });
+
+  it('hides the map canvas in every screenshot', () => {
+    expect(readFileSync(join(VISUAL_DIR, 'screen.ts'), 'utf8')).toMatch(/stylePath:\s*SCREENSHOT_CSS/);
+    expect(readFileSync(join(VISUAL_DIR, 'screenshot.css'), 'utf8')).toMatch(/\.map-container\s*>\s*canvas\s*\{[^}]*visibility:\s*hidden/);
   });
 });

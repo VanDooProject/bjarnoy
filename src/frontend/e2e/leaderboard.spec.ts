@@ -1,9 +1,9 @@
-import type { Page, Route } from '@playwright/test';
+import type { Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { clickHudMenuEntry } from './helpers';
 import { loginTestUser } from './support/session';
-import { AdminTablePage, SettlementPage } from './pages';
+import { AdminTablePage, LeaderboardPage, LEADERBOARD_WORLD_ID, SettlementPage, scoreEntry } from './pages';
 
 /**
  * Demo mode (what `npm run test:e2e` runs against — see playwright.config.ts
@@ -21,111 +21,6 @@ import { AdminTablePage, SettlementPage } from './pages';
  * backend end-to-end; this spec's job is the view's own rendering/state
  * logic against known response shapes.
  */
-
-const WORLD_ID = 'e2e-world';
-
-interface BoardInfo {
-  scope: 'user' | 'settlement' | 'guild';
-  category: string;
-  available: boolean;
-  reason: string | null;
-  computedAt: string | null;
-  entryCount: number | null;
-  myRank: number | null;
-}
-
-const WEEK_1 = '2026-07-01T00:00:00Z';
-const WEEK_2 = '2026-07-08T00:00:00Z';
-
-const directoryFixture: { boards: BoardInfo[]; weeklyWindows: { periodStart: string; periodEnd: string }[] } = {
-  boards: [
-    { scope: 'user', category: 'score', available: true, reason: null, computedAt: '2026-08-01T00:00:00Z', entryCount: 3, myRank: 2 },
-    { scope: 'user', category: 'weeklyScoreGained', available: true, reason: null, computedAt: '2026-08-01T00:00:00Z', entryCount: 3, myRank: null },
-    { scope: 'guild', category: 'score', available: false, reason: 'noGuildSystemYet', computedAt: null, entryCount: null, myRank: null },
-  ],
-  weeklyWindows: [
-    { periodStart: WEEK_1, periodEnd: WEEK_2 },
-    { periodStart: WEEK_2, periodEnd: '2026-07-15T00:00:00Z' },
-  ],
-};
-
-function scoreEntry(rank: number) {
-  return {
-    rank,
-    subjectId: `user-${rank}`,
-    subjectName: `Player ${rank}`,
-    value: 1000 - rank,
-    previousRank: rank,
-    delta: 0,
-  };
-}
-
-/**
- * Wires up the leaderboard endpoints this view calls, before the page ever
- * navigates (Playwright routes registered up front apply to the whole
- * session). `scorePages` lets pagination tests hand back a different
- * `nextAfterRank` per page, keyed by the `afterRank` query param the store
- * sends (`undefined` for the first page).
- */
-async function mockLeaderboardApi(
-  page: Page,
-  scorePages: Record<string, { items: ReturnType<typeof scoreEntry>[]; nextAfterRank: number | null }>,
-) {
-  await page.route(`**/api/v1/worlds/${WORLD_ID}/leaderboards`, (route: Route) =>
-    route.fulfill({ json: directoryFixture }),
-  );
-  await page.route(`**/api/v1/worlds/${WORLD_ID}/settlements/mine`, (route: Route) => route.fulfill({ json: [] }));
-  // The weekly board: the current board is the newest closed window; naming a window returns that one.
-  await page.route(new RegExp(`/api/v1/worlds/${WORLD_ID}/leaderboards/user/weeklyScoreGained(\\?.*)?$`), (route: Route) => {
-    const periodStart = new URL(route.request().url()).searchParams.get('periodStart') ?? WEEK_2;
-    return route.fulfill({
-      json: {
-        scope: 'user',
-        category: 'weeklyScoreGained',
-        available: true,
-        reason: null,
-        isFinal: true,
-        periodStart,
-        periodEnd: null,
-        computedAt: '2026-08-01T00:00:00Z',
-        items: [scoreEntry(1)],
-        nextAfterRank: null,
-      },
-    });
-  });
-  // Anchored regex, not a glob: a glob `**/leaderboards/user/score*` would
-  // also swallow `.../score/me` (its own, more specific route below), and
-  // relying on registration order between the two call sites instead is
-  // fragile. `?` here means an actual literal query string, not glob's
-  // "one wildcard character".
-  await page.route(new RegExp(`/api/v1/worlds/${WORLD_ID}/leaderboards/user/score(\\?.*)?$`), (route: Route) => {
-    const url = new URL(route.request().url());
-    const afterRank = url.searchParams.get('afterRank') ?? 'first';
-    const page_ = scorePages[afterRank] ?? { items: [], nextAfterRank: null };
-    return route.fulfill({
-      json: {
-        scope: 'user',
-        category: 'score',
-        available: true,
-        reason: null,
-        isFinal: false,
-        periodStart: null,
-        periodEnd: null,
-        computedAt: '2026-08-01T00:00:00Z',
-        items: page_.items,
-        nextAfterRank: page_.nextAfterRank,
-      },
-    });
-  });
-}
-
-async function gotoLeaderboards(page: Page) {
-  await page.addInitScript((worldId) => localStorage.setItem('bjarnoy.worldId', worldId), WORLD_ID);
-  await page.goto('/leaderboards');
-  // The directory fetch is async even against a mocked, instant response —
-  // wait for the real tabs to render rather than a fixed sleep.
-  await page.getByRole('navigation', { name: 'Boards' }).getByRole('button', { name: 'Score' }).first().waitFor();
-}
 
 test.describe('leaderboards', { tag: '@g2' }, () => {
   test('is reachable via the HUD nav link from the world map, opening as a modal over the map', async ({ page }) => {
@@ -164,11 +59,12 @@ test.describe('leaderboards', { tag: '@g2' }, () => {
   test('renders the category/scope tabs from the directory response and switches between a live and a dark board', async ({
     page,
   }) => {
-    await mockLeaderboardApi(page, { first: { items: [scoreEntry(1), scoreEntry(2)], nextAfterRank: null } });
-    await gotoLeaderboards(page);
+    const leaderboard = new LeaderboardPage(page);
+    await leaderboard.mockApi({ first: { items: [scoreEntry(1), scoreEntry(2)], nextAfterRank: null } });
+    await leaderboard.goto();
 
     // Two "Score" boards in the rail: one per scope group (Players, Guilds), and the caller's rank on the live one.
-    const tabs = page.getByRole('navigation', { name: 'Boards' }).getByRole('button', { name: 'Score' }).filter({ hasNotText: 'Weekly' });
+    const tabs = leaderboard.scoreTabs;
     await expect(tabs).toHaveCount(2);
     await expect(tabs.first()).toContainText('#2');
 
@@ -192,11 +88,12 @@ test.describe('leaderboards', { tag: '@g2' }, () => {
     // without fabricating a large dataset — LeaderboardView.vue's own
     // `nextAfterRank`/`loadPage` handling doesn't care how many rows are on
     // either side of that boundary, only whether one exists.
-    await mockLeaderboardApi(page, {
+    const leaderboard = new LeaderboardPage(page);
+    await leaderboard.mockApi({
       first: { items: [scoreEntry(1), scoreEntry(2)], nextAfterRank: 2 },
       '2': { items: [scoreEntry(3)], nextAfterRank: null },
     });
-    await gotoLeaderboards(page);
+    await leaderboard.goto();
 
     const board = new AdminTablePage(page);
     await expect(board.rows).toHaveCount(2);
@@ -214,25 +111,27 @@ test.describe('leaderboards', { tag: '@g2' }, () => {
   });
 
   test('"Jump to my rank" is hidden when logged out', async ({ page }) => {
-    await mockLeaderboardApi(page, { first: { items: [scoreEntry(1)], nextAfterRank: null } });
-    await gotoLeaderboards(page);
+    const leaderboard = new LeaderboardPage(page);
+    await leaderboard.mockApi({ first: { items: [scoreEntry(1)], nextAfterRank: null } });
+    await leaderboard.goto();
 
     await expect(page.getByRole('button', { name: 'Jump to my rank' })).toHaveCount(0);
   });
 
   test('"Jump to my rank" is visible and functional when logged in', async ({ page, adminAuth }) => {
-    await mockLeaderboardApi(page, { first: { items: [scoreEntry(1), scoreEntry(2)], nextAfterRank: null } });
+    const leaderboard = new LeaderboardPage(page);
+    await leaderboard.mockApi({ first: { items: [scoreEntry(1), scoreEntry(2)], nextAfterRank: null } });
     await adminAuth.loginAsPlayer('e2e-player');
     // `jumpToMyRank()` is called with no `subjectId`, so the real request
     // has no query string at all — `*` (matching zero or more chars) covers
     // that, unlike glob's `?` (exactly one char).
-    await page.route(`**/api/v1/worlds/${WORLD_ID}/leaderboards/user/score/me*`, (route: Route) =>
+    await page.route(`**/api/v1/worlds/${LEADERBOARD_WORLD_ID}/leaderboards/user/score/me*`, (route: Route) =>
       route.fulfill({
         // Rank 7 is the logged-in player (AdminAuthFixture.loginAsPlayer's `user-1`), which is what marks the own row.
         json: { myRank: 7, items: [scoreEntry(6), { ...scoreEntry(7), subjectId: 'user-1' }, scoreEntry(8)] },
       }),
     );
-    await gotoLeaderboards(page);
+    await leaderboard.goto();
 
     const jumpBtn = page.getByRole('button', { name: 'Jump to my rank' });
     await expect(jumpBtn).toBeVisible();
@@ -248,19 +147,21 @@ test.describe('leaderboards', { tag: '@g2' }, () => {
   });
   test('marks the player own row on the board', async ({ page, adminAuth }) => {
     // `loginAsPlayer` is `user-1`, which `scoreEntry(1)` carries as its subject id.
-    await mockLeaderboardApi(page, { first: { items: [scoreEntry(1), scoreEntry(2)], nextAfterRank: null } });
+    const leaderboard = new LeaderboardPage(page);
+    await leaderboard.mockApi({ first: { items: [scoreEntry(1), scoreEntry(2)], nextAfterRank: null } });
     await adminAuth.loginAsPlayer('e2e-player');
-    await gotoLeaderboards(page);
+    await leaderboard.goto();
 
     await expect(new AdminTablePage(page).myRow).toHaveCount(1);
     await expect(new AdminTablePage(page).myRow).toContainText('Player 1 · yours');
   });
 
   test('the week stepper is locked for a free player and steps through the weeks for a premium one', async ({ page, adminAuth }) => {
-    await mockLeaderboardApi(page, { first: { items: [scoreEntry(1)], nextAfterRank: null } });
+    const leaderboard = new LeaderboardPage(page);
+    await leaderboard.mockApi({ first: { items: [scoreEntry(1)], nextAfterRank: null } });
     await adminAuth.loginAsPlayer('e2e-player');
-    await gotoLeaderboards(page);
-    await page.getByRole('navigation', { name: 'Boards' }).getByRole('button', { name: 'Weekly score gained' }).click();
+    await leaderboard.goto();
+    await leaderboard.boardsNav.getByRole('button', { name: 'Weekly score gained' }).click();
 
     await expect(page.getByTestId('week-earlier')).toBeDisabled();
     await expect(page.getByTestId('week-premium-note')).toHaveText('Premium: the last 4 weeks');
@@ -268,10 +169,11 @@ test.describe('leaderboards', { tag: '@g2' }, () => {
   });
 
   test('a premium player can step to the earlier week', async ({ page, adminAuth }) => {
-    await mockLeaderboardApi(page, { first: { items: [scoreEntry(1)], nextAfterRank: null } });
+    const leaderboard = new LeaderboardPage(page);
+    await leaderboard.mockApi({ first: { items: [scoreEntry(1)], nextAfterRank: null } });
     await adminAuth.loginAsPlayer('e2e-player', { isPremium: true });
-    await gotoLeaderboards(page);
-    await page.getByRole('navigation', { name: 'Boards' }).getByRole('button', { name: 'Weekly score gained' }).click();
+    await leaderboard.goto();
+    await leaderboard.boardsNav.getByRole('button', { name: 'Weekly score gained' }).click();
 
     const earlier = page.getByTestId('week-earlier');
     await expect(earlier).toBeEnabled();
@@ -287,11 +189,12 @@ test.describe('leaderboards on a phone', { tag: '@g2' }, () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
   test('lists the boards first, drills into one, and the back chevron returns to the list before closing', async ({ page }) => {
-    await mockLeaderboardApi(page, { first: { items: [scoreEntry(1), scoreEntry(2)], nextAfterRank: null } });
-    await page.addInitScript((worldId) => localStorage.setItem('bjarnoy.worldId', worldId), WORLD_ID);
+    const leaderboard = new LeaderboardPage(page);
+    await leaderboard.mockApi({ first: { items: [scoreEntry(1), scoreEntry(2)], nextAfterRank: null } });
+    await leaderboard.seedWorld();
     await page.goto('/leaderboards');
 
-    const dialog = page.getByRole('dialog');
+    const dialog = leaderboard.dialog;
     await expect(dialog.locator('.mobile-title')).toHaveText('Leaderboards');
     await expect(dialog.getByRole('navigation')).toHaveCount(0);
     await dialog.getByRole('button', { name: /^Score/ }).first().click();

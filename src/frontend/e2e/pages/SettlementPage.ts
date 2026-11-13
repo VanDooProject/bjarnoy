@@ -312,6 +312,28 @@ export class SettlementPage {
     });
   }
 
+  /** The first building of this type standing in the realm, and where it is on screen. Throws when there is none. */
+  findBuilding(type: string): Promise<HexTarget> {
+    return this.page.evaluate((buildingType) => {
+      const win = window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string };
+        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
+      };
+      const world = win.__demoWorld();
+      const settlement = world.model.getSettlement(world.selectedSettlementId);
+      const radius = world.model.borderRadius(settlement);
+      for (let dq = -radius; dq <= radius; dq++) {
+        for (let dr = -radius; dr <= radius; dr++) {
+          const at = { q: settlement.q + dq, r: settlement.r + dr };
+          if (world.model.getTile(at.q, at.r).buildingType === buildingType) {
+            return { hex: at, screen: win.__settlementRenderer().hexCenterScreen(at) };
+          }
+        }
+      }
+      throw new Error(`no ${buildingType} stands in the realm`);
+    }, type);
+  }
+
   /** Clicks a hex found by `findHex`/`centreHex`, opening its ring menu. */
   async clickHex(target: HexTarget | ScreenPoint): Promise<void> {
     const screen = 'screen' in target ? target.screen : target;
