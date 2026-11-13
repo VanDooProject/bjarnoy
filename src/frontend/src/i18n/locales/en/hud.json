@@ -401,7 +401,9 @@
     "buildingCamp": "Building the camp, ready at {time}",
     "arrivesIn": "arrives in {eta}",
     "homeIn": "home in {eta}",
-    "campReadyIn": "camp ready in {eta}"
+    "campReadyIn": "camp ready in {eta}",
+    "campReady": "Camp ready",
+    "movingOn": "Moving on"
   },
   "garrisonSpots": {
     "longhouse": "Longhouse",

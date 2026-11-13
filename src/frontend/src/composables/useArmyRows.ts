@@ -83,9 +83,14 @@ export function useArmyRows() {
   return computed<ArmyRow[]>(() => {
     void world.hud.tick; // reactive dependency so ETA countdowns tick every second
     const now = Date.now();
-    /** "<phrase> 2h 40m"; a countdown that has run out reads "Arriving" on its own. */
-    const countdown = (key: Parameters<typeof t>[0], targetIso: string): string =>
-      Date.parse(targetIso) - now > 0 ? t(key, { eta: formatEta(targetIso, now) }) : formatEta(targetIso, now);
+    /**
+     * "<phrase> 2h 40m". A target that has passed (the row is stale until the next poll) reads as what the army is doing now:
+     * `pastKey` names it. Only an outbound arrival that has passed reads "Arriving".
+     */
+    const countdown = (key: Parameters<typeof t>[0], targetIso: string, pastKey?: Parameters<typeof t>[0]): string => {
+      if (Date.parse(targetIso) - now > 0) return t(key, { eta: formatEta(targetIso, now) });
+      return pastKey ? t(pastKey) : formatEta(targetIso, now);
+    };
     return world.armies.map((army) => {
       const composition = army.stacks
         .filter((s) => s.count > 0)
@@ -117,16 +122,16 @@ export function useArmyRows() {
           : null;
       // An army that cannot get home has no arrival to count down to, only the moment its food runs out.
       const eta = army.starvesAt
-        ? countdown('hud.armyStatus.starvesIn', army.starvesAt)
+        ? countdown('hud.armyStatus.starvesIn', army.starvesAt, 'hud.armyStatus.cannotGetHome')
         : etaIso
           ? campReadyAt !== null
-            ? countdown('hud.armyStatus.campReadyIn', etaIso)
+            ? countdown('hud.armyStatus.campReadyIn', etaIso, 'hud.armyStatus.campReady')
             : waiting
-              ? countdown('hud.armyStatus.movesOnIn', etaIso)
+              ? countdown('hud.armyStatus.movesOnIn', etaIso, 'hud.armyStatus.movingOn')
               : headingHome
-                ? countdown('hud.armyStatus.homeIn', etaIso)
+                ? countdown('hud.armyStatus.homeIn', etaIso, 'hud.armyStatus.atHome')
                 : standing
-                  ? countdown('hud.armyStatus.headsHomeIn', etaIso)
+                  ? countdown('hud.armyStatus.headsHomeIn', etaIso, 'hud.armyStatus.returning')
                   : countdown('hud.armyStatus.arrivesIn', etaIso)
           : null;
       const etaMs = army.starvesAt ? Date.parse(army.starvesAt) : etaIso ? Date.parse(etaIso) : null;

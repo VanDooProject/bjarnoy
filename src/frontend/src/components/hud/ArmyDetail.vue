@@ -178,9 +178,6 @@ const nowKey = computed(() => {
   font-size: 12px;
   color: var(--muted);
 }
-.mission-tag {
-  color: var(--gold);
-}
 .army-detail-link {
   padding: 0;
   background: transparent;

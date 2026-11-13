@@ -211,6 +211,45 @@ describe('useArmyRows', () => {
     expect(r.mission).toBe('Set up camp');
   });
 
+  it('reads "Camp ready" for a camp army whose camp is up but which is still listed, never "Arriving"', () => {
+    const world = useWorldStore();
+    world.armies = [army({ mission: 'setupcamp', movement: { ...army().movement!, arrivesAt: '2026-01-01T00:20:00Z' } })];
+    world.worldSpeedFactor = 1; // ready at 00:30, it is 01:00
+
+    expect(mountArmyRows().value[0].eta).toBe('Camp ready');
+  });
+
+  it('reads "Moving on" for a waiting group at the very moment the gathering leaves, never "Arriving"', () => {
+    const world = useWorldStore();
+    const base = army();
+    world.armies = [
+      army({
+        gatheringId: 'g1',
+        gatherDepartsAt: '2026-01-01T01:00:00Z',
+        movement: { ...base.movement!, arrivesAt: '2026-01-01T00:30:00Z', turnAroundAt: '2026-01-01T06:00:00Z' },
+      }),
+    ];
+
+    expect(mountArmyRows().value[0].eta).toBe('Moving on');
+  });
+
+  it('reads "At home" for a returning army whose return time has passed but which is still listed', () => {
+    const world = useWorldStore();
+    const base = army();
+    world.armies = [
+      army({ movement: { ...base.movement!, isReturning: true, turnAroundAt: '2026-01-01T00:00:00Z', returnArrivesAt: '2026-01-01T00:40:00Z' } }),
+    ];
+
+    expect(mountArmyRows().value[0].eta).toBe('At home');
+  });
+
+  it('a standing army whose arrival has just passed counts down to its turn-around, not "Arriving"', () => {
+    const world = useWorldStore();
+    const base = army();
+    world.armies = [army({ movement: { ...base.movement!, arrivesAt: '2026-01-01T00:59:59Z', turnAroundAt: '2026-01-01T05:00:00Z' } })];
+    expect(mountArmyRows().value[0].eta).toBe('heads home in 4h 0m');
+  });
+
   it('scales the camp build time by the world speed', () => {
     const world = useWorldStore();
     world.armies = [army({ mission: 'setupcamp', movement: { ...army().movement!, arrivesAt: '2026-01-01T00:50:00Z' } })];
