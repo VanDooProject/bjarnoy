@@ -82,6 +82,16 @@ const maxPercent = percentPerLevel * maxLevel;
       </section>
     </template>
 
+    <section id="ranged" class="block">
+      <h2>{{ $t('docs.training.ranged.heading') }}</h2>
+      <p class="text">{{ $t('docs.training.ranged.body') }}</p>
+      <ul class="rules">
+        <li>{{ $t('docs.training.ranged.after') }}</li>
+        <li>{{ $t('docs.training.ranged.garrison') }}</li>
+        <li>{{ $t('docs.training.ranged.report') }}</li>
+      </ul>
+    </section>
+
     <DocsAdminNote class="block">
       <p>{{ $t('docs.training.adminNote.time', { percent: percentPerLevel / 100 }) }}</p>
       <p>{{ $t('docs.training.adminNote.refund') }}</p>
