@@ -615,9 +615,15 @@ export function totalUpkeepPerHour(
 export function formatEta(targetIso: string, now: number): string {
   const totalSeconds = Math.round((new Date(targetIso).getTime() - now) / 1000);
   if (totalSeconds <= 0) return i18n.global.t('hud.armyStatus.arriving');
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
+  return formatDurationShort(totalSeconds);
+}
+
+/** A span of seconds as "2h 40m", "5m 12s" or "9s": the countdown style of the army rows. */
+export function formatDurationShort(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
   if (h > 0) return `${h}h ${m}m`;
   if (m > 0) return `${m}m ${s}s`;
   return `${s}s`;
