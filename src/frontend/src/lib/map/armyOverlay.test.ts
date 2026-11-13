@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ForeignArmyResponse } from '../../api/types';
-import { armyOverlayMovement, campArmyMarkers, campFleetLiveCoord, campFleetMovement, campLandMarkerId, foreignArmyMarker, foreignArmyOwner } from './armyOverlay';
+import { armyOverlayMovement, campArmyMarkers, campFleetLiveCoord, campFleetMovement, campLandMarkerId, foreignArmyMarker } from './armyOverlay';
 import type { ArmyOverlayMarker } from './HexMapRenderer';
-import { GUILD_REALM_COLOR, RIVAL_REALM_COLOR } from './realmColours';
-import type { Settlement } from './types';
+import { GUILD_REALM_COLOR, OWN_REALM_COLOR, RIVAL_REALM_COLOR, TREATY_REALM_COLOR } from './realmColours';
 
 const army: ForeignArmyResponse = {
   id: 'army-x',
   settlementId: 'rival-1',
-  ownerId: 'them',
+  relation: 'rival',
   isFleet: true,
   position: { q: 3, r: 0 },
   movement: {
@@ -23,13 +22,9 @@ const army: ForeignArmyResponse = {
   },
 };
 
-function owner(patch: Partial<Settlement>): Settlement {
-  return { id: 'rival-1', ownerId: 'them', ownerName: 'x', name: 'n', q: 9, r: 9, level: 1, foundedAt: 0, ...patch } as Settlement;
-}
-
 describe('foreignArmyMarker', () => {
   it('is a foreign, never selected marker on the stretch it was given, ship or flag as sent', () => {
-    const marker = foreignArmyMarker(army, owner({}), 'me');
+    const marker = foreignArmyMarker(army);
 
     expect(marker).toMatchObject({ id: 'army-x', foreign: true, selected: false, returning: false, isFleet: true, position: { q: 3, r: 0 } });
     expect(marker.movement).toEqual({
@@ -44,33 +39,15 @@ describe('foreignArmyMarker', () => {
     });
   });
 
-  it('wears the colour of its owner relative to the player', () => {
-    expect(foreignArmyMarker(army, owner({ relation: 'guild' }), 'me').color).toBe(GUILD_REALM_COLOR);
-    expect(foreignArmyMarker(army, owner({}), 'me').color).toBe(RIVAL_REALM_COLOR);
-    expect(foreignArmyMarker(army, undefined, 'me').color).toBe(RIVAL_REALM_COLOR);
-  });
-});
-
-describe('foreignArmyOwner', () => {
-  const settlements = [owner({ id: 'other', ownerId: 'someone' }), owner({ relation: 'guild' })];
-  const model = {
-    getSettlement: (id: string | null) => settlements.find((s) => s.id === id),
-    listSettlements: () => settlements,
-  };
-
-  it("is the army's home settlement", () => {
-    expect(foreignArmyOwner(army, model)?.id).toBe('rival-1');
+  it('wears the colour of how its owner stands to the player, as the server sends it', () => {
+    expect(foreignArmyMarker({ ...army, relation: 'guild' }).color).toBe(GUILD_REALM_COLOR);
+    expect(foreignArmyMarker({ ...army, relation: 'treaty' }).color).toBe(TREATY_REALM_COLOR);
+    expect(foreignArmyMarker({ ...army, relation: 'mine' }).color).toBe(OWN_REALM_COLOR);
+    expect(foreignArmyMarker(army).color).toBe(RIVAL_REALM_COLOR);
   });
 
-  it('is a settlement of the same owner for an army without a home, so it wears its realm colour', () => {
-    const homeless = { ...army, settlementId: null };
-
-    expect(foreignArmyOwner(homeless, model)?.id).toBe('rival-1');
-    expect(foreignArmyMarker(homeless, foreignArmyOwner(homeless, model), 'me').color).toBe(GUILD_REALM_COLOR);
-  });
-
-  it('is unknown (a rival) for an army without a home whose owner has no settlement on the map', () => {
-    expect(foreignArmyOwner({ ...army, settlementId: null, ownerId: 'nobody' }, model)).toBeUndefined();
+  it('wears its owner\'s colour without a home too', () => {
+    expect(foreignArmyMarker({ ...army, settlementId: null, relation: 'guild' }).color).toBe(GUILD_REALM_COLOR);
   });
 });
 

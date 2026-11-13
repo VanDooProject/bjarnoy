@@ -1,8 +1,7 @@
 import type { ForeignArmyResponse } from '../../api/types';
 import { routeProgressAt } from '../units/armyProgress';
 import type { ArmyOverlayMarker, ArmyOverlayMovement } from './HexMapRenderer';
-import { realmColor } from './realmColours';
-import type { Settlement } from './types';
+import { relationColor } from './realmColours';
 
 /**
  * Issue #94: hands the renderer the whole frozen leg, not a position — it interpolates along it every frame (see HexMapRenderer's
@@ -26,15 +25,11 @@ export function armyOverlayMovement(m: {
 }
 
 /**
- * The marker of another player's army marching inside our sight (docs/design/map-fog-v2.md §1g): in its owner's realm colour (guild, treaty
- * or rival, like the realm borders; `owner` is `foreignArmyOwner`'s settlement, unknown reads as rival), never selected, and flagged `foreign` so the
- * renderer gives it no fog vision.
+ * The marker of another player's army marching inside our sight (docs/design/map-fog-v2.md §1g): in its owner's realm colour (own, guild,
+ * treaty or rival, like the realm borders, from the relation the server sends: an army without a home wears it too), never selected, and
+ * flagged `foreign` so the renderer gives it no fog vision.
  */
-export function foreignArmyMarker(
-  army: ForeignArmyResponse,
-  owner: Settlement | undefined,
-  playerId: string,
-): ArmyOverlayMarker {
+export function foreignArmyMarker(army: ForeignArmyResponse): ArmyOverlayMarker {
   return {
     id: army.id,
     position: army.position,
@@ -45,21 +40,8 @@ export function foreignArmyMarker(
     visionRadius: 0,
     movement: armyOverlayMovement(army.movement),
     foreign: true,
-    color: realmColor(owner, playerId),
+    color: relationColor(army.relation),
   };
-}
-
-/**
- * The settlement whose realm colour another player's army wears: its home, or, for an army without a home, any settlement of the same
- * owner on the map (the colour is the owner's, guild, treaty or rival). Undefined when none is known, which reads as rival.
- */
-export function foreignArmyOwner(
-  army: ForeignArmyResponse,
-  settlements: { getSettlement(id: string | null): Settlement | undefined; listSettlements(): Settlement[] },
-): Settlement | undefined {
-  return settlements.getSettlement(army.settlementId) ?? (army.settlementId === null
-    ? settlements.listSettlements().find((s) => s.ownerId === army.ownerId)
-    : undefined);
 }
 
 /**
