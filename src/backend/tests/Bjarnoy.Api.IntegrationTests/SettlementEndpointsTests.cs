@@ -923,8 +923,11 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Empty(levelOne.Single(d => d.Type == "lumberjack").Prerequisites);
 
         Assert.Equal(
-            [new BuildingPrerequisiteResponse("fishinghut", 5)],
+            [new BuildingPrerequisiteResponse("fishinghut", 3)],
             levelOne.Single(d => d.Type == "harbour").Prerequisites);
+        Assert.Equal(
+            [new BuildingPrerequisiteResponse("harbour", 5)],
+            levelOne.Single(d => d.Type == "shipyard").Prerequisites);
         Assert.Empty(levelOne.Single(d => d.Type == "storagehouse").Prerequisites);
         Assert.Equal(
             [new BuildingPrerequisiteResponse("smithy", 5)],
