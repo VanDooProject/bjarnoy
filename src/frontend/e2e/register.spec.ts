@@ -1,5 +1,5 @@
-import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { REGISTER_PLAYER_ID, RegisterPage } from './pages';
 
 /**
  * Issue #108: the anon->permanent account flow. Runs against demo mode
@@ -19,24 +19,8 @@ import { expect, test } from './fixtures';
  * branch is straightforward enough to review directly.
  */
 
-const PLAYER_ID = 'player_11111111-1111-1111-1111-111111111111';
-
-const REGISTERED_USER = { id: 'u-1', userName: 'newjarl', role: 'player', status: 'active', displayName: null };
-
-async function seedPlayerId(page: Page) {
-  await page.addInitScript((id) => localStorage.setItem('bjarnoy.playerId', id), PLAYER_ID);
-}
-
 test('register creates an account, claims the local settlement id, and logs in', { tag: '@g2' }, async ({ page }) => {
-  await seedPlayerId(page);
-
-  let requestBody: { userName: string; password: string; existingOwnerId: string | null } | undefined;
-  await page.route('**/api/v1/auth/register', (route: Route) => {
-    requestBody = route.request().postDataJSON();
-    return route.fulfill({
-      json: { accessToken: 'e2e-access-token', refreshToken: 'e2e-refresh-token', user: REGISTERED_USER },
-    });
-  });
+  await RegisterPage.seedPlayerId(page);
 
   // Redirect target set to /leaderboards. Leaderboards now opens as a
   // modal over whatever page was showing before (App.vue's modal-route
@@ -44,18 +28,17 @@ test('register creates an account, claims the local settlement id, and logs in',
   // HexMapRenderer underneath (same as the default '/') — but the
   // assertions below are all about the register flow's own request/
   // response wiring and the modal's URL, not the map underneath it.
-  await page.goto('/register?redirect=%2Fleaderboards');
-  await page.getByLabel('Username').fill('newjarl');
-  await page.getByLabel('Password', { exact: true }).fill('correct horse battery');
-  await page.getByLabel('Confirm password').fill('correct horse battery');
-  await page.getByRole('button', { name: 'Create account' }).click();
+  const register = await RegisterPage.openRegister(page, '/leaderboards');
+  await register.mockRegister();
+  await register.fill('newjarl', 'correct horse battery', 'correct horse battery');
+  await register.submit();
 
   await expect(page).toHaveURL(/\/leaderboards$/);
 
-  expect(requestBody).toEqual({
+  expect(register.request).toEqual({
     userName: 'newjarl',
     password: 'correct horse battery',
-    existingOwnerId: PLAYER_ID,
+    existingOwnerId: REGISTER_PLAYER_ID,
   });
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem('bjarnoy.refreshToken')))
@@ -63,28 +46,21 @@ test('register creates an account, claims the local settlement id, and logs in',
 });
 
 test('register catches a mismatched confirmation before sending a request', { tag: '@g2' }, async ({ page }) => {
-  await seedPlayerId(page);
-  let requested = false;
-  await page.route('**/api/v1/auth/register', (route: Route) => {
-    requested = true;
-    return route.fulfill({ json: { accessToken: 'x', refreshToken: 'y', user: REGISTERED_USER } });
-  });
-
-  await page.goto('/register');
-  await page.getByLabel('Username').fill('newjarl');
-  await page.getByLabel('Password', { exact: true }).fill('correct horse battery');
-  await page.getByLabel('Confirm password').fill('does not match');
-  await page.getByRole('button', { name: 'Create account' }).click();
+  await RegisterPage.seedPlayerId(page);
+  const register = await RegisterPage.openRegister(page);
+  await register.mockRegister();
+  await register.fill('newjarl', 'correct horse battery', 'does not match');
+  await register.submit();
 
   await expect(page.getByText('Passwords do not match.')).toBeVisible();
-  expect(requested).toBe(false);
+  expect(register.request).toBeUndefined();
 });
 
 test('login and register link to each other', { tag: '@g2' }, async ({ page }) => {
-  await page.goto('/login');
-  await page.getByRole('button', { name: 'Playing anonymously? Create an account' }).click();
+  const login = await RegisterPage.openLogin(page);
+  await login.toRegisterLink.click();
   await expect(page).toHaveURL(/\/register$/);
 
-  await page.getByRole('button', { name: 'Already have an account? Log in' }).click();
+  await login.toLoginLink.click();
   await expect(page).toHaveURL(/\/login$/);
 });
