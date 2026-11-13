@@ -163,7 +163,7 @@ public class ArmyEntity
     /// <summary>True when <c>Location</c> is <c>ArmyLocation.AtHome</c>; the movement columns below are then unused.</summary>
     public bool AtHome { get; set; } = true;
 
-    /// <summary>Game instant, not wall time.</summary>
+    /// <summary>Game instant, not wall time. The active leg's start; for a guest (<see cref="IsSupporting"/>) the instant it reached its host.</summary>
     public DateTimeOffset DepartedAt { get; set; }
 
     public List<HexPoint> Path { get; set; } = [];
@@ -197,7 +197,7 @@ public class ArmyEntity
     public Army ToDomain()
     {
         ArmyLocation location = IsSupporting
-            ? new ArmyLocation.Supporting(TargetSettlementId!.Value, new HexCoord(TargetBuildingQ!.Value, TargetBuildingR!.Value))
+            ? new ArmyLocation.Supporting(TargetSettlementId!.Value, new HexCoord(TargetBuildingQ!.Value, TargetBuildingR!.Value), DepartedAt)
             : AtHome
                 ? new ArmyLocation.AtHome()
                 : new ArmyLocation.InTransit(new Movement
@@ -324,7 +324,8 @@ public class ArmyEntity
                 TargetSettlementId = supporting.HostSettlementId;
                 TargetBuildingQ = supporting.Spot.Q;
                 TargetBuildingR = supporting.Spot.R;
-                DepartedAt = default;
+                // A guest has no movement: the column holds the instant it reached its host (ArmyLocation.Supporting.Since).
+                DepartedAt = supporting.Since;
                 Path = [];
                 CumulativeHours = [];
                 EdgeHours = [];

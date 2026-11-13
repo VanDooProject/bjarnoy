@@ -141,4 +141,14 @@ public sealed class ArmyWithoutHomeTests
         };
         Assert.Equal(departed.AddHours(3), replanned.NotBeforeItsOrder(departed.AddHours(1)));
     }
+
+    [Fact]
+    public void A_guest_is_never_changed_from_before_it_reached_its_host()
+    {
+        var arrived = T0.AddHours(5);
+        var guest = Marching(200) with { Location = new ArmyLocation.Supporting(Guid.CreateVersion7(), Here, arrived) };
+
+        Assert.Equal(arrived, guest.NotBeforeItsOrder(T0.AddHours(4)));
+        Assert.Equal(T0.AddHours(6), guest.NotBeforeItsOrder(T0.AddHours(6)));
+    }
 }

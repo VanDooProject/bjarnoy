@@ -284,12 +284,16 @@ public sealed partial record Army
 
     /// <summary>
     /// <paramref name="at"/>, or the instant this army's current movement was ordered (<see cref="Movement.Movement.DepartedAt"/>,
-    /// <see cref="Movement.Movement.RoutePlannedAt"/>) when that is later: something settled late for an earlier instant (a camp
+    /// <see cref="Movement.Movement.RoutePlannedAt"/>), or a guest reached its host (<see cref="ArmyLocation.Supporting.Since"/>), when that is later: something settled late for an earlier instant (a camp
     /// that fell before the army was given its order) changes the army from its order on, it does not rewind it.
     /// </summary>
-    public DateTimeOffset NotBeforeItsOrder(DateTimeOffset at) => Location is ArmyLocation.InTransit { Movement: var movement }
-        ? new[] { at, movement.DepartedAt, movement.RoutePlannedAt ?? at }.Max()
-        : at;
+    public DateTimeOffset NotBeforeItsOrder(DateTimeOffset at) => Location switch
+    {
+        ArmyLocation.InTransit { Movement: var movement } => new[] { at, movement.DepartedAt, movement.RoutePlannedAt ?? at }.Max(),
+        // A guest from the instant it reached its host.
+        ArmyLocation.Supporting { Since: var since } => since > at ? since : at,
+        _ => at,
+    };
 
     /// <summary>Current hex: <paramref name="home"/> while <see cref="ArmyLocation.AtHome"/>, else the active leg's position.</summary>
     public HexCoord PositionAt(HexCoord home, DateTimeOffset now) => Location switch
@@ -1336,7 +1340,7 @@ public sealed partial record Army
 
         var arrived = army with
         {
-            Location = new ArmyLocation.Supporting(army.TargetSettlementId!.Value, army.TargetBuildingCoord!.Value),
+            Location = new ArmyLocation.Supporting(army.TargetSettlementId!.Value, army.TargetBuildingCoord!.Value, movement.ArrivesAt),
             Provisions = provisionsAtArrival,
         };
 
