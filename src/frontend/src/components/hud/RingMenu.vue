@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ResourceIcon from '../ResourceIcon.vue';
+import ResourceCost from '../ResourceCost.vue';
 // Issue #16 "ring menu on click of tile", second pass — the "2a" design
 // (Claude Design's `Tile Menu 2a`, chosen over four other directions).
 //
@@ -489,9 +489,12 @@ interface CardView {
   art?: ArtRef;
   badge?: { text: string; tone: 'ok' | Tone };
   chips: { key: ResourceKey; amount: number; short: boolean }[];
+  cost: Partial<Record<ResourceKey, number>>;
+  shortKeys: Partial<Record<ResourceKey, boolean>>;
   time?: string;
   timeLabel?: string;
   refundChips: { key: ResourceKey; amount: number }[];
+  refundCost: Partial<Record<ResourceKey, number>>;
   gives?: string;
   givesTotal?: string;
   warning?: string;
@@ -564,8 +567,11 @@ const cardView = computed<CardView | null>(() => {
     art: card.art,
     badge,
     chips,
+    cost: card.cost ?? {},
+    shortKeys: Object.fromEntries(chips.map((c) => [c.key, c.short])),
     time: card.time,
     timeLabel: card.timeLabel,
+    refundCost: card.refund ?? {},
     refundChips: RESOURCE_KEYS.filter((key) => !!card.refund?.[key]).map((key) => ({ key, amount: Math.floor(card.refund![key]!) })),
     gives: card.gives,
     givesTotal: card.givesTotal,
@@ -1123,10 +1129,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         <template v-if="cardView.chips.length">
           <dt>{{ t('hud.ringMenu.cost') }}</dt>
           <dd class="cost">
-            <span v-for="chip in cardView.chips" :key="chip.key" class="chip">
-              <ResourceIcon :kind="chip.key" :size="12" />
-              <b :class="{ short: chip.short }">{{ chip.amount }}</b>
-            </span>
+            <ResourceCost :cost="cardView.cost" :short="cardView.shortKeys" round="ceil" />
           </dd>
         </template>
         <template v-if="cardView.time">
@@ -1136,10 +1139,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         <template v-if="cardView.refundChips.length">
           <dt>{{ t('hud.ringMenu.refund') }}</dt>
           <dd class="cost" data-testid="ring-card-refund">
-            <span v-for="chip in cardView.refundChips" :key="chip.key" class="chip">
-              <ResourceIcon :kind="chip.key" :size="12" />
-              <b>{{ chip.amount }}</b>
-            </span>
+            <ResourceCost :cost="cardView.refundCost" round="floor" />
           </dd>
         </template>
         <template v-if="cardView.gives">
@@ -1512,14 +1512,6 @@ function onBackdropPointerDown(e: PointerEvent) {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 2px 10px;
-}
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.chip b.short {
-  color: var(--rival);
 }
 .card-foot {
   height: 12px;

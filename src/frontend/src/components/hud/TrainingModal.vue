@@ -23,7 +23,6 @@ import {
   MAX_TRAINING_ORDERS_PER_BUILDING,
   canAfford,
   distributedTrainingSeconds,
-  formatCostLine,
   formatTrainingDuration,
   maxAffordableCount,
   subtractCost,
@@ -37,7 +36,8 @@ import {
   type TrainingSplit,
   type UnitRequirement,
 } from '../../lib/units/trainingEconomy';
-import type { UnitDefinitionResponse } from '../../api/types';
+import ResourceCost from '../ResourceCost.vue';
+import type { ResourceLine, UnitDefinitionResponse } from '../../api/types';
 import { hasShorelineInTerritory } from '../../lib/map/shoreline';
 
 /** The building whose window this is: its type picks the units, its hex is where the order goes. */
@@ -161,7 +161,7 @@ const rows = computed(() =>
       locked,
       max,
       cost: totalTrainingCost(definition, count),
-      costText: formatCostLine(unitCost),
+      unitCost,
       durationText: formatTrainingDuration(
         split.value === 'here'
           ? unitTrainingSeconds(definition, openLevel.value, world.worldSpeedFactor)
@@ -224,6 +224,13 @@ const distributeCount = computed(() =>
     : Math.max(0, ...rows.value.filter((r) => !r.locked).map((r) => siblingsFor(r.definition).length)),
 );
 const affordable = computed(() => canAfford(pickedCost.value, world.hud.available));
+// Which picked resources the stock can't cover: shown red in the footer total, like the ring card's cost.
+const shortKeys = computed(() => ({
+  wood: pickedCost.value.wood > world.hud.available.wood,
+  stone: pickedCost.value.stone > world.hud.available.stone,
+  food: pickedCost.value.food > world.hud.available.food,
+  iron: pickedCost.value.iron > world.hud.available.iron,
+}));
 const training = ref(false);
 const errorText = ref<string | null>(null);
 // Training only works against the live backend; demo mode has no TrainingOrder/garrison concept in the local WorldModel yet.
@@ -266,12 +273,12 @@ async function trainPicked() {
 const cancelAsk = ref<string | null>(null);
 const cancelBusy = ref(false);
 const cancelRows = computed(() => {
-  const map = new Map<string, { refundText: string; kept: number }>();
+  const map = new Map<string, { refund: ResourceLine | null; kept: number }>();
   for (const o of hereOrders.value) {
     const def = catalogue.byType[o.unit];
     const done = o.waiting ? 0 : o.completedCount;
     const refund = def ? trainingCancelRefund(def, o.count - done) : null;
-    map.set(o.key, { refundText: refund ? formatCostLine(refund) : '', kept: done });
+    map.set(o.key, { refund: refund && Object.values(refund).some((v) => v > 0) ? refund : null, kept: done });
   }
   return map;
 });
@@ -355,9 +362,9 @@ async function cancelOrder(id: string) {
             <div v-else class="cbox">
               <div class="ct">
                 {{ t('hud.trainingModal.cancelAsk', { count: o.count, unit: unitName(o.unit) }) }}
-                <em v-if="cancelRows.get(o.key)?.refundText">
-                  {{ t('hud.trainingModal.cancelRefund', { amount: cancelRows.get(o.key)!.refundText }) }}
-                </em>
+                <i18n-t v-if="cancelRows.get(o.key)?.refund" keypath="hud.trainingModal.cancelRefund" tag="em" scope="global">
+                  <template #amount><ResourceCost :cost="cancelRows.get(o.key)!.refund!" :size="12" /></template>
+                </i18n-t>
                 <em v-else>{{ t('hud.trainingModal.cancelNothing') }}</em>
                 <em v-if="cancelRows.get(o.key)?.kept">
                   {{ t('hud.trainingModal.cancelKept', { count: cancelRows.get(o.key)!.kept }) }}
@@ -459,7 +466,10 @@ async function cancelOrder(id: string) {
               <div class="unit-stats">
                 {{ t('hud.trainingModal.attackDefense', { attack: row.definition.attack, defense: row.definition.defense }) }}
               </div>
-              <div class="unit-cost">{{ row.costText }} · {{ row.durationText }}</div>
+              <div class="unit-cost">
+                <ResourceCost :cost="row.unitCost" :size="13" />
+                <span class="unit-time">{{ row.durationText }}</span>
+              </div>
               <div v-if="row.locked" class="need" data-testid="missing">
                 <span class="need-label">{{ t('hud.trainingModal.needs') }}</span>
                 <span v-for="(req, i) in row.missing" :key="i" class="chip miss">{{ chipText(req) }}</span>
@@ -511,7 +521,7 @@ async function cancelOrder(id: string) {
         <div class="sum">
           <template v-if="picks.length">
             <b>{{ t('hud.trainingModal.footerOrders', { count: picks.length, free: freeSlots, max: MAX_TRAINING_ORDERS_PER_BUILDING }, picks.length) }}</b>
-            <span :class="{ unaffordable: !affordable }">{{ formatCostLine(pickedCost) }}</span>
+            <ResourceCost :cost="pickedCost" :size="14" :short="shortKeys" />
             <span v-if="tooManyOrders" class="foot-warn">{{ t('hud.trainingModal.tooManyOrders', { count: picks.length }) }}</span>
             <span v-else-if="!affordable" class="foot-warn">{{ t('hud.trainingModal.cantAfford') }}</span>
           </template>
@@ -894,9 +904,15 @@ async function cancelOrder(id: string) {
   color: var(--muted);
 }
 .unit-cost {
-  margin-top: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  margin-top: 3px;
   font-size: 12px;
-  color: var(--gold);
+}
+.unit-time {
+  color: var(--muted);
 }
 .need {
   display: flex;
@@ -1021,11 +1037,6 @@ async function cancelOrder(id: string) {
   color: var(--muted);
   font-weight: 500;
 }
-.sum span {
-  color: var(--gold);
-  font-variant-numeric: tabular-nums;
-}
-.sum span.unaffordable,
 .sum .foot-warn {
   color: #e08a8a;
 }

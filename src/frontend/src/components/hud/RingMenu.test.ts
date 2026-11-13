@@ -662,7 +662,7 @@ describe('RingMenu', () => {
         actions: [{ id: 'upgrade', label: 'Upgrade', card: { title: 'Upgrade to level 2', cost: { wood: 160.8, food: 80.4 } } }],
       });
       await bubble(wrapper, 'Upgrade').trigger('mouseenter');
-      expect(wrapper.get('.ring-card').findAll('.chip b').map((b) => b.text())).toEqual(['161', '81']);
+      expect(wrapper.get('.ring-card').findAll('.cost-item b').map((b) => b.text())).toEqual(['161', '81']);
     });
 
     it('shows a lock badge on a locked Upgrade bubble', () => {
@@ -1083,7 +1083,7 @@ describe('RingMenu', () => {
         actions: [{ id: 'upgrade', label: 'Upgrade', card: { title: 'Upgrade to level 2', cost: { wood: 160.8, food: 80.4 } } }],
       });
       await bubble(wrapper, 'Upgrade').trigger('mouseenter');
-      expect(wrapper.get('.ring-card').findAll('.chip b').map((b) => b.text())).toEqual(['161', '81']);
+      expect(wrapper.get('.ring-card').findAll('.cost-item b').map((b) => b.text())).toEqual(['161', '81']);
     });
 
     it('shows a lock badge on a locked Upgrade bubble', () => {
