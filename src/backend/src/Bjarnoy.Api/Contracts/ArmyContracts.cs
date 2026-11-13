@@ -577,22 +577,23 @@ public sealed record ForeignMovementResponse(
     DateTimeOffset ArrivesAt);
 
 /// <summary>
-/// A marching army of another player inside the viewer's sight. Deliberately nothing but identity (to colour by its realm: its home,
-/// or for an army without a home its owner, <paramref name="OwnerId"/> as on their settlements), kind of marker and where it is going
-/// next: no mission, target, units or provisions.
+/// A marching army of another player inside the viewer's sight. Deliberately nothing but identity (to colour by: its home, and
+/// <paramref name="Relation"/>, how its owner stands to the viewer, <see cref="SettlementRelations"/>, so an army without a home
+/// wears its owner's colour too; never the owner's ids, an anonymous owner id is that player's credential), kind of marker and where
+/// it is going next: no mission, target, units or provisions.
 /// </summary>
 public sealed record ForeignArmyResponse(
     Guid Id,
     Guid? SettlementId,
-    string OwnerId,
+    string Relation,
     bool IsFleet,
     HexPointResponse Position,
     ForeignMovementResponse Movement)
 {
-    public static ForeignArmyResponse From(ForeignArmy army) => new(
+    public static ForeignArmyResponse From(ForeignArmy army, string relation) => new(
         army.Id,
         army.SettlementId,
-        army.OwnerId,
+        relation,
         army.IsFleet,
         HexPointResponse.From(army.Position),
         new ForeignMovementResponse(

@@ -7,6 +7,7 @@ using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Bjarnoy.TestSupport;
 
@@ -128,7 +129,7 @@ public sealed class ForeignArmyEndpointsTests : IAsyncLifetime
         var army = Assert.Single(armies);
         Assert.Equal(scene.RivalArmyId, army.Id);
         Assert.Equal(scene.RivalSettlementId, army.SettlementId);
-        Assert.Equal(scene.RivalOwnerId, army.OwnerId);
+        Assert.Equal("rival", army.Relation);
         Assert.False(army.IsFleet);
         Assert.Equal(new HexPointResponse(scene.Viewer.Q + 3, scene.Viewer.R), army.Position);
         // Two hexes ahead at most, all of them in sight here; nothing of the nine-hex route behind it.
@@ -185,7 +186,9 @@ public sealed class ForeignArmyEndpointsTests : IAsyncLifetime
         var (json, armies) = await GetAsync(scene);
 
         Assert.DoesNotContain(armies, a => a.Id == scene.ViewerArmyId);
-        foreach (var leaked in new[] { "mission", "target", "stacks", "provisions", "returnPath", "spearman", "unit" })
+        // The owner id is an anonymous player's credential (X-Owner-Id): it must never reach another player.
+        Assert.DoesNotContain(scene.RivalOwnerId, json, StringComparison.OrdinalIgnoreCase);
+        foreach (var leaked in new[] { "mission", "target", "stacks", "provisions", "returnPath", "spearman", "unit", "ownerId", "userId" })
         {
             Assert.DoesNotContain(leaked, json, StringComparison.OrdinalIgnoreCase);
         }
@@ -205,5 +208,41 @@ public sealed class ForeignArmyEndpointsTests : IAsyncLifetime
         var (_, armies) = await GetAsync(scene);
 
         Assert.Empty(armies);
+    }
+
+    [Fact]
+    public async Task A_guildmates_army_is_marked_as_the_guilds_so_it_wears_the_guild_colour_even_without_a_home()
+    {
+        var scene = await SceneAsync(4.2);
+        using var client = _factory.CreateClient();
+        var viewerUser = (await (await client.PostJsonAsync("/api/v1/auth/register", new RegisterRequest(Unique("viewer"), "correct-horse-battery"), Ct))
+            .ReadStrictAsync<AuthResponse>(Ct));
+        var rivalUser = (await (await client.PostJsonAsync("/api/v1/auth/register", new RegisterRequest(Unique("mate"), "correct-horse-battery"), Ct))
+            .ReadStrictAsync<AuthResponse>(Ct)).User.Id;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var viewer = await db.Settlements.SingleAsync(s => s.Id == scene.Viewer.Id, Ct);
+            viewer.UserId = viewerUser.User.Id;
+            var rival = await db.Settlements.SingleAsync(s => s.Id == scene.RivalSettlementId, Ct);
+            rival.UserId = rivalUser;
+            var army = await db.Armies.SingleAsync(a => a.Id == scene.RivalArmyId, Ct);
+            army.UserId = rivalUser;
+            army.SettlementId = null;
+            var guild = new GuildEntity { WorldId = scene.WorldId, Name = "Mates", Tag = "MATE" };
+            guild.Memberships.Add(new GuildMembershipEntity { UserId = viewerUser.User.Id });
+            guild.Memberships.Add(new GuildMembershipEntity { UserId = rivalUser });
+            db.Guilds.Add(guild);
+            await db.SaveChangesAsync(Ct);
+        }
+
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", viewerUser.AccessToken);
+        var armies = await client.GetFromJsonAsync<List<ForeignArmyResponse>>(
+            $"/api/v1/worlds/{scene.WorldId}/foreign-armies", SqliteApiFixture.StrictJson, Ct);
+
+        var seen = Assert.Single(armies!);
+        Assert.Null(seen.SettlementId);
+        Assert.Equal("guild", seen.Relation);
     }
 }

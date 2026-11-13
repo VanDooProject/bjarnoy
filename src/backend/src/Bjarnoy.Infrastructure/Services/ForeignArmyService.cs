@@ -11,7 +11,8 @@ namespace Bjarnoy.Infrastructure.Services;
 /// A foreign army a viewer sees marching: where it stands and the short stretch of its route ahead — nothing of its mission, target,
 /// units, provisions or the part of the route behind it.
 /// </summary>
-public sealed record ForeignArmy(Guid Id, Guid? SettlementId, string OwnerId, bool IsFleet, HexCoord Position, ForeignRouteStretch Stretch);
+/// <param name="UserId">The owner's account, for working out how it stands to the viewer; never sent to the viewer.</param>
+public sealed record ForeignArmy(Guid Id, Guid? SettlementId, Guid UserId, bool IsFleet, HexCoord Position, ForeignRouteStretch Stretch);
 
 /// <summary>
 /// "Foreign armies in sight" (<c>docs/design/map-fog-v2.md</c> §1g): the marching armies of other players that stand inside the
@@ -62,7 +63,7 @@ public sealed class ForeignArmyService(GameDbContext dbContext, ExploredAreaServ
             }
 
             var stretch = ForeignRouteStretch.Clip(transit.Movement, gameNow, hex => Sight.Contains(sight, hex));
-            seen.Add(new ForeignArmy(entity.Id, entity.SettlementId, entity.OwnerId, domain.IsFleet, position, stretch));
+            seen.Add(new ForeignArmy(entity.Id, entity.SettlementId, entity.UserId, domain.IsFleet, position, stretch));
         }
 
         return seen;
