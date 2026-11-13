@@ -48,6 +48,9 @@ function row(overrides: Partial<ArmyRow> = {}): ArmyRow {
   return {
     id: 'a',
     composition: '10× Spearman',
+    stacks: [{ unit: 'spearman', count: 10 }],
+    tone: 'march',
+    timeline: null,
     status: 'In transit',
     eta: '1h 0m',
     etaMs: Date.parse('2026-01-01T01:00:00Z'),
@@ -133,7 +136,7 @@ describe('useArmyRows', () => {
     const r = rows.value[0];
     expect(r.composition).toBe('10× Spearman');
     expect(r.status).toBe('In transit');
-    expect(r.eta).toBe('1h 0m');
+    expect(r.eta).toBe('arrives in 1h 0m');
     expect(r.progress).toBeCloseTo(0.5); // halfway through a 0..2h leg, now at +1h
     expect(r.canRecall).toBe(true);
     expect(r.canFieldOrder).toBe(true); // 'move' mission, not at home/supporting
@@ -203,7 +206,7 @@ describe('useArmyRows', () => {
     const r = mountArmyRows().value[0];
 
     expect(r.status).toMatch(/^Building the camp, ready at \d{2}:\d{2}( [AP]M)?$/);
-    expect(r.eta).toBe('5m 0s');
+    expect(r.eta).toBe('camp ready in 5m 0s');
     expect(r.canRecall).toBe(true);
     expect(r.mission).toBe('Set up camp');
   });
@@ -214,7 +217,7 @@ describe('useArmyRows', () => {
     world.worldSpeedFactor = 5; // 10 min / 5 = 2 min after arrival
     vi.setSystemTime(new Date('2026-01-01T00:51:00Z'));
 
-    expect(mountArmyRows().value[0].eta).toBe('1m 0s');
+    expect(mountArmyRows().value[0].eta).toBe('camp ready in 1m 0s');
   });
 
   it('shows an army that has arrived as standing, counting down to when it heads home', () => {
@@ -286,7 +289,7 @@ describe('useArmyRows', () => {
       const r = mountArmyRows().value[0];
 
       expect(r.status).toBe('In transit');
-      expect(r.eta).toBe('1h 0m');
+      expect(r.eta).toBe('arrives in 1h 0m');
       expect(r.etaMs).toBe(Date.parse('2026-01-01T02:00:00Z'));
     });
   });
@@ -308,7 +311,7 @@ describe('useArmyRows', () => {
     const r = mountArmyRows().value[0];
 
     expect(r.status).toBe('Returning');
-    expect(r.eta).toBe('30m 0s');
+    expect(r.eta).toBe('home in 30m 0s');
     expect(r.etaMs).toBe(Date.parse('2026-01-01T01:30:00Z'));
     expect(r.canRecall).toBe(false);
   });
@@ -320,7 +323,7 @@ describe('useArmyRows', () => {
     const r = mountArmyRows().value[0];
 
     expect(r.status).toBe('In transit');
-    expect(r.eta).toBe('1h 0m');
+    expect(r.eta).toBe('arrives in 1h 0m');
     expect(r.etaMs).toBe(Date.parse('2026-01-01T02:00:00Z'));
   });
 
@@ -331,7 +334,7 @@ describe('useArmyRows', () => {
     const r = mountArmyRows().value[0];
 
     expect(r.status).toBe('In transit');
-    expect(r.eta).toBe('1h 0m');
+    expect(r.eta).toBe('arrives in 1h 0m');
   });
 
   it('uses the return leg once an army has turned around', () => {
@@ -360,7 +363,7 @@ describe('useArmyRows', () => {
 
     const r = rows.value[0];
     expect(r.status).toBe('Returning');
-    expect(r.eta).toBe('1h 0m'); // returnArrivesAt, not arrivesAt
+    expect(r.eta).toBe('home in 1h 0m'); // returnArrivesAt, not arrivesAt
     expect(r.progress).toBeCloseTo(0.5);
     expect(r.canRecall).toBe(false); // already turned around
   });
@@ -397,5 +400,41 @@ describe('useArmyRows', () => {
     expect(r.canRecall).toBe(true); // supporting armies can still be recalled
     expect(r.canFieldOrder).toBe(false); // canFieldOrderArmy excludes supporting
     expect(r.mission).toBe('Support');
+  });
+});
+
+describe('useArmyRows time line', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T01:00:00Z'));
+  });
+
+  it('carries the unit stacks, the time line and the colour of the countdown of each row', () => {
+    const world = useWorldStore();
+    world.armies = [army()];
+
+    const r = mountArmyRows().value[0];
+
+    expect(r.stacks).toEqual([{ unit: 'spearman', count: 10 }]);
+    expect(r.tone).toBe('march');
+    expect(r.timeline?.state).toBe('marching');
+    expect(r.timeline?.nowFraction).toBeCloseTo(0.25); // 1h into a 4h trip
+  });
+
+  it('colours a stranded army\'s countdown red, a supporting one green and a returning one light', () => {
+    const world = useWorldStore();
+    const base = army().movement!;
+    world.armies = [
+      army({ id: 'stranded', starvesAt: '2026-01-01T03:00:00Z', movement: { ...base, isStranded: true } }),
+      army({ id: 'support', supporting: true, movement: null }),
+      army({ id: 'home', movement: { ...base, isReturning: true } }),
+    ];
+
+    expect(mountArmyRows().value.map((r) => [r.id, r.tone, r.timeline?.state])).toEqual([
+      ['stranded', 'stranded', 'stranded'],
+      ['support', 'support', 'supporting'],
+      ['home', 'return', 'returning'],
+    ]);
   });
 });

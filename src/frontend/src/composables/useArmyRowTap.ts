@@ -3,8 +3,8 @@ import { useWorldStore } from '../stores/world';
 import { DOUBLE_TAP_MS, isDoubleTap, type Tap } from '../lib/map/doubleTap';
 
 /**
- * Tap/click behaviour of an army row, shared by QueueDrawer (mobile) and
- * ArmyPanel (desktop) so both read it the same way.
+ * Tap/click behaviour of an army row of the desktop panel (ArmyPanel). The phone drawer has no double tap: a tap there opens
+ * the army's detail, with "Show on map" in it.
  *
  * - A tap on an unselected row selects the army at once (route on the map).
  * - A tap on the selected row deselects it, but only after DOUBLE_TAP_MS

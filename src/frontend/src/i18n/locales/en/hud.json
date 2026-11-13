@@ -398,7 +398,10 @@
     "hunting": "Hunting",
     "cannotGetHome": "Cannot get home",
     "starvesIn": "starves in {eta}",
-    "buildingCamp": "Building the camp, ready at {time}"
+    "buildingCamp": "Building the camp, ready at {time}",
+    "arrivesIn": "arrives in {eta}",
+    "homeIn": "home in {eta}",
+    "campReadyIn": "camp ready in {eta}"
   },
   "garrisonSpots": {
     "longhouse": "Longhouse",
@@ -460,6 +463,35 @@
     "provisions": "Provisions",
     "dispatching": "Dispatching…",
     "confirmDispatch": "Confirm dispatch"
+  },
+  "armyDetail": {
+    "showOnMap": "Show on map",
+    "back": "Back to armies",
+    "foodHeading": "Food",
+    "spare": "Spare",
+    "wayHome": "Way home",
+    "food": "food",
+    "perHour": "per hour",
+    "events": {
+      "left": "Left home",
+      "arrives": "Arrives at ({q}, {r})",
+      "arrived": "Arrived at ({q}, {r})",
+      "now": "now",
+      "turnsHome": "Turns home by itself",
+      "turnedHome": "Turned home",
+      "home": "Home",
+      "starves": "Food runs out",
+      "movesOn": "Moves on",
+      "campReady": "Camp ready"
+    },
+    "now": {
+      "marching": "On the way",
+      "standing": "Standing, eating spare food",
+      "returning": "On the way home",
+      "stranded": "Cannot get home",
+      "waiting": "Waiting for the other groups",
+      "camp": "Building the camp"
+    }
   },
   "dispatchSheet": {
     "cancel": "Cancel dispatch",
