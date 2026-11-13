@@ -212,14 +212,14 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, grantResponse.StatusCode);
 
         // Settler trains at a Cart Workshop (see
-        // UnitCatalogue.RequiredBuildingType) — grant one before
+        // UnitCatalogue.RequiredBuildingType) at level 10 (the Camp Builder's level) — grant one before
         // TrainFiveSettlersAsync below.
         var layout = await client.GetFromJsonAsync<AdminSettlementLayoutResponse>(
             $"/api/v1/admin/settlements/{settlement.Id}/layout", SqliteApiFixture.StrictJson, Ct);
         var grassHex = layout!.Hexes.First(h => !h.IsCentre && h.Building is null && h.Terrain == "grass");
         await client.PutJsonAsync(
             $"/api/v1/admin/settlements/{settlement.Id}/buildings/{grassHex.Q}/{grassHex.R}",
-            new PlaceBuildingRequest("cartworkshop", 1), Ct);
+            new PlaceBuildingRequest("cartworkshop", 10), Ct);
 
         Authorize(client, player.AccessToken);
 
