@@ -4,6 +4,7 @@
 // reasoning as lib/units/trainingEconomy.ts.
 import { hexDistance, type AxialCoord } from '../hex/coords';
 import type {
+  ArmyResponse,
   DispatchArmyRequest,
   DispatchFromSpot,
   FieldOrderRequest,
@@ -334,13 +335,37 @@ export function isFieldOrderMidMarch(
 /** The movement fields `isArmyHeadingHome`, `isArmyStanding` and `armyStatusLabel` read — all of them required in `MovementResponse`. */
 type ArmyTimingMovement = Pick<MovementResponse, 'isReturning' | 'isStranded' | 'arrivesAt' | 'turnAroundAt'>;
 
+/** The gathering fields of `ArmyResponse` that `isArmyWaitingToGather` reads. */
+type ArmyGatheringFields = Pick<ArmyResponse, 'gatheringId' | 'gatherDepartsAt'>;
+
+/**
+ * Whether an army is a group of a gathering army (assembled from several garrison spots) that has reached the meeting hex and
+ * waits there for the gathering to leave: outbound, arrived, not stranded, and `gatherDepartsAt` (the gathering's departure from
+ * the meeting hex, `Gathering.DepartAt`) not passed yet. The backend keeps such a group standing past its own `turnAroundAt`
+ * until then (`Army.SettleTo`), and it moves on to the target afterwards, it does not go home.
+ */
+export function isArmyWaitingToGather(
+  army: ArmyGatheringFields & { movement: ArmyTimingMovement | null },
+  now: number,
+): boolean {
+  const movement = army.movement;
+  if (!army.gatheringId || !army.gatherDepartsAt) return false;
+  if (movement === null || movement.isStranded || movement.isReturning) return false;
+  return now >= Date.parse(movement.arrivesAt) && now <= Date.parse(army.gatherDepartsAt);
+}
+
 /**
  * Whether an army is on its way home: on the return leg, or past `turnAroundAt`, when the backend turns it home by itself
- * (`Army.SettleTo`) and the next refresh will report `isReturning`. A stranded army has no way home.
+ * (`Army.SettleTo`) and the next refresh will report `isReturning`. A stranded army has no way home, and a group waiting
+ * for its gathering does not turn around on its own.
  */
-export function isArmyHeadingHome(army: { movement: ArmyTimingMovement | null }, now: number): boolean {
+export function isArmyHeadingHome(
+  army: Partial<ArmyGatheringFields> & { movement: ArmyTimingMovement | null },
+  now: number,
+): boolean {
   const movement = army.movement;
   if (movement === null || movement.isStranded) return false;
+  if (isArmyWaitingToGather(army, now)) return false;
   return movement.isReturning || now >= Date.parse(movement.turnAroundAt);
 }
 
@@ -348,9 +373,20 @@ export function isArmyHeadingHome(army: { movement: ArmyTimingMovement | null },
  * Whether an army is standing on its destination: outbound, arrived, not stranded and not yet heading home. A hunt army
  * never stands: it fights the camp on arrival. See `docs/design/troop-movement-range.md` section 2.
  */
-export function isArmyStanding(army: { mission: string; movement: ArmyTimingMovement | null }, now: number): boolean {
+export function isArmyStanding(
+  army: Partial<ArmyGatheringFields> & { mission: string; movement: ArmyTimingMovement | null },
+  now: number,
+): boolean {
   const movement = army.movement;
-  if (movement === null || movement.isStranded || army.mission === 'hunt' || isArmyHeadingHome(army, now)) return false;
+  if (
+    movement === null ||
+    movement.isStranded ||
+    army.mission === 'hunt' ||
+    isArmyHeadingHome(army, now) ||
+    isArmyWaitingToGather(army, now)
+  ) {
+    return false;
+  }
   return !isFieldOrderMidMarch({ movement }, now);
 }
 
@@ -624,6 +660,8 @@ export function armyStatusLabel(
     position: HexPoint;
     movement: ArmyTimingMovement | null;
     mission: string;
+    gatheringId?: string | null;
+    gatherDepartsAt?: string | null;
   },
   now: number,
   targetSettlementName?: string | null,
@@ -634,6 +672,9 @@ export function armyStatusLabel(
     return targetSettlementName
       ? i18n.global.t('hud.armyStatus.supportingNamed', { name: targetSettlementName })
       : i18n.global.t('hud.armyStatus.supporting');
+  }
+  if (isArmyWaitingToGather(army, now)) {
+    return i18n.global.t('hud.armyStatus.waitingToGather', { q: army.position.q, r: army.position.r });
   }
   if (isArmyHeadingHome(army, now)) return i18n.global.t('hud.armyStatus.returning');
   if (isArmyStanding(army, now)) {

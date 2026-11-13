@@ -392,6 +392,8 @@
     "returning": "Kehrt zurück",
     "standingAt": "Steht auf ({q}, {r})",
     "headsHomeIn": "kehrt in {eta} um",
+    "waitingToGather": "Wartet auf ({q}, {r}) auf die anderen Gruppen",
+    "movesOnIn": "zieht in {eta} weiter",
     "inTransit": "Unterwegs",
     "hunting": "Auf der Jagd",
     "cannotGetHome": "Kein Weg nach Hause",
