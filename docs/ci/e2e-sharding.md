@@ -235,6 +235,23 @@ to, not just the group's running total — a duration-balanced group can
 still concentrate risk if too many of its tests are individually close to
 the timeout.
 
+## 2026-11-03 rebalance: `@g3` had grown into the straggler
+
+Run [41732133540](https://github.com/VanDooProject/bjarnoy/actions/runs/41732133540)
+(E2E step durations): `@g1` 8m36s, `@g2` 13m, `@g3` 21m, `rest` 12m37s. The
+landing-intro, ring-menu-mobile and landing specs had piled up in `@g3`.
+
+Moved three whole files from `@g3` to `@g1` (tag change only), sized from that
+run's per-test durations:
+
+| file | duration |
+|---|---|
+| `army-overlay.spec.ts` | ~178s (5 tests) |
+| `pinch-zoom.spec.ts` | ~135s (5 tests) |
+| `double-tap-zoom.spec.ts` | ~69s (2 tests) |
+
+Expected: `@g1` ~15m, `@g3` ~14.6m. Re-check against the next run.
+
 ## When to re-balance
 
 The group durations above are a snapshot, not a guarantee — they'll drift as

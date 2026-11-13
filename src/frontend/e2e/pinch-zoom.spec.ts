@@ -25,7 +25,7 @@ async function cameraView(page: Page): Promise<{ coord: { q: number; r: number }
   });
 }
 
-test.describe('pinch-to-zoom on touch', { tag: '@g3' }, () => {
+test.describe('pinch-to-zoom on touch', { tag: '@g1' }, () => {
   test.use({ hasTouch: true });
 
   test('spreading two fingers zooms in, closing them zooms back out', async ({ page }) => {
