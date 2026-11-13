@@ -72,18 +72,14 @@ test.describe('one layer at a time on a phone', { tag: '@g3' }, () => {
     // A barracks' ring offers "Train units", which opens the training window over the map.
     await settlement.standBuildings([{ type: 'barracks', level: 1 }]);
     const barracks = await page.evaluate(() => {
-      const w = window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string };
-        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
-      };
-      const world = w.__demoWorld();
+      const world = window.__demoWorld() as { model: any; selectedSettlementId: string };
       const s = world.model.getSettlement(world.selectedSettlementId);
       const radius = world.model.borderRadius(s);
       for (let dq = -radius; dq <= radius; dq++) {
         for (let dr = -radius; dr <= radius; dr++) {
           const at = { q: s.q + dq, r: s.r + dr };
           if (world.model.getTile(at.q, at.r).buildingType === 'barracks') {
-            return { hex: at, screen: w.__settlementRenderer().hexCenterScreen(at) };
+            return { hex: at, screen: window.__settlementRenderer().hexCenterScreen(at) };
           }
         }
       }

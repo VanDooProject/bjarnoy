@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
+import { cameraZoom } from './support/renderer';
 
 /**
  * The ring menu's motion (RingMenu.vue, lib/map/ringMotion.ts), played for real.
@@ -209,9 +210,7 @@ test.describe('ring menu motion', () => {
     await settlement.ring.waitForOpen();
     await ringSettled(page);
 
-    const zoomBefore = await page.evaluate(() =>
-      (window as unknown as { __settlementRenderer: () => { cameraZoom: number } }).__settlementRenderer().cameraZoom,
-    );
+    const zoomBefore = await cameraZoom(page);
     const shot = await settlement.screenshot();
     await page.mouse.move(120, 700);
     await page.mouse.down();

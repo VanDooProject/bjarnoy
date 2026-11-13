@@ -6,7 +6,7 @@ import { waitForMapReady } from './support/render';
 type CameraView = { coord: { q: number; r: number }; zoom: number };
 const cameraView = (page: import('@playwright/test').Page) =>
   page.evaluate(
-    () => (window as unknown as { __settlementRenderer: () => { cameraView: CameraView } }).__settlementRenderer().cameraView,
+    () => window.__settlementRenderer().cameraView,
   );
 
 // The settlement view keeps its camera in the URL hash. Demo mode keeps its world in memory, so a

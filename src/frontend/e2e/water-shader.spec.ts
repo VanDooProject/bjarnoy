@@ -131,13 +131,9 @@ async function patchDeepInside(settlement: SettlementPage, want: 'sea' | 'land',
   const box = await settlement.canvasBox();
   const centre = await page.evaluate(
     ([wanted, margin, viewport]) => {
-      const win = window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string };
-        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
-      };
-      const world = win.__demoWorld();
+      const world = window.__demoWorld() as { model: any; selectedSettlementId: string };
       const settlement = world.model.getSettlement(world.selectedSettlementId);
-      const renderer = win.__settlementRenderer();
+      const renderer = window.__settlementRenderer();
 
       const isWanted = (q: number, r: number) => {
         const terrain = world.model.getTile(q, r)?.terrain;

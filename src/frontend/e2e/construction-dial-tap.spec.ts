@@ -11,12 +11,9 @@ import { SettlementPage } from './pages';
 test.describe('construction dial tap on a phone', { tag: '@g2' }, () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  interface DialWindow {
-    __demoWorld: () => {
-      hud: { queueFetchedAt: number; queue: unknown[]; construction: unknown; tick: number };
-      syncHud: () => void;
-    };
-    __settlementRenderer: () => { dialScreenPoint: (c: { q: number; r: number }) => { x: number; y: number } };
+  interface DemoWorld {
+    hud: { queueFetchedAt: number; queue: unknown[]; construction: unknown; tick: number };
+    syncHud: () => void;
   }
 
   test('tapping a dial reaches the map and opens a ring, like tapping elsewhere', async ({ page }) => {
@@ -25,7 +22,7 @@ test.describe('construction dial tap on a phone', { tag: '@g2' }, () => {
     const target = await settlement.findHex({ terrain: 'grass' });
 
     await page.evaluate((hex) => {
-      const world = (window as unknown as DialWindow).__demoWorld();
+      const world = window.__demoWorld() as DemoWorld;
       world.hud.queueFetchedAt = Date.now();
       world.hud.queue = [
         {
@@ -47,7 +44,7 @@ test.describe('construction dial tap on a phone', { tag: '@g2' }, () => {
     }, target.hex);
 
     const dial = await page.evaluate(
-      (hex) => (window as unknown as DialWindow).__settlementRenderer().dialScreenPoint(hex),
+      (hex) => window.__settlementRenderer().dialScreenPoint(hex),
       target.hex,
     );
     await expect(settlement.hud.dialOnly(target.hex)).toHaveCount(1);

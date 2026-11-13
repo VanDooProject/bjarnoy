@@ -1,6 +1,7 @@
 // See RingMenuComponent.ts for why `expect`-free page objects import from `@playwright/test`, not `../fixtures`.
 import type { Locator, Page } from '@playwright/test';
 import type { HexCoord } from './SettlementPage';
+import { cameraZoom } from '../support/renderer';
 
 /** A building the demo settlement owns, as the model lists it. */
 export interface OwnedBuilding extends HexCoord {
@@ -8,16 +9,11 @@ export interface OwnedBuilding extends HexCoord {
   level: number;
 }
 
-type HudWindow = {
-  __demoWorld: () => {
-    model: any;
-    selectedSettlementId: string;
-    hud: { queueFetchedAt: number; queue: unknown[]; construction: unknown; tick: number };
-    syncHud: () => void;
-  };
-  __settlementRenderer: () => {
-    cameraZoom: number;
-  };
+type HudWorld = {
+  model: any;
+  selectedSettlementId: string;
+  hud: { queueFetchedAt: number; queue: unknown[]; construction: unknown; tick: number };
+  syncHud: () => void;
 };
 
 /** The building HUD of the settlement view (components/hud/BuildingHudLayer.vue): one marker per own building plus the toggle. */
@@ -71,7 +67,7 @@ export class BuildingHudComponent {
   /** The buildings the settlement owns, from the model. */
   ownedBuildings(): Promise<OwnedBuilding[]> {
     return this.page.evaluate(() => {
-      const world = (window as unknown as HudWindow).__demoWorld();
+      const world = window.__demoWorld() as HudWorld;
       return world.model.listBuildings(world.selectedSettlementId) as OwnedBuilding[];
     });
   }
@@ -80,7 +76,7 @@ export class BuildingHudComponent {
   async standBuildingAt(hex: HexCoord, type: string, level: number): Promise<void> {
     await this.page.evaluate(
       ({ at, buildingType, buildingLevel }) => {
-        const world = (window as unknown as HudWindow).__demoWorld();
+        const world = window.__demoWorld() as HudWorld;
         const tile = world.model.getTile(at.q, at.r);
         tile.buildingType = buildingType;
         tile.buildingLevel = buildingLevel;
@@ -94,7 +90,7 @@ export class BuildingHudComponent {
   async startUpgrade(hex: HexCoord, type: string, targetLevel: number): Promise<void> {
     await this.page.evaluate(
       ({ at, building, target }) => {
-        const world = (window as unknown as HudWindow).__demoWorld();
+        const world = window.__demoWorld() as HudWorld;
         world.hud.queueFetchedAt = Date.now();
         world.hud.queue = [
           {
@@ -131,6 +127,6 @@ export class BuildingHudComponent {
 
   /** The map camera's zoom. */
   cameraZoom(): Promise<number> {
-    return this.page.evaluate(() => (window as unknown as HudWindow).__settlementRenderer().cameraZoom);
+    return cameraZoom(this.page);
   }
 }
