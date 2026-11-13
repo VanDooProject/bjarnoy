@@ -83,6 +83,8 @@ players cannot.
 
 - An army that cannot get home stays where it is: it has no home, or no route home (for example a wall in the way).
   When its provisions run out, the whole army starves.
+- An army without a home still takes field orders: move, attack, support, or go to one of your garrison spots. The spot
+  it folds into becomes its home.
 - A stranded army can be attacked in the field like any other army. When it starves, you get a starvation report:
   which army, where, and the troops lost.
 - Only an army fleeing after a lost field battle is protected from field battles and camp ambushes, for at most
@@ -188,6 +190,12 @@ Consequences:
   `RetargetFoundingRejection.TargetNotReachable`) and the message "No land route: mountains
   and wide rivers can't be crossed."; the client maps the same codes to `apiErrors.rejections`
   in every locale and shows the text in the dispatch draft.
+- **The found route is straightened.** After the search, stretches of the route are replaced by
+  the straight hex line between their ends wherever every hex on that line is passable and the
+  line costs no more than the stretch (same half-and-half step pricing, so travel time and
+  provisions never get worse). On open sea this turns the two-leg shape (one diagonal, one
+  axis-straight leg) into one straight line. `HexPathfinder.Smooth` and `smooth` in `hexPath.ts`
+  do the same, on the same `HexCoord.Line` / `hexLine` hex line, so both sides return identical routes.
 - **The search is capped.** `HexPathfinder` expands at most 250,000 nodes per order, shared by
   all the searches the order makes: every leg through its waypoints, and a field order's way
   home (the TS twin `MAX_EXPANDED_NODES` in `hexPath.ts` matches for a single search); a long sea

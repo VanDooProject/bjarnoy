@@ -25,6 +25,7 @@
     "joinable": "Beitritt",
     "endboss": "Endboss",
     "frozenIsles": "Eisinseln",
+    "renownFollowsSpeed": "Ruhm folgt Tempo",
     "hidden": "Ausgeblendet",
     "seed": "Seed"
   },
@@ -56,6 +57,7 @@
     "startsAt": "Beginn",
     "closedToNewPlayers": "Für neue Spieler geschlossen",
     "frozenIslesEnabled": "Eisinseln aktiv",
+    "renownFollowsSpeed": "Ruhm folgt der Weltgeschwindigkeit",
     "hidden": "Für Spieler ausgeblendet",
     "endbossAt": "Endboss am"
   },

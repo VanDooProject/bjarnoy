@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS, MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { WorldMapPage, SettlementPage } from './pages';
-import { pinch, touchDrag } from './helpers';
+import { pinch, touchDrag } from './support/gestures';
 
 // docs/design/zoom-transition.md §9.2: two-finger pinch zooms (and pans) the
 // map on touch, through the exact same zoomBy() seam mouse-wheel zoom always

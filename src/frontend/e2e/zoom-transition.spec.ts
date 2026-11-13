@@ -2,7 +2,8 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { WorldMapPage } from './pages';
-import { clickHudMenuEntry, gotoWorldMap, waitForMapReady } from './helpers';
+import { clickHudMenuEntry, gotoWorldMap } from './helpers';
+import { waitForMapReady } from './support/render';
 import { DEFAULT_ENTER_SETTLEMENT_ZOOM } from '../src/lib/map/zoomTransition';
 
 // docs/design/zoom-transition.md: a wheel/pinch zoom crossing a threshold

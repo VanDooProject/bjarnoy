@@ -432,6 +432,7 @@ public static class WorldEndpoints
         WorldService worlds,
         ForeignArmyService foreignArmies,
         RealmDirectory realms,
+        GameDbContext db,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -449,7 +450,12 @@ public static class WorldEndpoints
 
         var now = world.ToClock().ToGameTime(timeProvider.GetUtcNow());
         var seen = await foreignArmies.GetAsync(worldId, realm.OwnerId!, now, cancellationToken);
-        return TypedResults.Ok<IReadOnlyList<ForeignArmyResponse>>([.. seen.Select(ForeignArmyResponse.From)]);
+        var callerIdClaim = httpContext.User.Identity?.IsAuthenticated == true
+            ? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            : null;
+        var callerUserId = Guid.TryParse(callerIdClaim, out var parsedCallerId) ? parsedCallerId : (Guid?)null;
+        var relationOf = await SettlementRelations.OfUserForCallerAsync(db, worldId, callerUserId, cancellationToken);
+        return TypedResults.Ok<IReadOnlyList<ForeignArmyResponse>>([.. seen.Select(a => ForeignArmyResponse.From(a, relationOf(a.UserId)))]);
     }
 
     /// <summary>

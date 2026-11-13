@@ -1,7 +1,8 @@
 import type { Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { clickHudMenuEntry, loginTestUser } from './helpers';
+import { clickHudMenuEntry } from './helpers';
+import { loginTestUser } from './support/session';
 import { AdminTablePage, LeaderboardPage, LEADERBOARD_WORLD_ID, SettlementPage, scoreEntry } from './pages';
 
 /**

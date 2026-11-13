@@ -1,6 +1,7 @@
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { foundSettlement, waitForMapReady } from './helpers';
+import { foundSettlement } from './helpers';
+import { waitForMapReady } from './support/render';
 
 type CameraView = { coord: { q: number; r: number }; zoom: number };
 const cameraView = (page: import('@playwright/test').Page) =>

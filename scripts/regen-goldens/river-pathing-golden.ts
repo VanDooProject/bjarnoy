@@ -33,6 +33,10 @@ for (const q of [50, 51, 52]) put(q, 0, 'grass');
 // 60..62: a river-stream Y (a stream joining a river) between the endpoints; its two feeders are the only other land.
 for (const [q, r] of [[60, 0], [61, 0], [62, 0], [61, -1], [60, 1]] as const) put(q, r, 'grass');
 
+// 200..224 x -14..0: a wide open grass patch (25 x 15 hexes). The endpoints sit off every hex axis, so the A* route (an axis leg plus a
+// diagonal one) is straightened into one straight hex line.
+for (let q = 200; q <= 224; q++) for (let r = -14; r <= 0; r++) put(q, r, 'grass');
+
 // Palisades: four strips (q0 .. q0+6, r -3..3, everything else sea) with a wall down the column q0+3; the endpoints are (q0+1, 0) and (q0+5, 0).
 // 70: a wall closed at both ends by a mountain, with a gate in the middle (owner A's). 80: the same without the gate.
 // 90: a wall that stops one hex short of the sea at the bottom (half-open end, crossed at the ground plus 3), a mountain closing the top.
@@ -130,6 +134,24 @@ interface CaseInput {
   army?: 'friendly' | 'friend' | 'enemy';
 }
 const caseInputs: CaseInput[] = [
+  {
+    name: 'open_grass_line_along_an_edge_direction_offset_10_minus5',
+    comment: 'Same grass patch, endpoints offset (+10, -5): the straight line runs between two hex axes, where the cube lerp lands on .5 rounding ties without the fixed 1e-6 nudge. Both sides must pick the same hexes.',
+    from: { q: 205, r: -2 },
+    to: { q: 215, r: -7 },
+  },
+  {
+    name: 'open_grass_line_along_an_edge_direction_offset_minus5_10',
+    comment: 'Same grass patch, endpoints offset (-5, +10): another between-axis direction, again exactly on the rounding-tie case.',
+    from: { q: 215, r: -12 },
+    to: { q: 210, r: -2 },
+  },
+  {
+    name: 'open_grass_route_is_straightened_into_one_hex_line',
+    comment: 'A 25 x 15 grass patch with off-axis endpoints (24 hexes apart): A* alone would walk an axis leg and a diagonal leg; the route is smoothed to the straight hex line between the endpoints, at the same cost.',
+    from: { q: 200, r: 0 },
+    to: { q: 224, r: -9 },
+  },
   {
     name: 'stream_crossing_no_detour_available',
     comment: 'A single grass corridor with a stream tile in the middle and nothing else reachable (everywhere else is sea): a stream is walkable at a flat 1.0 + 8.0 = 9.0.',

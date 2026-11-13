@@ -9,7 +9,7 @@ import {
   SettlementPage,
   WorldMapPage,
 } from '../pages';
-import { loginTestUser } from '../helpers';
+import { loginTestUser } from '../support/session';
 import { expectScreen, freezeClock } from './screen';
 
 test.use({ mapLayers: { water: false, fog: false }, mapMotion: { hud: 'off' } });

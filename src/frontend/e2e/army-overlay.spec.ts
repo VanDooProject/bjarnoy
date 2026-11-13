@@ -1,7 +1,7 @@
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
-import { captureCanvas } from './helpers';
+import { captureCanvas } from './support/render';
 
 /**
  * Issues #93 and #94: the settlement map's army/route overlay — draggable

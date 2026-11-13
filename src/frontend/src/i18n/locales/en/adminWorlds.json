@@ -25,6 +25,7 @@
     "joinable": "Joinable",
     "endboss": "Endboss",
     "frozenIsles": "Frozen isles",
+    "renownFollowsSpeed": "Renown follows speed",
     "hidden": "Hidden",
     "seed": "Seed"
   },
@@ -56,6 +57,7 @@
     "startsAt": "Starts at",
     "closedToNewPlayers": "Closed to new players",
     "frozenIslesEnabled": "Frozen isles enabled",
+    "renownFollowsSpeed": "Renown follows world speed",
     "hidden": "Hidden from players",
     "endbossAt": "Endboss at"
   },

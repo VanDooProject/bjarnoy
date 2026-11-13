@@ -435,8 +435,10 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         Assert.False(renown.CanFoundAnother);
     }
 
-    [Fact]
-    public async Task Renown_hourly_rate_and_accrual_scale_with_the_world_speed_factor()
+    [Theory]
+    [InlineData(true, 5.0)]
+    [InlineData(false, 1.0)]
+    public async Task Renown_hourly_rate_follows_the_world_speed_only_when_the_world_flag_is_on(bool followsSpeed, double expectedFactor)
     {
         using var client = Client();
         var (worldId, settlement, player, _) = await SetUpPlayerReadyToExpandAsync(client);
@@ -448,14 +450,31 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
 
         Authorize(client, adminToken);
         var patched = await client.PatchJsonAsync(
-            $"/api/v1/admin/worlds/{worldId}/settings", new UpdateWorldSettingsRequest { SpeedFactor = 5.0 }, Ct);
+            $"/api/v1/admin/worlds/{worldId}/settings",
+            new UpdateWorldSettingsRequest { SpeedFactor = 5.0, RenownFollowsSpeed = followsSpeed },
+            Ct);
         Assert.Equal(HttpStatusCode.OK, patched.StatusCode);
+        Assert.Equal(followsSpeed, (await patched.ReadStrictAsync<AdminWorldResponse>(Ct)).RenownFollowsSpeed);
 
         Authorize(client, player.AccessToken);
         var renown = await client.GetFromJsonAsync<RenownResponse>(
             $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
 
-        Assert.Equal(levels * RenownAccount.PointsPerLevelPerHour * 5.0, renown!.PerHour);
+        Assert.Equal(levels * RenownAccount.PointsPerLevelPerHour * expectedFactor, renown!.PerHour);
+    }
+
+    [Fact]
+    public async Task A_new_world_does_not_let_renown_follow_the_world_speed()
+    {
+        using var client = Client();
+        var (worldId, _, _, _) = await SetUpPlayerReadyToExpandAsync(client);
+        var adminToken = await CreateAdminTokenAsync(client);
+
+        Authorize(client, adminToken);
+        var worlds = await client.GetFromJsonAsync<List<AdminWorldResponse>>(
+            "/api/v1/admin/worlds", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.False(worlds!.Single(w => w.Id == worldId).RenownFollowsSpeed);
     }
 
     [Fact]

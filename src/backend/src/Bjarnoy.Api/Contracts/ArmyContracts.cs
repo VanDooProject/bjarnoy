@@ -182,6 +182,7 @@ public sealed record MovementResponse(
 /// Rings of the map the army sees around itself while it travels: the highest <c>VisionRadius</c> among its unit types plus its
 /// home settlement's Odin's Ravens (<see cref="FogVisionRadii.ArmyVisionRadius"/>). The client's live fog layer draws it as is.
 /// </param>
+/// <param name="SettlementId">The army's home settlement; <see langword="null"/> for an army without a home (it cannot be recalled).</param>
 /// <param name="AtHome">True when the army is standing in its home settlement — <paramref name="Movement"/> is then null.</param>
 /// <param name="Supporting">
 /// True when the army is currently a guest garrison at
@@ -190,7 +191,8 @@ public sealed record MovementResponse(
 /// null here too, since a guest is not travelling.
 /// </param>
 /// <param name="StarvesAt">
-/// When the army's provisions run out and the whole army dies; only set while it cannot get home (<see cref="MovementResponse.IsStranded"/>).
+/// When the army's provisions run out and the whole army dies; only set while it cannot get home (<see cref="MovementResponse.IsStranded"/>,
+/// or it has no home).
 /// </param>
 /// <param name="Position">
 /// Current hex: the home settlement's centre while <paramref name="AtHome"/>,
@@ -199,7 +201,7 @@ public sealed record MovementResponse(
 /// </param>
 public sealed record ArmyResponse(
     Guid Id,
-    Guid SettlementId,
+    Guid? SettlementId,
     string Mission,
     Guid? TargetSettlementId,
     bool AtHome,
@@ -219,10 +221,13 @@ public sealed record ArmyResponse(
     public static ArmyResponse From(ArmyEntity entity, DateTimeOffset gameNow)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        ArgumentNullException.ThrowIfNull(entity.Settlement);
+        if (entity.SettlementId is not null)
+        {
+            ArgumentNullException.ThrowIfNull(entity.Settlement);
+        }
 
         var domain = entity.ToDomain();
-        var home = new HexCoord(entity.Settlement.CentreQ, entity.Settlement.CentreR);
+        var home = entity.Settlement is { } homeSettlement ? new HexCoord(homeSettlement.CentreQ, homeSettlement.CentreR) : domain.HomeSpot;
         var atHome = domain.Location is ArmyLocation.AtHome;
         var supporting = domain.Location is ArmyLocation.Supporting;
         var movement = domain.Location is ArmyLocation.InTransit inTransit ? inTransit.Movement : null;
@@ -248,7 +253,8 @@ public sealed record ArmyResponse(
             domain.ProvisionsAt(gameNow),
             domain.TotalSpeed,
             domain.TotalUpkeepPerHour,
-            FogVisionRadii.ArmyVisionRadius(domain.Stacks, entity.Settlement.ToDomain().VisionBonusRings),
+            // An army without a home has no Odin's Ravens behind it.
+            FogVisionRadii.ArmyVisionRadius(domain.Stacks, entity.Settlement?.ToDomain().VisionBonusRings ?? 0),
             [.. domain.Stacks.Select(s => new ArmyUnitStackResponse(s.Type.ToWireName(), s.Count))],
             movement is null ? null : MovementResponse.From(movement),
             domain.StarvesAt,
@@ -258,16 +264,18 @@ public sealed record ArmyResponse(
     }
 }
 
-/// <summary>An army as it appears in a settlement's army list.</summary>
-public sealed record ArmySummary(Guid Id, string Mission, bool AtHome, bool Supporting, HexPointResponse Position)
+/// <summary>
+/// An army as it appears in a settlement's army list. <paramref name="SettlementId"/> is its home settlement: null for an army
+/// without a home, which every realm of its owner lists.
+/// </summary>
+public sealed record ArmySummary(Guid Id, Guid? SettlementId, string Mission, bool AtHome, bool Supporting, HexPointResponse Position)
 {
     public static ArmySummary From(ArmyEntity entity, DateTimeOffset gameNow)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        ArgumentNullException.ThrowIfNull(entity.Settlement);
 
         var domain = entity.ToDomain();
-        var home = new HexCoord(entity.Settlement.CentreQ, entity.Settlement.CentreR);
+        var home = entity.Settlement is { } homeSettlement ? new HexCoord(homeSettlement.CentreQ, homeSettlement.CentreR) : domain.HomeSpot;
         var atHome = domain.Location is ArmyLocation.AtHome;
         var supporting = domain.Location is ArmyLocation.Supporting;
 
@@ -279,7 +287,7 @@ public sealed record ArmySummary(Guid Id, string Mission, bool AtHome, bool Supp
         };
 
         return new ArmySummary(
-            entity.Id, domain.Mission.ToString().ToLowerInvariant(), atHome, supporting,
+            entity.Id, entity.SettlementId, domain.Mission.ToString().ToLowerInvariant(), atHome, supporting,
             HexPointResponse.From(position));
     }
 }
@@ -292,7 +300,7 @@ public sealed record ArmySummary(Guid Id, string Mission, bool AtHome, bool Supp
 /// via <see cref="ArmySummary"/> on their own settlement's army list.
 /// </summary>
 public sealed record GuestArmySummary(
-    Guid ArmyId, Guid OwnerSettlementId, double TotalUpkeepPerHour, IReadOnlyList<ArmyUnitStackResponse> Stacks)
+    Guid ArmyId, Guid? OwnerSettlementId, double TotalUpkeepPerHour, IReadOnlyList<ArmyUnitStackResponse> Stacks)
 {
     public static GuestArmySummary From(ArmyEntity entity)
     {
@@ -569,19 +577,23 @@ public sealed record ForeignMovementResponse(
     DateTimeOffset ArrivesAt);
 
 /// <summary>
-/// A marching army of another player inside the viewer's sight. Deliberately nothing but identity (to colour by its realm), kind of
-/// marker and where it is going next: no mission, target, units or provisions.
+/// A marching army of another player inside the viewer's sight. Deliberately nothing but identity (to colour by: its home, and
+/// <paramref name="Relation"/>, how its owner stands to the viewer, <see cref="SettlementRelations"/>, so an army without a home
+/// wears its owner's colour too; never the owner's ids, an anonymous owner id is that player's credential), kind of marker and where
+/// it is going next: no mission, target, units or provisions.
 /// </summary>
 public sealed record ForeignArmyResponse(
     Guid Id,
-    Guid SettlementId,
+    Guid? SettlementId,
+    string Relation,
     bool IsFleet,
     HexPointResponse Position,
     ForeignMovementResponse Movement)
 {
-    public static ForeignArmyResponse From(ForeignArmy army) => new(
+    public static ForeignArmyResponse From(ForeignArmy army, string relation) => new(
         army.Id,
         army.SettlementId,
+        relation,
         army.IsFleet,
         HexPointResponse.From(army.Position),
         new ForeignMovementResponse(

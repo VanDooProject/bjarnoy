@@ -13,20 +13,35 @@ production build via `vite preview`, no backend — specs mock the API themselve
   fixture; importing the raw `test` silently drops that regression guard.
 - `pages/` — the page objects (below). Check here first: most setup a spec
   needs already has an intent method.
-- `helpers.ts` — `waitForMapReady(page)`, `gotoWorldMap(page)`,
-  `loginTestUser(page, userName?)` (a mocked authenticated session, before
-  the page's first navigation — needed by anything that clicks HudNav's
-  "World map" or "Leaderboards" links, both of which now require
-  `auth.isAuthenticated`), `claimLandfall(page)`, `foundSettlement(page)`, `rectsOf(locator)` /
-  `distanceFrom(rect, x, y)`, `captureCanvas(page, box)` — the last one is how
-  a spec takes a comparable frame of the map: `locator.screenshot()` waits out
-  animation frames, which costs *seconds* per frame on a software-rendered
-  runner (see its own comment for the measurements, and prefer the page
-  objects' `screenshot()` methods, which call it for you). Also `pinch(page,
-  centre, fromGap, toGap, steps?)` and `touchDrag(page, from, to, steps?)` —
-  real multi-/single-touch gestures via CDP's `Input.dispatchTouchEvent`
-  (`page.touchscreen` only exposes single-finger `tap`), used by
-  `pinch-zoom.spec.ts`.
+- `support/` — the low-level utilities, one module per concern. Specs and page
+  objects import from the module directly; support modules never import
+  `helpers.ts` or the `pages` barrel (narrow `../pages/AdminAuthFixture` only).
+  - `support/session.ts` — `loginTestUser(page, userName?)`: a mocked
+    authenticated session, before the page's first navigation — needed by
+    anything that clicks HudNav's "World map" or "Leaderboards" links, both of
+    which now require `auth.isAuthenticated`.
+  - `support/render.ts` — `waitForMapReady(page)`, `waitForRenderedFrames(page,
+    frames?)`, `captureCanvas(page, box)` and `observeLongTasks(page)` /
+    `longestTask(page)`. `captureCanvas` is how a spec takes a comparable frame
+    of the map: `locator.screenshot()` waits out animation frames, which costs
+    *seconds* per frame on a software-rendered runner (see its own comment for
+    the measurements, and prefer the page objects' `screenshot()` methods, which
+    call it for you).
+  - `support/geometry.ts` — `rectsOf(locator)` / `distanceFrom(rect, x, y)`
+    (every element's box and visibility in one round trip), `layoutOverflow(page)`
+    (the phone-viewport layout check).
+  - `support/gestures.ts` — real touch gestures via CDP's
+    `Input.dispatchTouchEvent` (`page.touchscreen` only exposes single-finger
+    `tap`): `pinch(page, centre, fromGap, toGap, steps?)`, `touchDrag(page,
+    from, to, steps?)` and `doubleTap(page, p)`, used by `pinch-zoom.spec.ts` and
+    `double-tap-zoom.spec.ts`.
+  - `support/cdp.ts` — `cdpSessionFor(page)`: the one-CDP-session-per-page
+    cache that the gestures and `captureCanvas` share.
+- `helpers.ts` — only the multi-step user flows built on `support/`:
+  `gotoWorldMap(page)`, `clickHudMenuEntry`, `openHudDrawer`, `claimLandfall`,
+  `enterSettlementAfterOnboarding`, `foundSettlement`, `placeGuidedBuildings`,
+  `openRingOnGuidedHex`, `buildThroughOpenRing`, `bubbleNearestPointerTip`,
+  `putFleetsFarAtSea`, `refreshArmies`. (These move into page objects over time.)
 - `budgets.ts` — `MAP_SPEC_TIMEOUT_MS`, `HEAVY_MAP_SPEC_TIMEOUT_MS`.
 
 Cost model for specs that drive a map view: a Playwright call is a round trip
@@ -55,11 +70,11 @@ two `requestAnimationFrame`s no longer imply a Pixi render.
    point — the way `sawmill-build.spec.ts` and `shrine-build.spec.ts` do. If a
    new spec needs a variant (e.g. "find an empty owned grass hex"), add it to
    `helpers.ts` rather than pasting the loop again.
-3. **No duplicated admin login.** Admin specs seed
-   `localStorage['bjarnoy.refreshToken'] = 'seed-refresh-admin'` and mock
-   `**/api/v1/auth/refresh` + `**/api/v1/auth/me`. That block is already
-   copy-pasted across five specs (issue #189) — reuse/extend the shared helper
-   instead of adding a sixth copy.
+3. **No duplicated login.** Use the `adminAuth` fixture (`adminAuth.login()` /
+   `loginAsPlayer(name)`) or `loginTestUser(page)` from `support/session.ts`.
+   Never seed `localStorage['bjarnoy.refreshToken']` or mock
+   `**/api/v1/auth/refresh` + `**/api/v1/auth/me` in a spec: that block lives
+   only in `pages/AdminAuthFixture.ts` (issue #189).
 4. **A selector used in 2+ specs gets extracted.** Raw `.ring-bubble`,
    `.hex-tooltip`, `polygon[data-hex="q,r"]`, `table.table tbody tr` strings are
    the main source of the duplication we are trying to stop. Prefer a
@@ -109,6 +124,7 @@ one-off abstraction inside the spec.
 | `LeaderboardPage` | Leaderboards: `mockApi()`, `goto()`, `seedWorld()`, `scoreTabs`, `firstScoreBoard`, `boardsNav`, `dialog`; `scoreEntry()` builds a row. |
 | `DocsPage` | `/docs`: `openHub()`, `openTechTree()`, `openTiles()`, `artLoaded()`. |
 | `LandingPage` | `/` with the intro skipped: `open()`. |
+| `BuildingHudComponent` | The building HUD of the settlement view: `markers` / `dialOnlyMarkers` / `toggle`, `marker(hex)` / `dialOnly(hex)` / `dial(hex)` / `dialLabel(hex)` / `box(hex)`, `ownedBuildings()`, `standBuildingAt(hex, type, level)`, `startUpgrade(hex, type, targetLevel)`, `dialOnlyKeys()`, `elementTagAt(point)`, `cameraZoom()`. |
 | `ScrollableView` | The "does this view scroll inside its own box" check (#101): `metrics()`, `wheel(delta)`, `noHorizontalOverflow()`. |
 
 Page objects import `expect` from `@playwright/test`, not from `./fixtures` —

@@ -390,6 +390,10 @@
     "supportingNamed": "Unterstützt {name}",
     "supporting": "Unterstützt",
     "returning": "Kehrt zurück",
+    "standingAt": "Steht auf ({q}, {r})",
+    "headsHomeIn": "kehrt in {eta} um",
+    "waitingToGather": "Wartet bei ({q}, {r}) auf die anderen Gruppen",
+    "movesOnIn": "zieht in {eta} weiter",
     "inTransit": "Unterwegs",
     "hunting": "Auf der Jagd",
     "cannotGetHome": "Kein Weg nach Hause",
@@ -406,6 +410,7 @@
   "armyPanel": {
     "title": "Armeen",
     "demoNote": "Die Entsendung von Armeen erfordert das echte Backend und ist im Demo-Modus noch nicht eingerichtet.",
+    "withoutHome": "Ohne Zuhause",
     "noArmies": "Keine Armeen unterwegs.",
     "dispatchArmy": "Armee entsenden",
     "premiumRedirectTitle": "Premium erforderlich, um eine noch reisende Armee umzuleiten",

@@ -793,6 +793,8 @@ export interface AdminWorldResponse {
   startsAt: string | null;
   joinsClosed: boolean;
   frozenIslesEnabled: boolean;
+  /** Whether the renown buildings earn follows the world speed factor. */
+  renownFollowsSpeed: boolean;
   /** Left out of every public world list for non-admins. */
   hidden: boolean;
   endbossAt: string | null;
@@ -882,6 +884,7 @@ export interface UpdateWorldSettingsRequest {
   startsAt?: string | null;
   joinsClosed?: boolean;
   frozenIslesEnabled?: boolean;
+  renownFollowsSpeed?: boolean;
   hidden?: boolean;
   endbossAt?: string | null;
 }
@@ -1196,7 +1199,8 @@ export interface AdminEditArmyRequest {
 export interface AdminArmyResponse {
   army: ArmyResponse;
   worldId: string;
-  settlementName: string;
+  /** Null for an army without a home. */
+  settlementName: string | null;
   ownerName: string;
   /** Loot the army carries home and has not deposited yet. */
   loot: ResourceLine;
@@ -1730,7 +1734,10 @@ export interface ForeignMovementResponse {
  */
 export interface ForeignArmyResponse {
   id: string;
-  settlementId: string;
+  /** Null for an army without a home. */
+  settlementId: string | null;
+  /** How the army's owner stands to the viewer (never the owner's ids): picks its colour, for an army without a home too. */
+  relation: 'mine' | 'guild' | 'treaty' | 'rival';
   isFleet: boolean;
   position: HexPoint;
   movement: ForeignMovementResponse;
@@ -1747,7 +1754,8 @@ export interface ForeignArmyResponse {
  */
 export interface ArmyResponse {
   id: string;
-  settlementId: string;
+  /** The army's home settlement; null for an army without a home (its beach camp was destroyed): it cannot be recalled, it still takes field orders. */
+  settlementId: string | null;
   mission: string;
   targetSettlementId: string | null;
   atHome: boolean;
@@ -1766,7 +1774,7 @@ export interface ArmyResponse {
   gatheringId?: string | null;
   /** The hex the groups of a gathering army meet on. */
   gatherHex?: HexPoint | null;
-  /** When this group leaves its spot for the meeting hex. */
+  /** When the gathering leaves the meeting hex for its target (`Gathering.DepartAt`); a group that has arrived waits there until then. */
   gatherDepartsAt?: string | null;
 }
 
@@ -1778,6 +1786,8 @@ export interface ArmyUnitStackResponse {
 /** An army as it appears in a settlement's army list — lighter than `ArmyResponse`. */
 export interface ArmySummary {
   id: string;
+  /** The army's home settlement; null for an army without a home, which every realm of its owner lists. */
+  settlementId: string | null;
   mission: string;
   atHome: boolean;
   supporting: boolean;
@@ -1794,7 +1804,8 @@ export interface ArmySummary {
  */
 export interface GuestArmySummary {
   armyId: string;
-  ownerSettlementId: string;
+  /** Null for a guest without a home. */
+  ownerSettlementId: string | null;
   totalUpkeepPerHour: number;
   stacks: ArmyUnitStackResponse[];
 }

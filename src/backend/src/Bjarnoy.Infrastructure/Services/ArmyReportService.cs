@@ -17,13 +17,14 @@ public sealed class ArmyReportService(GameDbContext dbContext)
     private readonly GameDbContext _dbContext = dbContext;
 
     /// <summary>Stages a report on the context; the caller saves.</summary>
+    /// <remarks>The report goes to the army's own owner (<see cref="ArmyEntity.OwnerId"/>), so an army without a home gets one too.</remarks>
     public ArmyReportEntity Add(
-        SettlementEntity owner, ArmyReportKind kind, DateTimeOffset occurredAt, Guid armyId, HexCoord hex,
+        ArmyEntity army, ArmyReportKind kind, DateTimeOffset occurredAt, Guid armyId, HexCoord hex,
         ArmyMission mission, IEnumerable<UnitStack> units)
     {
-        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(army);
 
-        var report = ArmyReportEntity.Create(owner.WorldId, owner.OwnerId, owner.UserId, kind, occurredAt, armyId, hex, mission, units);
+        var report = ArmyReportEntity.Create(army.WorldId, army.OwnerId, army.UserId, kind, occurredAt, armyId, hex, mission, units);
         _dbContext.ArmyReports.Add(report);
         return report;
     }

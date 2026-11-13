@@ -9,17 +9,19 @@ in [Taking over a realm](realm-takeover.md).
 - Passengers do not take part in the ship fight. The passengers the surviving ships cannot carry drown after the ship fight,
   before the land fight. Losses in the land fight are land troop losses only.
 - Siege engines on board (catapults, rams) fire in the land fight, from on board.
-- Ships do no damage to buildings on land. The Fire Ship (Brandschiff) is trained at the Dockyard. It damages buildings in the water: docks, fishers, the Shrine
+- Ships do no damage to buildings on land. Fire craft are trained at the Shipyard: the Fire Raft and the Fire Hulk (Brander, it replaces the Fire Ship); numbers in
+  [units-and-ships.md](../units-and-ships.md). They damage buildings in the water: docks, fishers, the Shrine
   of Njörd and a wall's sea end. It does no damage to units, cannot carry anything and eats a lot of food (high upkeep). It is single use: when it reaches the target and
   the ship fight there is won, it burns up and damages the building. In the ship fight it counts as a ship with its own hull and
   can be sunk, but adds no attack. It takes the same round-trip food check as every army, since it can be recalled before it
-  arrives. Fire Ships that are not used come back: when the target is gone, when the ship fight is lost, and those not needed
-  for the damage. 10 Fire Ships take one level off a building (starting value, to be tuned). The usual siege rules cap it: a
-  building never loses more levels in one attack than they allow, however many Fire Ships come.
+  arrives. Fire craft that are not used come back: when the target is gone, when the ship fight is lost, and those not needed
+  for the damage. 10 Fire Hulks or 50 Fire Rafts take one level off a building (starting values, to be tuned). The usual siege rules cap it: a
+  building never loses more levels in one attack than they allow, however many fire craft come.
 - An attack on a building in the water (a dock, a fisher, the Shrine of Njörd, a wall's sea end) is a ship fight only, with no
   loot: the troops and siege engines on board cannot reach it. Attack on a beach camp: ship fight first, then the land fight. The land troops
-  fight from on board and do not land. If the attacker loses the ship fight, there is no land fight. The camp's buildings are
-  damaged by land siege in the land fight, never by ships.
+  fight from on board and do not land. If the attacker loses the ship fight, there is no land fight. Siege engines and fire
+  ships do not damage a beach camp; it falls only to an attack that leaves no troops in it
+  ([beach-camp.md](beach-camp.md)).
 - If the target has no fleet, the ship fight is skipped and counts as won.
 - Wildlife camps follow the same split. Water camps (the whale road) are fought by fleets only. Sand camps (seal and walrus
   haul-outs) are fought by land troops only, from on board; the fleet does no fighting there. A fleet without land troops on board

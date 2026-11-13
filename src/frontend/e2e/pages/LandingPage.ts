@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import { waitForMapReady } from '../helpers';
+import { waitForMapReady } from '../support/render';
 
 /** The landing page (`/`): the settlement preview with the "choose where your realm begins" heading. */
 export class LandingPage {

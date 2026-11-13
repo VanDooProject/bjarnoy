@@ -1100,7 +1100,7 @@
     },
     "renown": {
       "heading": "Ruhm und Preis",
-      "body": "Jede Siedlung nach der ersten kostet Ruhm und Siedler. Ruhm sammelst du mit den Gebäuden aller deiner Siedlungen zusammen: 1 pro Gebäudestufe und Stunde, auf schnelleren Welten entsprechend schneller, und er verfällt nie. Mit jeder Siedlung, die du besitzt, verdoppelt sich der Ruhm, der für die nächste verlangt wird. Siedler kosten immer gleich viel.",
+      "body": "Jede Siedlung nach der ersten kostet Ruhm und Siedler. Ruhm sammelst du mit den Gebäuden aller deiner Siedlungen zusammen: 1 pro Gebäudestufe und Stunde, und er verfällt nie. Mit jeder Siedlung, die du besitzt, verdoppelt sich der Ruhm, der für die nächste verlangt wird. Siedler kosten immer gleich viel.",
       "columns": {
         "next": "Du gründest",
         "renown": "Nötiger Ruhm"
@@ -1170,7 +1170,12 @@
     "risks": {
       "heading": "Gefahren",
       "attacked": "Ein Lager kann von Land und vom Meer aus angegriffen werden. Verteidigen keine Truppen es, kannst du es plündern.",
-      "empty": "Sind keine Truppen darin, lässt es sich auch ohne Belagerungsgerät zerstören."
+      "falls": "Ein Lager fällt nur, wenn ein Angriff niemanden darin übrig lässt und der Angreifer selbst noch Truppen hat. Belagerungsgerät braucht er dafür nicht. Ein Überfall plündert das Lager nur.",
+      "guarded": "Solange Truppen das Lager bewachen – deine eigenen oder die einer Armee, die es unterstützt, Schiffe eingeschlossen –, lässt es sich nicht zerstören, weder mit Katapulten noch mit Rammböcken oder Brandschiffen.",
+      "destroyed": "Wird das Lager zerstört, ist es weg – so wie ein Reich endet, wenn sein Langhaus fällt. Alles, was es an Vorräten hatte, ist verloren, bis auf die Beute des Angreifers.",
+      "troopsOut": "Sind beim Fall des Lagers Truppen von dort unterwegs, ziehen sie zu deinem nächsten Garnisonsort, den sie erreichen können. Der wird ihr neues Zuhause. Erreichen sie keinen, bleiben sie, wo sie sind, bis ihr Proviant aufgebraucht ist – dann verhungern sie.",
+      "onTheWay": "Ist eine Armee gerade zu einem Lager unterwegs, das zerstört wird, zieht sie trotzdem bis auf sein Feld und bleibt dort stehen.",
+      "withoutHome": "Eine Armee ohne Zuhause nimmt weiter Befehle an: ziehen, angreifen, unterstützen oder zu einem deiner Garnisonsorte. Der Ort, an dem sie einrückt, wird ihr neues Zuhause. Zurückrufen kannst du sie nicht. Du findest sie in der Armeeliste jedes deiner Reiche unter „Ohne Zuhause“."
     }
   },
   "realm": {

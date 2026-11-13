@@ -39,8 +39,9 @@ function army(overrides: Partial<ArmyResponse> = {}): ArmyResponse {
       returnPath: [],
       returnCumulativeHours: [],
       returnEdgeHours: [],
-      turnAroundAt: '2026-01-01T02:00:00Z',
-      returnArrivesAt: '2026-01-01T04:00:00Z',
+      // Standing on its destination and not yet turned home (relative to the real clock), so it can still be recalled.
+      turnAroundAt: new Date(Date.now() + 2 * 3600_000).toISOString(),
+      returnArrivesAt: new Date(Date.now() + 4 * 3600_000).toISOString(),
       isReturning: false,
       isStranded: false,
       isFleeing: false,
@@ -140,5 +141,40 @@ describe('ArmyPanel recall refusal', () => {
     await vi.waitFor(() => expect(wrapper.find('.recall-refusal').exists()).toBe(true));
 
     expect(wrapper.get('.recall-refusal').text()).toBe('Recall failed.');
+  });
+});
+
+describe('ArmyPanel armies without a home', () => {
+  beforeEach(() => setActivePinia(createPinia()));
+
+  it('lists them under a "Without home" heading after the realm\'s own armies, with no Recall but a field order', () => {
+    const world = useWorldStore();
+    world.armies = [army({ id: 'lost', settlementId: null }), army({ id: 'own' })];
+    const wrapper = mount(ArmyPanel, {
+      global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] },
+    });
+
+    const list = wrapper.find('.army-list');
+    const heading = list.find('[data-testid="army-group-without-home"]');
+    expect(heading.text()).toBe('Without home');
+    const children = list.element.children;
+    const rows = wrapper.findAll('.army-row');
+    expect(rows).toHaveLength(2);
+    // The own army first, then the heading, then the army without a home.
+    expect(Array.from(children).indexOf(rows[0].element)).toBeLessThan(Array.from(children).indexOf(heading.element));
+    expect(Array.from(children).indexOf(heading.element)).toBeLessThan(Array.from(children).indexOf(rows[1].element));
+    expect(rows[1].find('.recall').exists()).toBe(false);
+    expect(rows[1].find('.field-order').exists()).toBe(true);
+    expect(rows[0].find('.recall').exists()).toBe(true);
+  });
+
+  it('shows no heading while every army has a home', () => {
+    const world = useWorldStore();
+    world.armies = [army()];
+    const wrapper = mount(ArmyPanel, {
+      global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] },
+    });
+
+    expect(wrapper.find('[data-testid="army-group-without-home"]').exists()).toBe(false);
   });
 });

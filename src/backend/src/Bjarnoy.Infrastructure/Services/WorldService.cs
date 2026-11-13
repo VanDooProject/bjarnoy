@@ -530,8 +530,10 @@ public sealed class WorldService(
 
         // Both ends: an army sent *at* one of these settlements is as dangling
         // as one sent *from* it.
+        // An army without a home has no settlement to match, so the world's own armies all go.
         await _dbContext.Armies
-            .Where(a => settlementIds.Contains(a.SettlementId)
+            .Where(a => a.WorldId == worldId
+                || (a.SettlementId != null && settlementIds.Contains(a.SettlementId.Value))
                 || (a.TargetSettlementId != null && settlementIds.Contains(a.TargetSettlementId.Value)))
             .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 
@@ -891,6 +893,7 @@ public sealed class WorldService(
         DateTimeOffset? endbossAt,
         string? name = null,
         bool? hidden = null,
+        bool? renownFollowsSpeed = null,
         CancellationToken cancellationToken = default)
     {
         var world = await _dbContext.Worlds
@@ -935,6 +938,11 @@ public sealed class WorldService(
         if (frozenIslesEnabled is { } frozenIsles)
         {
             world.FrozenIslesEnabled = frozenIsles;
+        }
+
+        if (renownFollowsSpeed is { } followsSpeed)
+        {
+            world.RenownFollowsSpeed = followsSpeed;
         }
 
         if (hasEndbossAt)
