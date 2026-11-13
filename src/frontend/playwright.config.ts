@@ -17,7 +17,8 @@ const visualProjects = [
     name: 'visual-phone',
     testDir: './e2e/visual',
     testMatch: '*.visual.spec.ts',
-    use: { ...devices['Pixel 7'] },
+    // Scale 1: same CSS layout as the device, a seventh of the pixels; colours compare the same (user decision, PR #770).
+    use: { ...devices['Pixel 7'], deviceScaleFactor: 1 },
   },
 ];
 
