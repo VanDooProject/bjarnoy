@@ -155,6 +155,38 @@ public class ArmyTests
         Assert.False(movement.IsReturning);
     }
 
+    private static int Expansions(HexCoord from, HexCoord to) =>
+        HexPathfinder.Search(from, to, AllGrass(), isLandUnit: true).Expanded;
+
+    [Fact]
+    public void Dispatch_legs_share_one_search_budget_so_legs_that_each_fit_alone_can_be_refused_together()
+    {
+        var settlement = Found();
+        var waypoint = new HexCoord(3, 0);
+        var destination = new HexCoord(3, 3);
+        var firstLeg = Expansions(Home, waypoint);
+        var secondLeg = Expansions(waypoint, destination);
+        var total = firstLeg + secondLeg;
+        Assert.True(firstLeg > 0 && secondLeg > 0);
+
+        DispatchDecision PlanWith(int budget) => TestArmy.PlanDispatch(
+            settlement, [new UnitStack(UnitType.Spearman, 5)], 40, [waypoint], destination, T0, Guid.CreateVersion7(),
+            AllGrass(), routeSearchBudget: budget);
+
+        // Each leg alone fits in the budget, together they do not.
+        Assert.True(Math.Max(firstLeg, secondLeg) <= total - 1);
+        Assert.Equal(DispatchRejection.RouteTooLong, PlanWith(total - 1).Rejection);
+        Assert.True(PlanWith(total).Accepted);
+    }
+
+    [Fact]
+    public void Dispatch_with_waypoints_under_the_default_budget_still_succeeds()
+    {
+        var decision = Dispatch(Found(), new HexCoord(3, 3), provisions: 40, waypoints: [new HexCoord(3, 0), new HexCoord(0, 3)]);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
     [Fact]
     public void Waypoints_are_visited_in_order_in_the_concatenated_path()
     {
@@ -555,6 +587,88 @@ public class ArmyTests
         Assert.Equal(new HexCoord(10, 0), movement.Path[0]);
         Assert.Equal(new HexCoord(15, 0), movement.Path[^1]);
         Assert.False(movement.IsReturning);
+    }
+
+    [Fact]
+    public void FieldOrder_way_home_counts_against_the_same_search_budget_as_the_legs()
+    {
+        var standingAt = new HexCoord(10, 0);
+        var destination = new HexCoord(15, 0);
+        var army = Standing(standingAt);
+        var outbound = Expansions(standingAt, destination);
+        var wayHome = Expansions(destination, Home);
+        var total = outbound + wayHome;
+        Assert.True(outbound > 0 && wayHome > 0);
+
+        FieldOrderResult PlanWith(int budget) => Army.PlanFieldOrder(
+            army, [], destination, Home, ArrivedAt(army), AllGrass(), isPremium: false, routeSearchBudget: budget);
+
+        // The outbound leg fits alone, and so does the way home; it is the pair that runs over.
+        Assert.Equal(FieldOrderRejection.RouteTooLong, PlanWith(total - 1).Rejection);
+        Assert.True(PlanWith(total).Accepted);
+    }
+
+    [Fact]
+    public void FieldOrder_legs_share_one_search_budget()
+    {
+        var standingAt = new HexCoord(10, 0);
+        var waypoint = new HexCoord(10, 6);
+        var destination = new HexCoord(15, 0);
+        var army = Standing(standingAt);
+        var total = Expansions(standingAt, waypoint) + Expansions(waypoint, destination) + Expansions(destination, Home);
+
+        FieldOrderResult PlanWith(int budget) => Army.PlanFieldOrder(
+            army, [waypoint], destination, Home, ArrivedAt(army), AllGrass(), isPremium: true, routeSearchBudget: budget);
+
+        Assert.Equal(FieldOrderRejection.RouteTooLong, PlanWith(total - 1).Rejection);
+        Assert.True(PlanWith(total).Accepted);
+    }
+
+    private static List<HexCoord> WaypointsOf(int count) => [.. Enumerable.Range(1, count).Select(i => new HexCoord(i, 0))];
+
+    [Theory]
+    [InlineData(5, false, true)]
+    [InlineData(6, false, false)]
+    [InlineData(10, true, true)]
+    [InlineData(11, true, false)]
+    public void Dispatch_takes_at_most_five_waypoints_or_ten_with_premium(int count, bool isPremium, bool accepted)
+    {
+        var decision = TestArmy.PlanDispatch(
+            Found(), [new UnitStack(UnitType.Spearman, 5)], 100, WaypointsOf(count), new HexCoord(count + 1, 0), T0,
+            Guid.CreateVersion7(), AllGrass(), isPremium: isPremium);
+
+        Assert.Equal(accepted, decision.Accepted);
+        if (!accepted)
+        {
+            Assert.Equal(DispatchRejection.TooManyWaypoints, decision.Rejection);
+        }
+    }
+
+    [Fact]
+    public void Dispatch_with_six_waypoints_is_refused_for_a_free_account_before_any_search()
+    {
+        var decision = TestArmy.PlanDispatch(
+            Found(), [new UnitStack(UnitType.Spearman, 5)], 100, WaypointsOf(6), new HexCoord(7, 0), T0,
+            Guid.CreateVersion7(), AllGrass(), routeSearchBudget: 0);
+
+        Assert.Equal(DispatchRejection.TooManyWaypoints, decision.Rejection);
+    }
+
+    [Theory]
+    [InlineData(10, true)]
+    [InlineData(11, false)]
+    public void FieldOrder_move_on_takes_at_most_ten_waypoints_for_premium(int count, bool accepted)
+    {
+        var army = Standing(new HexCoord(0, 0));
+
+        var result = Army.PlanFieldOrder(
+            army, WaypointsOf(count), new HexCoord(count + 1, 0), Home, ArrivedAt(army), AllGrass(), isPremium: true);
+
+        Assert.Equal(accepted, result.Accepted);
+        if (!accepted)
+        {
+            Assert.Equal(FieldOrderRejection.TooManyWaypoints, result.Rejection);
+        }
     }
 
     [Fact]

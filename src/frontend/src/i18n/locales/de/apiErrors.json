@@ -76,6 +76,7 @@
     "SplitRequiresStandingArmy": "Nur eine stehende Armee lässt sich teilen. Eine marschierende zieht komplett los.",
     "InvalidUnitSelection": "Wähle mindestens eine Einheit, höchstens so viele, wie die Armee hat.",
     "PremiumRequired": "Dafür wird Premium benötigt.",
+    "TooManyWaypoints": "Zu viele Wegpunkte. Ein Befehl nimmt höchstens 5, mit Premium 10.",
     "UnitNotAvailable": "Diese Einheit ist bei dieser Langhaus-Stufe noch nicht verfügbar.",
     "TrainingQueueFull": "Die Ausbildungsschlange dieses Gebäudes ist voll.",
     "InvalidCount": "Die Anzahl muss mindestens 1 sein.",
