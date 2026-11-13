@@ -46,24 +46,27 @@ function expectRuleHolds(route: AxialCoord[], points: Point[]) {
   const onRoute = new Set(route.map(coordKey));
   const outsiders = new Map<string, AxialCoord>();
   for (const h of route) for (const n of hexesInRadius(h, 1)) if (!onRoute.has(coordKey(n))) outsiders.set(coordKey(n), n);
+  // Collected and asserted once: an expect() per sample makes this test take seconds.
+  const violations: string[] = [];
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1];
     const b = points[i];
-    for (const o of outsiders.values()) {
+    for (const [key, o] of outsiders) {
       const poly = polygon(o);
-      expect(segmentEntersPolygon(a, b, poly, EPS)).toBe(false);
+      if (segmentEntersPolygon(a, b, poly, EPS)) violations.push(`segment ${i - 1}-${i} clips into ${key}`);
       // Dense sampling as an independent check: no sample is deeper inside than eps.
+      const m = center(o);
       const inner = poly.map((v) => {
-        const m = center(o);
         const f = 1 - (2 * EPS) / Math.hypot(v.x - m.x, v.y - m.y);
         return { x: m.x + (v.x - m.x) * f, y: m.y + (v.y - m.y) * f };
       });
       for (let s = 0; s <= 40; s++) {
         const p = { x: a.x + ((b.x - a.x) * s) / 40, y: a.y + ((b.y - a.y) * s) / 40 };
-        expect(pointInPolygon(p, inner, 0)).toBe(false);
+        if (pointInPolygon(p, inner, 0)) violations.push(`segment ${i - 1}-${i} sample ${s} inside ${key}`);
       }
     }
   }
+  expect(violations).toEqual([]);
 }
 
 const routes: Record<string, AxialCoord[]> = {
