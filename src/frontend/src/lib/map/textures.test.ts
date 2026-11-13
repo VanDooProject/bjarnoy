@@ -822,6 +822,35 @@ describe('textureKeyFor inland lakes', () => {
   });
 });
 
+describe('a building on an inland lake with no base art of its own', () => {
+  it('falls back to the sea base, like the lake is drawn without a building', () => {
+    const base = (name: string) => Object.fromEntries(TILE_ORIENTATIONS.map((o) => [o, name]));
+    const textures = {
+      base: { sea: base('sea-base') },
+      baseIndexed: {},
+      top: {},
+      animTop: {},
+      coastalBase: {},
+      coastalTop: {},
+      wastedCoastalBase: {},
+      wastedCoastalTop: {},
+    } as unknown as TileTextures;
+    const hut: Tile = {
+      q: 0,
+      r: 0,
+      terrain: 'inlandlake',
+      isCoastalWater: true,
+      orientation: 'NW',
+      variant: 0,
+      buildingType: 'fishinghut',
+      buildingLevel: 7,
+    };
+
+    expect(baseTextureFor(textures, hut)).toBe('sea-base');
+    expect(baseTextureFor(textures, { ...hut, terrain: 'sea' })).toBe('sea-base');
+  });
+});
+
 describe('living mountain shapes', () => {
   const FAMILIES = ['mountaintile', 'mountaintile_table', 'mountaintile_saddleback', 'mountaintile_corrie'];
   const mountain = (variant: number, extra: Partial<Tile> = {}): Tile => ({ q: 0, r: 0, terrain: 'mountain', orientation: 'E', variant, ...extra });

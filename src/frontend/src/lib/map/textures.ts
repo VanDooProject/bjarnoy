@@ -2035,7 +2035,8 @@ export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: Ri
   // Also reached while `indexed` exists but every one of its rungs is still
   // a hole (only `buildings-level1` loaded, and this particular family's
   // level 1 base frame hasn't resolved either) — same graceful degradation.
-  const base = textures.base[key] ?? textures.base[tile.terrain];
+  // An inland lake has no base art of its own: it is drawn with the sea's, like in `textureKeyFor`.
+  const base = textures.base[key] ?? textures.base[seaArt(tile.terrain)];
   return base![orientation];
 }
 
