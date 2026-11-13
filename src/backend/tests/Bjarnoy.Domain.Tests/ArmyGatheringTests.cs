@@ -254,7 +254,7 @@ public class ArmyGatheringTests
     {
         var dock = new HexCoord(3, 0);
         UnitStack[] ships = [new UnitStack(UnitType.Karve, 1)];
-        var settlement = WithUnits(Found((dock, BuildingType.Dockyard)), (Centre, Spearmen(8)), (dock, ships));
+        var settlement = WithUnits(Found((dock, BuildingType.Harbour)), (Centre, Spearmen(8)), (dock, ships));
         var decision = Send(settlement, 100, [], new HexCoord(6, 0), Strait, (Centre, Spearmen(8)), (dock, ships));
         var group = GroupAt(decision, Centre);
         var crowded = group with { Stacks = [new UnitStack(UnitType.Spearman, 15)] };
@@ -406,7 +406,7 @@ public class ArmyGatheringTests
     {
         var dock = new HexCoord(3, 0);
         UnitStack[] ships = [new UnitStack(UnitType.Karve, 1)];
-        var settlement = WithUnits(Found((dock, BuildingType.Dockyard)), (Centre, Spearmen(5)), (dock, ships));
+        var settlement = WithUnits(Found((dock, BuildingType.Harbour)), (Centre, Spearmen(5)), (dock, ships));
 
         var decision = Send(settlement, 100, [], new HexCoord(6, 0), Strait, (Centre, Spearmen(5)), (dock, ships));
 
@@ -430,7 +430,7 @@ public class ArmyGatheringTests
         var far = new HexCoord(3, 12);
         UnitStack[] ships = [new UnitStack(UnitType.Karve, 2)];
         var settlement = WithUnits(
-            Found((near, BuildingType.Dockyard), (far, BuildingType.Dockyard)), (Centre, Spearmen(5)), (near, ships), (far, ships));
+            Found((near, BuildingType.Harbour), (far, BuildingType.Harbour)), (Centre, Spearmen(5)), (near, ships), (far, ships));
 
         var decision = Send(settlement, 200, [], new HexCoord(7, 6), Strait, (Centre, Spearmen(5)), (near, ships), (far, ships));
 
@@ -455,7 +455,7 @@ public class ArmyGatheringTests
         var near = new HexCoord(3, 0);
         var far = new HexCoord(3, 12);
         var settlement = WithUnits(
-            Found((near, BuildingType.Dockyard), (far, BuildingType.Dockyard)),
+            Found((near, BuildingType.Harbour), (far, BuildingType.Harbour)),
             (Centre, Spearmen(12)), (near, [new UnitStack(UnitType.Karve, 1)]), (far, [new UnitStack(UnitType.Karve, 2)]));
 
         var decision = Send(
@@ -473,7 +473,7 @@ public class ArmyGatheringTests
         var far = new HexCoord(3, 12);
         UnitStack[] ships = [new UnitStack(UnitType.Karve, 1)];
         var settlement = WithUnits(
-            Found((near, BuildingType.Dockyard), (far, BuildingType.Dockyard)), (Centre, Spearmen(15)), (near, ships), (far, ships));
+            Found((near, BuildingType.Harbour), (far, BuildingType.Harbour)), (Centre, Spearmen(15)), (near, ships), (far, ships));
 
         var decision = Send(settlement, 200, [], new HexCoord(7, 6), Strait, (Centre, Spearmen(15)), (near, ships), (far, ships));
 

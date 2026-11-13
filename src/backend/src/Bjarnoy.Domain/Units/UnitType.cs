@@ -32,11 +32,11 @@ public enum UnitType
     /// <summary>Siege unit; requires Berserker to be trainable first.</summary>
     Catapult = 6,
 
-    /// <summary>Entry-level transport ship.</summary>
+    /// <summary>Troop transport ship. Trained at the Harbour.</summary>
     Karve = 7,
 
-    /// <summary>Heavier warship; requires Karve to be trainable first.</summary>
-    Longship = 8,
+    /// <summary>The standard warship. Trained at the Shipyard.</summary>
+    Snekkja = 8,
 
     /// <summary>
     /// Civilian coloniser (issue #55): five, standing together on an
@@ -52,16 +52,31 @@ public enum UnitType
     Ram = 10,
 
     /// <summary>
-    /// Fire ship: a hull with no attack and no slots, sent with a fleet to burn a building standing in the water (see
-    /// <c>docs/design/economy.md</c>, "Fire Ship"); requires Karve to be trainable first.
+    /// Fire Hulk (was the Fire Ship): a hull with no attack and no slots, sent with a fleet to burn a building standing in the water (see
+    /// <c>docs/design/economy.md</c>, "Fire Ship"). Trained at the Shipyard (the Fire Hulk).
     /// </summary>
-    FireShip = 11,
+    FireHulk = 11,
 
     /// <summary>
     /// Civilian that sets up a beach camp (<see cref="Bjarnoy.Domain.Settlers.BeachCamp"/>): two of them, landed on a free sand
     /// shore, build it and are used up doing so. See <c>docs/design/skirmish/beach-camp.md</c>.
     /// </summary>
     CampBuilder = 12,
+
+    /// <summary>Scout boat: tiny, fast, wide vision, no cargo. Trained at the Harbour.</summary>
+    Faering = 13,
+
+    /// <summary>Small cargo ship, no troops. Trained at the Harbour.</summary>
+    Byrding = 14,
+
+    /// <summary>Big cargo ship, no troops. Trained at the Harbour.</summary>
+    Knarr = 15,
+
+    /// <summary>The heavier longship: the fastest and strongest warship. Trained at the Shipyard.</summary>
+    Skeid = 16,
+
+    /// <summary>Cheap fire craft: fifty burn one building level in the water. Trained at the Shipyard.</summary>
+    FireRaft = 17,
 }
 
 public static class UnitTypeExtensions
@@ -76,11 +91,16 @@ public static class UnitTypeExtensions
         UnitType.Provisioner => "provisioner",
         UnitType.Catapult => "catapult",
         UnitType.Karve => "karve",
-        UnitType.Longship => "longship",
+        UnitType.Snekkja => "snekkja",
         UnitType.Settler => "settler",
         UnitType.Ram => "ram",
-        UnitType.FireShip => "fireship",
+        UnitType.FireHulk => "firehulk",
         UnitType.CampBuilder => "campbuilder",
+        UnitType.Faering => "faering",
+        UnitType.Byrding => "byrding",
+        UnitType.Knarr => "knarr",
+        UnitType.Skeid => "skeid",
+        UnitType.FireRaft => "fireraft",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown unit type"),
     };
 }

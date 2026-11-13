@@ -159,12 +159,12 @@ public class ArmyAttackTests
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1000, Stone: 1000, Food: (4 * hours) + 5, Iron: 1000),
                 ResourceAmounts.Zero, ResourceAmounts.Uniform(2000), T0),
-        }.WithGarrison([new UnitStack(UnitType.Longship, 2)]);
+        }.WithGarrison([new UnitStack(UnitType.Snekkja, 2)]);
 
         var arrival = Army.SettleArrival(army, camp, defenderSpeedFactor: 1.0, arrivesAt.AddHours(1), seed: 3, terrainAt: AllGrass());
 
         Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
-        Assert.Equal([new UnitStack(UnitType.Longship, 2)], arrival.DefenderGarrisonAtBattle);
+        Assert.Equal([new UnitStack(UnitType.Snekkja, 2)], arrival.DefenderGarrisonAtBattle);
         Assert.Empty(arrival.DefenderSettlement.Garrison);
     }
 

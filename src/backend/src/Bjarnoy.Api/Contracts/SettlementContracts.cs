@@ -707,7 +707,9 @@ public sealed record UnitDefinitionResponse(
     int RequiredLonghouseLevel,
     string? RequiredUnitType,
     string RequiredBuildingType,
-    IReadOnlyList<string> SiegeTargets)
+    IReadOnlyList<string> SiegeTargets,
+    int RequiredBuildingLevel,
+    int FireCraftPerLevel)
 {
     public static UnitDefinitionResponse From(UnitDefinition definition)
     {
@@ -730,7 +732,9 @@ public sealed record UnitDefinitionResponse(
             definition.RequiredLonghouseLevel,
             definition.RequiredUnitType?.ToWireName(),
             definition.RequiredBuildingType.ToWireName(),
-            SiegeTargetNames(definition.SiegeTargets));
+            SiegeTargetNames(definition.SiegeTargets),
+            definition.RequiredBuildingLevel,
+            definition.FireCraftPerLevel);
     }
 
     /// <summary>The lowercase wire names of the kinds of building a siege engine can damage: <c>walls</c>, <c>towers</c>, <c>buildings</c>.</summary>

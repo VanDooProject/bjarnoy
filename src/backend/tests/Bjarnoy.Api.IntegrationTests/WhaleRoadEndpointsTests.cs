@@ -120,7 +120,7 @@ public sealed class WhaleRoadEndpointsTests : IAsyncLifetime
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Longship, Count = 10 });
+            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Snekkja, Count = 10 });
             db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Karve, Count = 10 });
             db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Axeman, Count = 20 });
             await db.SaveChangesAsync(Ct);
@@ -182,7 +182,7 @@ public sealed class WhaleRoadEndpointsTests : IAsyncLifetime
         var camp = await CampAtAsync(client, setup.WorldId, whale);
         Assert.Equal((CampFamilies.Whaleroad, true, 0), (camp.Family, camp.Strong, camp.GuardRange));
 
-        var dispatched = await DispatchAsync(client, setup.Settlement.Id, "longship", 5, whale, 200, "hunt");
+        var dispatched = await DispatchAsync(client, setup.Settlement.Id, "snekkja", 5, whale, 200, "hunt");
         Assert.Equal(HttpStatusCode.Created, dispatched.StatusCode);
         var army = await dispatched.ReadStrictAsync<ArmyResponse>(Ct);
         Assert.Equal("hunt", army.Mission);
@@ -205,12 +205,12 @@ public sealed class WhaleRoadEndpointsTests : IAsyncLifetime
         Assert.True(report.Loot.Food > 0);
         Assert.Equal((0d, 0d, 0d), (report.Loot.Wood, report.Loot.Stone, report.Loot.Iron));
         var survivors = 5 - report.Units.Single().Lost;
-        Assert.True(report.Loot.Food <= survivors * UnitCatalogue.Get(UnitType.Longship).CarryCapacity);
+        Assert.True(report.Loot.Food <= survivors * UnitCatalogue.Get(UnitType.Snekkja).CarryCapacity);
 
         // The food of the pool first refilled the provisions of the ships that survived (320 food each; the fleet set out with at most
         // 200), then the ships took what they could carry; the rest stays on the whale road.
         var refill = 1800 - (report.Loot.Food + after.Leftover.Food);
-        var foodCapacity = survivors * UnitCatalogue.Get(UnitType.Longship).FoodCarryCapacity;
+        var foodCapacity = survivors * UnitCatalogue.Get(UnitType.Snekkja).FoodCarryCapacity;
         Assert.InRange(refill, Math.Min(1800, foodCapacity - 200), Math.Min(1800, foodCapacity));
     }
 
@@ -230,7 +230,7 @@ public sealed class WhaleRoadEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Conflict, landAtSea.StatusCode);
         Assert.Equal("HuntRequiresFleet", await landAtSea.RejectionAsync(Ct));
 
-        var seaAtLand = await DispatchAsync(client, setup.Settlement.Id, "longship", 5, landHex, 50, "hunt");
+        var seaAtLand = await DispatchAsync(client, setup.Settlement.Id, "snekkja", 5, landHex, 50, "hunt");
         Assert.Equal(HttpStatusCode.Conflict, seaAtLand.StatusCode);
         Assert.Equal("HuntRequiresLandUnits", await seaAtLand.RejectionAsync(Ct));
 

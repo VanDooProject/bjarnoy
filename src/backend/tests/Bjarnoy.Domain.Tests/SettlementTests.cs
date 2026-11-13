@@ -197,7 +197,7 @@ public class BuildingCatalogueTests
 
     [Theory]
     [InlineData(BuildingType.FishingHut)]
-    [InlineData(BuildingType.Dockyard)]
+    [InlineData(BuildingType.Harbour)]
     [InlineData(BuildingType.ShrineOfNjord)]
     public void The_fishing_hut_dockyard_and_shrine_of_njord_require_coastal_water_instead_of_a_land_terrain(BuildingType type)
     {
@@ -242,7 +242,8 @@ public class BuildingCatalogueTests
 
     [Theory]
     [InlineData(BuildingType.Barracks, BuildingType.Tower, 3)]
-    [InlineData(BuildingType.Dockyard, BuildingType.FishingHut, 5)]
+    [InlineData(BuildingType.Harbour, BuildingType.FishingHut, 3)]
+    [InlineData(BuildingType.Shipyard, BuildingType.Harbour, 5)]
     [InlineData(BuildingType.ArcheryRange, BuildingType.Barracks, 5)]
     [InlineData(BuildingType.SiegeWorkshop, BuildingType.ArcheryRange, 3)]
     [InlineData(BuildingType.CartWorkshop, BuildingType.TownSquare, 3)]
@@ -254,7 +255,7 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.CropMill, BuildingType.Farm, 10)]
     [InlineData(BuildingType.ShrineOfUllr, BuildingType.Sawmill, 5)]
     [InlineData(BuildingType.ShrineOfFreyja, BuildingType.CropMill, 5)]
-    [InlineData(BuildingType.ShrineOfNjord, BuildingType.Dockyard, 10)]
+    [InlineData(BuildingType.ShrineOfNjord, BuildingType.Harbour, 10)]
     [InlineData(BuildingType.ShrineOfThor, BuildingType.Smithy, 5)]
     public void The_catalogue_carries_the_agreed_prerequisites(
         BuildingType type, BuildingType required, int requiredLevel)
@@ -1761,7 +1762,7 @@ public class SettlementTests
     public void A_shrine_of_njord_is_refused_on_land_even_when_affordable()
     {
         // Its art is a shrine on a rock in the shallows — same rule as
-        // FishingHut/Dockyard, it is built on coastal water only.
+        // FishingHut/Harbour, it is built on coastal water only.
         var settlement = FoundAtLonghouseLevel(10);
 
         var decision = settlement.PlanBuild(BuildingType.ShrineOfNjord, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());

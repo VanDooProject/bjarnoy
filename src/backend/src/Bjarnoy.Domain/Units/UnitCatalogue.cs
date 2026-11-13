@@ -16,9 +16,9 @@ namespace Bjarnoy.Domain.Units;
 /// Iron and the unlock ladder (<c>docs/design/economy.md</c> section 8): every unit except the
 /// <see cref="UnitType.Thrall"/> costs iron, so raising troops is gated by iron income. Each unit's
 /// Longhouse gate follows the building that trains it: Spearman with the Barracks (LH 5; the Thrall has no gate of its own, its Barracks is the gate), Axeman
-/// at LH 6, three levels after the bog-ore works open (LH 3), Karve with the Dockyard (LH 8), Bowman with the Archery Range (LH 9),
+/// at LH 6, three levels after the bog-ore works open (LH 3), Karve with the Harbour (LH 8), Bowman with the Archery Range (LH 9),
 /// Provisioner and Settler with the Cart Workshop (LH 10), and the elite units (Berserker, Catapult,
-/// Longship) at LH 20, where the Hammerschmiede boosts the bog-ore works.
+/// Snekkja) at LH 20, where the Hammerschmiede boosts the bog-ore works.
 /// </remarks>
 /// <remarks>
 /// <see cref="BuildingType.Barracks"/> and <see cref="BuildingType.ArcheryRange"/>
@@ -228,6 +228,60 @@ public static class UnitCatalogue
             RequiredUnitType = UnitType.Berserker,
             RequiredBuildingType = BuildingType.SiegeWorkshop,
         },
+        [UnitType.Faering] = new UnitDefinition
+        {
+            Type = UnitType.Faering,
+            VisionRadius = 7,
+            Class = UnitClass.Ship,
+            Attack = 0,
+            Defense = 3,
+            Speed = 8,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 40,
+            ShipSlots = 0,
+            UpkeepPerHour = 0.25,
+            TrainingCost = new ResourceAmounts(Wood: 40, Stone: 10, Food: 10, Iron: 0),
+            TrainingDuration = TimeSpan.FromMinutes(6),
+            RequiredLonghouseLevel = 1,
+            RequiredBuildingLevel = 1,
+            RequiredBuildingType = BuildingType.Harbour,
+        },
+        [UnitType.Byrding] = new UnitDefinition
+        {
+            Type = UnitType.Byrding,
+            VisionRadius = 5,
+            Class = UnitClass.Ship,
+            Attack = 0,
+            Defense = 10,
+            Speed = 6,
+            CarryCapacity = 160,
+            FoodCarryCapacity = 150,
+            ShipSlots = 0,
+            UpkeepPerHour = 0.5,
+            TrainingCost = new ResourceAmounts(Wood: 120, Stone: 50, Food: 20, Iron: 20),
+            TrainingDuration = TimeSpan.FromMinutes(20),
+            RequiredLonghouseLevel = 1,
+            RequiredBuildingLevel = 1,
+            RequiredBuildingType = BuildingType.Harbour,
+        },
+        [UnitType.Knarr] = new UnitDefinition
+        {
+            Type = UnitType.Knarr,
+            VisionRadius = 5,
+            Class = UnitClass.Ship,
+            Attack = 0,
+            Defense = 20,
+            Speed = 4,
+            CarryCapacity = 600,
+            FoodCarryCapacity = 1200,
+            ShipSlots = 0,
+            UpkeepPerHour = 1,
+            TrainingCost = new ResourceAmounts(Wood: 300, Stone: 120, Food: 40, Iron: 135),
+            TrainingDuration = TimeSpan.FromMinutes(50),
+            RequiredLonghouseLevel = 1,
+            RequiredBuildingLevel = 3,
+            RequiredBuildingType = BuildingType.Harbour,
+        },
         [UnitType.Karve] = new UnitDefinition
         {
             Type = UnitType.Karve,
@@ -242,12 +296,13 @@ public static class UnitCatalogue
             UpkeepPerHour = 1.5,
             TrainingCost = new ResourceAmounts(Wood: 250, Stone: 100, Food: 40, Iron: 100),
             TrainingDuration = TimeSpan.FromMinutes(45),
-            RequiredLonghouseLevel = 8,
-            RequiredBuildingType = BuildingType.Dockyard,
+            RequiredLonghouseLevel = 1,
+            RequiredBuildingLevel = 5,
+            RequiredBuildingType = BuildingType.Harbour,
         },
-        [UnitType.Longship] = new UnitDefinition
+        [UnitType.Snekkja] = new UnitDefinition
         {
-            Type = UnitType.Longship,
+            Type = UnitType.Snekkja,
             VisionRadius = 4,
             Class = UnitClass.Ship,
             Attack = 60,
@@ -258,17 +313,53 @@ public static class UnitCatalogue
             ShipSlots = 20,
             UpkeepPerHour = 2,
             TrainingCost = new ResourceAmounts(Wood: 400, Stone: 200, Food: 60, Iron: 220),
-            TrainingDuration = TimeSpan.FromHours(1.5),
-            RequiredLonghouseLevel = 20,
-            RequiredUnitType = UnitType.Karve,
-            RequiredBuildingType = BuildingType.Dockyard,
+            TrainingDuration = TimeSpan.FromMinutes(90),
+            RequiredLonghouseLevel = 1,
+            RequiredBuildingLevel = 1,
+            RequiredBuildingType = BuildingType.Shipyard,
         },
-        [UnitType.FireShip] = new UnitDefinition
+        [UnitType.Skeid] = new UnitDefinition
         {
-            Type = UnitType.FireShip,
+            Type = UnitType.Skeid,
+            VisionRadius = 4,
+            Class = UnitClass.Ship,
+            Attack = 90,
+            Defense = 60,
+            Speed = 11,
+            CarryCapacity = 120,
+            FoodCarryCapacity = 480,
+            ShipSlots = 30,
+            UpkeepPerHour = 3,
+            TrainingCost = new ResourceAmounts(Wood: 550, Stone: 250, Food: 80, Iron: 300),
+            TrainingDuration = TimeSpan.FromMinutes(120),
+            RequiredLonghouseLevel = 20,
+            RequiredBuildingLevel = 10,
+            RequiredBuildingType = BuildingType.Shipyard,
+        },
+        [UnitType.FireRaft] = new UnitDefinition
+        {
+            Type = UnitType.FireRaft,
+            VisionRadius = 2,
+            Class = UnitClass.Ship,
+            Attack = 0,
+            Defense = 3,
+            Speed = 5,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 30,
+            ShipSlots = 0,
+            UpkeepPerHour = 1,
+            TrainingCost = new ResourceAmounts(Wood: 50, Stone: 10, Food: 10, Iron: 10),
+            TrainingDuration = TimeSpan.FromMinutes(10),
+            RequiredLonghouseLevel = 1,
+            RequiredBuildingLevel = 1,
+            RequiredBuildingType = BuildingType.Shipyard,
+            FireCraftPerLevel = 50,
+        },
+        [UnitType.FireHulk] = new UnitDefinition
+        {
+            Type = UnitType.FireHulk,
             VisionRadius = 6,
             Class = UnitClass.Ship,
-            // Starting values, to be tuned. No attack and no slots: ten Fire Ships burn one building level in the water.
             Attack = 0,
             Defense = 25,
             Speed = 8,
@@ -279,8 +370,9 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 300, Stone: 60, Food: 40, Iron: 80),
             TrainingDuration = TimeSpan.FromMinutes(40),
             RequiredLonghouseLevel = 12,
-            RequiredUnitType = UnitType.Karve,
-            RequiredBuildingType = BuildingType.Dockyard,
+            RequiredBuildingLevel = 5,
+            RequiredBuildingType = BuildingType.Shipyard,
+            FireCraftPerLevel = 10,
         },
     };
 
@@ -330,7 +422,7 @@ public static class UnitCatalogue
             return false;
         }
 
-        if (buildingLevelOf is not null && buildingLevelOf(definition.RequiredBuildingType) < 1)
+        if (buildingLevelOf is not null && buildingLevelOf(definition.RequiredBuildingType) < definition.RequiredBuildingLevel)
         {
             return false;
         }

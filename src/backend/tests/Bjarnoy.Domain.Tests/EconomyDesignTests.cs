@@ -22,7 +22,8 @@ public class EconomyDesignTests
         (BuildingType.Barracks, 5),
         (BuildingType.TownSquare, 6),
         (BuildingType.Palisade, 7), (BuildingType.PalisadeGate, 7), (BuildingType.Bridge, 7),
-        (BuildingType.Dockyard, 8),
+        (BuildingType.Harbour, 5),
+        (BuildingType.Shipyard, 10),
         (BuildingType.ArcheryRange, 9),
         (BuildingType.CartWorkshop, 10),
         (BuildingType.Meadery, 11),
@@ -188,7 +189,8 @@ public class EconomyDesignTests
     [InlineData(BuildingType.Barracks, 20)]
     [InlineData(BuildingType.ArcheryRange, 20)]
     [InlineData(BuildingType.SiegeWorkshop, 20)]
-    [InlineData(BuildingType.Dockyard, 20)]
+    [InlineData(BuildingType.Harbour, 20)]
+    [InlineData(BuildingType.Shipyard, 20)]
     [InlineData(BuildingType.TownSquare, 20)]
     [InlineData(BuildingType.CartWorkshop, 20)]
     [InlineData(BuildingType.DruidHut, 20)]

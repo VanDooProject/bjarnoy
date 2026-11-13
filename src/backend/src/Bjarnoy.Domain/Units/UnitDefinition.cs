@@ -93,6 +93,18 @@ public sealed record UnitDefinition
     /// </summary>
     public SiegeTargets SiegeTargets { get; init; }
 
+    /// <summary>
+    /// For a fire craft: how many of them take one building level off a building standing in the water (Fire Hulk 10, Fire Raft
+    /// 50); they are used up doing it. Zero for every other unit. See <see cref="Bjarnoy.Domain.Combat.SiegeResolver.Burn"/>.
+    /// </summary>
+    public int FireCraftPerLevel { get; init; }
+
+    /// <summary>
+    /// The level of the training building (<see cref="RequiredBuildingType"/>) this unit needs, on top of
+    /// <see cref="RequiredLonghouseLevel"/> as its own Longhouse gate. See <c>docs/design/units-and-ships.md</c> §1.
+    /// </summary>
+    public int RequiredBuildingLevel { get; init; } = 1;
+
     public required ResourceAmounts TrainingCost { get; init; }
 
     /// <summary>Time to train one unit. A batch drips out one at a time — see <see cref="Bjarnoy.Domain.Buildings.TrainingOrder"/>.</summary>
@@ -113,7 +125,7 @@ public sealed record UnitDefinition
     /// land roster (Spearman, Axeman, Berserker),
     /// <see cref="BuildingType.ArcheryRange"/> for the archer
     /// (Bowman), <see cref="BuildingType.SiegeWorkshop"/> for the siege
-    /// engines (Catapult, Ram), <see cref="BuildingType.Dockyard"/> for
+    /// engines (Catapult, Ram), <see cref="BuildingType.Harbour"/> for
     /// ships. Defaults to the Longhouse.
     /// </summary>
     public BuildingType RequiredBuildingType { get; init; } = BuildingType.Longhouse;

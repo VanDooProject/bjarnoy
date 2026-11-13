@@ -372,7 +372,7 @@ public sealed class MigrationTests
     }
 
     /// <summary>
-    /// Existing garrisons stand at the settlement's centre when the garrison-spots migration runs, ships at the Dockyard nearest
+    /// Existing garrisons stand at the settlement's centre when the garrison-spots migration runs, ships at the Harbour nearest
     /// the centre (by hex distance, ties by Q, then R) or the centre when there is none; an army's home spot and a guest's spot
     /// follow the same rule. The rows are written through the model, then the schema is taken back to the migration before
     /// <c>AddGarrisonSpots</c> (which drops the spot columns) and migrated forward again, so the data step runs over them.
@@ -419,12 +419,12 @@ public sealed class MigrationTests
                 var harbourSettlement = Settle(harbour, 3, 4);
                 foreach (var (q, r) in new[] { (7, 4), (5, 6), (9, 9) })
                 {
-                    harbourSettlement.Buildings.Add(new PlacedBuildingEntity { SettlementId = harbour, Q = q, R = r, Type = BuildingType.Dockyard, Level = 1 });
+                    harbourSettlement.Buildings.Add(new PlacedBuildingEntity { SettlementId = harbour, Q = q, R = r, Type = BuildingType.Harbour, Level = 1 });
                 }
 
                 harbourSettlement.Garrison.Add(new UnitStackEntity { SettlementId = harbour, UnitType = UnitType.Spearman, Count = 5 });
                 harbourSettlement.Garrison.Add(new UnitStackEntity { SettlementId = harbour, UnitType = UnitType.Karve, Count = 2 });
-                harbourSettlement.Garrison.Add(new UnitStackEntity { SettlementId = harbour, UnitType = UnitType.Longship, Count = 1 });
+                harbourSettlement.Garrison.Add(new UnitStackEntity { SettlementId = harbour, UnitType = UnitType.Snekkja, Count = 1 });
                 var inlandSettlement = Settle(inland, 20, 20);
                 inlandSettlement.Garrison.Add(new UnitStackEntity { SettlementId = inland, UnitType = UnitType.Karve, Count = 3 });
                 context.Settlements.AddRange(harbourSettlement, inlandSettlement);
@@ -461,7 +461,7 @@ public sealed class MigrationTests
                 Assert.Equal((3, 4), SpotOf(harbour, UnitType.Spearman));
                 // Two docks are four hexes from the centre; the lower Q wins, the farther one never does.
                 Assert.Equal((5, 6), SpotOf(harbour, UnitType.Karve));
-                Assert.Equal((5, 6), SpotOf(harbour, UnitType.Longship));
+                Assert.Equal((5, 6), SpotOf(harbour, UnitType.Snekkja));
                 Assert.Equal((20, 20), SpotOf(inland, UnitType.Karve));
 
                 var armies = await context.Armies.AsNoTracking().ToListAsync(Ct);

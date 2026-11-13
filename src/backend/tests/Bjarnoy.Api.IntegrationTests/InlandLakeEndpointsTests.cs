@@ -97,7 +97,7 @@ public sealed class InlandLakeEndpointsTests : IAsyncLifetime
         var (client, _, settlement, _, hexes) = await SetUpAsync();
         using var _ = client;
 
-        var response = await Build(client, settlement.Id, "dockyard", hexes["shore"]);
+        var response = await Build(client, settlement.Id, "harbour", hexes["shore"]);
 
         Assert.Equal("TerrainNotAllowed", await response.RejectionAsync(Ct));
     }

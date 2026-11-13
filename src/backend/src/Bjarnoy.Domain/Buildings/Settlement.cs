@@ -110,7 +110,7 @@ public sealed record Settlement
     public IReadOnlyList<UnitStack> Garrison => TotalOf(SpotStacks);
 
     /// <summary>
-    /// The garrison spots: the Longhouse hex first, then every standing Tower and Dockyard by Q, then R — one entry each, empty
+    /// The garrison spots: the Longhouse hex first, then every standing Tower, Harbour and Shipyard by Q, then R — one entry each, empty
     /// ones included. A tower outside the realm is still a building and still a spot; a foundation still under construction
     /// (level 0) is not standing yet.
     /// </summary>
@@ -120,7 +120,7 @@ public sealed record Settlement
         {
             var coords = new List<(HexCoord Coord, GarrisonSpotKind Kind)> { (Centre, IsBeachCamp ? GarrisonSpotKind.BeachCamp : GarrisonSpotKind.Longhouse) };
             coords.AddRange(Buildings
-                .Where(b => b.Type is BuildingType.Tower or BuildingType.Dockyard && b.Level >= 1 && b.Coord != Centre)
+                .Where(b => b.Type is BuildingType.Tower or BuildingType.Harbour or BuildingType.Shipyard && b.Level >= 1 && b.Coord != Centre)
                 .OrderBy(b => b.Coord.Q).ThenBy(b => b.Coord.R)
                 .Select(b => (b.Coord, b.Type == BuildingType.Tower ? GarrisonSpotKind.Tower : GarrisonSpotKind.Dock)));
 
@@ -176,7 +176,7 @@ public sealed record Settlement
     }
 
     /// <summary>
-    /// Splits off the units standing at a coordinate that is no longer a garrison spot (its Tower or Dockyard was destroyed,
+    /// Splits off the units standing at a coordinate that is no longer a garrison spot (its Tower, Harbour or Shipyard was destroyed,
     /// however that happened) and returns this settlement without them, plus what stood there. The one place such a garrison is
     /// found; the infrastructure marches each group to a new spot when it persists the settlement.
     /// </summary>

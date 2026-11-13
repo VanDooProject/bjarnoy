@@ -636,7 +636,7 @@ public class FogChunkServiceTests : IDisposable
 
     [Theory]
     [InlineData(UnitType.Karve, 6)]
-    [InlineData(UnitType.Longship, 4)]
+    [InlineData(UnitType.Snekkja, 4)]
     [InlineData(UnitType.Thrall, 3)]
     [InlineData(UnitType.Spearman, 2)]
     [InlineData(UnitType.Catapult, 1)]

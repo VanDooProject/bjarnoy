@@ -444,12 +444,12 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
             Winner = BattleWinner.Attacker,
             Seed = 3,
             ShipFight = new BattleReportShipFight(
-                [new BattleReportAttackerLine(UnitType.FireShip, 30, 4, 26)],
-                [new BattleReportDefenderLine(UnitType.Longship, 2, 0)],
+                [new BattleReportAttackerLine(UnitType.FireHulk, 30, 4, 26)],
+                [new BattleReportDefenderLine(UnitType.Snekkja, 2, 0)],
                 120, 80, BattleWinner.Attacker),
             Drowned = [new UnitStack(UnitType.Spearman, 20)],
             FireShipsBurned = 20,
-            FireSiege = new BattleReportSiegeLine(new HexCoord(5, 0), BuildingType.Dockyard, 3, 1, false),
+            FireSiege = new BattleReportSiegeLine(new HexCoord(5, 0), BuildingType.Harbour, 3, 1, false),
         };
         await WithDbAsync(async db =>
         {
@@ -463,13 +463,13 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         SetOwner(client, mineOwnerId);
         var response = await client.GetFromJsonAsync<BattleReportResponse>($"/api/v1/reports/{report.Id}", SqliteApiFixture.StrictJson, Ct);
 
-        Assert.Equal("fireship", response!.ShipFight!.AttackerLines.Single().Unit);
+        Assert.Equal("firehulk", response!.ShipFight!.AttackerLines.Single().Unit);
         Assert.Equal((120d, 80d, "attacker"), (response.ShipFight.AttackPower, response.ShipFight.DefensePower, response.ShipFight.Winner));
-        Assert.Equal("longship", response.ShipFight.DefenderLines.Single().Unit);
+        Assert.Equal("snekkja", response.ShipFight.DefenderLines.Single().Unit);
         Assert.Equal("spearman", response.AttackerLines.Single().Unit);
         Assert.Equal(new ArmyUnitStackResponse("spearman", 20), response.Drowned.Single());
         Assert.Equal(20, response.FireShipsBurned);
-        Assert.Equal("dockyard", response.FireSiege!.TargetType);
+        Assert.Equal("harbour", response.FireSiege!.TargetType);
         Assert.Equal((3, 1), (response.FireSiege.LevelBefore, response.FireSiege.LevelAfter));
         Assert.Null(response.Siege);
     }

@@ -221,8 +221,8 @@ public class RealmDecayTests
         var dock = new HexCoord(1, 0);
         Func<HexCoord, Terrain> inland = _ => Terrain.Grass;
 
-        Assert.Equal(dock, Bjarnoy.Domain.Armies.Army.FleetAnchor(Centre, [new PlacedBuilding(dock, BuildingType.Dockyard, 1)], inland));
-        Assert.Equal(Centre, Bjarnoy.Domain.Armies.Army.FleetAnchor(Centre, [new PlacedBuilding(dock, BuildingType.Dockyard, 1, T0)], inland));
+        Assert.Equal(dock, Bjarnoy.Domain.Armies.Army.FleetAnchor(Centre, [new PlacedBuilding(dock, BuildingType.Harbour, 1)], inland));
+        Assert.Equal(Centre, Bjarnoy.Domain.Armies.Army.FleetAnchor(Centre, [new PlacedBuilding(dock, BuildingType.Harbour, 1, T0)], inland));
     }
 
     // --- decay speed --------------------------------------------------------------------------------------------------------------

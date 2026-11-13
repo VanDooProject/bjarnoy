@@ -10,7 +10,7 @@ namespace Bjarnoy.Domain.Tests;
 /// <summary>
 /// Issue #450, departure half: a fleet leaves from and returns to its settlement's harbour hex
 /// (<see cref="Army.FleetAnchor(HexCoord, IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain})"/>), which is the
-/// Dockyard when the centre is inland. Fleet attacks at inland-centred targets are covered by <see cref="FleetShoreAttackTests"/>.
+/// Harbour when the centre is inland. Fleet attacks at inland-centred targets are covered by <see cref="FleetShoreAttackTests"/>.
 /// </summary>
 public class FleetDepartureTests
 {
@@ -22,10 +22,10 @@ public class FleetDepartureTests
     // Sea in the middle columns, grass either side: (0,0) is three hexes from the water, (2,0) touches it.
     private static Terrain Strait(HexCoord c) => c.Q is >= 3 and <= 8 ? Terrain.Sea : Terrain.Grass;
 
-    private static Settlement Found(HexCoord centre, params HexCoord[] dockyards) =>
-        FoundWithUnits(centre, [new UnitStack(UnitType.Karve, 5)], dockyards);
+    private static Settlement Found(HexCoord centre, params HexCoord[] harbours) =>
+        FoundWithUnits(centre, [new UnitStack(UnitType.Karve, 5)], harbours);
 
-    private static Settlement FoundWithUnits(HexCoord centre, UnitStack[] garrison, params HexCoord[] dockyards)
+    private static Settlement FoundWithUnits(HexCoord centre, UnitStack[] garrison, params HexCoord[] harbours)
     {
         const int longhouseLevel = 10;
         var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, longhouseLevel)]);
@@ -37,7 +37,7 @@ public class FleetDepartureTests
             Buildings =
             [
                 new PlacedBuilding(centre, BuildingType.Longhouse, longhouseLevel),
-                .. dockyards.Select(d => new PlacedBuilding(d, BuildingType.Dockyard, 1)),
+                .. harbours.Select(d => new PlacedBuilding(d, BuildingType.Harbour, 1)),
             ],
             Resources = ResourcePool.Create(new ResourceAmounts(1_000_000, 1_000_000, 1_000_000, 1_000_000), production, capacity, T0),
         }.WithGarrison(garrison);
@@ -68,13 +68,13 @@ public class FleetDepartureTests
     {
         var settlement = Found(InlandHome, Dock);
 
-        var train = settlement.PlanTrain(UnitType.Karve, 1, T0, Guid.CreateVersion7(), hasShoreline: true);
+        var train = settlement.PlanTrain(UnitType.Faering, 1, T0, Guid.CreateVersion7(), hasShoreline: true);
 
         Assert.True(train.Accepted, $"expected accept, got {train.Rejection}");
     }
 
     [Fact]
-    public void Inland_settlement_fleet_move_starts_and_returns_at_the_dockyard()
+    public void Inland_settlement_fleet_move_starts_and_returns_at_the_harbour()
     {
         var settlement = Found(InlandHome, Dock);
 
@@ -87,7 +87,7 @@ public class FleetDepartureTests
     }
 
     [Fact]
-    public void Inland_settlement_fleet_raid_starts_and_returns_at_the_dockyard()
+    public void Inland_settlement_fleet_raid_starts_and_returns_at_the_harbour()
     {
         var settlement = Found(InlandHome, Dock);
 
@@ -140,7 +140,7 @@ public class FleetDepartureTests
     [Fact]
     public void Inland_settlement_without_a_dockyard_keeps_the_centre_and_cannot_dispatch_a_fleet()
     {
-        // Expected: without a Dockyard it cannot train ships either, so this state only arises from admin edits.
+        // Expected: without a Harbour it cannot train ships either, so this state only arises from admin edits.
         var settlement = Found(InlandHome);
 
         Assert.Equal(InlandHome, Army.FleetAnchor(settlement, Strait));
@@ -151,6 +151,15 @@ public class FleetDepartureTests
     public void FleetAnchor_picks_the_dockyard_nearest_the_centre()
     {
         var settlement = Found(InlandHome, new HexCoord(5, 0), Dock, new HexCoord(7, 0));
+
+        Assert.Equal(Dock, Army.FleetAnchor(settlement, Strait));
+    }
+
+    [Fact]
+    public void FleetAnchor_counts_a_shipyard_like_a_harbour()
+    {
+        var found = Found(InlandHome);
+        var settlement = found with { Buildings = [.. found.Buildings, new PlacedBuilding(Dock, BuildingType.Shipyard, 1)] };
 
         Assert.Equal(Dock, Army.FleetAnchor(settlement, Strait));
     }
@@ -185,7 +194,7 @@ public class FleetDepartureTests
     }
 
     [Fact]
-    public void Recall_of_a_fleet_to_an_inland_home_ends_at_the_dockyard()
+    public void Recall_of_a_fleet_to_an_inland_home_ends_at_the_harbour()
     {
         var settlement = Found(InlandHome, Dock);
         var army = Move(settlement, new HexCoord(7, 0)).Army!;
@@ -200,7 +209,7 @@ public class FleetDepartureTests
     }
 
     [Fact]
-    public void Recall_of_a_mixed_ship_and_settler_convoy_routes_over_sea_to_the_dockyard()
+    public void Recall_of_a_mixed_ship_and_settler_convoy_routes_over_sea_to_the_harbour()
     {
         // A sea Found convoy: ships plus settlers. Any ship makes it a fleet, so Recall must use the sea tables.
         var settlement = Found(InlandHome, Dock);
@@ -231,7 +240,7 @@ public class FleetDepartureTests
     }
 
     [Fact]
-    public void PlanFieldOrder_from_an_inland_home_returns_to_the_dockyard()
+    public void PlanFieldOrder_from_an_inland_home_returns_to_the_harbour()
     {
         var settlement = Found(InlandHome, Dock);
         var army = Move(settlement, new HexCoord(6, 0)).Army!;
@@ -244,7 +253,7 @@ public class FleetDepartureTests
     }
 
     [Fact]
-    public void RetargetFounding_of_a_sea_convoy_from_an_inland_home_returns_to_the_dockyard()
+    public void RetargetFounding_of_a_sea_convoy_from_an_inland_home_returns_to_the_harbour()
     {
         var settlement = Found(InlandHome, Dock);
         var path = new[] { Dock, new HexCoord(4, 0), new HexCoord(5, 0), new HexCoord(6, 0), new HexCoord(7, 0), new HexCoord(8, 0), CoastalTarget };
@@ -270,7 +279,7 @@ public class FleetDepartureTests
     }
 
     [Fact]
-    public void ForceFieldRetreat_of_a_fleet_to_an_inland_home_ends_at_the_dockyard()
+    public void ForceFieldRetreat_of_a_fleet_to_an_inland_home_ends_at_the_harbour()
     {
         var settlement = Found(InlandHome, Dock);
         var army = Move(settlement, new HexCoord(7, 0)).Army!;

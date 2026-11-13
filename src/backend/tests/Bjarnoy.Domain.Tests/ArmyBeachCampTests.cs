@@ -196,7 +196,7 @@ public class ArmyBeachCampTests
     [Fact]
     public void A_fleet_may_land_on_the_camp_hex()
     {
-        var requested = new[] { new UnitStack(UnitType.CampBuilder, 2), new UnitStack(UnitType.Longship, 1) };
+        var requested = new[] { new UnitStack(UnitType.CampBuilder, 2), new UnitStack(UnitType.Snekkja, 1) };
         var settlement = Camp(garrison: requested);
 
         var decision = Dispatch(settlement, requested: requested, terrainAt: h => h == Site ? Terrain.Sand : Terrain.Sea);

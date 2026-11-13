@@ -125,7 +125,7 @@ public class GarrisonRelocationTests
             [
                 new PlacedBuilding(new HexCoord(-4, 0), BuildingType.Longhouse, 1),
                 new PlacedBuilding(new HexCoord(1, 2), BuildingType.Tower, 1),
-                new PlacedBuilding(dock, BuildingType.Dockyard, 1),
+                new PlacedBuilding(dock, BuildingType.Harbour, 1),
             ],
             Resources = ResourcePool.Create(ResourceAmounts.Uniform(1_000), production, capacity, T0),
         };
@@ -152,7 +152,7 @@ public class GarrisonRelocationTests
             Id = SettlementId,
             Name = "Bjornstad",
             Centre = new HexCoord(0, 0),
-            Buildings = [new PlacedBuilding(new HexCoord(0, 0), BuildingType.Longhouse, 1), new PlacedBuilding(dock, BuildingType.Dockyard, 1)],
+            Buildings = [new PlacedBuilding(new HexCoord(0, 0), BuildingType.Longhouse, 1), new PlacedBuilding(dock, BuildingType.Harbour, 1)],
             Resources = ResourcePool.Create(ResourceAmounts.Zero, ResourceAmounts.Zero, ResourceAmounts.Uniform(10), T0),
         };
 

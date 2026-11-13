@@ -89,7 +89,7 @@ public class BogBuildingTests
         Assert.Equal(BuildRejection.TerrainNotAllowed, away.Rejection);
 
         var dock = settlement.PlanBuild(
-            BuildingType.Dockyard, coord, Terrain.InlandLake, T0, Guid.CreateVersion7(), isInlandLakeShore: true);
+            BuildingType.Harbour, coord, Terrain.InlandLake, T0, Guid.CreateVersion7(), isInlandLakeShore: true);
         Assert.Equal(BuildRejection.TerrainNotAllowed, dock.Rejection);
     }
 

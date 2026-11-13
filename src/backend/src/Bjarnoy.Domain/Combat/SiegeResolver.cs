@@ -235,45 +235,62 @@ public static class SiegeResolver
         return LowerBuilding(buildings, index, levelsDestroyed);
     }
 
-    /// <summary>Surviving Fire Ships it takes to burn one building level (<c>docs/design/economy.md</c>, "Fire Ship").</summary>
-    public const int FireShipsPerLevel = 10;
-
     /// <summary>
-    /// The fire damage of <paramref name="survivingFireShips"/> against the building standing on
-    /// <paramref name="targetCoord"/>: <c>floor(survivingFireShips / 10)</c> levels, then <see cref="LevelsTakenFrom"/> (a wall hex
-    /// loses one at most), clamped to the building's level. Only a building standing on a <see cref="Terrain.Sea"/> hex burns; no
-    /// target, a target that is gone or on land, or fewer than ten ships burn nothing.
+    /// The fire damage of the surviving fire craft (<see cref="UnitDefinition.FireCraftPerLevel"/>: 10 Fire Hulks or 50 Fire Rafts
+    /// take one level) against the building standing on <paramref name="targetCoord"/>. Each craft type counts on its own:
+    /// <c>floor(count / craftPerLevel)</c> levels, summed, then <see cref="LevelsTakenFrom"/> (a wall hex loses one at most),
+    /// clamped to the building's level. Only a building standing on a <see cref="Terrain.Sea"/> hex burns; no target, a target
+    /// that is gone or on land, or too few craft burn nothing.
     /// </summary>
     /// <returns>
-    /// The outcome (<see cref="SiegeOutcome.None"/> when nothing burned) and the number of Fire Ships burned: the levels actually
-    /// taken times <see cref="FireShipsPerLevel"/>. The rest of the Fire Ships sail home.
+    /// The outcome (<see cref="SiegeOutcome.None"/> when nothing burned) and the craft burned by it: per type the levels it
+    /// paid for times its craft-per-level, the cheapest craft (most per level) first. The rest sail home.
     /// </returns>
-    public static (SiegeOutcome Outcome, int Burned) Burn(
-        int survivingFireShips,
+    public static (SiegeOutcome Outcome, IReadOnlyList<UnitStack> Burned) Burn(
+        IReadOnlyList<UnitStack> survivingFireCraft,
         IReadOnlyList<PlacedBuilding> defenderBuildings,
         HexCoord? targetCoord,
         Func<HexCoord, Terrain> terrainAt)
     {
+        ArgumentNullException.ThrowIfNull(survivingFireCraft);
         ArgumentNullException.ThrowIfNull(defenderBuildings);
         ArgumentNullException.ThrowIfNull(terrainAt);
 
-        if (targetCoord is not { } coord || survivingFireShips < FireShipsPerLevel || terrainAt(coord) != Terrain.Sea)
+        var craft = survivingFireCraft
+            .Where(s => s.Count > 0 && UnitCatalogue.Get(s.Type).FireCraftPerLevel > 0)
+            .GroupBy(s => s.Type)
+            .Select(g => (Type: g.Key, Count: g.Sum(s => s.Count), PerLevel: UnitCatalogue.Get(g.Key).FireCraftPerLevel))
+            .OrderByDescending(c => c.PerLevel)
+            .ToList();
+        var levelsOffered = craft.Sum(c => c.Count / c.PerLevel);
+        if (targetCoord is not { } coord || levelsOffered < 1 || terrainAt(coord) != Terrain.Sea)
         {
-            return (SiegeOutcome.None, 0);
+            return (SiegeOutcome.None, []);
         }
 
         var buildings = defenderBuildings.ToList();
         var index = buildings.FindIndex(b => b.Coord == coord);
 
-        // Fire ships do not bring a beach camp down either (see CanDamage).
+        // Fire craft do not bring a beach camp down either (see CanDamage).
         if (index < 0 || buildings[index].Type == BuildingType.BeachCamp)
         {
-            return (SiegeOutcome.None, 0);
+            return (SiegeOutcome.None, []);
         }
 
-        var outcome = LowerBuilding(buildings, index, survivingFireShips / FireShipsPerLevel);
-        var levelsTaken = outcome.LevelBefore - outcome.LevelAfter;
-        return (outcome, levelsTaken * FireShipsPerLevel);
+        var outcome = LowerBuilding(buildings, index, levelsOffered);
+        var remaining = outcome.LevelBefore - outcome.LevelAfter;
+        var burned = new List<UnitStack>();
+        foreach (var (type, count, perLevel) in craft)
+        {
+            var levels = Math.Min(remaining, count / perLevel);
+            if (levels > 0)
+            {
+                burned.Add(new UnitStack(type, levels * perLevel));
+                remaining -= levels;
+            }
+        }
+
+        return (outcome, burned);
     }
 
     /// <summary>Takes <see cref="LevelsTakenFrom"/> levels off the building at <paramref name="index"/>, removing it at level 0.</summary>

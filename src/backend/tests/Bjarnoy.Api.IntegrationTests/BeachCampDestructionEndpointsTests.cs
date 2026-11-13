@@ -292,7 +292,7 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
     {
         var scene = await PlantAsync(
             campArmyProvisions: null, attackUnits: [(UnitType.Axeman, 10), (UnitType.Catapult, 10)]);
-        await PlantGuestAsync(scene, [(UnitType.Longship, 3)]);
+        await PlantGuestAsync(scene, [(UnitType.Snekkja, 3)]);
 
         await LandTheAttackAsync(scene);
 
@@ -307,13 +307,13 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
     public async Task A_land_attack_that_kills_every_land_troop_while_the_camps_own_fleet_survives_does_not_destroy_it()
     {
         var scene = await PlantAsync(
-            campArmyProvisions: null, campGarrison: [(UnitType.Spearman, 2), (UnitType.Longship, 2)]);
+            campArmyProvisions: null, campGarrison: [(UnitType.Spearman, 2), (UnitType.Snekkja, 2)]);
 
         await LandTheAttackAsync(scene);
 
         Assert.True(await InDbAsync(db => db.Settlements.AnyAsync(s => s.Id == scene.CampId, Ct)));
         var garrison = await InDbAsync(db => db.UnitStacks.Where(g => g.SettlementId == scene.CampId && g.Count > 0).ToListAsync(Ct));
-        Assert.Equal([UnitType.Longship], garrison.Select(g => g.UnitType).Distinct());
+        Assert.Equal([UnitType.Snekkja], garrison.Select(g => g.UnitType).Distinct());
     }
 
     [Fact]
@@ -321,7 +321,7 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
     {
         // Two longships eat 4 food an hour: 21 food leaves 5 when the attack lands four hours in, the axemen carry them off, and
         // the ships starve right after the fight, before anything settles the attack.
-        var scene = await PlantAsync(campArmyProvisions: null, campGarrison: [(UnitType.Longship, 2)], campFood: 21);
+        var scene = await PlantAsync(campArmyProvisions: null, campGarrison: [(UnitType.Snekkja, 2)], campFood: 21);
 
         await LandTheAttackAsync(scene);
 

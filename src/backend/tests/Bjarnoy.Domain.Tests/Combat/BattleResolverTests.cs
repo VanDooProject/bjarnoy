@@ -57,7 +57,7 @@ public class BattleResolverTests
     public void Land_attack_bonus_percent_scales_only_non_ship_attack_power()
     {
         // 10 Spearmen (Attack 15 each = 150 land) + 2 Longships (Attack 60 each = 120 ship).
-        var attacker = new[] { new UnitStack(UnitType.Spearman, 10), new UnitStack(UnitType.Longship, 2) };
+        var attacker = new[] { new UnitStack(UnitType.Spearman, 10), new UnitStack(UnitType.Snekkja, 2) };
         var defender = new[] { new UnitStack(UnitType.Spearman, 1) };
 
         var noBonus = BattleResolver.Resolve(attacker, defender, defenseBonusPercent: 0, Abundant, seed: 1);
@@ -71,7 +71,7 @@ public class BattleResolverTests
     [Fact]
     public void Ship_attack_bonus_percent_scales_only_ship_attack_power()
     {
-        var attacker = new[] { new UnitStack(UnitType.Spearman, 10), new UnitStack(UnitType.Longship, 2) };
+        var attacker = new[] { new UnitStack(UnitType.Spearman, 10), new UnitStack(UnitType.Snekkja, 2) };
         var defender = new[] { new UnitStack(UnitType.Spearman, 1) };
 
         var withShipBonus = BattleResolver.Resolve(
@@ -375,10 +375,10 @@ public class BattleResolverTests
     [Fact]
     public void Loot_capacity_is_the_surviving_ships_alone_when_there_are_ships_else_everyones()
     {
-        var withShips = new[] { new UnitStack(UnitType.Longship, 2), new UnitStack(UnitType.Axeman, 50) };
+        var withShips = new[] { new UnitStack(UnitType.Snekkja, 2), new UnitStack(UnitType.Axeman, 50) };
         var landOnly = new[] { new UnitStack(UnitType.Axeman, 50) };
 
-        Assert.Equal(BattleResolver.CarryCapacity([new UnitStack(UnitType.Longship, 2)]), BattleResolver.LootCapacity(withShips));
+        Assert.Equal(BattleResolver.CarryCapacity([new UnitStack(UnitType.Snekkja, 2)]), BattleResolver.LootCapacity(withShips));
         Assert.Equal(BattleResolver.CarryCapacity(landOnly), BattleResolver.LootCapacity(landOnly));
         Assert.True(BattleResolver.LootCapacity(landOnly) > 0);
         Assert.Equal(0, BattleResolver.LootCapacity([]));
