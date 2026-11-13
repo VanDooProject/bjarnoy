@@ -139,6 +139,23 @@ describe('TrainingModal', () => {
     expect(text).toContain(m > 0 ? `${m}m ${s}s` : `${s}s`);
   });
 
+  it('shows costs as resource icons with numbers, and marks an uncovered resource red in the footer total', async () => {
+    const world = setup([placed('barracks', 3, -2, 7)]);
+    const thrall = definitions.find((d) => d.type === 'thrall')!;
+    const wrapper = mountModal();
+    const row = wrapper.findAll('.unit-row')[0]!;
+    expect(row.findAll('.unit-cost .cost-item svg').length).toBeGreaterThan(0);
+    expect(row.get('.unit-cost .cost-item b').text()).toBe(String(thrall.trainingCost.wood));
+    await row.findAll('.step-btn')[1]!.trigger('click');
+    const total = wrapper.get('.foot .sum .resource-cost');
+    expect(total.get('b').text()).toBe(String(thrall.trainingCost.wood));
+    expect(total.get('b').classes()).not.toContain('short');
+    // The stock drops below the picked total (e.g. a build reserves it).
+    world.hud.available = { wood: thrall.trainingCost.wood - 1, stone: 99999, food: 99999, iron: 99999 };
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('.foot .sum .resource-cost b').classes()).toContain('short');
+  });
+
   it('hides the "Train in" selector when the settlement has only one such building', () => {
     setup([placed('barracks', 3, -2, 7), placed('archeryrange', 1, 1, 3)]);
     expect(mountModal().find('.selectors').exists()).toBe(false);
@@ -295,7 +312,9 @@ describe('TrainingModal', () => {
     await wrapper.get('.qx').trigger('click');
     const spearman = definitions.find((d) => d.type === 'spearman')!;
     // 3 units not trained yet: half of 3 × the cost.
-    expect(wrapper.get('.cbox').text()).toContain(`${Math.floor((spearman.trainingCost.wood * 3) / 2)} Wood`);
+    const refundWood = wrapper.get('.cbox .cost-item');
+    expect(refundWood.get('b').text()).toBe(String(Math.floor((spearman.trainingCost.wood * 3) / 2)));
+    expect(refundWood.attributes('title')).toBe('Wood');
     expect(wrapper.get('.cbox').text()).toContain('1 already trained stay');
     expect(cancelTraining).not.toHaveBeenCalled();
     await wrapper.get('.danger').trigger('click');
