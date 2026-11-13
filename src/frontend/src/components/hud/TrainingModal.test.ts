@@ -283,4 +283,69 @@ describe('TrainingModal', () => {
     await flushPromises();
     expect(cancelTraining).toHaveBeenCalledWith('p1');
   });
+
+  it('counts only siblings that have the unit\'s level for free slots in Distribute mode', async () => {
+    // Barracks A (level 6) is full, Barracks B (level 2) is empty: the Axeman (Barracks 6) can only go to A.
+    const world = setup([placed('barracks', 3, -2, 6), placed('barracks', 5, 0, 2)]);
+    world.hud.trainingQueue = [1, 2, 3, 4, 5].map((i) => order(3, -2, `p${i}`));
+    const wrapper = mountModal(placed('barracks', 3, -2, 6));
+    await wrapper.findAll('.seg')[1]!.trigger('click');
+    const axeman = wrapper.findAll('.unit-row').find((r) => r.get('.unit-name').text() === 'Axeman')!;
+    await axeman.findAll('.step-btn')[1]!.trigger('click');
+    expect(wrapper.get('.foot .primary').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('.foot .sum').text()).toContain('Not enough free slots');
+    // The Thrall (level 1) fits in B.
+    await axeman.findAll('.step-btn')[0]!.trigger('click');
+    await wrapper.findAll('.unit-row')[0]!.findAll('.step-btn')[1]!.trigger('click');
+    expect(wrapper.get('.foot .primary').attributes('disabled')).toBeUndefined();
+  });
+
+  it('counts the buildings that have the level in the Distribute button', async () => {
+    setup([placed('barracks', 3, -2, 6), placed('barracks', 5, 0, 2), placed('barracks', 7, 0, 6)]);
+    const wrapper = mountModal(placed('barracks', 3, -2, 6));
+    await wrapper.findAll('.seg')[1]!.trigger('click');
+    // Nothing picked: the most buildings any unlocked unit can spread over (the Thrall: all three).
+    expect(wrapper.findAll('.seg')[1]!.text()).toBe('Distribute (3)');
+    const axeman = wrapper.findAll('.unit-row').find((r) => r.get('.unit-name').text() === 'Axeman')!;
+    await axeman.findAll('.step-btn')[1]!.trigger('click');
+    expect(wrapper.findAll('.seg')[1]!.text()).toBe('Distribute (2)');
+  });
+
+  it('unlocks a row in Distribute mode from a building below the level when a sibling has it, but not in "This building"', async () => {
+    setup([placed('barracks', 3, -2, 2), placed('barracks', 5, 0, 6)]);
+    const wrapper = mountModal(placed('barracks', 3, -2, 2));
+    const spearman = () => wrapper.findAll('.unit-row').find((r) => r.get('.unit-name').text() === 'Spearman')!;
+    expect(spearman().findAll('.chip')).toHaveLength(1);
+    await wrapper.findAll('.seg')[1]!.trigger('click');
+    expect(spearman().findAll('.chip')).toHaveLength(0);
+    await spearman().findAll('.step-btn')[1]!.trigger('click');
+    await wrapper.get('.foot .primary').trigger('click');
+    await flushPromises();
+    expect(trainUnits).toHaveBeenCalledWith('s1', { unit: 'spearman', count: 1, q: 3, r: -2, split: 'evenly' }, undefined);
+  });
+
+  it('reads the open building\'s level live, so an upgrade that finishes while open updates subtitle, rows and ladder', async () => {
+    const world = setup([placed('barracks', 3, -2, 2)]);
+    const wrapper = mountModal(placed('barracks', 3, -2, 2));
+    expect(wrapper.get('.sub').text()).toContain('Level 2');
+    const spearman = () => wrapper.findAll('.unit-row').find((r) => r.get('.unit-name').text() === 'Spearman')!;
+    expect(spearman().findAll('.chip')).toHaveLength(1);
+
+    world.hud.buildings = [placed('barracks', 3, -2, 3)];
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.get('.sub').text()).toContain('Level 3');
+    expect(spearman().findAll('.chip')).toHaveLength(0);
+    expect(wrapper.get('[data-testid="unlock-ladder"] .now').element.closest('.stop')!.textContent).toContain('Level 3');
+  });
+
+  it('disables + once the row is at the largest affordable count', async () => {
+    const world = setup(twoBarracks);
+    world.hud.available = { wood: 130, stone: 99999, food: 99999, iron: 99999 };
+    const wrapper = mountModal();
+    const plus = wrapper.findAll('.unit-row')[0]!.findAll('.step-btn')[1]!;
+    await plus.trigger('click');
+    await plus.trigger('click');
+    expect(plus.attributes('disabled')).toBeDefined();
+  });
 });

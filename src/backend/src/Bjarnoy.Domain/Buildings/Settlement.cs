@@ -2789,19 +2789,27 @@ public sealed record Settlement
             return TrainDecision.Rejected(TrainRejection.WrongBuilding);
         }
 
-        // The level is the ordering building's own, not the best of its type; a distributed order only goes to buildings that have it.
-        if (here.Level < definition.RequiredBuildingLevel)
+        // "This building" needs the ordering building's own level. A distributed order goes to the buildings of the type that have
+        // the level, so it may be placed from a building below it.
+        if (split == TrainingSplit.Here && here.Level < definition.RequiredBuildingLevel)
         {
             return TrainDecision.Rejected(TrainRejection.BuildingLevelTooLow);
         }
 
-        var candidates = split == TrainingSplit.Here
+        var functioning = (split == TrainingSplit.Here
             ? new List<PlacedBuilding> { here }
-            : Buildings.Where(b => b.Type == definition.RequiredBuildingType).ToList();
-        candidates.RemoveAll(b => b.Level < definition.RequiredBuildingLevel || !b.IsFunctioning);
-        if (candidates.Count == 0)
+            : Buildings.Where(b => b.Type == definition.RequiredBuildingType).ToList())
+            .Where(b => b.Level >= 1 && b.IsFunctioning)
+            .ToList();
+        if (functioning.Count == 0)
         {
             return TrainDecision.Rejected(TrainRejection.BuildingOutsideRealm);
+        }
+
+        var candidates = functioning.Where(b => b.Level >= definition.RequiredBuildingLevel).ToList();
+        if (candidates.Count == 0)
+        {
+            return TrainDecision.Rejected(TrainRejection.BuildingLevelTooLow);
         }
 
         var slots = candidates
@@ -2867,7 +2875,7 @@ public sealed record Settlement
     public const double TrainingCancelRefundShare = 0.5;
 
     /// <summary>
-    /// What cancelling <paramref name="order"/> at <paramref name="now"/> pays back: 50 % of the cost of the units not yet trained.
+    /// What cancelling <paramref name="order"/> at <paramref name="now"/> pays back: 50 % of the cost of the units not yet trained, floored to whole resources.
     /// Units of a running order that are already trained are not part of it.
     /// </summary>
     public static ResourceAmounts TrainingCancelRefund(TrainingOrder order, DateTimeOffset now)
@@ -2875,7 +2883,10 @@ public sealed record Settlement
         ArgumentNullException.ThrowIfNull(order);
 
         var untrained = order.Count - order.CompletedCount(now);
-        return UnitCatalogue.Get(order.UnitType).TrainingCost * (untrained * TrainingCancelRefundShare);
+        var half = UnitCatalogue.Get(order.UnitType).TrainingCost * (untrained * TrainingCancelRefundShare);
+
+        // Whole resources only, floored: the training window shows the same number.
+        return new ResourceAmounts(Math.Floor(half.Wood), Math.Floor(half.Stone), Math.Floor(half.Food), Math.Floor(half.Iron));
     }
 
     /// <summary>

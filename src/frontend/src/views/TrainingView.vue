@@ -21,7 +21,7 @@ onMounted(() => void units.load());
 // The graph needs the building catalogue too (what Longhouse level opens each training building).
 const buildings = useBuildingCatalogueStore();
 onMounted(() => void buildings.load());
-const rows = computed(() => units.definitions);
+const hasUnits = computed(() => units.definitions.length > 0);
 
 const percentPerLevel = Math.round(TRAINING_TIME_REDUCTION_PER_LEVEL * 100);
 const maxLevel = maxLevelFor('barracks');
@@ -30,7 +30,7 @@ const maxPercent = percentPerLevel * maxLevel;
 
 <template>
   <DocsPageLayout class="training" :title="$t('docs.training.title')" caption="DOCS · TRAINING" :intro="$t('docs.training.intro')">
-    <template v-if="rows.length > 0">
+    <template v-if="hasUnits">
       <section id="buildings" class="block">
         <h2>{{ $t('docs.training.buildings.heading') }}</h2>
         <p class="text">{{ $t('docs.training.buildings.body') }}</p>

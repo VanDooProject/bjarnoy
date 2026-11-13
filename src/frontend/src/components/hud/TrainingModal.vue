@@ -36,6 +36,7 @@ import {
   type TrainingSplit,
   type UnitRequirement,
 } from '../../lib/units/trainingEconomy';
+import type { UnitDefinitionResponse } from '../../api/types';
 import { hasShorelineInTerritory } from '../../lib/map/shoreline';
 
 /** The building whose window this is: its type picks the units, its hex is where the order goes. */
@@ -69,6 +70,11 @@ function onQuantityInput(type: string, event: Event) {
 
 const longhouseLevel = computed(() => world.hud.level);
 
+// The window stays open while buildings finish: read the open building's level live, the prop is only the level it opened with.
+const openLevel = computed(
+  () => world.hud.buildings.find((b) => b.q === props.building.q && b.r === props.building.r)?.level ?? props.building.level,
+);
+
 // The settlement's functioning buildings of this type (standing, inside the realm) — what "Distribute" spreads an order over.
 const siblings = computed(() => trainingBuildingsOfType(world.hud.buildings, props.building.type));
 // With only one such building there is nothing to choose, so no selector is shown.
@@ -86,18 +92,19 @@ const hereOrders = computed(() =>
 );
 const ordersHere = computed(() => hereOrders.value.length);
 const slotsFreeHere = computed(() => Math.max(0, MAX_TRAINING_ORDERS_PER_BUILDING - ordersHere.value));
-// A distributed order needs room in at least one of the buildings; each picked type becomes one order in every building that gets units.
-const freeSlots = computed(() => {
+// Orders waiting in the building on a hex, from the live queue.
+function ordersAt(b: { q: number; r: number }): number {
+  return world.hud.trainingQueue.filter((o) => o.q === b.q && o.r === b.r).length;
+}
+// The siblings a unit's distributed order can go to: only buildings that have the unit's building level.
+function siblingsFor(definition: UnitDefinitionResponse) {
+  return siblings.value.filter((b) => b.level >= definition.requiredBuildingLevel);
+}
+// "This building" needs room here; a distributed order needs room in at least one building that has the unit's level.
+function freeSlotsFor(definition: UnitDefinitionResponse): number {
   if (split.value === 'here') return slotsFreeHere.value;
-  return Math.max(
-    0,
-    ...siblings.value.map(
-      (b) =>
-        MAX_TRAINING_ORDERS_PER_BUILDING -
-        world.hud.trainingQueue.filter((o) => o.q === b.q && o.r === b.r).length,
-    ),
-  );
-});
+  return Math.max(0, ...siblingsFor(definition).map((b) => MAX_TRAINING_ORDERS_PER_BUILDING - ordersAt(b)));
+}
 
 // Issue #40 phase 6 §4: whether this settlement's own claimed territory touches the sea — Ship-class units need it, mirroring
 // `Settlement.PlanTrain`'s `hasShoreline` gate (`TrainRejection.SettlementNotCoastal`). Computed client-side from the same
@@ -115,7 +122,7 @@ const isCoastal = computed<boolean | null>(() => {
 });
 
 // The level of the settlement's best functioning building of a type: only for prerequisite units, which unlock settlement-wide.
-// The unit's own building level is the opened building's (`props.building.level`), as `Settlement.PlanTrain` checks it.
+// The unit's own building level is the opened building's (`openLevel`), as `Settlement.PlanTrain` checks it for "This building"; a distributed order goes to the siblings that have the level.
 function bestBuildingLevelOf(buildingType: string): number {
   return Math.max(0, ...trainingBuildingsOfType(world.hud.buildings, buildingType).map((b) => b.level));
 }
@@ -136,7 +143,8 @@ const rows = computed(() =>
     const missing = unitRequirements(definition.type, {
       longhouseLevel: longhouseLevel.value,
       byType: catalogue.byType,
-      orderingLevel: props.building.level,
+      // A distributed order goes to the siblings that have the level, so the best one counts; "This building" needs the open one's.
+      orderingLevel: split.value === 'here' ? openLevel.value : bestBuildingLevelOf(props.building.type),
       bestBuildingLevelOf,
       coastal: isCoastal.value,
     });
@@ -155,11 +163,11 @@ const rows = computed(() =>
       costText: formatCostLine(unitCost),
       durationText: formatTrainingDuration(
         split.value === 'here'
-          ? unitTrainingSeconds(definition, props.building.level, world.worldSpeedFactor)
+          ? unitTrainingSeconds(definition, openLevel.value, world.worldSpeedFactor)
           : distributedTrainingSeconds(
               definition,
               Math.max(1, count),
-              siblings.value.map((b) => b.level),
+              siblingsFor(definition).map((b) => b.level),
               split.value,
               world.worldSpeedFactor,
             ),
@@ -198,7 +206,19 @@ const pickedCost = computed(() =>
     { wood: 0, stone: 0, food: 0, iron: 0 },
   ),
 );
+// The orders that fit: the scarcest of the picked rows (each type becomes one order), or the roomiest row when none is picked.
+const freeSlots = computed(() =>
+  picks.value.length
+    ? Math.min(...picks.value.map((r) => freeSlotsFor(r.definition)))
+    : Math.max(0, ...rows.value.filter((r) => !r.locked).map((r) => freeSlotsFor(r.definition))),
+);
 const tooManyOrders = computed(() => picks.value.length > freeSlots.value);
+// How many buildings "Distribute" spreads over: those that have the level of every picked unit, else of any unlocked one.
+const distributeCount = computed(() =>
+  picks.value.length
+    ? Math.min(...picks.value.map((r) => siblingsFor(r.definition).length))
+    : Math.max(0, ...rows.value.filter((r) => !r.locked).map((r) => siblingsFor(r.definition).length)),
+);
 const affordable = computed(() => canAfford(pickedCost.value, world.hud.available));
 const training = ref(false);
 const errorText = ref<string | null>(null);
@@ -210,9 +230,9 @@ const canTrain = computed(
 // The unlock ladder of this building: the levels that open units, the ones reached marked.
 const ladder = computed(() => {
   const stops = unlockLadder(catalogue.definitions, props.building.type);
-  const reached = stops.filter((s) => props.building.level >= s.level);
+  const reached = stops.filter((s) => openLevel.value >= s.level);
   const current = reached.length ? reached[reached.length - 1]!.level : null;
-  return stops.map((s) => ({ ...s, reached: props.building.level >= s.level, current: s.level === current }));
+  return stops.map((s) => ({ ...s, reached: openLevel.value >= s.level, current: s.level === current }));
 });
 
 // Issue #158: a note when something is actually reserved, so a training rejection that's really "some of that is spoken for"
@@ -273,7 +293,7 @@ async function cancelOrder(id: string) {
           <div>
             <div class="name">{{ buildingName(building.type) }}</div>
             <div class="sub">
-              {{ t('hud.trainingModal.subtitle', { level: building.level, percent: trainingBonusPercent(building.level) }) }}
+              {{ t('hud.trainingModal.subtitle', { level: openLevel, percent: trainingBonusPercent(openLevel) }) }}
             </div>
           </div>
           <button class="close" @click="emit('close')">{{ t('hud.trainingModal.close') }}</button>
@@ -383,7 +403,7 @@ async function cancelOrder(id: string) {
               :aria-pressed="mode === 'distribute'"
               @click="mode = 'distribute'"
             >
-              {{ t('hud.trainingModal.distribute', { count: siblings.length }) }}
+              {{ t('hud.trainingModal.distribute', { count: distributeCount }) }}
             </button>
           </div>
           <div v-if="mode === 'distribute'" class="selector" role="group" :aria-label="t('hud.trainingModal.splitLabel')">
@@ -461,6 +481,7 @@ async function cancelOrder(id: string) {
                   type="button"
                   class="step-btn"
                   :aria-label="t('hud.trainingModal.more')"
+                  :disabled="row.count >= row.max"
                   @click="setQuantity(row.definition.type, row.count + 1)"
                 >
                   {{ t('hud.trainingModal.plus') }}

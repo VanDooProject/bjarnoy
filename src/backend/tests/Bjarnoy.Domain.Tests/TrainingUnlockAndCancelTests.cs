@@ -112,11 +112,30 @@ public class TrainingUnlockAndCancelTests
     }
 
     [Fact]
-    public void A_distributed_order_started_from_a_building_below_the_level_is_refused()
+    public void A_distributed_order_can_be_placed_from_a_building_below_the_level_when_a_sibling_has_it()
     {
         var s = Found(10, Barracks(A, 5), Barracks(B, 2));
 
+        var decision = Plan(s, UnitType.Spearman, 4, B, TrainingSplit.Evenly);
+
+        Assert.True(decision.Accepted);
+        Assert.Equal(A, Assert.Single(decision.Orders).BuildingCoord);
+    }
+
+    [Fact]
+    public void A_distributed_order_is_refused_when_no_building_of_the_type_has_the_level()
+    {
+        var s = Found(10, Barracks(A, 2), Barracks(B, 2));
+
         Assert.Equal(TrainRejection.BuildingLevelTooLow, Plan(s, UnitType.Spearman, 4, B, TrainingSplit.Evenly).Rejection);
+    }
+
+    [Fact]
+    public void This_building_mode_still_needs_the_ordering_buildings_own_level_even_when_a_sibling_has_it()
+    {
+        var s = Found(10, Barracks(A, 5), Barracks(B, 2));
+
+        Assert.Equal(TrainRejection.BuildingLevelTooLow, Plan(s, UnitType.Spearman, 4, B).Rejection);
     }
 
     [Fact]
@@ -229,5 +248,26 @@ public class TrainingUnlockAndCancelTests
         Assert.Equal(cost * 2.0, Settlement.TrainingCancelRefund(order, T0));
         Assert.Equal(cost * 1.5, Settlement.TrainingCancelRefund(order, T0 + TimeSpan.FromMinutes(10)));
         Assert.Equal(cost * 0.0, Settlement.TrainingCancelRefund(order, T0 + TimeSpan.FromMinutes(40)));
+    }
+
+    [Fact]
+    public void The_refund_is_floored_to_whole_resources()
+    {
+        // One Thrall costs 25 food: half is 12.5, refunded as 12.
+        var order = new TrainingOrder
+        {
+            Id = Guid.NewGuid(),
+            BuildingCoord = A,
+            UnitType = UnitType.Thrall,
+            Count = 1,
+            StartedAt = T0,
+            PerUnitDuration = TimeSpan.FromMinutes(10),
+        };
+
+        var refund = Settlement.TrainingCancelRefund(order, T0);
+
+        Assert.Equal(12, refund.Food);
+        Assert.Equal(30, refund.Wood);
+        Assert.Equal(15, refund.Stone);
     }
 }

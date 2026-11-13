@@ -153,6 +153,12 @@ describe('trainingCancelRefund', () => {
     expect(trainingCancelRefund(unit({ type: 'x', trainingCost: { wood: 25, stone: 0, food: 0, iron: 0 } }), 1).wood).toBe(12);
   });
 
+  it('floors whole resources the way the backend does (one Thrall: 25 food refunds 12)', () => {
+    const thrall = unit({ type: 'thrall', trainingCost: { wood: 60, stone: 30, food: 25, iron: 0 } });
+    expect(trainingCancelRefund(thrall, 1)).toEqual({ wood: 30, stone: 15, food: 12, iron: 0 });
+    expect(trainingCancelRefund(thrall, 3).food).toBe(37);
+  });
+
   it('pays nothing when every unit is trained', () => {
     expect(trainingCancelRefund(spearman, 0)).toEqual({ wood: 0, stone: 0, food: 0, iron: 0 });
   });
