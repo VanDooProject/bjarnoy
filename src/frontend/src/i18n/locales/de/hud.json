@@ -425,7 +425,12 @@
     "hunting": "Auf der Jagd",
     "cannotGetHome": "Kein Weg nach Hause",
     "starvesIn": "verhungert in {eta}",
-    "buildingCamp": "Baut das Strandlager, fertig um {time} Uhr"
+    "buildingCamp": "Baut das Strandlager, fertig um {time} Uhr",
+    "arrivesIn": "kommt in {eta} an",
+    "homeIn": "in {eta} zu Hause",
+    "campReadyIn": "Lager fertig in {eta}",
+    "campReady": "Lager fertig",
+    "movingOn": "Zieht weiter"
   },
   "garrisonSpots": {
     "longhouse": "Langhaus",
@@ -487,6 +492,43 @@
     "provisions": "Proviant",
     "dispatching": "Wird entsendet…",
     "confirmDispatch": "Entsendung bestätigen"
+  },
+  "armyDetail": {
+    "showOnMap": "Auf der Karte zeigen",
+    "back": "Zurück zu den Armeen",
+    "foodHeading": "Nahrung",
+    "spare": "Übrig",
+    "wayHome": "Heimweg",
+    "food": "Nahrung",
+    "perHour": "pro Stunde",
+    "events": {
+      "left": "Aufgebrochen",
+      "arrives": "Erreicht ({q}, {r})",
+      "arrived": "Angekommen auf ({q}, {r})",
+      "now": "jetzt",
+      "turnsHome": "Kehrt von selbst um",
+      "turnedHome": "Umgekehrt",
+      "home": "Zu Hause",
+      "starves": "Nahrung aufgebraucht",
+      "movesOn": "Zieht weiter",
+      "campReady": "Lager fertig"
+    },
+    "now": {
+      "marching": "Auf dem Weg",
+      "standing": "Steht und isst die Reserve",
+      "returning": "Auf dem Heimweg",
+      "stranded": "Kein Weg nach Hause",
+      "waiting": "Wartet auf die anderen Gruppen",
+      "camp": "Baut das Lager"
+    },
+    "next": {
+      "arrives": "Ankunft {time}",
+      "turnsHome": "Kehrt um {time}",
+      "home": "Zu Hause {time}",
+      "starves": "Nahrung aus {time}",
+      "movesOn": "Zieht weiter {time}",
+      "campReady": "Lager fertig {time}"
+    }
   },
   "dispatchSheet": {
     "cancel": "Entsendung abbrechen",
