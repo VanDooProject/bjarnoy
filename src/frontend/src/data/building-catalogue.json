@@ -23403,12 +23403,12 @@
       "type": "shipyard",
       "level": 1,
       "cost": {
-        "wood": 600,
-        "stone": 150,
-        "food": 50,
+        "wood": 410,
+        "stone": 99,
+        "food": 33,
         "iron": 0
       },
-      "buildSeconds": 3600,
+      "buildSeconds": 1800,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -23448,12 +23448,12 @@
       "type": "shipyard",
       "level": 2,
       "cost": {
-        "wood": 780,
-        "stone": 200,
-        "food": 65,
+        "wood": 530,
+        "stone": 130,
+        "food": 43,
         "iron": 0
       },
-      "buildSeconds": 7958,
+      "buildSeconds": 6253,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -23488,12 +23488,12 @@
       "type": "shipyard",
       "level": 3,
       "cost": {
-        "wood": 1000,
-        "stone": 250,
-        "food": 85,
+        "wood": 690,
+        "stone": 170,
+        "food": 56,
         "iron": 0
       },
-      "buildSeconds": 12316,
+      "buildSeconds": 10705,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -23528,12 +23528,12 @@
       "type": "shipyard",
       "level": 4,
       "cost": {
-        "wood": 1300,
-        "stone": 330,
-        "food": 110,
+        "wood": 900,
+        "stone": 220,
+        "food": 73,
         "iron": 0
       },
-      "buildSeconds": 16674,
+      "buildSeconds": 15158,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -23568,12 +23568,12 @@
       "type": "shipyard",
       "level": 5,
       "cost": {
-        "wood": 1700,
-        "stone": 430,
-        "food": 140,
+        "wood": 1150,
+        "stone": 280,
+        "food": 94,
         "iron": 0
       },
-      "buildSeconds": 21032,
+      "buildSeconds": 19611,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -23608,12 +23608,12 @@
       "type": "shipyard",
       "level": 6,
       "cost": {
-        "wood": 2250,
-        "stone": 560,
-        "food": 190,
+        "wood": 1500,
+        "stone": 370,
+        "food": 120,
         "iron": 0
       },
-      "buildSeconds": 25389,
+      "buildSeconds": 24063,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -23648,12 +23648,12 @@
       "type": "shipyard",
       "level": 7,
       "cost": {
-        "wood": 2900,
-        "stone": 720,
-        "food": 240,
+        "wood": 2000,
+        "stone": 480,
+        "food": 160,
         "iron": 0
       },
-      "buildSeconds": 29747,
+      "buildSeconds": 28516,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -23688,12 +23688,12 @@
       "type": "shipyard",
       "level": 8,
       "cost": {
-        "wood": 3750,
-        "stone": 940,
-        "food": 310,
+        "wood": 2550,
+        "stone": 620,
+        "food": 210,
         "iron": 0
       },
-      "buildSeconds": 34105,
+      "buildSeconds": 32968,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -23728,12 +23728,12 @@
       "type": "shipyard",
       "level": 9,
       "cost": {
-        "wood": 4900,
-        "stone": 1200,
-        "food": 410,
+        "wood": 3350,
+        "stone": 810,
+        "food": 270,
         "iron": 0
       },
-      "buildSeconds": 38463,
+      "buildSeconds": 37421,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -23768,12 +23768,12 @@
       "type": "shipyard",
       "level": 10,
       "cost": {
-        "wood": 6350,
-        "stone": 1600,
-        "food": 530,
+        "wood": 4350,
+        "stone": 1050,
+        "food": 350,
         "iron": 0
       },
-      "buildSeconds": 42821,
+      "buildSeconds": 41874,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -23808,12 +23808,12 @@
       "type": "shipyard",
       "level": 11,
       "cost": {
-        "wood": 8250,
-        "stone": 2050,
-        "food": 690,
+        "wood": 5650,
+        "stone": 1350,
+        "food": 450,
         "iron": 0
       },
-      "buildSeconds": 47179,
+      "buildSeconds": 46326,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -23848,12 +23848,12 @@
       "type": "shipyard",
       "level": 12,
       "cost": {
-        "wood": 11000,
-        "stone": 2700,
-        "food": 900,
+        "wood": 7350,
+        "stone": 1750,
+        "food": 590,
         "iron": 0
       },
-      "buildSeconds": 51537,
+      "buildSeconds": 50779,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -23888,12 +23888,12 @@
       "type": "shipyard",
       "level": 13,
       "cost": {
-        "wood": 14000,
-        "stone": 3500,
-        "food": 1150,
+        "wood": 9550,
+        "stone": 2300,
+        "food": 770,
         "iron": 0
       },
-      "buildSeconds": 55895,
+      "buildSeconds": 55232,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -23928,12 +23928,12 @@
       "type": "shipyard",
       "level": 14,
       "cost": {
-        "wood": 18000,
-        "stone": 4550,
-        "food": 1500,
+        "wood": 12500,
+        "stone": 3000,
+        "food": 1000,
         "iron": 0
       },
-      "buildSeconds": 60253,
+      "buildSeconds": 59684,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -23968,12 +23968,12 @@
       "type": "shipyard",
       "level": 15,
       "cost": {
-        "wood": 23500,
-        "stone": 5900,
-        "food": 1950,
+        "wood": 16000,
+        "stone": 3900,
+        "food": 1300,
         "iron": 0
       },
-      "buildSeconds": 64611,
+      "buildSeconds": 64137,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -24008,12 +24008,12 @@
       "type": "shipyard",
       "level": 16,
       "cost": {
-        "wood": 30500,
-        "stone": 7700,
-        "food": 2550,
+        "wood": 21000,
+        "stone": 5050,
+        "food": 1700,
         "iron": 0
       },
-      "buildSeconds": 68968,
+      "buildSeconds": 68589,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -24048,12 +24048,12 @@
       "type": "shipyard",
       "level": 17,
       "cost": {
-        "wood": 40000,
-        "stone": 10000,
-        "food": 3350,
+        "wood": 27500,
+        "stone": 6600,
+        "food": 2200,
         "iron": 0
       },
-      "buildSeconds": 73326,
+      "buildSeconds": 73042,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -24088,12 +24088,12 @@
       "type": "shipyard",
       "level": 18,
       "cost": {
-        "wood": 52000,
-        "stone": 13000,
-        "food": 4350,
+        "wood": 35500,
+        "stone": 8550,
+        "food": 2850,
         "iron": 0
       },
-      "buildSeconds": 77684,
+      "buildSeconds": 77495,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -24128,12 +24128,12 @@
       "type": "shipyard",
       "level": 19,
       "cost": {
-        "wood": 67500,
-        "stone": 17000,
-        "food": 5600,
+        "wood": 46000,
+        "stone": 11000,
+        "food": 3700,
         "iron": 0
       },
-      "buildSeconds": 82042,
+      "buildSeconds": 81947,
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
@@ -24168,9 +24168,9 @@
       "type": "shipyard",
       "level": 20,
       "cost": {
-        "wood": 87500,
-        "stone": 22000,
-        "food": 7300,
+        "wood": 60000,
+        "stone": 14500,
+        "food": 4800,
         "iron": 0
       },
       "buildSeconds": 86400,

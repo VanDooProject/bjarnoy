@@ -199,7 +199,7 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.FishingHut)]
     [InlineData(BuildingType.Harbour)]
     [InlineData(BuildingType.ShrineOfNjord)]
-    public void The_fishing_hut_dockyard_and_shrine_of_njord_require_coastal_water_instead_of_a_land_terrain(BuildingType type)
+    public void The_fishing_hut_harbour_and_shrine_of_njord_require_coastal_water_instead_of_a_land_terrain(BuildingType type)
     {
         var definition = BuildingCatalogue.Get(type, 1);
 

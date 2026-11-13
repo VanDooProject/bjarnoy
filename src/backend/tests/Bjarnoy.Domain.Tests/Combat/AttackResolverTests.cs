@@ -293,7 +293,7 @@ public class AttackResolverTests
     }
 
     [Fact]
-    public void Twenty_five_fire_ships_at_a_dockyard_of_level_3_burn_two_levels_and_five_sail_home()
+    public void Twenty_five_fire_ships_at_a_harbour_of_level_3_burn_two_levels_and_five_sail_home()
     {
         var plan = Attack(
             [new(UnitType.FireHulk, 25)], buildings: Buildings(new PlacedBuilding(SeaHex, BuildingType.Harbour, 3)), target: SeaHex);
@@ -435,7 +435,7 @@ public class AttackResolverTests
     }
 
     [Fact]
-    public void No_loot_means_no_refill_a_lost_fight_a_dockyard_target_or_a_fleet_without_passengers()
+    public void No_loot_means_no_refill_a_lost_fight_a_harbour_target_or_a_fleet_without_passengers()
     {
         Assert.Equal(0, Attack([new(UnitType.Spearman, 1)], home: [new(UnitType.Spearman, 100)], provisions: 0).Refill);
 

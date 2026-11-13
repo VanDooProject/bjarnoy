@@ -92,7 +92,7 @@ public sealed class InlandLakeEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task The_dockyard_is_refused_on_an_inland_lake_shore()
+    public async Task The_harbour_is_refused_on_an_inland_lake_shore()
     {
         var (client, _, settlement, _, hexes) = await SetUpAsync();
         using var _ = client;

@@ -806,7 +806,7 @@ public static class BuildingCatalogue
         [BuildingType.PalisadeGate] = Tech(10, 1),
         [BuildingType.Bridge] = Tech(30, 3),
         [BuildingType.Harbour] = Tech(30, 24),
-        [BuildingType.Shipyard] = Tech(60, 24),
+        [BuildingType.Shipyard] = Tech(30, 24),
         [BuildingType.ArcheryRange] = Tech(45, 22),
         [BuildingType.CartWorkshop] = Tech(60, 22),
         [BuildingType.Meadery] = Tech(60, 24),
@@ -1217,18 +1217,18 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.Harbour,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 160, Stone: 40, Food: 14, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 410, Stone: 99, Food: 33, Iron: 0) * CostFactor(level),
         BuildDuration = BuildTime(BuildingType.Harbour, level),
         RequiresCoastalWater = true,
     };
 
-    // The Shipyard: the second half of the old Dockyard (docs/design/units-and-ships.md §1). Stands in coastal water like the Harbour,
-    // trains the warships and the fire craft, and is a garrison spot for every ship. Costs and times are starting values.
+    // The Shipyard: the second half of the old Dockyard (docs/design/units-and-ships.md §1). Stands in coastal water like the Harbour, costs and builds like it (economy.md),
+    // trains the warships and the fire craft, and is a garrison spot for every ship.
     private static BuildingDefinition Shipyard(int level) => new()
     {
         Type = BuildingType.Shipyard,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 600, Stone: 150, Food: 50, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 410, Stone: 99, Food: 33, Iron: 0) * CostFactor(level),
         BuildDuration = BuildTime(BuildingType.Shipyard, level),
         RequiresCoastalWater = true,
     };

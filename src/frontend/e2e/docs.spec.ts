@@ -925,6 +925,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       "Spearman",
     );
     await expect(page.locator('[data-building="harbour"]')).toContainText(
+      "Færing",
+    );
+    await expect(page.locator('[data-building="shipyard"]')).toContainText(
       "Snekkja",
     );
     // The Longhouse trains nothing, so it is not a row.
@@ -942,7 +945,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await page.goto("/docs/ships");
     await expectPlayerPage(page, "Ships and water", "ships-table");
     await expect(page.locator('[data-row="attack"]')).toContainText("60");
-    await expect(page.locator('[data-row="needs"]')).toContainText("Karve");
+    await expect(page.locator('[data-row="needs"]')).toContainText("Shipyard");
     await expect(page.getByText("Under investigation")).toHaveCount(0);
   });
 

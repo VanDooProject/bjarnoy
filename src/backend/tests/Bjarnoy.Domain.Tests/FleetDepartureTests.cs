@@ -121,7 +121,7 @@ public class FleetDepartureTests
     }
 
     [Fact]
-    public void A_grass_centre_next_to_the_sea_does_not_harbour_ships_the_dockyard_is_the_anchor()
+    public void A_grass_centre_next_to_the_sea_does_not_harbour_ships_the_harbour_is_the_anchor()
     {
         var centre = new HexCoord(2, 0);
         var settlement = Found(centre, Dock);
@@ -138,7 +138,7 @@ public class FleetDepartureTests
     }
 
     [Fact]
-    public void Inland_settlement_without_a_dockyard_keeps_the_centre_and_cannot_dispatch_a_fleet()
+    public void Inland_settlement_without_a_harbour_keeps_the_centre_and_cannot_dispatch_a_fleet()
     {
         // Expected: without a Harbour it cannot train ships either, so this state only arises from admin edits.
         var settlement = Found(InlandHome);
@@ -148,7 +148,7 @@ public class FleetDepartureTests
     }
 
     [Fact]
-    public void FleetAnchor_picks_the_dockyard_nearest_the_centre()
+    public void FleetAnchor_picks_the_harbour_nearest_the_centre()
     {
         var settlement = Found(InlandHome, new HexCoord(5, 0), Dock, new HexCoord(7, 0));
 

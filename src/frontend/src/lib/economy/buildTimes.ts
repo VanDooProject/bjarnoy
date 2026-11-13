@@ -56,7 +56,7 @@ export const TECH_TIMES: Readonly<Record<string, readonly [number, number]>> = {
   palisadegate: [10, 1],
   bridge: [30, 3],
   harbour: [30, 24],
-  shipyard: [60, 24],
+  shipyard: [30, 24],
   archeryrange: [45, 22],
   cartworkshop: [60, 22],
   meadery: [60, 24],

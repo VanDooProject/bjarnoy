@@ -17,12 +17,12 @@ test('building a harbour from the ring menu on coastal water places it', async (
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.found(page);
 
-  // Harbour unlocks at longhouse 8 (BuildingCatalogue.cs UnlockLevels,
+  // Harbour unlocks at longhouse 5 (BuildingCatalogue.cs UnlockLevels,
   // docs/design/economy.md's ladder) — level the longhouse up first, same
   // approach shrine-build.spec.ts uses for the shrine's own gate.
-  await settlement.setSettlementLevel(8);
-  // ...and stand its prerequisite, a level-5 fishing hut (BuildingCatalogue.cs Prerequisites).
-  await settlement.standBuildings([{ type: 'fishinghut', level: 5 }]);
+  await settlement.setSettlementLevel(5);
+  // ...and stand its prerequisite, a level-3 fishing hut (BuildingCatalogue.cs Prerequisites).
+  await settlement.standBuildings([{ type: 'fishinghut', level: 3 }]);
   // Late buildings cost more than a fresh settlement can hold: fund it (and its storage) so the bubble is affordable.
   await settlement.fund(10_000_000);
 

@@ -216,7 +216,7 @@ public class RealmDecayTests
     }
 
     [Fact]
-    public void A_dockyard_outside_the_realm_is_no_fleet_home()
+    public void A_harbour_outside_the_realm_is_no_fleet_home()
     {
         var dock = new HexCoord(1, 0);
         Func<HexCoord, Terrain> inland = _ => Terrain.Grass;

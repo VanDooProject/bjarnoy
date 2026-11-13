@@ -6,6 +6,7 @@ import DocsPageLink from '../components/docs/DocsPageLink.vue';
 import BuildingLink from '../components/docs/BuildingLink.vue';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { unitName } from '../i18n/catalogueNames';
+import { groupByShipGroup } from '../lib/units/shipGroups';
 import { maxLevelFor } from '../lib/map/buildingEconomy';
 import { MAX_TRAINING_ORDERS_PER_BUILDING, TRAINING_TIME_REDUCTION_PER_LEVEL } from '../lib/units/trainingEconomy';
 
@@ -25,7 +26,7 @@ const rows = computed(() => {
     list.push(unit.type);
     byBuilding.set(unit.requiredBuildingType, list);
   }
-  return [...byBuilding].map(([building, types]) => ({ building, units: types.map(unitName).join(', ') }));
+  return [...byBuilding].map(([building, types]) => ({ building, units: groupByShipGroup(types, (t) => t).flatMap((g) => g.rows).map(unitName).join(', ') }));
 });
 
 const percentPerLevel = Math.round(TRAINING_TIME_REDUCTION_PER_LEVEL * 100);

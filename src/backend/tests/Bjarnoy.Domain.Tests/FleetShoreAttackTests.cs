@@ -247,7 +247,7 @@ public class FleetShoreAttackTests
     }
 
     [Fact]
-    public void A_fleet_at_the_dockyard_fights_the_home_ships()
+    public void A_fleet_at_the_harbour_fights_the_home_ships()
     {
         var defender = Found(TargetCentre, [new UnitStack(UnitType.Snekkja, 1)], new PlacedBuilding(ShoreHex, BuildingType.Harbour, 3));
 
@@ -308,7 +308,7 @@ public class FleetShoreAttackTests
     }
 
     [Fact]
-    public void All_home_and_guest_ships_fight_a_fleet_at_a_shore_building_away_from_the_dockyard_and_the_centre()
+    public void All_home_and_guest_ships_fight_a_fleet_at_a_shore_building_away_from_the_harbour_and_the_centre()
     {
         var defender = Found(TargetCentre, [new UnitStack(UnitType.Snekkja, 50)], new PlacedBuilding(CoastalWaterHex, BuildingType.Harbour, 3),
             new PlacedBuilding(ShoreHex, BuildingType.Farm, 9));
