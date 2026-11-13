@@ -926,7 +926,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     const graph = page.getByTestId("unit-graph");
     await expect(graph.locator("svg")).toBeVisible();
     await expect(graph.locator('svg [data-unit="spearman"]')).toBeVisible();
-    await expect(graph.locator('svg [data-unit="longship"]')).toBeVisible();
+    await expect(graph.locator('svg [data-unit="snekkja"]')).toBeVisible();
     // The Ram and the Catapult need the Berserker, across lanes; the Berserker needs no other unit.
     await expect(
       graph.locator('[data-edge="berserker>ram"]'),
