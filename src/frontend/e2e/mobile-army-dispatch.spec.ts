@@ -6,7 +6,6 @@ import { RingMenuComponent } from './pages/RingMenuComponent';
 import { gotoWorldMap } from './helpers';
 import { layoutOverflow } from './support/geometry';
 import { loginTestUser } from './support/session';
-import { DOUBLE_TAP_SLOP_PX } from '../src/lib/map/doubleTap';
 
 /**
  * Issue: mobile army dispatch. Phones (<=768px) get no ArmyPanel — a 260px
@@ -248,7 +247,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     expect(overflow.offscreen).toEqual([]);
   });
 
-  test('QueueDrawer lists a seeded army with its ETA; a row tap selects it and keeps the drawer open; a double tap closes the drawer and centres the camera', async ({ page }) => {
+  test('QueueDrawer lists a seeded army with its ETA; a row tap selects it and opens its detail; Show on map closes the drawer and centres the camera', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await SettlementPage.found(page);
 
@@ -301,27 +300,22 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     expect(Math.hypot(before.x - canvasCentre.x, before.y - canvasCentre.y)).toBeGreaterThan(80);
 
     await page.locator('.queue-drawer-handle').click();
-    const armyRow = page.locator('.army-row', { hasText: 'Spearman' });
+    const armyRow = page.getByTestId('army-row-head').filter({ has: page.locator('[title="Spearman"]') });
     await expect(armyRow).toBeVisible();
-    await expect(armyRow.locator('.status-row-time')).not.toHaveText('—');
+    await expect(armyRow.getByTestId('army-row-time')).not.toHaveText('—');
 
-    // The single tap lands on the row's left end and the double tap below on
-    // its centre, further apart than DOUBLE_TAP_SLOP_PX: the spec runs the two
-    // gestures back to back, often within one double-tap window (DOUBLE_TAP_MS),
-    // so at the same point the double tap's first click could pair with this
-    // tap instead.
-    // The drawer would then close a click early and the double tap's second
-    // click would land on the map underneath, opening a ring menu whose
-    // make-room pan moves the camera off the army.
-    const rowButton = armyRow.locator('.status-row-click');
-    const rowBox = (await rowButton.boundingBox())!;
-    expect(rowBox.width / 2 - 8).toBeGreaterThan(DOUBLE_TAP_SLOP_PX);
-    await rowButton.click({ position: { x: 8, y: rowBox.height / 2 } });
+    await armyRow.click();
 
     await expect.poll(async () => (await demoWorld(page)).selectedArmyId).toBe('army-1');
     await expect(page.locator('#queue-drawer-body')).toHaveAttribute('aria-hidden', 'false');
+    // The detail replaces the list; back returns to it.
+    await expect(page.getByTestId('army-detail')).toBeVisible();
+    await expect(armyRow).toHaveCount(0);
+    await page.getByTestId('army-detail-back').click();
+    await expect(armyRow).toBeVisible();
+    await armyRow.click();
 
-    await rowButton.dblclick();
+    await page.getByTestId('army-show-on-map').click();
 
     await expect(page.locator('#queue-drawer-body')).toHaveAttribute('aria-hidden', 'true');
     await expect.poll(async () => (await demoWorld(page)).selectedArmyId).toBe('army-1');
@@ -334,7 +328,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
         return Math.hypot(after.x - canvasCentre.x, after.y - canvasCentre.y);
       })
       .toBeLessThan(40);
-    // Checked once the camera has settled: no click of the double tap reached the map underneath.
+    // Checked once the camera has settled: nothing of the taps reached the map underneath.
     await expect(new RingMenuComponent(page).bubbles).toHaveCount(0);
   });
 });
