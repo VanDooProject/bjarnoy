@@ -17,10 +17,10 @@ const baseReport = {
   winner: 'attacker',
   mission: 'attack',
   attackerLines: [
-    { unit: 'spearman', sent: 10, lost: 4, survived: 6 },
-    { unit: 'axeman', sent: 5, lost: 1, survived: 4 },
+    { unit: 'spearman', sent: 10, lost: 4, survived: 6, volleyLost: 0 },
+    { unit: 'axeman', sent: 5, lost: 1, survived: 4, volleyLost: 0 },
   ],
-  defenderLines: [{ unit: 'thrall', lost: 8, survived: 2 }],
+  defenderLines: [{ unit: 'thrall', lost: 8, survived: 2, volleyLost: 0 }],
   lootTaken: { wood: 50, stone: 0, food: 20, iron: 0 },
 };
 
@@ -73,19 +73,19 @@ describe('reportSummaryLine for a fleet', () => {
   const fleet = {
     ...baseReport,
     shipFight: {
-      attackerLines: [{ unit: 'firehulk', sent: 30, lost: 4, survived: 26 }],
-      defenderLines: [{ unit: 'snekkja', lost: 2, survived: 0 }],
+      attackerLines: [{ unit: 'firehulk', sent: 30, lost: 4, survived: 26, volleyLost: 0 }],
+      defenderLines: [{ unit: 'snekkja', lost: 2, survived: 0, volleyLost: 0 }],
     },
     drowned: [{ count: 20 }],
     fireShipsBurned: 10,
   };
 
-  it('counts both fights, the burned Fire Hulks as losses, and names the drowned', () => {
+  it('counts both fights, the burned Fire Ships as losses, and names the drowned', () => {
     expect(reportSummaryLine(fleet, 'attacker')).toBe('19 lost, 26 survived, 20 drowned, 70 looted');
   });
 
-  it('counts each unit once: lost plus survived is what was sent, burned Fire Hulks included', () => {
-    // 15 land units sent (5 lost, 10 survived) and 30 Fire Hulks sent (4 lost in the ship fight, 26 survived, 10 of those burned).
+  it('counts each unit once: lost plus survived is what was sent, burned Fire Ships included', () => {
+    // 15 land units sent (5 lost, 10 survived) and 30 Fire Ships sent (4 lost in the ship fight, 26 survived, 10 of those burned).
     expect(reportSummaryLine(fleet, 'attacker')).toContain('19 lost, 26 survived');
   });
 

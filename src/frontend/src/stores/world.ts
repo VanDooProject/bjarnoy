@@ -1112,6 +1112,12 @@ export const useWorldStore = defineStore('world', {
       await api.cancelBuild(this.selectedSettlementId, orderId, this.ownerId ?? undefined);
       await this.refreshLiveSettlement();
     },
+    /** Live mode: cancels a training order (any in the queue); the units not trained yet are refunded at 50 %. Throws `ApiError`. */
+    async cancelTrainingLive(orderId: string) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      await api.cancelTraining(this.selectedSettlementId, orderId, this.ownerId ?? undefined);
+      await this.refreshLiveSettlement();
+    },
     /**
      * Live mode: queues a training batch against the backend, charging its
      * cost immediately — mirrors `queueBuildOptimistic` above, including the

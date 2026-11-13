@@ -567,7 +567,8 @@
       "bend": "Biegung",
       "bend60": "Enge Biegung",
       "spring": "Quelle"
-    }
+    },
+    "history": "Nach Snorris Gylfaginning ist Naglfar das Schiff aus den ungeschnittenen Nägeln der Toten. Wer mit langen Nägeln stirbt, baut daran mit, darum schneidet man sie, um die Fertigstellung hinauszuzögern. Zu Ragnarök reißt es sich los und trägt die Riesen in die letzte Schlacht, mit dem Riesen Hrym am Steuer. In der Völuspá gehört sein Losreißen zu den Zeichen des Weltendes."
   },
   "wildlifeCamps": {
     "title": "Wildtierlager",
@@ -1028,10 +1029,17 @@
     "title": "Truppen ausbilden",
     "intro": "Welches Gebäude welche Einheiten ausbildet, wie die Warteschlangen funktionieren und wie du einen Auftrag auf mehrere Gebäude verteilst.",
     "buildings": {
-      "heading": "Wer bildet was aus",
-      "body": "Jede Einheit bildest du in einer bestimmten Art von Gebäude aus. Das Langhaus bildet keine Einheiten aus.",
-      "building": "Gebäude",
-      "units": "Bildet aus"
+      "heading": "Was jedes Gebäude ausbildet",
+      "body": "Jede Einheit bildest du in einer bestimmten Art von Gebäude aus, die meisten brauchen dafür eine Mindeststufe. Es zählt die Stufe des Gebäudes, in dem du den Auftrag erteilst: Eine zweite Kaserne auf Stufe 2 bildet keinen Speerträger aus, auch wenn deine erste auf Stufe 8 steht. Das Langhaus bildet nichts aus. Ein Pfeil heißt: Die erste Einheit muss freigeschaltet sein, bevor du die zweite ausbilden kannst."
+    },
+    "graph": {
+      "label": "Welche Einheit auf welcher Stufe welches Gebäudes freigeschaltet wird",
+      "axis": "Gebäudestufe. Die Pfeile führen von der nötigen Einheit zu der Einheit, die sie freischaltet.",
+      "opensAt": "Langhaus {level}",
+      "longhouseShort": "LH {level}",
+      "longhouse": "braucht Langhaus {level}",
+      "level": "Stufe {level}",
+      "needsUnit": "braucht {unit}"
     },
     "queue": {
       "heading": "Warteschlangen und Tempo",
@@ -1040,7 +1048,8 @@
       "speed": "Mit jeder Gebäudestufe geht die Ausbildung {percent} % schneller, auf Stufe {level} sind es {max} %. Die Dauer steht fest, sobald du den Auftrag erteilst. Baust du das Gebäude danach aus, ändert sie sich nicht mehr.",
       "pay": "Den ganzen Auftrag bezahlst du sofort.",
       "cancel": "Verlässt ein Gebäude dein {realm} oder wird es zerstört, werden seine Aufträge abgebrochen und du bekommst alles zurück. Die Aufträge in deinen anderen Gebäuden laufen weiter.",
-      "realmLink": "Gebiet"
+      "realmLink": "Gebiet",
+      "cancelOrder": "Du kannst jeden Auftrag in der Warteschlange eines Gebäudes abbrechen, auch den laufenden. Einheiten, die noch nicht fertig sind, bringen die Hälfte ihrer Kosten zurück. Einheiten des laufenden Auftrags, die schon fertig sind, bleiben bei dir."
     },
     "distribute": {
       "heading": "Ausbilden in mehreren Gebäuden",
@@ -1048,10 +1057,18 @@
       "evenly": "Gleichmäßig: Die Einheiten werden durch die Zahl der Gebäude geteilt. Übrige Einheiten gehen einzeln an die Gebäude mit den höchsten Stufen. Gibt es weniger Einheiten als Gebäude, bekommen nur die Gebäude mit den höchsten Stufen eine.",
       "fastest": "Am schnellsten (Premium-Funktion): Die Einheiten werden so aufgeteilt, dass die Aufträge möglichst früh und gemeinsam fertig werden. Dabei zählen die Stufe jedes Gebäudes und die Aufträge, die dort schon warten."
     },
+    "ranged": {
+      "heading": "Fernkämpfer",
+      "body": "Bogenschützen und Speerwerfer sind Fernkämpfer. In jedem Landkampf schlagen sie zuerst zu: Bevor der eigentliche Kampf beginnt, werfen die Fernkämpfer beider Seiten gleichzeitig einmal ihre Geschosse. Jede Seite verliert dabei einen Teil ihrer Einheiten, von jeder Art aber höchstens ein Drittel. Je stärker der Fernangriff gegenüber der Verteidigung des Gegners ist, desto mehr trifft er.",
+      "after": "Danach läuft der Kampf wie gewohnt mit dem, was übrig ist, und die Fernkämpfer kämpfen darin wie alle anderen mit. Weil sie zuerst zuschlagen, sind sie im eigentlichen Kampf schwach.",
+      "garrison": "Auch die Fernkämpfer einer verteidigenden Besatzung schlagen zuerst zu: Wer angreift, bekommt ihre Salve ab, bevor der Kampf beginnt.",
+      "report": "Der Kampfbericht zeigt, wie viele Einheiten jede Seite durch die Salve und wie viele im Kampf verloren hat."
+    },
     "adminNote": {
       "time": "Ausbildungszeit pro Einheit = Katalogzeit × (1 − {percent} × Gebäudestufe) ÷ Weltgeschwindigkeit, festgelegt beim Erteilen des Auftrags.",
       "refund": "Verlässt ein Gebäude das Gebiet, wird zerstört oder ist auf Stufe 0 verfallen, bricht es seine Warteschlange ab und erstattet jeden Auftrag voll."
-    }
+    },
+    "history": "Nordische Schlachten begannen auf Distanz, bevor die Reihen aufeinandertrafen: erst Pfeile, Wurfspeere und Steine, dann der Nahkampf oder das Entern. Die Sagas nennen Bogenschützen, etwa Einar Thambarskelfir auf Olaf Tryggvasons Ormen Lange bei Svolder (1000). Die Sagas wurden erst etwa zwei Jahrhunderte später aufgeschrieben; solche Einzelheiten sind Überlieferung, keine Aufzeichnung."
   },
   "founding": {
     "title": "Siedlungen gründen",
@@ -1425,6 +1442,12 @@
     },
     "adminNote": {
       "sea": "Eine Gründung über das Meer folgt der Platzregel oben: Die {settlers} Siedler einer Gründungsgruppe belegen {settlers} Plätze (ShipCargo)."
+    },
+    "history": {
+      "dockyard": "Kriegsschiffe lagen in Bootshäusern (naust, ein belegtes Wort) und wurden über das Leidang (leiðangr) aufgeboten: Jeder Küstenbezirk musste ein Schiff bauen, bemannen und verpflegen. Handelsschiffe nutzten die Stege und Kais der Hafenorte wie Haithabu, Birka und Kaupang.",
+      "karve": "Die Karve (karfi) war das Mehrzweckschiff eines Häuptlings: für Reisen, Truppen, etwas Fracht und den Küstenkrieg. Sie war breiter und flacher als ein reines Kriegsschiff. Oft bringt man sie mit dem Osebergschiff (um 820, etwa 21,5 m) und dem Gokstadschiff (um 890, etwa 23 m) in Verbindung; das ist eine Deutung. Ein Nachbau des Gokstadschiffs überquerte 1893 den Atlantik bis nach Chicago.",
+      "longship": "„Langschiff“ (langskip) ist der Sammelbegriff für alle langen, schmalen Kriegsschiffe mit Riemen. Die Nordleute ordneten sie nach ihrer Größe in „Räumen“ (rúm), den Abständen zwischen den Ruderbänken. Das Langschiff im Spiel entspricht der Snekkja: dem gängigen mittelgroßen Raub- und Aufgebotsschiff von etwa 17 m aufwärts mit 13 bis 20 Riemenpaaren. Skuldelev 5 (dänisch, um 1030, 13 Riemenpaare, mit wiederverwendetem Holz ausgebessert) gilt als eine solche, und das Wikingerschiffsmuseum in Roskilde segelt einen Nachbau, die Helge Ask. Auch die größere Skeid und das Drachenschiff waren Langschiffe.",
+      "fireShip": "Brandschiffe waren bei den Nordleuten keine übliche Waffe. Feuer auf See gehört zu den Byzantinern: Ihr Griechisches Feuer verbrannte 941 vor Konstantinopel die Flotte der Rus unter Fürst Igor. Einen Fall aus der Wikingerzeit gibt es vielleicht doch: Haithabu 1, ein Kriegsschiff von etwa 30 m, wurde verbrannt im Hafen von Haithabu gefunden und auf etwa 985 datiert. Nach einer Lesart der Archäologen in Roskilde wurde es mit Brennstoff gefüllt, angezündet und bei einem Angriff gegen die Hafenanlagen geschickt. Das stützt sich auf einen einzigen Fund und ist eine Deutung, keine Gewissheit."
     }
   },
   "shrines": {
@@ -1496,5 +1519,9 @@
       "„Land!“ Der Nebel hebt sich, und dein Reich beginnt."
     ],
     "watch": "Intro ansehen"
+  },
+  "historyNotes": {
+    "toggle": "Geschichte zeigen",
+    "label": "Geschichte"
   }
 }

@@ -310,13 +310,39 @@
     "demoNote": "Training requires the live backend and isn't wired up in demo mode yet.",
     "reservedNote": "{amount} resources reserved for queued construction.",
     "attackDefense": "Atk {attack} · Def {defense}",
-    "requiresCoastal": "requires a coastal settlement",
-    "requiresLonghouse": "requires longhouse {level}",
-    "requiresUnit": "and {unit}",
-    "requiresBuildingLevel": "requires {building} {level}",
+    "needBuildingLevel": "{building} {required} (now {current})",
+    "needLonghouse": "Longhouse {required} (now {current})",
+    "needUnit": "{unit} unlocked",
+    "needCoast": "Coast",
+    "needs": "Needs",
+    "quantity": "Amount of {unit}",
+    "fewer": "Fewer",
+    "more": "More",
+    "minus": "−",
+    "plus": "+",
+    "max": "Max",
+    "trainOrders": "Train {count} order | Train {count} orders",
+    "pickUnits": "Pick units to train",
+    "footerOrders": "{count} order · {free} of {max} slots free | {count} orders · {free} of {max} slots free",
+    "tooManyOrders": "Not enough free slots for {count} orders here.",
+    "cantAfford": "Not enough resources for this.",
     "training": "Training…",
-    "train": "Train",
-    "trainingFailed": "Training failed."
+    "trainingFailed": "Training failed.",
+    "queueTitle": "Training here",
+    "queueSlots": "{used} of {max} slots used",
+    "queueEmpty": "Nothing in training here.",
+    "queueNow": "Training",
+    "cancelOrder": "Cancel order",
+    "cancelAsk": "Cancel {count}× {unit}?",
+    "cancelRefund": "You get back {amount} (50 %).",
+    "cancelKept": "{count} already trained stay.",
+    "cancelNothing": "Nothing is refunded.",
+    "cancelConfirm": "Cancel order",
+    "cancelKeep": "Keep",
+    "cancelFailed": "Couldn't cancel the order.",
+    "ladderTitle": "Unlocks",
+    "ladderLevel": "Level {level}",
+    "ladderNow": "now"
   },
   "battleReport": {
     "buildings": {
@@ -352,6 +378,9 @@
     "unit": "Unit",
     "sent": "Sent",
     "lost": "Lost",
+    "volleyPower": "Volley power",
+    "lostVolley": "Lost (volley)",
+    "lostFight": "Lost (fight)",
     "survived": "Survived",
     "noStacksRecorded": "No stacks recorded.",
     "lootTaken": "Loot taken",
@@ -400,7 +429,12 @@
     "hunting": "Hunting",
     "cannotGetHome": "Cannot get home",
     "starvesIn": "starves in {eta}",
-    "buildingCamp": "Building the camp, ready at {time}"
+    "buildingCamp": "Building the camp, ready at {time}",
+    "arrivesIn": "arrives in {eta}",
+    "homeIn": "home in {eta}",
+    "campReadyIn": "camp ready in {eta}",
+    "campReady": "Camp ready",
+    "movingOn": "Moving on"
   },
   "garrisonSpots": {
     "longhouse": "Longhouse",
@@ -462,6 +496,43 @@
     "provisions": "Provisions",
     "dispatching": "Dispatching…",
     "confirmDispatch": "Confirm dispatch"
+  },
+  "armyDetail": {
+    "showOnMap": "Show on map",
+    "back": "Back to armies",
+    "foodHeading": "Food",
+    "spare": "Spare",
+    "wayHome": "Way home",
+    "food": "food",
+    "perHour": "per hour",
+    "events": {
+      "left": "Left home",
+      "arrives": "Arrives at ({q}, {r})",
+      "arrived": "Arrived at ({q}, {r})",
+      "now": "now",
+      "turnsHome": "Turns home by itself",
+      "turnedHome": "Turned home",
+      "home": "Home",
+      "starves": "Food runs out",
+      "movesOn": "Moves on",
+      "campReady": "Camp ready"
+    },
+    "now": {
+      "marching": "On the way",
+      "standing": "Standing, eating spare food",
+      "returning": "On the way home",
+      "stranded": "Cannot get home",
+      "waiting": "Waiting for the other groups",
+      "camp": "Building the camp"
+    },
+    "next": {
+      "arrives": "Arrives {time}",
+      "turnsHome": "Turns home {time}",
+      "home": "Home {time}",
+      "starves": "Food runs out {time}",
+      "movesOn": "Moves on {time}",
+      "campReady": "Camp ready {time}"
+    }
   },
   "dispatchSheet": {
     "cancel": "Cancel dispatch",
@@ -615,5 +686,15 @@
     "withCount": "{panel} ({count})",
     "collapse": "Collapse {panel}",
     "expand": "Expand {panel}"
+  },
+  "quickUpgrade": {
+    "chipTitle": "Quick upgrade",
+    "chipHintTouch": "Tap a building · hold the map to stop",
+    "chipHintMouse": "Click a building · Esc to stop",
+    "stop": "Stop quick upgrade",
+    "holdHint": "Hold to keep upgrading: one tap per building",
+    "premiumHold": "Premium: hold to upgrade with one tap per building",
+    "shiftHint": "Shift+click: upgrade to level {level}",
+    "premiumShift": "Premium: Shift+click upgrades"
   }
 }

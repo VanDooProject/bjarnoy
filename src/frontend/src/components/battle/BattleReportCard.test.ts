@@ -14,8 +14,8 @@ const landReport: BattleReportCardData = {
   attackPower: 750,
   defensePower: 350,
   lootTaken: { wood: 0, stone: 0, food: 0, iron: 0 },
-  attackerLines: [{ unit: 'spearman', sent: 50, lost: 16, survived: 34 }],
-  defenderLines: [{ unit: 'spearman', lost: 10, survived: 0 }],
+  attackerLines: [{ unit: 'spearman', sent: 50, lost: 16, survived: 34, volleyLost: 0 }],
+  defenderLines: [{ unit: 'spearman', lost: 10, survived: 0, volleyLost: 0 }],
   siege: null,
 };
 
@@ -23,14 +23,14 @@ const fleetReport: BattleReportCardData = {
   ...landReport,
   attackPower: 300,
   defensePower: 200,
-  attackerLines: [{ unit: 'spearman', sent: 20, lost: 5, survived: 15 }],
-  defenderLines: [{ unit: 'axeman', lost: 8, survived: 0 }],
+  attackerLines: [{ unit: 'spearman', sent: 20, lost: 5, survived: 15, volleyLost: 0 }],
+  defenderLines: [{ unit: 'axeman', lost: 8, survived: 0, volleyLost: 0 }],
   shipFight: {
     attackerLines: [
-      { unit: 'snekkja', sent: 2, lost: 1, survived: 1 },
-      { unit: 'firehulk', sent: 30, lost: 4, survived: 26 },
+      { unit: 'snekkja', sent: 2, lost: 1, survived: 1, volleyLost: 0 },
+      { unit: 'firehulk', sent: 30, lost: 4, survived: 26, volleyLost: 0 },
     ],
-    defenderLines: [{ unit: 'snekkja', lost: 2, survived: 0 }],
+    defenderLines: [{ unit: 'snekkja', lost: 2, survived: 0, volleyLost: 0 }],
     attackPower: 120,
     defensePower: 80,
     winner: 'attacker',
@@ -57,6 +57,38 @@ describe('BattleReportCard', () => {
     expect(wrapper.find('[data-testid=drowned]').exists()).toBe(false);
     expect(wrapper.find('[data-testid=fire-damage]').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('Ship fight');
+  });
+
+  it('shows no volley figures and keeps the single Lost column for a fight without ranged units', () => {
+    const wrapper = mountCard(landReport);
+
+    expect(wrapper.find('[data-testid=attacker-volley-power]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid=defender-volley-power]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid=lost-volley]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Volley');
+    expect(wrapper.findAll('th').map((th) => th.text())).toContain('Lost');
+  });
+
+  it('shows each side\'s volley power and splits every line\'s losses into volley and fight', () => {
+    const wrapper = mountCard({
+      ...landReport,
+      attackerVolleyPower: 200,
+      defenderVolleyPower: 90,
+      attackerLines: [{ unit: 'skirmisher', sent: 20, lost: 12, survived: 8, volleyLost: 3 }],
+      defenderLines: [{ unit: 'bowman', lost: 10, survived: 0, volleyLost: 4 }],
+    });
+
+    expect(wrapper.get('[data-testid=attacker-volley-power]').text()).toContain('200');
+    expect(wrapper.get('[data-testid=defender-volley-power]').text()).toContain('90');
+    expect(wrapper.findAll('th').map((th) => th.text())).toEqual(
+      expect.arrayContaining(['Lost (volley)', 'Lost (fight)']),
+    );
+    expect(wrapper.findAll('th').map((th) => th.text())).not.toContain('Lost');
+    const volley = wrapper.findAll('[data-testid=lost-volley]').map((td) => td.text());
+    const fight = wrapper.findAll('[data-testid=lost-fight]').map((td) => td.text());
+    // Attacker line first, then the defender's: volley 3 + fight 9 = 12 lost, volley 4 + fight 6 = 10 lost.
+    expect(volley).toEqual(['3', '4']);
+    expect(fight).toEqual(['9', '6']);
   });
 
   it('shows a report stored before ships fought separately exactly like a land fight', () => {

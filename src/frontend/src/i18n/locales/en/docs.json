@@ -567,7 +567,8 @@
       "bend": "Bend",
       "bend60": "Sharp bend",
       "spring": "Spring"
-    }
+    },
+    "history": "Naglfar is the ship built from the uncut nails of the dead, according to Snorri's Gylfaginning. A man who dies with untrimmed nails adds to it, so people trim theirs to delay its completion. At Ragnarök it breaks loose and carries the giants to the last battle, with the giant Hrym as its helmsman. In the Völuspá its loosening is one of the signs of the end."
   },
   "wildlifeCamps": {
     "title": "Wildlife camps",
@@ -1028,10 +1029,17 @@
     "title": "Training troops",
     "intro": "Which building trains which units, how the queues work, and how to spread an order over several buildings.",
     "buildings": {
-      "heading": "Who trains what",
-      "body": "Every unit is trained in one kind of building. The Longhouse trains nothing.",
-      "building": "Building",
-      "units": "Trains"
+      "heading": "What each building trains",
+      "body": "Every unit is trained in one kind of building, and most need that building at a minimum level. The level counts in the building you order from: a second Barracks that is still level 2 cannot train a Spearman, even when your first one is level 8. The Longhouse trains nothing. An arrow means you need the first unit unlocked before the second."
+    },
+    "graph": {
+      "label": "Which unit opens at which level of which building",
+      "axis": "Building level. Arrows point from the unit you need to the unit it opens.",
+      "opensAt": "Longhouse {level}",
+      "longhouseShort": "LH {level}",
+      "longhouse": "needs Longhouse {level}",
+      "level": "Level {level}",
+      "needsUnit": "needs {unit}"
     },
     "queue": {
       "heading": "Queues and speed",
@@ -1040,7 +1048,8 @@
       "speed": "Training gets {percent}% faster with every building level, {max}% at level {level}. The time is fixed when you place the order; upgrading the building later does not change it.",
       "pay": "You pay for the whole order up front.",
       "cancel": "If a building leaves your {realm} or is destroyed, its orders are cancelled and you get everything back. Orders in your other buildings keep training.",
-      "realmLink": "realm"
+      "realmLink": "realm",
+      "cancelOrder": "You can cancel any order in a building's queue, the running one included. Units that are not trained yet give back half of their cost. Units of the running order that are already trained stay with you."
     },
     "distribute": {
       "heading": "Training in several buildings",
@@ -1048,10 +1057,18 @@
       "evenly": "Evenly: the units are divided by the number of buildings. Units left over go one each to the highest-level buildings. With fewer units than buildings, only the highest-level ones get a unit.",
       "fastest": "Fastest (a premium feature): the units are split so that the orders finish together, as early as possible. It counts each building's level and how many orders are already waiting in it."
     },
+    "ranged": {
+      "heading": "Ranged units",
+      "body": "Bowmen and Skirmishers are ranged units. In a land fight they strike first: before the main fight, the ranged units of both sides throw once, at the same time. Each side loses part of its units, at most a third of every unit type, and the stronger the ranged attack is against the other side's defence, the more it takes.",
+      "after": "Then the fight runs as usual with what is left, and the ranged units fight in it like everyone else. That first strike is why they are weak fighters.",
+      "garrison": "The ranged units of a defending garrison strike first too: an attacker meets their volley before the fight begins.",
+      "report": "The battle report shows how many units each side lost to the volley and how many in the fight."
+    },
     "adminNote": {
       "time": "Training time per unit = catalogue time × (1 − {percent} × building level) ÷ world speed, fixed when the order is placed.",
       "refund": "A building that leaves the realm, is destroyed or has decayed to level 0 cancels its queue and refunds every order in full."
-    }
+    },
+    "history": "Norse battles opened at range before the lines closed: arrows, thrown spears and stones first, then hand-to-hand fighting or boarding. The sagas name archers, such as Einar Thambarskelfir on Olaf Tryggvason's Ormen Lange at Svolder (1000). The sagas were written down about two centuries later, so such details are tradition, not record."
   },
   "founding": {
     "title": "Founding settlements",
@@ -1425,6 +1442,12 @@
     },
     "adminNote": {
       "sea": "Founding by sea follows the slot rule above: the {settlers} settlers of a founding party take {settlers} slots (ShipCargo)."
+    },
+    "history": {
+      "dockyard": "Warships were kept in boathouses (naust, a word the sources attest) and called up by the levy (leiðangr), in which every coastal district had to build, man and feed a ship. Trade ships used the jetties and quays of harbour towns such as Hedeby, Birka and Kaupang.",
+      "karve": "The karve (karfi) was a chieftain's all-purpose ship for travel, troops, some cargo and coastal war. It was broader and shallower than a pure warship. It is often matched with the Oseberg ship (about 820, about 21.5 m) and the Gokstad ship (about 890, about 23 m), which is an interpretation. A replica of the Gokstad ship crossed the Atlantic to Chicago in 1893.",
+      "longship": "\"Longship\" (langskip) is the umbrella word for every long, narrow, oared warship. The Norse sorted them by size in rooms (rúm), the spaces between the rowing benches. The game's Longship plays the snekkja, the common mid-size raider and levy ship of about 17 m and up, with 13 to 20 pairs of oars. Skuldelev 5 (Danish, about 1030, 13 pairs of oars, repaired with reused timber) is counted as one, and the Viking Ship Museum in Roskilde sails a replica, Helge Ask. The larger skeid and the dragon ship were longships too.",
+      "fireShip": "The Norse did not use fire ships as a regular weapon. Fire at sea belongs to the Byzantines, whose Greek fire burned the fleet of the Rus' under Prince Igor off Constantinople in 941. There may be one Viking-age case: Hedeby 1, a warship of about 30 m, was found burned in Hedeby harbour and dated to about 985. One reading, by the Roskilde archaeologists, is that it was filled with fuel, set alight and sent against the harbour's defences during an attack. That rests on a single find and is an interpretation, not a certainty."
     }
   },
   "shrines": {
@@ -1496,5 +1519,9 @@
       "“Land!” The fog lifts, and your realm begins."
     ],
     "watch": "Watch the intro"
+  },
+  "historyNotes": {
+    "toggle": "Show history",
+    "label": "History"
   }
 }

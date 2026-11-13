@@ -307,7 +307,9 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
     public async Task A_land_attack_that_kills_every_land_troop_while_the_camps_own_fleet_survives_does_not_destroy_it()
     {
         var scene = await PlantAsync(
-            campArmyProvisions: null, campGarrison: [(UnitType.Spearman, 2), (UnitType.Snekkja, 2)]);
+            campArmyProvisions: null, campGarrison: [(UnitType.Spearman, 2), (UnitType.Snekkja, 2)],
+            // Plenty of food: ten Axemen now carry 400 away, and the ships must not starve on what the raiders leave.
+            campFood: 2_000);
 
         await LandTheAttackAsync(scene);
 

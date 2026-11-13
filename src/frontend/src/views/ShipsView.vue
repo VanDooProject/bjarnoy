@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
+import DocsHistoryNote from '../components/docs/DocsHistoryNote.vue';
 import DocsPageLink from '../components/docs/DocsPageLink.vue';
 import BuildingLink from '../components/docs/BuildingLink.vue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
@@ -78,6 +79,7 @@ const loc = computed(() => String(locale.value));
         <template #harbourLevel>{{ harbourLevelForShipyard }}</template>
       </i18n-t>
       <p class="text">{{ $t('docs.ships.harbour.shore') }}</p>
+      <DocsHistoryNote><p>{{ $t('docs.ships.history.dockyard') }}</p></DocsHistoryNote>
     </section>
 
     <section id="ships" class="block">
@@ -151,6 +153,12 @@ const loc = computed(() => String(locale.value));
         </table>
       </div>
     </section>
+
+    <DocsHistoryNote class="block">
+      <p>{{ $t('docs.ships.history.karve') }}</p>
+      <p>{{ $t('docs.ships.history.longship') }}</p>
+      <p>{{ $t('docs.ships.history.fireShip') }}</p>
+    </DocsHistoryNote>
 
     <section id="sailing" class="block">
       <h2>{{ $t('docs.ships.sailing.heading') }}</h2>

@@ -37,6 +37,9 @@ export interface FieldBattleReportCardData {
   sideBOwnerName: string | null;
   sideAPower: number;
   sideBPower: number;
+  /** The ranged attack each side threw in the volley before the fight; 0 without ranged units. */
+  sideAVolleyPower?: number;
+  sideBVolleyPower?: number;
   sideAWasDefending: boolean;
   sideBWasDefending: boolean;
   lootTaken: ResourceLine;
@@ -89,6 +92,11 @@ function wasDefending(side: FieldBattleSide): boolean {
 function powerOf(side: FieldBattleSide): number {
   return side === 'sidea' ? props.report.sideAPower : props.report.sideBPower;
 }
+function volleyPowerOf(side: FieldBattleSide): number {
+  return (side === 'sidea' ? props.report.sideAVolleyPower : props.report.sideBVolleyPower) ?? 0;
+}
+// A fight without ranged units has no volley: the tables keep the single "Lost" column.
+const hasVolley = computed(() => volleyPowerOf('sidea') > 0 || volleyPowerOf('sideb') > 0);
 </script>
 
 <template>
@@ -122,23 +130,34 @@ function powerOf(side: FieldBattleSide): number {
           <span v-if="wasDefending(s)" class="defending-tag">{{ t('hud.fieldBattleReport.defending') }}</span>
         </h3>
         <p class="power">{{ t('hud.fieldBattleReport.power') }}: {{ Math.round(powerOf(s)) }}</p>
+        <p v-if="hasVolley" class="power" :data-testid="`field-battle-volley-${s}`">
+          {{ t('hud.battleReport.volleyPower') }}: {{ Math.round(volleyPowerOf(s)) }}
+        </p>
         <div class="lines-scroll">
           <table class="lines">
             <thead>
               <tr>
                 <th>{{ t('hud.battleReport.unit') }}</th>
-                <th>{{ t('hud.battleReport.lost') }}</th>
+                <template v-if="hasVolley">
+                  <th>{{ t('hud.battleReport.lostVolley') }}</th>
+                  <th>{{ t('hud.battleReport.lostFight') }}</th>
+                </template>
+                <th v-else>{{ t('hud.battleReport.lost') }}</th>
                 <th>{{ t('hud.battleReport.survived') }}</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="row in rowsFor(s)" :key="row.unit">
                 <td>{{ unitName(row.unit) }}</td>
-                <td class="lost">{{ row.lost }}</td>
+                <template v-if="hasVolley">
+                  <td class="lost" data-testid="lost-volley">{{ row.volleyLost }}</td>
+                  <td class="lost" data-testid="lost-fight">{{ row.lost - row.volleyLost }}</td>
+                </template>
+                <td v-else class="lost">{{ row.lost }}</td>
                 <td class="survived">{{ row.survived }}</td>
               </tr>
               <tr v-if="!rowsFor(s).length">
-                <td colspan="3" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
+                <td :colspan="hasVolley ? 4 : 3" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
               </tr>
             </tbody>
           </table>

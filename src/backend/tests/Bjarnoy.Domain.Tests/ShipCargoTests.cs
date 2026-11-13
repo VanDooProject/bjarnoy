@@ -16,11 +16,12 @@ public class ShipCargoTests
     [Theory]
     [InlineData(UnitType.Thrall, 1)]
     [InlineData(UnitType.Spearman, 1)]
+    [InlineData(UnitType.Skirmisher, 1)]
     [InlineData(UnitType.Settler, 1)]
     [InlineData(UnitType.Bowman, 2)]
     [InlineData(UnitType.Axeman, 2)]
     [InlineData(UnitType.Provisioner, 2)]
-    [InlineData(UnitType.Berserker, 4)]
+    [InlineData(UnitType.Berserker, 3)]
     [InlineData(UnitType.Catapult, 10)]
     [InlineData(UnitType.Ram, 10)]
     [InlineData(UnitType.Karve, 0)]
@@ -72,17 +73,17 @@ public class ShipCargoTests
     [Fact]
     public void DropOverflow_drowns_the_biggest_units_first_until_the_rest_fit()
     {
-        // One Karve left (10 slots) for ram (10) + 3 berserkers (12) + 4 spearmen (4) = 26.
+        // One Karve left (10 slots) for ram (10) + 3 berserkers (9) + 4 spearmen (4) = 23.
         var (kept, drowned) = ShipCargo.DropOverflow(
             [new(UnitType.Karve, 1)],
             [new(UnitType.Spearman, 4), new(UnitType.Berserker, 3), new(UnitType.Ram, 1)]);
 
-        // Overflow 16: the ram (10) goes first, then two berserkers (4 each).
+        // Overflow 13: the ram (10) goes first, then one berserker (3).
         Assert.Equal(
-            [new UnitStack(UnitType.Berserker, 2), new UnitStack(UnitType.Ram, 1)],
+            [new UnitStack(UnitType.Berserker, 1), new UnitStack(UnitType.Ram, 1)],
             drowned.OrderBy(d => d.Type).ToList());
         Assert.Equal(
-            [new UnitStack(UnitType.Spearman, 4), new UnitStack(UnitType.Berserker, 1)],
+            [new UnitStack(UnitType.Spearman, 4), new UnitStack(UnitType.Berserker, 2)],
             kept.ToList());
     }
 

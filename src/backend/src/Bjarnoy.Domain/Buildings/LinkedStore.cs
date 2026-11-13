@@ -215,6 +215,10 @@ public sealed class LinkedStore
     public Guid? MemberOwningOrder(Guid orderId) =>
         _slots.FirstOrDefault(s => s.Settlement.Queue.Any(o => o.Id == orderId))?.Id;
 
+    /// <summary>The member whose training queue holds <paramref name="orderId"/>, or null when none does.</summary>
+    public Guid? MemberOwningTrainingOrder(Guid orderId) =>
+        _slots.FirstOrDefault(s => s.Settlement.TrainingQueue.Any(o => o.Id == orderId))?.Id;
+
     /// <summary>
     /// Replaces the guest stacks <paramref name="id"/> hosts (after a battle took some of them) and re-splits the pool, so the
     /// following settle eats with the guests that are left.

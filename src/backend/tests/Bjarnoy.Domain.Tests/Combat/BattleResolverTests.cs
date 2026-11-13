@@ -151,7 +151,7 @@ public class BattleResolverTests
     [Fact]
     public void Loot_is_capped_by_the_survivors_total_carry_capacity()
     {
-        // 1 Axeman survives with CarryCapacity 30; the settlement holds far
+        // 1 Axeman survives with CarryCapacity 40; the settlement holds far
         // more than that of everything.
         var attacker = new[] { new UnitStack(UnitType.Axeman, 1) };
         IReadOnlyList<UnitStack> defender = [];
@@ -159,21 +159,20 @@ public class BattleResolverTests
         var plan = BattleResolver.Resolve(attacker, defender, defenseBonusPercent: 0, Abundant, seed: 1);
 
         var total = plan.LootTaken.Wood + plan.LootTaken.Stone + plan.LootTaken.Food + plan.LootTaken.Iron;
-        Assert.Equal(30, total, 6);
+        Assert.Equal(40, total, 6);
         // Split evenly across the four resources when all are abundant.
-        Assert.Equal(7.5, plan.LootTaken.Wood, 6);
-        Assert.Equal(7.5, plan.LootTaken.Stone, 6);
-        Assert.Equal(7.5, plan.LootTaken.Food, 6);
-        Assert.Equal(7.5, plan.LootTaken.Iron, 6);
+        Assert.Equal(10, plan.LootTaken.Wood, 6);
+        Assert.Equal(10, plan.LootTaken.Stone, 6);
+        Assert.Equal(10, plan.LootTaken.Food, 6);
+        Assert.Equal(10, plan.LootTaken.Iron, 6);
     }
 
     [Fact]
     public void Loot_is_capped_by_what_is_actually_available_and_the_shortfall_spreads_to_the_others()
     {
-        // Carry capacity 120 (1 Axeman, 30) — wait, use enough units for a
-        // round number: 4 Axemen => capacity 120, so an even split would want
+        // Carry capacity 120 (3 Axemen, 40 each), so an even split would want
         // 30 of each resource, but the settlement holds no wood at all.
-        var attacker = new[] { new UnitStack(UnitType.Axeman, 4) };
+        var attacker = new[] { new UnitStack(UnitType.Axeman, 3) };
         IReadOnlyList<UnitStack> defender = [];
         var available = new ResourceAmounts(Wood: 0, Stone: 1_000_000, Food: 1_000_000, Iron: 1_000_000);
 

@@ -18,15 +18,25 @@ import {
   isArmyWaitingToGather,
   isFieldOrderMidMarch,
 } from '../lib/units/armyDispatch';
+import { buildArmyTimeline, type ArmyTimeline } from '../lib/units/armyTimeline';
 import type { MessageSchema } from '../i18n/schema';
 import type { ArmyResponse } from '../api/types';
+
+/** Colour of the row's countdown: the leg the army is on. */
+export type ArmyRowTone = 'march' | 'return' | 'support' | 'stranded' | 'default';
 
 export interface ArmyRow {
   id: string;
   composition: string;
+  /** The unit stacks behind `composition`, for the unit chips. */
+  stacks: { unit: string; count: number }[];
   status: string;
+  /** Colour of the countdown. */
+  tone: ArmyRowTone;
+  /** The legs, "now" tick, events and food numbers of the trip; null for an army without a trip. */
+  timeline: ArmyTimeline | null;
   eta: string | null;
-  /** Raw arrival instant (ms epoch) behind `eta`, for sorting — null exactly when `eta` is. */
+  /** Raw instant (ms epoch) behind `eta`, for sorting — null exactly when `eta` is. */
   etaMs: number | null;
   /** Time fraction along the active leg (departedAt→arrivesAt, or turnAroundAt→returnArrivesAt while returning); null for a supporting army, which has no active leg. */
   progress: number | null;
@@ -50,6 +60,21 @@ function armyProgressFraction(army: ArmyResponse, now: number): number | null {
   return Math.min(1, Math.max(0, (now - start) / (end - start)));
 }
 
+function armyRowTone(timeline: ArmyTimeline | null): ArmyRowTone {
+  switch (timeline?.state) {
+    case 'marching':
+      return 'march';
+    case 'returning':
+      return 'return';
+    case 'supporting':
+      return 'support';
+    case 'stranded':
+      return 'stranded';
+    default:
+      return 'default';
+  }
+}
+
 export function useArmyRows() {
   const world = useWorldStore();
   const auth = useAuthStore();
@@ -58,6 +83,14 @@ export function useArmyRows() {
   return computed<ArmyRow[]>(() => {
     void world.hud.tick; // reactive dependency so ETA countdowns tick every second
     const now = Date.now();
+    /**
+     * "<phrase> 2h 40m". A target that has passed (the row is stale until the next poll) reads as what the army is doing now:
+     * `pastKey` names it. Only an outbound arrival that has passed reads "Arriving".
+     */
+    const countdown = (key: Parameters<typeof t>[0], targetIso: string, pastKey?: Parameters<typeof t>[0]): string => {
+      if (Date.parse(targetIso) - now > 0) return t(key, { eta: formatEta(targetIso, now) });
+      return pastKey ? t(pastKey) : formatEta(targetIso, now);
+    };
     return world.armies.map((army) => {
       const composition = army.stacks
         .filter((s) => s.count > 0)
@@ -89,13 +122,17 @@ export function useArmyRows() {
           : null;
       // An army that cannot get home has no arrival to count down to, only the moment its food runs out.
       const eta = army.starvesAt
-        ? t('hud.armyStatus.starvesIn', { eta: formatEta(army.starvesAt, now) })
+        ? countdown('hud.armyStatus.starvesIn', army.starvesAt, 'hud.armyStatus.cannotGetHome')
         : etaIso
-          ? waiting
-            ? t('hud.armyStatus.movesOnIn', { eta: formatEta(etaIso, now) })
-            : standing
-              ? t('hud.armyStatus.headsHomeIn', { eta: formatEta(etaIso, now) })
-              : formatEta(etaIso, now)
+          ? campReadyAt !== null
+            ? countdown('hud.armyStatus.campReadyIn', etaIso, 'hud.armyStatus.campReady')
+            : waiting
+              ? countdown('hud.armyStatus.movesOnIn', etaIso, 'hud.armyStatus.movingOn')
+              : headingHome
+                ? countdown('hud.armyStatus.homeIn', etaIso, 'hud.armyStatus.atHome')
+                : standing
+                  ? countdown('hud.armyStatus.headsHomeIn', etaIso, 'hud.armyStatus.returning')
+                  : countdown('hud.armyStatus.arrivesIn', etaIso)
           : null;
       const etaMs = army.starvesAt ? Date.parse(army.starvesAt) : etaIso ? Date.parse(etaIso) : null;
       // Nor any way home to recall it on, nor a home at all.
@@ -107,10 +144,14 @@ export function useArmyRows() {
       // Issue #156 phase 1: "Move on" once standing, "Append goal" while still
       // travelling — see isFieldOrderMidMarch's own doc comment.
       const midMarch = isFieldOrderMidMarch(army, now);
+      const timeline = buildArmyTimeline(army, now, campReadyAt);
       return {
         id: army.id,
         composition: composition || '—',
+        stacks: army.stacks.filter((s) => s.count > 0).map((s) => ({ unit: s.unit, count: s.count })),
         status,
+        tone: armyRowTone(timeline),
+        timeline,
         eta,
         etaMs,
         progress: armyProgressFraction(army, now),

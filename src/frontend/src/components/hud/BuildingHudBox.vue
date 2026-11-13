@@ -7,6 +7,9 @@ import type { HudRequirement, HudRow } from '../../lib/hud/buildingHud';
 import { coarseDuration, formatCountdown } from '../../lib/hud/countdown';
 import { formatFullNumber } from '../../lib/hud/compactNumber';
 import { RESOURCE_TOKENS } from '../../lib/resources/resourceGlyphs';
+import { RING_RESOURCE_KEYS } from '../../lib/map/ringAvailability';
+import { formatBuildTime } from '../../lib/map/ringCatalogue';
+import ResourceIcon from '../ResourceIcon.vue';
 import BuildingHudIcon from './BuildingHudIcon.vue';
 import UnitIcon from '../UnitIcon.vue';
 
@@ -32,6 +35,11 @@ function requirementText(req: HudRequirement): string {
     : t('hud.buildingHud.needsBuilding', { building: buildingName(req.type), level: req.level });
 }
 
+/** The chips of the quick upgrade line: what is to be paid, rounded up (costs scale by a fractional factor), like the ring's card. */
+function quickCost(cost: Readonly<Record<string, number>> | undefined) {
+  return RING_RESOURCE_KEYS.filter((key) => !!cost?.[key]).map((key) => ({ key, amount: Math.ceil(cost![key]!) }));
+}
+
 const pct = (fraction: number) => `${(Math.min(1, Math.max(0, fraction)) * 100).toFixed(1)}%`;
 
 </script>
@@ -41,7 +49,23 @@ const pct = (fraction: number) => `${(Math.min(1, Math.max(0, fraction)) * 100).
     <template v-for="(row, i) in rows" :key="i">
       <template v-if="row.kind === 'upgrade'">
         <!-- Missing requirements: one chip per line, near folds from four on, mid from three on. -->
-        <template v-if="row.requirements.length">
+        <div v-if="row.quick?.mode === 'locked'" class="hud-row" data-testid="hud-quick-upgrade">
+          <span class="hud-chip hud-chip--locked"><BuildingHudIcon name="lock" />{{ t('hud.quickUpgrade.premiumShift') }}</span>
+        </div>
+        <template v-else-if="row.quick && row.state === 'ready'">
+          <div class="hud-row" data-testid="hud-quick-upgrade">
+            <span class="hud-chip hud-chip--ready">
+              <BuildingHudIcon name="up" />{{ row.quick.shift ? t('hud.quickUpgrade.shiftHint', { level: row.targetLevel }) : t('hud.buildingHud.upgrade') }}
+            </span>
+          </div>
+          <div class="hud-row" data-testid="hud-quick-upgrade-cost">
+            <span v-for="chip in quickCost(row.quick.cost)" :key="chip.key" class="hud-chip">
+              <ResourceIcon :kind="chip.key" :size="11" /><span class="hud-num">{{ num(chip.amount) }}</span>
+            </span>
+            <span v-if="row.quick.buildSeconds !== undefined" class="hud-num hud-muted">{{ formatBuildTime(row.quick.buildSeconds) }}</span>
+          </div>
+        </template>
+        <template v-else-if="row.requirements.length">
           <template v-if="tier === 'near'">
             <div v-for="(req, j) in row.requirements" :key="j" class="hud-row">
               <span class="hud-chip hud-chip--blocked"><BuildingHudIcon name="lock" />{{ requirementText(req) }}</span>
@@ -161,6 +185,7 @@ const pct = (fraction: number) => `${(Math.min(1, Math.max(0, fraction)) * 100).
 .hud-chip--ready { color: #5fd08a; }
 .hud-chip--short { color: #f0b04a; }
 .hud-chip--blocked { color: #93a3ae; }
+.hud-chip--locked { color: var(--muted); }
 .hud-chip--work { color: #6fb0e0; }
 .hud-chip--max { color: #ffc55c; }
 .hud-premium {

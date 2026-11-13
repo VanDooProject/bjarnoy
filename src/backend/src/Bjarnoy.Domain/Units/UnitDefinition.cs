@@ -100,17 +100,24 @@ public sealed record UnitDefinition
     public int FireCraftPerLevel { get; init; }
 
     /// <summary>
-    /// The level of the training building (<see cref="RequiredBuildingType"/>) this unit needs, on top of
-    /// <see cref="RequiredLonghouseLevel"/> as its own Longhouse gate. See <c>docs/design/units-and-ships.md</c> §1.
+    /// True for the units that strike in the volley before the main fight of a land fight (Bowman, Skirmisher): see
+    /// <see cref="Bjarnoy.Domain.Combat.Volley"/> and <c>docs/design/units-and-ships.md</c> section 4.
     /// </summary>
-    public int RequiredBuildingLevel { get; init; } = 1;
+    public bool Ranged { get; init; }
 
     public required ResourceAmounts TrainingCost { get; init; }
 
     /// <summary>Time to train one unit. A batch drips out one at a time — see <see cref="Bjarnoy.Domain.Buildings.TrainingOrder"/>.</summary>
     public required TimeSpan TrainingDuration { get; init; }
 
+    /// <summary>The unit's own Longhouse gate, on top of the Longhouse level its training building opens at.</summary>
     public required int RequiredLonghouseLevel { get; init; }
+
+    /// <summary>
+    /// The minimum level of the training building (<see cref="RequiredBuildingType"/>) the order is placed in
+    /// (<c>docs/design/units-and-ships.md</c> section 1). Checked against that one building, not against any building of the type.
+    /// </summary>
+    public int RequiredBuildingLevel { get; init; } = 1;
 
     /// <summary>
     /// Another unit type that must itself be available (see

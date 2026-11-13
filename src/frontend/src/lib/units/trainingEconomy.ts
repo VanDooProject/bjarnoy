@@ -23,32 +23,110 @@ export function canAfford(cost: ResourceLine, stock: ResourceLine): boolean {
   return RESOURCE_KEYS.every((key) => stock[key] >= cost[key]);
 }
 
-/**
- * Whether `type` is trainable at `longhouseLevel` — mirrors the backend's
- * `UnitCatalogue.IsAvailable`: the longhouse is high enough, its training
- * building (`requiredBuildingType`) stands if `buildingLevelOf` is supplied,
- * and (recursively) any prerequisite unit is itself available under the same
- * conditions. `byType` is the catalogue indexed by wire type name (see
- * `stores/unitCatalogue.ts`'s `byType` getter).
- *
- * `buildingLevelOf` mirrors `Settlement.PlanTrain`'s own lookup (a
- * settlement's level of a given building type, 0 if it has none); omitting
- * it skips the training-building check entirely, the same "unknown" escape
- * hatch the backend uses for callers with no settlement to check against.
- */
-export function isUnitAvailable(
-  type: string,
-  longhouseLevel: number,
-  byType: Record<string, UnitDefinitionResponse>,
-  buildingLevelOf?: (buildingType: string) => number,
-): boolean {
-  const definition = byType[type];
+/** One requirement a unit still misses in the building the order goes to. */
+export type UnitRequirement =
+  | { kind: 'buildingLevel'; building: string; required: number; current: number }
+  | { kind: 'longhouse'; required: number; current: number }
+  | { kind: 'unit'; unit: string }
+  | { kind: 'coast' };
+
+export interface UnitRequirementContext {
+  longhouseLevel: number;
+  /** The catalogue indexed by wire type name (see `stores/unitCatalogue.ts`'s `byType` getter). */
+  byType: Record<string, UnitDefinitionResponse>;
+  /** The level of the building the order goes to (the opened building, not the best of its type). */
+  orderingLevel: number;
+  /** The level of the settlement's best functioning building of a type, 0 when it has none; used for prerequisite units. */
+  bestBuildingLevelOf: (buildingType: string) => number;
+  /** Whether the settlement claims a shoreline hex; `null` (unknown, e.g. demo mode) counts as coastal. */
+  coastal: boolean | null;
+}
+
+/** Whether `type` is unlocked in this settlement somewhere: the Longhouse, its building's best level and its own prerequisite hold. */
+function isUnlockedSomewhere(type: string, ctx: UnitRequirementContext): boolean {
+  const definition = ctx.byType[type];
   if (!definition) return false;
-  if (longhouseLevel < definition.requiredLonghouseLevel) return false;
-  if (buildingLevelOf && buildingLevelOf(definition.requiredBuildingType) < definition.requiredBuildingLevel) return false;
-  return (
-    !definition.requiredUnitType || isUnitAvailable(definition.requiredUnitType, longhouseLevel, byType, buildingLevelOf)
-  );
+  if (ctx.longhouseLevel < definition.requiredLonghouseLevel) return false;
+  if (ctx.bestBuildingLevelOf(definition.requiredBuildingType) < definition.requiredBuildingLevel) return false;
+  return !definition.requiredUnitType || isUnlockedSomewhere(definition.requiredUnitType, ctx);
+}
+
+/**
+ * Everything `type` still misses in the building the order goes to, in the order the window lists it; empty means it can be
+ * trained. Mirrors the backend's `UnitCatalogue.IsAvailable` and `Settlement.PlanTrain` (the level is the ordering building's own).
+ * The row and the gate both read this one list.
+ */
+export function unitRequirements(type: string, ctx: UnitRequirementContext): UnitRequirement[] {
+  const definition = ctx.byType[type];
+  if (!definition) return [];
+  const missing: UnitRequirement[] = [];
+  if (ctx.orderingLevel < definition.requiredBuildingLevel) {
+    missing.push({
+      kind: 'buildingLevel',
+      building: definition.requiredBuildingType,
+      required: definition.requiredBuildingLevel,
+      current: ctx.orderingLevel,
+    });
+  }
+  if (ctx.longhouseLevel < definition.requiredLonghouseLevel) {
+    missing.push({ kind: 'longhouse', required: definition.requiredLonghouseLevel, current: ctx.longhouseLevel });
+  }
+  if (definition.requiredUnitType && !isUnlockedSomewhere(definition.requiredUnitType, ctx)) {
+    missing.push({ kind: 'unit', unit: definition.requiredUnitType });
+  }
+  if (definition.class === 'ship' && ctx.coastal === false) {
+    missing.push({ kind: 'coast' });
+  }
+  return missing;
+}
+
+/** The largest count of `definition` that `stock` covers (0 when it covers none). */
+export function maxAffordableCount(definition: UnitDefinitionResponse, stock: ResourceLine): number {
+  const cost = definition.trainingCost;
+  let max = Number.POSITIVE_INFINITY;
+  for (const key of RESOURCE_KEYS) {
+    if (cost[key] > 0) max = Math.min(max, Math.floor(stock[key] / cost[key]));
+  }
+  return Number.isFinite(max) ? Math.max(0, max) : 0;
+}
+
+/** `stock` minus `cost`, floored at 0 per resource. */
+export function subtractCost(stock: ResourceLine, cost: ResourceLine): ResourceLine {
+  return {
+    wood: Math.max(0, stock.wood - cost.wood),
+    stone: Math.max(0, stock.stone - cost.stone),
+    food: Math.max(0, stock.food - cost.food),
+    iron: Math.max(0, stock.iron - cost.iron),
+  };
+}
+
+/** Share of the cost of the units not yet trained that cancelling an order pays back (`Settlement.TrainingCancelRefundShare`). */
+export const TRAINING_CANCEL_REFUND_SHARE = 0.5;
+
+/** What cancelling an order pays back: 50 % of the cost of its `untrained` units, rounded down per resource. */
+export function trainingCancelRefund(definition: UnitDefinitionResponse, untrained: number): ResourceLine {
+  const full = totalTrainingCost(definition, Math.max(0, untrained));
+  return {
+    wood: Math.floor(full.wood * TRAINING_CANCEL_REFUND_SHARE),
+    stone: Math.floor(full.stone * TRAINING_CANCEL_REFUND_SHARE),
+    food: Math.floor(full.food * TRAINING_CANCEL_REFUND_SHARE),
+    iron: Math.floor(full.iron * TRAINING_CANCEL_REFUND_SHARE),
+  };
+}
+
+/** The unit types of one training building grouped by the building level that opens them, lowest level first. */
+export function unlockLadder(
+  definitions: UnitDefinitionResponse[],
+  buildingType: string,
+): { level: number; units: string[] }[] {
+  const byLevel = new Map<number, string[]>();
+  for (const d of definitions) {
+    if (d.requiredBuildingType !== buildingType) continue;
+    const list = byLevel.get(d.requiredBuildingLevel) ?? [];
+    list.push(d.type);
+    byLevel.set(d.requiredBuildingLevel, list);
+  }
+  return [...byLevel.entries()].sort((a, b) => a[0] - b[0]).map(([level, units]) => ({ level, units }));
 }
 
 /** Share of the per-unit training time a building takes off per level (docs/design: -1% per level, -20% at level 20). */

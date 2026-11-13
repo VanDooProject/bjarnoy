@@ -173,7 +173,9 @@ export interface CampReportUnitLine {
 export interface CampReportBeastLine {
   tier: BeastTier;
   before: number;
+  /** Every beast of the tier that died; `volleyLost` of them fell to the army's volley before the fight. */
   lost: number;
+  volleyLost: number;
 }
 
 /** Mirrors `CampReportResponse` — a wildlife camp fight (hunt, ambush or tower attack). */
@@ -187,6 +189,8 @@ export interface CampReportResponse {
   winner: 'army' | 'camp';
   armyPower: number;
   campPower: number;
+  /** The ranged attack of the army's Bowmen and Skirmishers before the fight (the beasts throw nothing back); 0 without ranged units. */
+  armyVolleyPower: number;
   units: CampReportUnitLine[];
   beasts: CampReportBeastLine[];
   loot: ResourceLine;
@@ -1817,14 +1821,18 @@ export interface GuestArmySummary {
 export interface BattleReportAttackerLine {
   unit: string;
   sent: number;
+  /** Every loss of the fight; `volleyLost` of them fell to the volley before the main fight. */
   lost: number;
   survived: number;
+  volleyLost: number;
 }
 
 export interface BattleReportDefenderLine {
   unit: string;
+  /** Every loss of the fight; `volleyLost` of them fell to the volley before the main fight. */
   lost: number;
   survived: number;
+  volleyLost: number;
 }
 
 /**
@@ -1874,6 +1882,9 @@ export interface BattleReportResponse {
   winner: string;
   attackPower: number;
   defensePower: number;
+  /** The ranged attack of each side in the land fight's volley before the main fight; 0 without ranged units. */
+  attackerVolleyPower: number;
+  defenderVolleyPower: number;
   seed: number;
   lootTaken: ResourceLine;
   attackerLines: BattleReportAttackerLine[];
@@ -1900,6 +1911,8 @@ export interface FieldBattleReportLine {
   isLoss: boolean;
   unit: string;
   count: number;
+  /** On a loss line: how many of `count` fell to the volley before the fight. */
+  volleyCount: number;
 }
 
 /** `winner` is `'sidea'`, `'sideb'`, or `'tie'` (see `FieldBattleWinner`). */
@@ -1919,6 +1932,9 @@ export interface FieldBattleReportResponse {
   winner: string;
   sideAPower: number;
   sideBPower: number;
+  /** The ranged attack of each side in the volley before the fight; 0 without ranged units. */
+  sideAVolleyPower: number;
+  sideBVolleyPower: number;
   sideAWasDefending: boolean;
   sideBWasDefending: boolean;
   seed: number;
@@ -1970,6 +1986,8 @@ export interface SimulatorResponse {
   winner: string;
   attackPower: number;
   defensePower: number;
+  attackerVolleyPower: number;
+  defenderVolleyPower: number;
   seed: number;
   lootTaken: ResourceLine;
   attackerLines: BattleReportAttackerLine[];
@@ -2006,6 +2024,8 @@ export interface UnitDefinitionResponse {
   /** Slots this ship offers to land troops (0 for every other unit). */
   shipSlots: number;
   upkeepPerHour: number;
+  /** True for the units that strike in the volley before a land fight (Bowman, Skirmisher). */
+  ranged: boolean;
   trainingCost: ResourceLine;
   trainingSeconds: number;
   requiredLonghouseLevel: number;
@@ -2013,7 +2033,7 @@ export interface UnitDefinitionResponse {
   requiredUnitType: string | null;
   /** The building type whose ring trains this unit (`UnitDefinition.RequiredBuildingType`, e.g. `"longhouse"`, `"barracks"`, `"cartworkshop"`) — at least one must stand for the unit to be trainable. */
   requiredBuildingType: string;
-  /** The level of that building this unit needs (`UnitDefinition.RequiredBuildingLevel`). */
+  /** The minimum level of the building the order is placed in (`UnitDefinition.RequiredBuildingLevel`). */
   requiredBuildingLevel: number;
   /** For a fire craft: how many take one building level off a building in the water (`UnitDefinition.FireCraftPerLevel`); 0 for every other unit. */
   fireCraftPerLevel: number;

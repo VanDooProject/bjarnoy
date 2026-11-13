@@ -702,13 +702,14 @@ public sealed record UnitDefinitionResponse(
     int CargoSlots,
     int ShipSlots,
     double UpkeepPerHour,
+    bool Ranged,
     ResourceLine TrainingCost,
     double TrainingSeconds,
     int RequiredLonghouseLevel,
     string? RequiredUnitType,
     string RequiredBuildingType,
-    IReadOnlyList<string> SiegeTargets,
     int RequiredBuildingLevel,
+    IReadOnlyList<string> SiegeTargets,
     int FireCraftPerLevel)
 {
     public static UnitDefinitionResponse From(UnitDefinition definition)
@@ -727,13 +728,14 @@ public sealed record UnitDefinitionResponse(
             definition.CargoSlots,
             definition.ShipSlots,
             definition.UpkeepPerHour,
+            definition.Ranged,
             ResourceLine.From(definition.TrainingCost),
             definition.TrainingDuration.TotalSeconds,
             definition.RequiredLonghouseLevel,
             definition.RequiredUnitType?.ToWireName(),
             definition.RequiredBuildingType.ToWireName(),
-            SiegeTargetNames(definition.SiegeTargets),
             definition.RequiredBuildingLevel,
+            SiegeTargetNames(definition.SiegeTargets),
             definition.FireCraftPerLevel);
     }
 

@@ -16,6 +16,7 @@
       "cargoSlots": 1,
       "shipSlots": 0,
       "upkeepPerHour": 0.25,
+      "ranged": false,
       "trainingCost": {
         "wood": 60,
         "stone": 30,
@@ -26,8 +27,8 @@
       "requiredLonghouseLevel": 1,
       "requiredUnitType": null,
       "requiredBuildingType": "barracks",
-      "siegeTargets": [],
       "requiredBuildingLevel": 1,
+      "siegeTargets": [],
       "fireCraftPerLevel": 0
     },
     {
@@ -42,6 +43,7 @@
       "cargoSlots": 1,
       "shipSlots": 0,
       "upkeepPerHour": 0.25,
+      "ranged": false,
       "trainingCost": {
         "wood": 80,
         "stone": 40,
@@ -52,8 +54,8 @@
       "requiredLonghouseLevel": 5,
       "requiredUnitType": null,
       "requiredBuildingType": "barracks",
+      "requiredBuildingLevel": 3,
       "siegeTargets": [],
-      "requiredBuildingLevel": 1,
       "fireCraftPerLevel": 0
     },
     {
@@ -63,11 +65,12 @@
       "defense": 15,
       "speed": 4,
       "visionRadius": 2,
-      "carryCapacity": 30,
+      "carryCapacity": 40,
       "foodCarryCapacity": 40,
       "cargoSlots": 2,
       "shipSlots": 0,
       "upkeepPerHour": 0.5,
+      "ranged": false,
       "trainingCost": {
         "wood": 100,
         "stone": 30,
@@ -78,34 +81,35 @@
       "requiredLonghouseLevel": 6,
       "requiredUnitType": null,
       "requiredBuildingType": "barracks",
+      "requiredBuildingLevel": 6,
       "siegeTargets": [],
-      "requiredBuildingLevel": 1,
       "fireCraftPerLevel": 0
     },
     {
       "type": "bowman",
       "class": "infantry",
-      "attack": 30,
-      "defense": 30,
+      "attack": 20,
+      "defense": 12,
       "speed": 4,
       "visionRadius": 2,
-      "carryCapacity": 15,
+      "carryCapacity": 2,
       "foodCarryCapacity": 40,
       "cargoSlots": 2,
       "shipSlots": 0,
       "upkeepPerHour": 0.5,
+      "ranged": true,
       "trainingCost": {
-        "wood": 90,
-        "stone": 60,
+        "wood": 80,
+        "stone": 50,
         "food": 20,
-        "iron": 50
+        "iron": 35
       },
-      "trainingSeconds": 1200,
+      "trainingSeconds": 900,
       "requiredLonghouseLevel": 9,
       "requiredUnitType": null,
       "requiredBuildingType": "archeryrange",
-      "siegeTargets": [],
       "requiredBuildingLevel": 1,
+      "siegeTargets": [],
       "fireCraftPerLevel": 0
     },
     {
@@ -115,23 +119,24 @@
       "defense": 20,
       "speed": 5,
       "visionRadius": 2,
-      "carryCapacity": 25,
+      "carryCapacity": 15,
       "foodCarryCapacity": 64,
-      "cargoSlots": 4,
+      "cargoSlots": 3,
       "shipSlots": 0,
       "upkeepPerHour": 1,
+      "ranged": false,
       "trainingCost": {
-        "wood": 150,
+        "wood": 140,
         "stone": 60,
         "food": 30,
-        "iron": 120
+        "iron": 90
       },
-      "trainingSeconds": 2100,
+      "trainingSeconds": 1800,
       "requiredLonghouseLevel": 20,
-      "requiredUnitType": "axeman",
+      "requiredUnitType": null,
       "requiredBuildingType": "barracks",
+      "requiredBuildingLevel": 10,
       "siegeTargets": [],
-      "requiredBuildingLevel": 1,
       "fireCraftPerLevel": 0
     },
     {
@@ -146,6 +151,7 @@
       "cargoSlots": 2,
       "shipSlots": 0,
       "upkeepPerHour": 0.25,
+      "ranged": false,
       "trainingCost": {
         "wood": 90,
         "stone": 40,
@@ -156,8 +162,8 @@
       "requiredLonghouseLevel": 10,
       "requiredUnitType": null,
       "requiredBuildingType": "cartworkshop",
-      "siegeTargets": [],
       "requiredBuildingLevel": 1,
+      "siegeTargets": [],
       "fireCraftPerLevel": 0
     },
     {
@@ -172,6 +178,7 @@
       "cargoSlots": 10,
       "shipSlots": 0,
       "upkeepPerHour": 1.5,
+      "ranged": false,
       "trainingCost": {
         "wood": 300,
         "stone": 200,
@@ -179,14 +186,14 @@
         "iron": 250
       },
       "trainingSeconds": 3600,
-      "requiredLonghouseLevel": 20,
+      "requiredLonghouseLevel": 1,
       "requiredUnitType": "berserker",
       "requiredBuildingType": "siegeworkshop",
+      "requiredBuildingLevel": 10,
       "siegeTargets": [
         "towers",
         "buildings"
       ],
-      "requiredBuildingLevel": 1,
       "fireCraftPerLevel": 0
     },
     {
@@ -201,6 +208,7 @@
       "cargoSlots": 0,
       "shipSlots": 10,
       "upkeepPerHour": 1.5,
+      "ranged": false,
       "trainingCost": {
         "wood": 250,
         "stone": 100,
@@ -211,8 +219,8 @@
       "requiredLonghouseLevel": 1,
       "requiredUnitType": null,
       "requiredBuildingType": "harbour",
-      "siegeTargets": [],
       "requiredBuildingLevel": 5,
+      "siegeTargets": [],
       "fireCraftPerLevel": 0
     },
     {
@@ -227,6 +235,7 @@
       "cargoSlots": 0,
       "shipSlots": 20,
       "upkeepPerHour": 2,
+      "ranged": false,
       "trainingCost": {
         "wood": 400,
         "stone": 200,
@@ -237,8 +246,8 @@
       "requiredLonghouseLevel": 1,
       "requiredUnitType": null,
       "requiredBuildingType": "shipyard",
-      "siegeTargets": [],
       "requiredBuildingLevel": 1,
+      "siegeTargets": [],
       "fireCraftPerLevel": 0
     },
     {
@@ -253,6 +262,7 @@
       "cargoSlots": 1,
       "shipSlots": 0,
       "upkeepPerHour": 0.25,
+      "ranged": false,
       "trainingCost": {
         "wood": 120,
         "stone": 90,
@@ -263,8 +273,8 @@
       "requiredLonghouseLevel": 10,
       "requiredUnitType": null,
       "requiredBuildingType": "cartworkshop",
+      "requiredBuildingLevel": 5,
       "siegeTargets": [],
-      "requiredBuildingLevel": 1,
       "fireCraftPerLevel": 0
     },
     {
@@ -279,6 +289,7 @@
       "cargoSlots": 10,
       "shipSlots": 0,
       "upkeepPerHour": 1.5,
+      "ranged": false,
       "trainingCost": {
         "wood": 400,
         "stone": 100,
@@ -286,14 +297,14 @@
         "iron": 150
       },
       "trainingSeconds": 3600,
-      "requiredLonghouseLevel": 20,
+      "requiredLonghouseLevel": 1,
       "requiredUnitType": "berserker",
       "requiredBuildingType": "siegeworkshop",
+      "requiredBuildingLevel": 10,
       "siegeTargets": [
         "walls",
         "towers"
       ],
-      "requiredBuildingLevel": 1,
       "fireCraftPerLevel": 0
     },
     {
@@ -308,6 +319,7 @@
       "cargoSlots": 0,
       "shipSlots": 0,
       "upkeepPerHour": 5,
+      "ranged": false,
       "trainingCost": {
         "wood": 300,
         "stone": 60,
@@ -318,8 +330,8 @@
       "requiredLonghouseLevel": 12,
       "requiredUnitType": null,
       "requiredBuildingType": "shipyard",
-      "siegeTargets": [],
       "requiredBuildingLevel": 5,
+      "siegeTargets": [],
       "fireCraftPerLevel": 10
     },
     {
@@ -334,6 +346,7 @@
       "cargoSlots": 1,
       "shipSlots": 0,
       "upkeepPerHour": 0.25,
+      "ranged": false,
       "trainingCost": {
         "wood": 80,
         "stone": 40,
@@ -344,8 +357,35 @@
       "requiredLonghouseLevel": 10,
       "requiredUnitType": null,
       "requiredBuildingType": "cartworkshop",
+      "requiredBuildingLevel": 10,
       "siegeTargets": [],
+      "fireCraftPerLevel": 0
+    },
+    {
+      "type": "skirmisher",
+      "class": "infantry",
+      "attack": 10,
+      "defense": 3,
+      "speed": 6,
+      "visionRadius": 2,
+      "carryCapacity": 2,
+      "foodCarryCapacity": 30,
+      "cargoSlots": 1,
+      "shipSlots": 0,
+      "upkeepPerHour": 0.25,
+      "ranged": true,
+      "trainingCost": {
+        "wood": 60,
+        "stone": 25,
+        "food": 20,
+        "iron": 15
+      },
+      "trainingSeconds": 480,
+      "requiredLonghouseLevel": 9,
+      "requiredUnitType": null,
+      "requiredBuildingType": "archeryrange",
       "requiredBuildingLevel": 1,
+      "siegeTargets": [],
       "fireCraftPerLevel": 0
     },
     {
@@ -360,6 +400,7 @@
       "cargoSlots": 0,
       "shipSlots": 0,
       "upkeepPerHour": 0.25,
+      "ranged": false,
       "trainingCost": {
         "wood": 40,
         "stone": 10,
@@ -370,8 +411,8 @@
       "requiredLonghouseLevel": 1,
       "requiredUnitType": null,
       "requiredBuildingType": "harbour",
-      "siegeTargets": [],
       "requiredBuildingLevel": 1,
+      "siegeTargets": [],
       "fireCraftPerLevel": 0
     },
     {
@@ -386,6 +427,7 @@
       "cargoSlots": 0,
       "shipSlots": 0,
       "upkeepPerHour": 0.5,
+      "ranged": false,
       "trainingCost": {
         "wood": 120,
         "stone": 50,
@@ -396,8 +438,8 @@
       "requiredLonghouseLevel": 1,
       "requiredUnitType": null,
       "requiredBuildingType": "harbour",
-      "siegeTargets": [],
       "requiredBuildingLevel": 1,
+      "siegeTargets": [],
       "fireCraftPerLevel": 0
     },
     {
@@ -412,6 +454,7 @@
       "cargoSlots": 0,
       "shipSlots": 0,
       "upkeepPerHour": 1,
+      "ranged": false,
       "trainingCost": {
         "wood": 300,
         "stone": 120,
@@ -422,8 +465,8 @@
       "requiredLonghouseLevel": 1,
       "requiredUnitType": null,
       "requiredBuildingType": "harbour",
-      "siegeTargets": [],
       "requiredBuildingLevel": 3,
+      "siegeTargets": [],
       "fireCraftPerLevel": 0
     },
     {
@@ -438,6 +481,7 @@
       "cargoSlots": 0,
       "shipSlots": 30,
       "upkeepPerHour": 3,
+      "ranged": false,
       "trainingCost": {
         "wood": 550,
         "stone": 250,
@@ -448,8 +492,8 @@
       "requiredLonghouseLevel": 20,
       "requiredUnitType": null,
       "requiredBuildingType": "shipyard",
-      "siegeTargets": [],
       "requiredBuildingLevel": 10,
+      "siegeTargets": [],
       "fireCraftPerLevel": 0
     },
     {
@@ -464,6 +508,7 @@
       "cargoSlots": 0,
       "shipSlots": 0,
       "upkeepPerHour": 1,
+      "ranged": false,
       "trainingCost": {
         "wood": 50,
         "stone": 10,
@@ -474,8 +519,8 @@
       "requiredLonghouseLevel": 1,
       "requiredUnitType": null,
       "requiredBuildingType": "shipyard",
-      "siegeTargets": [],
       "requiredBuildingLevel": 1,
+      "siegeTargets": [],
       "fireCraftPerLevel": 50
     }
   ]

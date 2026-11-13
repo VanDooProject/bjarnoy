@@ -2765,12 +2765,14 @@ public sealed record Settlement
             return TrainDecision.Rejected(TrainRejection.PremiumRequired);
         }
 
-        if (!UnitCatalogue.IsAvailable(type, LonghouseLevel, t => HighestLevelOf(t)))
+        if (!UnitCatalogue.IsAvailable(type, LonghouseLevel, t => HighestLevelOf(t), checkOwnBuildingLevel: false))
         {
             // The same check counting every building: the unit is only missing because its training building stands
             // outside the realm.
             return TrainDecision.Rejected(
-                UnitCatalogue.IsAvailable(type, LonghouseLevel, t => Buildings.Where(b => b.Type == t).Select(b => b.Level).DefaultIfEmpty(0).Max())
+                UnitCatalogue.IsAvailable(
+                    type, LonghouseLevel, t => Buildings.Where(b => b.Type == t).Select(b => b.Level).DefaultIfEmpty(0).Max(),
+                    checkOwnBuildingLevel: false)
                     ? TrainRejection.BuildingOutsideRealm
                     : TrainRejection.UnitNotAvailable);
         }
@@ -2787,13 +2789,27 @@ public sealed record Settlement
             return TrainDecision.Rejected(TrainRejection.WrongBuilding);
         }
 
-        var candidates = split == TrainingSplit.Here
+        // "This building" needs the ordering building's own level. A distributed order goes to the buildings of the type that have
+        // the level, so it may be placed from a building below it.
+        if (split == TrainingSplit.Here && here.Level < definition.RequiredBuildingLevel)
+        {
+            return TrainDecision.Rejected(TrainRejection.BuildingLevelTooLow);
+        }
+
+        var functioning = (split == TrainingSplit.Here
             ? new List<PlacedBuilding> { here }
-            : Buildings.Where(b => b.Type == definition.RequiredBuildingType).ToList();
-        candidates.RemoveAll(b => b.Level < 1 || !b.IsFunctioning);
-        if (candidates.Count == 0)
+            : Buildings.Where(b => b.Type == definition.RequiredBuildingType).ToList())
+            .Where(b => b.Level >= 1 && b.IsFunctioning)
+            .ToList();
+        if (functioning.Count == 0)
         {
             return TrainDecision.Rejected(TrainRejection.BuildingOutsideRealm);
+        }
+
+        var candidates = functioning.Where(b => b.Level >= definition.RequiredBuildingLevel).ToList();
+        if (candidates.Count == 0)
+        {
+            return TrainDecision.Rejected(TrainRejection.BuildingLevelTooLow);
         }
 
         var slots = candidates
@@ -2853,6 +2869,62 @@ public sealed record Settlement
         }
 
         return this with { Resources = paid, TrainingQueue = [.. TrainingQueue, .. orders] };
+    }
+
+    /// <summary>Share of the cost of units not yet trained that cancelling a training order pays back (<c>docs/design/economy.md</c>).</summary>
+    public const double TrainingCancelRefundShare = 0.5;
+
+    /// <summary>
+    /// What cancelling <paramref name="order"/> at <paramref name="now"/> pays back: 50 % of the cost of the units not yet trained, floored to whole resources.
+    /// Units of a running order that are already trained are not part of it.
+    /// </summary>
+    public static ResourceAmounts TrainingCancelRefund(TrainingOrder order, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(order);
+
+        var untrained = order.Count - order.CompletedCount(now);
+        var half = UnitCatalogue.Get(order.UnitType).TrainingCost * (untrained * TrainingCancelRefundShare);
+
+        // Whole resources only, floored: the training window shows the same number.
+        return new ResourceAmounts(Math.Floor(half.Wood), Math.Floor(half.Stone), Math.Floor(half.Food), Math.Floor(half.Iron));
+    }
+
+    /// <summary>
+    /// Cancels any order of the training queue (running or waiting): the units not trained yet are refunded at 50 % of their
+    /// cost, the units of a running order that are already trained join the garrison, and the orders behind it in the same
+    /// building move up. Call on an already-settled settlement, like <see cref="CancelBuild"/>.
+    /// </summary>
+    public CancelTrainingResult CancelTraining(Guid orderId, DateTimeOffset now)
+    {
+        var order = TrainingQueue.FirstOrDefault(o => o.Id == orderId);
+        if (order is null || order.IsComplete(now))
+        {
+            return CancelTrainingResult.Rejected(CancelTrainingRejection.OrderNotFound);
+        }
+
+        var done = order.CompletedCount(now);
+        var freed = order.CompletesAt - (order.StartedAt > now ? order.StartedAt : now);
+        var queue = TrainingQueue
+            .Where(o => o.Id != orderId)
+            .Select(o => o.BuildingCoord == order.BuildingCoord && o.StartedAt >= order.CompletesAt
+                ? o with { StartedAt = o.StartedAt - freed }
+                : o)
+            .ToList();
+
+        var settled = this with
+        {
+            Resources = Resources.Deposit(TrainingCancelRefund(order, now), now),
+            TrainingQueue = queue,
+        };
+
+        if (done > 0)
+        {
+            var batch = new[] { new UnitStack(order.UnitType, done) };
+            var spot = settled.NearestSpotFor(order.BuildingCoord, batch)?.Coord ?? Centre;
+            settled = settled.AddToGarrisonAt(spot, batch);
+        }
+
+        return CancelTrainingResult.Accept(settled);
     }
 
     /// <summary>

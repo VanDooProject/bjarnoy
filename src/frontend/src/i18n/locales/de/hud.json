@@ -310,13 +310,39 @@
     "demoNote": "Die Ausbildung erfordert das echte Backend und ist im Demo-Modus noch nicht eingerichtet.",
     "reservedNote": "{amount} Ressourcen für laufende Bauaufträge reserviert.",
     "attackDefense": "Ang {attack} · Vtd {defense}",
-    "requiresCoastal": "erfordert eine Küstensiedlung",
-    "requiresLonghouse": "erfordert Langhaus {level}",
-    "requiresUnit": "und {unit}",
-    "requiresBuildingLevel": "erfordert {building} {level}",
+    "needBuildingLevel": "{building} {required} (jetzt {current})",
+    "needLonghouse": "Langhaus {required} (jetzt {current})",
+    "needUnit": "{unit} freigeschaltet",
+    "needCoast": "Küste",
+    "needs": "Benötigt",
+    "quantity": "Anzahl {unit}",
+    "fewer": "Weniger",
+    "more": "Mehr",
+    "minus": "−",
+    "plus": "+",
+    "max": "Max",
+    "trainOrders": "{count} Auftrag ausbilden | {count} Aufträge ausbilden",
+    "pickUnits": "Wähle Einheiten zum Ausbilden",
+    "footerOrders": "{count} Auftrag · {free} von {max} Plätzen frei | {count} Aufträge · {free} von {max} Plätzen frei",
+    "tooManyOrders": "Für {count} Aufträge sind hier nicht genug Plätze frei.",
+    "cantAfford": "Dafür reichen die Ressourcen nicht.",
     "training": "Wird ausgebildet…",
-    "train": "Ausbilden",
-    "trainingFailed": "Ausbildung fehlgeschlagen."
+    "trainingFailed": "Ausbildung fehlgeschlagen.",
+    "queueTitle": "Wird hier ausgebildet",
+    "queueSlots": "{used} von {max} Plätzen belegt",
+    "queueEmpty": "Hier wird gerade nichts ausgebildet.",
+    "queueNow": "Läuft",
+    "cancelOrder": "Auftrag abbrechen",
+    "cancelAsk": "{count}× {unit} abbrechen?",
+    "cancelRefund": "Du bekommst {amount} zurück (50 %).",
+    "cancelKept": "{count} bereits ausgebildete bleiben.",
+    "cancelNothing": "Es gibt nichts zurück.",
+    "cancelConfirm": "Auftrag abbrechen",
+    "cancelKeep": "Behalten",
+    "cancelFailed": "Der Auftrag ließ sich nicht abbrechen.",
+    "ladderTitle": "Freischaltungen",
+    "ladderLevel": "Stufe {level}",
+    "ladderNow": "jetzt"
   },
   "battleReport": {
     "buildings": {
@@ -352,6 +378,9 @@
     "unit": "Einheit",
     "sent": "Entsandt",
     "lost": "Verloren",
+    "volleyPower": "Salvenkraft",
+    "lostVolley": "Verloren (Salve)",
+    "lostFight": "Verloren (Kampf)",
     "survived": "Überlebt",
     "noStacksRecorded": "Keine Truppen erfasst.",
     "lootTaken": "Beute",
@@ -400,7 +429,12 @@
     "hunting": "Auf der Jagd",
     "cannotGetHome": "Kein Weg nach Hause",
     "starvesIn": "verhungert in {eta}",
-    "buildingCamp": "Baut das Strandlager, fertig um {time} Uhr"
+    "buildingCamp": "Baut das Strandlager, fertig um {time} Uhr",
+    "arrivesIn": "kommt in {eta} an",
+    "homeIn": "in {eta} zu Hause",
+    "campReadyIn": "Lager fertig in {eta}",
+    "campReady": "Lager fertig",
+    "movingOn": "Zieht weiter"
   },
   "garrisonSpots": {
     "longhouse": "Langhaus",
@@ -462,6 +496,43 @@
     "provisions": "Proviant",
     "dispatching": "Wird entsendet…",
     "confirmDispatch": "Entsendung bestätigen"
+  },
+  "armyDetail": {
+    "showOnMap": "Auf der Karte zeigen",
+    "back": "Zurück zu den Armeen",
+    "foodHeading": "Nahrung",
+    "spare": "Übrig",
+    "wayHome": "Heimweg",
+    "food": "Nahrung",
+    "perHour": "pro Stunde",
+    "events": {
+      "left": "Aufgebrochen",
+      "arrives": "Erreicht ({q}, {r})",
+      "arrived": "Angekommen auf ({q}, {r})",
+      "now": "jetzt",
+      "turnsHome": "Kehrt von selbst um",
+      "turnedHome": "Umgekehrt",
+      "home": "Zu Hause",
+      "starves": "Nahrung aufgebraucht",
+      "movesOn": "Zieht weiter",
+      "campReady": "Lager fertig"
+    },
+    "now": {
+      "marching": "Auf dem Weg",
+      "standing": "Steht und isst die Reserve",
+      "returning": "Auf dem Heimweg",
+      "stranded": "Kein Weg nach Hause",
+      "waiting": "Wartet auf die anderen Gruppen",
+      "camp": "Baut das Lager"
+    },
+    "next": {
+      "arrives": "Ankunft {time}",
+      "turnsHome": "Kehrt um {time}",
+      "home": "Zu Hause {time}",
+      "starves": "Nahrung aus {time}",
+      "movesOn": "Zieht weiter {time}",
+      "campReady": "Lager fertig {time}"
+    }
   },
   "dispatchSheet": {
     "cancel": "Entsendung abbrechen",
@@ -615,5 +686,15 @@
     "withCount": "{panel} ({count})",
     "collapse": "{panel} einklappen",
     "expand": "{panel} ausklappen"
+  },
+  "quickUpgrade": {
+    "chipTitle": "Schnellausbau",
+    "chipHintTouch": "Gebäude antippen · Karte gedrückt halten zum Beenden",
+    "chipHintMouse": "Gebäude anklicken · Esc zum Beenden",
+    "stop": "Schnellausbau beenden",
+    "holdHint": "Gedrückt halten: danach baust du mit einem Tipp pro Gebäude aus",
+    "premiumHold": "Premium: Gedrückt halten und mit einem Tipp pro Gebäude ausbauen",
+    "shiftHint": "Umschalt+Klick: auf Stufe {level} ausbauen",
+    "premiumShift": "Premium: Mit Umschalt+Klick ausbauen"
   }
 }

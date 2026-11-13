@@ -63,20 +63,27 @@ public enum UnitType
     /// </summary>
     CampBuilder = 12,
 
+    /// <summary>
+    /// Fast, cheap ranged foot unit trained at the Archery Range: throws spears in the volley before the main fight
+    /// (<c>docs/design/units-and-ships.md</c> section 4), weak in the fight itself.
+    /// </summary>
+    Skirmisher = 13,
+
     /// <summary>Scout boat: tiny, fast, wide vision, no cargo. Trained at the Harbour.</summary>
-    Faering = 13,
+    Faering = 14,
 
     /// <summary>Small cargo ship, no troops. Trained at the Harbour.</summary>
-    Byrding = 14,
+    Byrding = 15,
 
     /// <summary>Big cargo ship, no troops. Trained at the Harbour.</summary>
-    Knarr = 15,
+    Knarr = 16,
 
     /// <summary>The heavier longship: the fastest and strongest warship. Trained at the Shipyard.</summary>
-    Skeid = 16,
+    Skeid = 17,
 
     /// <summary>Cheap fire craft: fifty burn one building level in the water. Trained at the Shipyard.</summary>
-    FireRaft = 17,
+    FireRaft = 18,
+
 }
 
 public static class UnitTypeExtensions
@@ -101,6 +108,7 @@ public static class UnitTypeExtensions
         UnitType.Knarr => "knarr",
         UnitType.Skeid => "skeid",
         UnitType.FireRaft => "fireraft",
+        UnitType.Skirmisher => "skirmisher",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown unit type"),
     };
 }
