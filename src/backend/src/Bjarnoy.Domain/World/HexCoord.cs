@@ -43,6 +43,50 @@ public readonly record struct HexCoord(int Q, int R)
     public int DistanceTo(HexCoord other) => Distance(this, other);
 
     /// <summary>
+    /// The straight hex line from <paramref name="a"/> to <paramref name="b"/>, both ends included (<c>Distance + 1</c> hexes; just
+    /// <c>[a]</c> when they are the same hex): cube lerp, each sample rounded to the nearest hex. Both ends are nudged by a fixed 1e-6
+    /// so a sample never lands on a rounding tie. Mirrors the frontend's <c>hexLine</c> (<c>hex/coords.ts</c>); both round with
+    /// floor(x + 0.5), so the two agree bit for bit.
+    /// </summary>
+    public static List<HexCoord> Line(HexCoord a, HexCoord b)
+    {
+        var n = Distance(a, b);
+        if (n == 0)
+        {
+            return [a];
+        }
+
+        double aq = a.Q + 1e-6, ar = a.R + 1e-6, as_ = (-a.Q - a.R) - 2e-6;
+        double bq = b.Q + 1e-6, br = b.R + 1e-6, bs = (-b.Q - b.R) - 2e-6;
+        var line = new List<HexCoord>(n + 1);
+        for (var k = 0; k <= n; k++)
+        {
+            double t = (double)k / n;
+            double fq = aq + ((bq - aq) * t);
+            double fr = ar + ((br - ar) * t);
+            double fs = as_ + ((bs - as_) * t);
+            double q = Math.Floor(fq + 0.5);
+            double r = Math.Floor(fr + 0.5);
+            double s = Math.Floor(fs + 0.5);
+            double dq = Math.Abs(q - fq);
+            double dr = Math.Abs(r - fr);
+            double ds = Math.Abs(s - fs);
+            if (dq > dr && dq > ds)
+            {
+                q = -r - s;
+            }
+            else if (dr > ds)
+            {
+                r = -q - s;
+            }
+
+            line.Add(new HexCoord((int)q, (int)r));
+        }
+
+        return line;
+    }
+
+    /// <summary>
     /// Straight-line distance between two hex centres, in hex-spacing units —
     /// the round metric, as opposed to <see cref="Distance"/>'s step count.
     /// Mirrors the frontend's <c>hexEuclideanDistance</c> (<c>hex/coords.ts</c>).

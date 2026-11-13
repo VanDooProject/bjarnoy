@@ -58,6 +58,35 @@ export function hexDistance(a: AxialCoord, b: AxialCoord): number {
 }
 
 /**
+ * The straight hex line from `a` to `b`, both ends included (`hexDistance + 1` hexes; just `[a]` when they are the same hex): cube
+ * lerp, each sample rounded to the nearest hex. Both ends are nudged by a fixed 1e-6 so a sample never lands on a rounding tie. The
+ * C# twin is `HexCoord.Line`; both round with floor(x + 0.5) so the two agree bit for bit.
+ */
+export function hexLine(a: AxialCoord, b: AxialCoord): AxialCoord[] {
+  const n = hexDistance(a, b);
+  if (n === 0) return [{ q: a.q, r: a.r }];
+  const aq = a.q + 1e-6, ar = a.r + 1e-6, as = -a.q - a.r - 2e-6;
+  const bq = b.q + 1e-6, br = b.r + 1e-6, bs = -b.q - b.r - 2e-6;
+  const line: AxialCoord[] = [];
+  for (let k = 0; k <= n; k++) {
+    const t = k / n;
+    const fq = aq + (bq - aq) * t;
+    const fr = ar + (br - ar) * t;
+    const fs = as + (bs - as) * t;
+    let q = Math.floor(fq + 0.5);
+    let r = Math.floor(fr + 0.5);
+    const s = Math.floor(fs + 0.5);
+    const dq = Math.abs(q - fq);
+    const dr = Math.abs(r - fr);
+    const ds = Math.abs(s - fs);
+    if (dq > dr && dq > ds) q = -r - s;
+    else if (dr > ds) r = -q - s;
+    line.push({ q: q + 0, r: r + 0 });
+  }
+  return line;
+}
+
+/**
  * Straight-line distance between two hex centres, in hex-spacing units — the
  * round metric, as opposed to `hexDistance`'s step count.
  *
