@@ -86,14 +86,11 @@ public class LandingBuildQueueTests(AppHostFixture fixture)
             apiClient, world.Id, centre, "grass", cancellationToken);
 
         // --- Admin: tune the world's speed so the Reindeer Herder's level-1 build takes
-        // OrderSeconds, a duration this test owns instead of inheriting from the
-        // catalogue's pacing (which was rebalanced once already: the order went from
-        // minutes to ~10 s at SpeedFactor 6 and finished before the first assertions,
-        // so the queue read back empty and the countdown panel never showed).
-        // The order has to outlast the slowest poll that can still pick it up (see the
-        // 20 s budget below) and the API read after it, yet resolve inside the 60 s
-        // wait for the panel to clear. PlanBuild divides BuildDuration by the world's
-        // SpeedFactor at the moment the order is planned, so this is set before queuing.
+        // OrderSeconds, a duration this test owns instead of inheriting from the catalogue's pacing.
+        // The order has to outlast the slowest poll that can still pick it up (the 20 s budget
+        // below) and the API read after it, yet resolve inside the 60 s wait for the panel to
+        // clear. PlanBuild divides BuildDuration by the world's SpeedFactor when the order is
+        // planned, so this is set before queuing.
         const double OrderSeconds = 40;
         var speedFactor = BuildingCatalogue.BuildTime(BuildingType.ReindeerHerder, 1).TotalSeconds / OrderSeconds;
         var frontendEvent = await resourceNotifications.WaitForResourceAsync(
