@@ -583,6 +583,21 @@ export async function doubleTap(page: Page, p: { x: number; y: number }): Promis
 }
 
 /**
+ * Puts one finger down at `p` and keeps it there (a real touch via CDP, so the page sees a held touch pointer); `fingerUp` lifts
+ * it. For the long-press gestures: the spec waits for what the hold does (a chip appearing), then lifts.
+ */
+export async function fingerDown(page: Page, p: { x: number; y: number }): Promise<void> {
+  const session = await cdpSessionFor(page);
+  await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: p.x, y: p.y, id: 0 }] });
+}
+
+/** Lifts the finger `fingerDown` put down. */
+export async function fingerUp(page: Page): Promise<void> {
+  const session = await cdpSessionFor(page);
+  await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+}
+
+/**
  * Builds `building` through the onboarding's ring on the already-clicked hex, the way a player does: Build hub, then
  * the category, then the building (the ring is the map's own, see useBuildRing). A phone taps (the first tap on a
  * building arms it and docks its card, the second commits); desktop clicks with the real pointer.

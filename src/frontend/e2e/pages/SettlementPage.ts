@@ -297,6 +297,17 @@ export class SettlementPage {
     });
   }
 
+  /** Where a hex is drawn on the canvas right now (canvas px, like `findHex`'s `screen`). */
+  screenOf(hex: HexCoord): Promise<ScreenPoint> {
+    return this.page.evaluate(
+      (at) =>
+        (window as unknown as { __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } } })
+          .__settlementRenderer()
+          .hexCenterScreen(at),
+      hex,
+    );
+  }
+
   /** The longhouse's own hex, and where it is on screen. */
   centreHex(): Promise<HexTarget> {
     return this.page.evaluate(() => {
