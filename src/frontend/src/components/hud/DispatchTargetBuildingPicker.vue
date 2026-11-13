@@ -38,7 +38,7 @@ const picker = useDispatchTargetBuilding(computed(() => props.hasTarget));
           type="button"
           class="target-row"
           :class="{ 'out-of-reach': !b.damageable }"
-          :disabled="!b.damageable"
+          :disabled="!b.pickable"
           :title="b.damageable ? undefined : t('hud.armyPanel.cannotDamage')"
           data-testid="building-target"
           @click="picker.pick(b.q, b.r)"

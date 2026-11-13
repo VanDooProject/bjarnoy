@@ -418,13 +418,16 @@ export function hasSiegeEngineSelected(
   return selectedSiegeTargets(unitCounts, byType).size > 0;
 }
 
-/** Whether the selected siege engines can damage a `buildingType` building: rams breach walls and towers, catapults the rest. */
+/**
+ * Whether the selected siege engines can damage a `buildingType` building: rams breach walls and towers, catapults the rest. Never a
+ * beach camp — mirrors `SiegeResolver.CanDamage`: a camp falls only to an attack that leaves nobody in it, siege engines never take it down.
+ */
 export function canSiegeDamage(
   unitCounts: Record<string, number>,
   byType: Record<string, UnitDefinitionResponse>,
   buildingType: string,
 ): boolean {
-  return selectedSiegeTargets(unitCounts, byType).has(siegeTargetKindOf(buildingType));
+  return buildingType !== 'beachcamp' && selectedSiegeTargets(unitCounts, byType).has(siegeTargetKindOf(buildingType));
 }
 
 /** Whether a unit type is a ram-like engine: one that can breach walls. */

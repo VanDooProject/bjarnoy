@@ -53,8 +53,13 @@ export function useDispatchTargetBuilding(hasTargetSettlement: ComputedRef<boole
       label: buildingLabel(b.type),
       level: b.level,
       // Whether the selected engines can damage this kind of building: rams breach walls and towers, catapults burn towers
-      // and the rest, ships whatever shore building they are sent at.
+      // and the rest (never a beach camp).
       damageable: canSiegeDamage(draft.value?.unitCounts ?? {}, catalogue.byType, b.type),
+    })).map((row) => ({
+      ...row,
+      // A fleet is sent at a shore building to fight there, whatever its engines can damage (a beach camp, say): it can always be
+      // picked. A land attack's pick only aims the engines, so one they cannot damage is not offered.
+      pickable: isRequired.value || row.damageable,
     }));
   });
   const selectedLabel = computed(() => {

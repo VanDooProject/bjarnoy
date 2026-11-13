@@ -283,6 +283,8 @@ describe('siege engines by target', () => {
     expect(canSiegeDamage({ catapult: 1 }, byType, 'tower')).toBe(true);
     expect(canSiegeDamage({ catapult: 1 }, byType, 'bridge')).toBe(true);
     expect(canSiegeDamage({ catapult: 1 }, byType, 'longhouse')).toBe(true);
+    // A beach camp falls only to an attack that leaves nobody in it: no siege engine takes it down.
+    expect(canSiegeDamage({ catapult: 1, ram: 1 }, byType, 'beachcamp')).toBe(false);
     expect(canSiegeDamage({ spearman: 3 }, byType, 'longhouse')).toBe(false);
   });
 

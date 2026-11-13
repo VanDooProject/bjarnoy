@@ -18,7 +18,7 @@ function unit(type: string, cls: string, siegeTargets: string[] = []): UnitDefin
 // Land at q >= 0, sea at q < 0: (0,r) is shoreline, (3,r) is inland, (-1,r) is a sea hex.
 const COAST = { isLand: (q: number) => q >= 0, isSea: (q: number) => q < 0 };
 
-function setup(unitCounts: Record<string, number>) {
+function setup(unitCounts: Record<string, number>, buildings?: { q: number; r: number; type: string; level: number }[]) {
   setActivePinia(createPinia());
   const world = useWorldStore();
   world.model = markRaw(COAST) as unknown as typeof world.model;
@@ -27,13 +27,14 @@ function setup(unitCounts: Record<string, number>) {
     unit('catapult', 'siege', ['towers', 'buildings']),
     unit('ram', 'siege', ['walls', 'towers']),
     unit('spearman', 'infantry'),
+    unit('longship', 'ship'),
   ];
   world.startDispatch();
   world.setDispatchMission('attack');
   world.dispatchDraft!.unitCounts = unitCounts;
   world.dispatchDraft!.targetSettlementId = 'target-1';
   world.dispatchTargetBuildingsFor = 'target-1';
-  world.dispatchTargetBuildings = [
+  world.dispatchTargetBuildings = buildings ?? [
     { q: 3, r: 0, type: 'farm', level: 4 },
     { q: 2, r: 0, type: 'palisade', level: 3 },
     { q: 0, r: 0, type: 'fishing_hut', level: 2 },
@@ -86,6 +87,23 @@ describe('useDispatchTargetBuilding', () => {
 
     world.dispatchDraft!.unitCounts = { ram: 1 };
     expect(picker.selectedUnreachable.value).toBe(false);
+  });
+
+  it('shows a beach camp as out of the engines\' reach for a land attack with catapults', () => {
+    const { picker } = setup({ catapult: 3 }, [{ q: 0, r: 0, type: 'beachcamp', level: 1 }]);
+
+    expect(picker.rows.value).toMatchObject([{ q: 0, r: 0, damageable: false, pickable: false }]);
+  });
+
+  it('still lets a fleet carrying catapults be sent at a beach camp, which its engines cannot damage', () => {
+    const { world, picker } = setup({ longship: 2, catapult: 3 }, [{ q: 0, r: 0, type: 'beachcamp', level: 1 }]);
+
+    expect(picker.isRequired.value).toBe(true);
+    expect(picker.rows.value).toMatchObject([{ q: 0, r: 0, damageable: false, pickable: true }]);
+
+    picker.pick(0, 0);
+    expect(world.dispatchDraft!.targetBuildingCoord).toEqual({ q: 0, r: 0 });
+    expect(picker.isMissingRequiredPick.value).toBe(false);
   });
 
   it('shows no picker for a plain land attack', () => {
