@@ -155,9 +155,14 @@ const loc = computed(() => String(locale.value));
     </section>
 
     <DocsHistoryNote class="block">
+      <p>{{ $t('docs.ships.history.faering') }}</p>
+      <p>{{ $t('docs.ships.history.byrding') }}</p>
+      <p>{{ $t('docs.ships.history.knarr') }}</p>
       <p>{{ $t('docs.ships.history.karve') }}</p>
       <p>{{ $t('docs.ships.history.longship') }}</p>
+      <p>{{ $t('docs.ships.history.skeid') }}</p>
       <p>{{ $t('docs.ships.history.fireShip') }}</p>
+      <p>{{ $t('docs.ships.history.fireCraft') }}</p>
     </DocsHistoryNote>
 
     <section id="sailing" class="block">
