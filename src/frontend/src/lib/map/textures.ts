@@ -2035,8 +2035,14 @@ export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: Ri
   // Also reached while `indexed` exists but every one of its rungs is still
   // a hole (only `buildings-level1` loaded, and this particular family's
   // level 1 base frame hasn't resolved either) — same graceful degradation.
-  const base = textures.base[key] ?? textures.base[seaArt(tile.terrain)];
-  return base![orientation];
+  // The building's own family has no base frame loaded (its atlas page is still loading, or the pack never had one): the hex draws what it
+  // would without the building, as the land-wall branch above does. This is what the tile is anyway: coastal water, wasted art, biome
+  // forest, a bog's own base (bog families live in `baseIndexed`, never in `base`, so a terrain lookup here would find nothing).
+  const base = textures.base[key];
+  if (!base && tile.buildingType) {
+    return baseTextureFor(textures, { ...tile, buildingType: undefined, buildingLevel: undefined }, riverArt);
+  }
+  return (base ?? textures.base[tile.terrain])![orientation];
 }
 
 /** A camp's art levels: `level000` cleared (static), `level001` guarded (animated). */

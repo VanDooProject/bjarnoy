@@ -822,6 +822,40 @@ describe('textureKeyFor inland lakes', () => {
   });
 });
 
+describe('a building whose own atlas family is not loaded yet', () => {
+  const perRotation = <T>(value: T) => Object.fromEntries(TILE_ORIENTATIONS.map((o) => [o, value]));
+  const textures = {
+    base: { sea: perRotation('sea-base'), wasteland: perRotation('wasteland-base'), grass: perRotation('grass-base') },
+    baseIndexed: { bog: perRotation(['bog-base']) },
+    top: {},
+    animTop: {},
+    coastalBase: perRotation(['coastal-base']),
+    coastalTop: perRotation(['coastal-top']),
+    wastedCoastalBase: perRotation(['wasted-coastal-base']),
+    wastedCoastalTop: perRotation(['wasted-coastal-top']),
+  } as unknown as TileTextures;
+  const tile = (extra: Partial<Tile>): Tile => ({ q: 0, r: 0, terrain: 'grass', variant: 0, orientation: 'NW', ...extra });
+
+  it('draws a Fishing Hut on a coastal inland lake hex with the coastal water base', () => {
+    const hut = tile({ terrain: 'inlandlake', isCoastalWater: true, buildingType: 'fishinghut' });
+    expect(baseTextureFor(textures, hut)).toBe('coastal-base');
+  });
+
+  it('draws a Fishing Hut on an open inland lake hex with the sea base', () => {
+    const hut = tile({ terrain: 'inlandlake', buildingType: 'fishinghut' });
+    expect(baseTextureFor(textures, hut)).toBe('sea-base');
+  });
+
+  it('draws a bog building on the bog moss base, not a missing terrain base', () => {
+    const tower = tile({ buildingType: 'tower', bog: { kind: 'bog' } as Tile['bog'] });
+    expect(baseTextureFor(textures, tower)).toBe('bog-base');
+  });
+
+  it('draws a building on wasted ground with the wasted base', () => {
+    expect(baseTextureFor(textures, tile({ wasted: true, buildingType: 'lumberjack' }))).toBe('wasteland-base');
+  });
+});
+
 describe('living mountain shapes', () => {
   const FAMILIES = ['mountaintile', 'mountaintile_table', 'mountaintile_saddleback', 'mountaintile_corrie'];
   const mountain = (variant: number, extra: Partial<Tile> = {}): Tile => ({ q: 0, r: 0, terrain: 'mountain', orientation: 'E', variant, ...extra });
@@ -2155,16 +2189,6 @@ describe('palisade art', () => {
     const tile: Tile = { q: 0, r: 0, terrain: 'sand', orientation: 'NE', buildingType: 'longhouse', buildingLevel: 1 };
 
     expect(baseTextureFor(textures, tile)).toBe('beach-base-1');
-  });
-
-  it('a building without base art of its own on an inland lake takes the sea base, like the lake itself', () => {
-    // Regression: the Fishing Hut on an `inlandlake` hex (the showcase re-roll picked such seeds at random) fell back to
-    // `base['inlandlake']`, which does not exist: the lake draws with the sea's art.
-    const textures = emptyTextures();
-    textures.base.sea = orientationMap('sea-base' as unknown as never);
-    const tile: Tile = { q: 0, r: 0, terrain: 'inlandlake', isCoastalWater: true, orientation: 'NW', buildingType: 'fishinghut', buildingLevel: 7 };
-
-    expect(baseTextureFor(textures, tile)).toBe('sea-base');
   });
 
   it('keeps the sea end on its own coastal base', () => {
