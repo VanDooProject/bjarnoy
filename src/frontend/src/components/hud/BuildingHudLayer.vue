@@ -56,6 +56,7 @@ import {
   dialRemainingSeconds,
   nextTapReveal,
   pickTappedDial,
+  type BlockedMarker,
   type ConstructionDial,
 } from '../../lib/map/constructionDial';
 import { circleIntersectsRect, markerFadeStep, type OcclusionCircle } from '../../lib/map/markerOcclusion';
@@ -82,6 +83,8 @@ export interface BuildingHudRenderer {
   readonly markerOcclusionCircle: OcclusionCircle | null;
   /** The construction dials the renderer holds: the queue's, plus finishing and refused ones. Replaced on every change. */
   readonly constructionDialList: readonly ConstructionDial[];
+  /** The markers playing the blocked-upgrade animation (a quick upgrade hit a building that cannot be upgraded now). Replaced on every change. */
+  readonly blockedMarkerList: readonly BlockedMarker[];
 }
 
 const props = withDefaults(
@@ -122,6 +125,8 @@ const tierOf = (key: string): HudTier => tiers.value[key] ?? 'mid';
 
 /** Bumped when the renderer's dial list changes (a refusal, a finish, a new order): the markers read their order dial from it. */
 const dialsVersion = ref(0);
+/** When a quick upgrade last hit each blocked building (hex key): the marker's dial plays the refusal from then (`BuildingHudDial`). */
+const blockedAt = ref<Record<string, number>>({});
 
 /** The dial is drawn at the progress dial's default-zoom size; the marker is scaled to the live size factor `zs`. */
 const DIAL_RADIUS = dialRadiusPx(1);
@@ -508,6 +513,7 @@ function setMouseHovering(on: boolean) {
   emit('update:hovering', on);
 }
 let lastDialList: readonly ConstructionDial[] | null = null;
+let lastBlockedList: readonly BlockedMarker[] | null = null;
 
 /** Runs from the renderer's own frame (`setFrameObserver`), never from a rAF of its own: the camera it reads is the one just drawn. */
 function tick() {
@@ -522,6 +528,10 @@ function tick() {
   if (renderer.constructionDialList !== lastDialList) {
     lastDialList = renderer.constructionDialList;
     dialsVersion.value += 1;
+  }
+  if (renderer.blockedMarkerList !== lastBlockedList) {
+    lastBlockedList = renderer.blockedMarkerList;
+    blockedAt.value = Object.fromEntries(lastBlockedList.map((b) => [b.key, b.atMs]));
   }
   if (tapKey !== null && nowMs - tapAtMs >= DIAL_TAP_REVEAL_MS) tapKey = null;
   // Nothing to place (the landing page without an order, building info off and no dial): no layout read in the map's frame.
@@ -812,6 +822,7 @@ onUnmounted(() => {
                 :order="m.vm.dial.order"
                 :label-visible="tierOf(m.key) !== 'far'"
                 :glyph="glyphOf(m)"
+                :blocked-at-ms="blockedAt[m.key]"
               />
             </span>
             <Transition :css="false" @enter="(el, done) => boxHook('in', el, done)" @leave="(el, done) => boxHook('out', el, done)">

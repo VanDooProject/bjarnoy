@@ -43,7 +43,7 @@ import type { AxialCoord } from '../hex/coords';
 import { axialToOddQ, coordKey, hexesInRadius, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
-import { DIAL_FINISH_MS, DIAL_REJECT_MS, retainFinishingDials, rejectDialAt, type ConstructionDial } from './constructionDial';
+import { DIAL_FINISH_MS, DIAL_REJECT_MS, retainFinishingDials, rejectDialAt, flashBlockedAt, type BlockedMarker, type ConstructionDial } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import { atlasPageCount } from './atlasManifests';
 import { attachFramePacing } from './framePacing';
@@ -1060,6 +1060,7 @@ function hexPoints(cx: number, cy: number, r: number): number[] {
 }
 
 const NO_DIALS: readonly ConstructionDial[] = [];
+const NO_BLOCKED: readonly BlockedMarker[] = [];
 
 // Construction progress dial (see `constructionDial.ts`): drawn by the HTML layer (BuildingHudLayer / BuildingHudDial); the renderer only
 // holds the data and the lift of the dial's centre above its hex.
@@ -2341,6 +2342,7 @@ export class HexMapRenderer {
   // Construction progress dials — just stores data, drawn every tick into
   // `highlightLayer` (above the buildings) in settlement mode only.
   private constructionDials: ConstructionDial[] | null = null;
+  private blockedMarkers: readonly BlockedMarker[] = NO_BLOCKED;
   // Fog v2 (docs/design/map-fog-v2.md §2.4/§4): two screen-space Pixi Mesh
   // layers sampling the fetched mask texture through a shared GLSL shader —
   // see fog/FogMaskLayer.ts. blackFogLayer (out-of-sight tint) sits between
@@ -6493,6 +6495,19 @@ export class HexMapRenderer {
    */
   rejectConstructionDial(coord: AxialCoord) {
     this.constructionDials = rejectDialAt(this.constructionDials ?? [], coord, Date.now());
+  }
+
+  /** The markers playing the blocked-upgrade animation (`flashBlockedMarker`); the list is replaced on every change. */
+  get blockedMarkerList(): readonly BlockedMarker[] {
+    return this.blockedMarkers;
+  }
+
+  /**
+   * A quick upgrade hit a building that cannot be upgraded now: its marker plays the refusal animation of a refused order's
+   * dial without the cross and the fade-out (`BLOCKED_DIAL_OPTIONS`) and stays as it was.
+   */
+  flashBlockedMarker(coord: AxialCoord) {
+    this.blockedMarkers = flashBlockedAt(this.blockedMarkers, coord, Date.now());
   }
 
   /**

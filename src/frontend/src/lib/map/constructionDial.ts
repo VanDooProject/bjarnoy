@@ -360,12 +360,25 @@ export interface DialRejectFrame {
 const REJECT_SHAKE_OFFSETS = [0, -6, 6, -5, 5, -3, 0];
 
 /**
+ * Which parts of the rejection animation play. The default is the refused order's dial: the cross and the fade-out. A refused
+ * quick upgrade only tells that the building cannot be upgraded now (`BLOCKED_DIAL_OPTIONS`): its marker stays, so no cross and no
+ * fade-out (the red flash fades out instead, over the same last 350 ms).
+ */
+export interface DialRejectOptions {
+  cross: boolean;
+  fadeOut: boolean;
+}
+export const REFUSED_DIAL_OPTIONS: DialRejectOptions = { cross: true, fadeOut: true };
+export const BLOCKED_DIAL_OPTIONS: DialRejectOptions = { cross: false, fadeOut: false };
+
+/**
  * Rejection animation state `msSinceReject` after the server refused the
  * build: shake (420 ms), pop, red flash, a cross drawn over it, two red
  * shockwaves, then fade and shrink from 1150 ms; null outside 0..1500 ms.
- * With reduced motion there is no shake, pop or rings.
+ * With reduced motion there is no shake, pop or rings. `options` leaves out the
+ * cross and the fade-out (shrink and opacity stay at 1, the flash ends instead).
  */
-export function dialRejectFrame(msSinceReject: number, reducedMotion: boolean): DialRejectFrame | null {
+export function dialRejectFrame(msSinceReject: number, reducedMotion: boolean, options: DialRejectOptions = REFUSED_DIAL_OPTIONS): DialRejectFrame | null {
   if (msSinceReject < 0 || msSinceReject >= DIAL_REJECT_MS) return null;
   const s = msSinceReject;
   let offsetX = 0;
@@ -380,15 +393,17 @@ export function dialRejectFrame(msSinceReject: number, reducedMotion: boolean): 
     if (s < 150) scale = 1 + 0.12 * easeOut(s / 150);
     else if (s < 400) scale = 1.12 - 0.12 * ((s - 150) / 250);
   }
-  const flash = s < 150 ? s / 150 : s < 500 ? 1 - 0.65 * ((s - 150) / 350) : 0.35;
+  const f = clamp01((s - 1150) / 350);
+  const flash0 = s < 150 ? s / 150 : s < 500 ? 1 - 0.65 * ((s - 150) / 350) : 0.35;
+  const flash = options.fadeOut ? flash0 : flash0 * (1 - f);
   const rings = reducedMotion
     ? []
     : [0, 160].flatMap((start) => {
         const p = clamp01((s - start) / 700);
         return s < start || p >= 1 ? [] : [{ scale: 1 + 1.1 * easeOut(p), alpha: 0.9 * (1 - p) }];
       });
-  const f = clamp01((s - 1150) / 350);
-  return { offsetX, scale: scale * (1 - 0.4 * f), flash, cross: clamp01((s - 150) / 300), rings, alpha: 1 - f };
+  const shrink = options.fadeOut ? f : 0;
+  return { offsetX, scale: scale * (1 - 0.4 * shrink), flash, cross: options.cross ? clamp01((s - 150) / 300) : 0, rings, alpha: 1 - shrink };
 }
 
 /**
@@ -423,6 +438,18 @@ export function rejectDialAt(dials: ConstructionDial[], coord: AxialCoord, nowMs
   const here = (d: ConstructionDial) => d.coord.q === coord.q && d.coord.r === coord.r;
   if (dials.some((d) => here(d) && d.endMs !== null)) return dials;
   return [...dials.filter((d) => !here(d)), { coord, startMs: null, endMs: null, state: 'pending', queuePosition: null, rejectedAtMs: nowMs }];
+}
+
+/** A marker playing the blocked-upgrade animation: its hex ("q,r") and when it started. */
+export interface BlockedMarker {
+  key: string;
+  atMs: number;
+}
+
+/** The blocked markers after `coord` was hit at `nowMs`: its entry starts over, the ones whose animation has played out are dropped. */
+export function flashBlockedAt(list: readonly BlockedMarker[], coord: AxialCoord, nowMs: number): BlockedMarker[] {
+  const key = `${coord.q},${coord.r}`;
+  return [...list.filter((b) => b.key !== key && nowMs - b.atMs < DIAL_REJECT_MS), { key, atMs: nowMs }];
 }
 
 /**

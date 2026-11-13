@@ -66,6 +66,29 @@ test.describe('quick upgrade with Shift on desktop', { tag: '@g2' }, () => {
   });
 });
 
+test.describe('quick upgrade on a building that cannot be upgraded now', { tag: '@g2' }, () => {
+  test('Shift+click shows the refusal chip and the marker plays the refusal animation, then stays', async ({ page, adminAuth }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await foundAs(page, adminAuth, true);
+    await settlement.setResources({ wood: 0, stone: 0, food: 0, iron: 0 });
+    const centre = await settlement.centreHex();
+    const before = await settlement.longhouseBuildingLevel();
+    const dial = settlement.hud.dial(centre.hex).locator('.hud-dial');
+
+    await page.keyboard.down('Shift');
+    await settlement.clickHex(centre);
+    await page.keyboard.up('Shift');
+
+    await expect(page.getByTestId('build-refusal')).toBeVisible();
+    await expect(dial).toHaveAttribute('data-refused', '');
+    // The marker stays: the animation ends, nothing was ordered, no ring opened.
+    await expect(dial).not.toHaveAttribute('data-refused', '');
+    await expect(settlement.hud.marker(centre.hex)).toHaveCount(1);
+    expect(await settlement.longhouseBuildingLevel()).toBe(before);
+    await expect(settlement.ring.bubbles).toHaveCount(0);
+  });
+});
+
 test.describe('quick upgrade for a free account', { tag: '@g2' }, () => {
   test('Shift+click opens the ring like a plain click, and the marker box says it is premium', async ({ page, adminAuth }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);

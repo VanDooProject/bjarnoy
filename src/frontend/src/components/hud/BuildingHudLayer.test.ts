@@ -6,13 +6,14 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import BuildingHudDial from './BuildingHudDial.vue';
 import BuildingHudLayer, { type BuildingHudRenderer } from './BuildingHudLayer.vue';
 import { useWorldStore } from '../../stores/world';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { useAuthStore } from '../../stores/auth';
 import { useQuickUpgradeStore } from '../../stores/quickUpgrade';
 import { installFakeAnimate, type FakeAnimate } from '../../test/fakeAnimate';
-import { DIAL_REJECT_MS, constructionDialsFromQueue, rejectDialAt, type ConstructionDial } from '../../lib/map/constructionDial';
+import { DIAL_REJECT_MS, constructionDialsFromQueue, rejectDialAt, type BlockedMarker, type ConstructionDial } from '../../lib/map/constructionDial';
 import { markerScale } from '../../lib/hud/buildingHud';
 import { makePendingOrder } from '../../lib/hud/pendingBuild';
 import { createTestI18n } from '../../test/i18n';
@@ -67,6 +68,8 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
     markerOcclusionCircle: null as { x: number; y: number; r: number } | null,
     // The renderer's construction dials; a test replaces the array to change them, like the renderer does.
     constructionDialList: [] as ConstructionDial[],
+    // The markers playing the blocked-upgrade animation; a test replaces the array, like the renderer does.
+    blockedMarkerList: [] as BlockedMarker[],
     ...overrides,
   };
   return renderer as BuildingHudRenderer & {
@@ -78,6 +81,7 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
     tapObserver: ((screen: { x: number; y: number }) => void) | null;
     frameObserver: (() => void) | null;
     constructionDialList: ConstructionDial[];
+    blockedMarkerList: BlockedMarker[];
   };
 }
 
@@ -689,6 +693,29 @@ describe('BuildingHudLayer', () => {
         await hover('3,0');
         expect(line('3,0').exists()).toBe(false);
       });
+    });
+
+    it('hands the time a quick upgrade hit a blocked building to that marker\'s dial, and to no other', async () => {
+      premium(true);
+      const world = seedBuildings();
+      world.hud.available = { wood: 0, stone: 0, food: 0, iron: 0 };
+      const renderer = fakeRenderer();
+      wrapper = mountLayer(renderer);
+      useQuickUpgradeStore().start();
+      await flushPromises();
+      const dialOf = (key: string) => wrapper!.findAllComponents(BuildingHudDial).find((d) => d.element.closest(`[data-coord="${key}"]`));
+      expect(dialOf('3,0')!.props('blockedAtMs')).toBeUndefined();
+
+      const atMs = Date.now();
+      renderer.blockedMarkerList = [{ key: '3,0', atMs }];
+      runFrame();
+      await flushPromises();
+      expect(dialOf('3,0')!.props('blockedAtMs')).toBe(atMs);
+      expect(dialOf('1,0')!.props('blockedAtMs')).toBeUndefined();
+      // The dial plays it over the plain state: the clock stays, nothing is drawn as a refused order's dial.
+      expect(wrapper.get('[data-coord="3,0"] .hud-dial').attributes('data-refused')).toBeDefined();
+      expect(wrapper.find('[data-coord="3,0"] .hud-dial__glyph--wait').exists()).toBe(true);
+      expect(wrapper.find('[data-coord="3,0"] .hud-dial__burst').exists()).toBe(false);
     });
 
     it('a free account keeps the levels: Shift and the mode change nothing', async () => {

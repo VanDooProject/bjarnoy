@@ -18,3 +18,5 @@ Premium only. Upgrades a building's next level without going through the ring me
 ## Blocked upgrades
 - A click or tap on a building that cannot be upgraded (resources, slots, locks, max level, busy hex) sends nothing and
   shows the same reason the Upgrade bubble gives.
+- The building's marker plays the refusal animation of a refused order's dial (shake, pop, red flash, two shockwaves), without
+  the cross and without fading out: the marker stays as it was.

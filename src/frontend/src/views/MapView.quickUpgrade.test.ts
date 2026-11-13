@@ -31,11 +31,20 @@ vi.mock('../api/client', async (importOriginal) => {
   return { ...real, api: new Proxy(real.api, { get: (target, key) => (key === 'queueBuild' ? queueBuild : Reflect.get(target, key)) }) };
 });
 
-/** Stands in for the canvas: hands the view a hex click on demand, and has no renderer (the view reads it with `?.`). */
+/** The renderer's call the quick upgrade makes on a blocked building: its marker plays the refusal animation. */
+const flashBlockedMarker = vi.hoisted(() => vi.fn());
+
+/** The renderer the view reaches into: every call does nothing, but the one under test is recorded. */
+const stubRenderer = new Proxy({}, { get: (_t, key) => (key === 'flashBlockedMarker' ? flashBlockedMarker : () => undefined) });
+
+/** Stands in for the canvas: hands the view a hex click on demand, and the stand-in renderer. */
 const CanvasStub = defineComponent({
   name: 'SettlementCanvas',
   emits: ['hex-click'],
-  setup: () => () => h('div', { class: 'canvas-stub' }),
+  setup(_props, { expose }) {
+    expose({ renderer: stubRenderer });
+    return () => h('div', { class: 'canvas-stub' });
+  },
 });
 
 const LONGHOUSE = { q: 1, r: 0 };
@@ -127,6 +136,7 @@ describe('MapView quick upgrade', () => {
       },
     );
     queueBuild.mockReset();
+    flashBlockedMarker.mockReset();
     queueBuild.mockReturnValue(new Promise<void>(() => {}));
   });
   afterEach(() => {
@@ -148,6 +158,8 @@ describe('MapView quick upgrade', () => {
     expect(queueBuild).toHaveBeenCalledWith('s1', { building: 'barracks', q: BARRACKS.q, r: BARRACKS.r }, undefined);
     expect(world.hud.queue.map((o) => o.targetLevel)).toEqual([3]);
     expect(wrapper.findComponent(RingMenu).exists()).toBe(false);
+    // A building that can be upgraded does not flash.
+    expect(flashBlockedMarker).not.toHaveBeenCalled();
   });
 
   it('two taps in a row on the same building order level n+1 and then n+2', async () => {
@@ -197,6 +209,9 @@ describe('MapView quick upgrade', () => {
     const chip = wrapper.getComponent(BuildRefusalChip);
     expect(chip.props('message')).toBe(ringHint);
     expect(chip.props('coord')).toEqual(BARRACKS);
+    // The marker of that building plays the refusal animation, once.
+    expect(flashBlockedMarker).toHaveBeenCalledTimes(1);
+    expect(flashBlockedMarker).toHaveBeenCalledWith(BARRACKS);
     expect(wrapper.findComponent(RingMenu).exists()).toBe(false);
     // The mode stays on after a refusal.
     expect(useQuickUpgradeStore().on).toBe(true);

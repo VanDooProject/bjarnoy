@@ -1614,6 +1614,7 @@ async function upgradeAt(coord: AxialCoord, tile: Tile) {
 function quickUpgradeAt(coord: AxialCoord, tile: Tile) {
   const action = upgradeActionFor(tile);
   if (action.disabled) {
+    canvasRef.value?.renderer?.flashBlockedMarker(coord);
     showBuildRefusal(coord, action.hint ?? t('hud.ringMenu.actions.maxLevel'));
     return;
   }

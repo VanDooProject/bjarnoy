@@ -9,10 +9,12 @@ import { computed, onUnmounted, ref, watch, type ComponentPublicInstance } from 
 import type { HudRing } from '../../lib/hud/buildingHud';
 import {
   CONSTRUCTION_DIAL_ELAPSED_COLOR,
+  BLOCKED_DIAL_OPTIONS,
   CONSTRUCTION_DIAL_REJECT_COLOR,
   DIAL_PENDING_SWEEP_MS,
   dialPhase,
   dialProgress,
+  dialRejectFrame,
   hexPerimeterSegment,
   pendingDotFrame,
   polylinePartial,
@@ -42,6 +44,11 @@ const props = defineProps<{
    * upgrade can be ordered now), `wait` = the dark hex with a clock (it cannot yet). Only drawn on the plain state dial.
    */
   glyph?: 'up' | 'wait';
+  /**
+   * When a quick upgrade hit this blocked building (the renderer's `flashBlockedMarker`): the refusal animation plays over the
+   * plain dial without the cross and the fade-out, so the marker stays as it was (`BLOCKED_DIAL_OPTIONS`).
+   */
+  blockedAtMs?: number;
 }>();
 
 const RING_COLOR: Record<HudRing, string> = { ready: '#5fd08a', blocked: '#e2705f', upgrading: '#fff', max: '#ffd23f', none: '#fff' };
@@ -135,8 +142,17 @@ const labelColor = computed(() => (props.urgent ? YELLOW : props.ring === 'max' 
 
 const now = ref(Date.now());
 const phase = computed(() => (props.order ? dialPhase(props.order, now.value, prefersReducedMotion()) : null));
+const blockedFrame = computed(() =>
+  props.blockedAtMs === undefined ? null : dialRejectFrame(now.value - props.blockedAtMs, prefersReducedMotion(), BLOCKED_DIAL_OPTIONS),
+);
+// A new hit starts the animation over from the moment it came in.
+watch(
+  () => props.blockedAtMs,
+  () => (now.value = Date.now()),
+);
 const animated = computed(() => {
   const p = phase.value;
+  if (blockedFrame.value !== null) return true;
   return p !== null && (p.kind === 'finish' || p.kind === 'reject' || (p.kind === 'pending' && !prefersReducedMotion()));
 });
 
@@ -224,6 +240,21 @@ const burst = computed(() => {
   };
 });
 
+/** The blocked-upgrade animation over the plain dial: the shake and pop of the marker, the red flash and the shockwaves. */
+const blocked = computed(() => {
+  const frame = blockedFrame.value;
+  if (!frame) return null;
+  const { c, hexAt } = geometry.value;
+  const r = props.radius;
+  return {
+    transform: `translate(${frame.offsetX.toFixed(2)} 0) translate(${c} ${c}) scale(${frame.scale.toFixed(3)}) translate(${-c} ${-c})`,
+    flash: hexAt(r),
+    flashOpacity: 0.7 * frame.flash,
+    rings: frame.rings.filter((ring) => ring.alpha > 0).map((ring) => ({ points: hexAt(r * ring.scale), opacity: ring.alpha })),
+    ringWidth: 3 * geometry.value.unit,
+  };
+});
+
 /** The pending dial: one orbiting sweep (still segments with reduced motion), and the three bouncing dots. */
 const pending = computed(() => {
   if (phase.value?.kind !== 'pending') return null;
@@ -253,6 +284,7 @@ const pending = computed(() => {
     :viewBox="`0 0 ${geometry.size} ${geometry.size}`"
     style="overflow: visible"
     aria-hidden="true"
+    :data-refused="blocked ? '' : undefined"
   >
     <g v-if="burst" class="hud-dial__burst" :transform="`translate(${burst.shake.toFixed(2)} 0)`">
       <polygon v-for="(ring, i) in burst.rings" :key="i" :points="ring.points" fill="none" :stroke="burst.color" :stroke-opacity="ring.opacity" :stroke-width="burst.ringWidth" stroke-linejoin="round" />
@@ -261,7 +293,8 @@ const pending = computed(() => {
       <polygon :points="burst.body" fill="none" :stroke="burst.color" :stroke-opacity="burst.edgeOpacity" :stroke-width="burst.edgeWidth" stroke-linejoin="round" />
       <polyline v-for="(mark, i) in burst.marks" :key="`m${i}`" :points="mark" fill="none" stroke="#fff" :stroke-opacity="burst.edgeOpacity" :stroke-width="burst.markWidth" stroke-linecap="round" stroke-linejoin="round" />
     </g>
-    <template v-else>
+    <g v-else :transform="blocked?.transform">
+      <polygon v-for="(ring, i) in blocked?.rings ?? []" :key="`b${i}`" :points="ring.points" fill="none" :stroke="RED" :stroke-opacity="ring.opacity" :stroke-width="blocked!.ringWidth" stroke-linejoin="round" />
       <polygon :points="geometry.hex" :fill="glyph === 'up' ? GOLD : '#0b1720'" />
       <polygon :points="geometry.hex" fill="none" :stroke="trackColor" :stroke-opacity="trackOpacity" :stroke-width="geometry.sw" stroke-linejoin="round" />
       <path v-if="arcShown" :ref="setArcEl" class="hud-dial__arc" :d="geometry.outline" pathLength="1" stroke-dasharray="1 1" :stroke-dashoffset="arcOffset" fill="none" :stroke="YELLOW" :stroke-width="geometry.sw" stroke-linecap="round" stroke-linejoin="round" />
@@ -271,6 +304,7 @@ const pending = computed(() => {
           <circle v-for="(dot, i) in pending.dots" :key="`d${i}`" class="hud-dial__dot" :cx="dot.x" :cy="dot.y" :r="dot.r" fill="#fff" :fill-opacity="dot.opacity" />
         </template>
       </template>
+      <polygon v-if="blocked" class="hud-dial__flash" :points="blocked.flash" :fill="RED" :fill-opacity="blocked.flashOpacity" />
       <g v-if="glyph === 'up'" class="hud-dial__glyph hud-dial__glyph--up">
         <polyline v-for="(chevron, i) in glyphMarks.chevrons" :key="i" :points="chevron" fill="none" :stroke="DARK" :stroke-width="glyphMarks.width" stroke-linecap="round" stroke-linejoin="round" />
       </g>
@@ -295,7 +329,7 @@ const pending = computed(() => {
           {{ label }}
         </text>
       </Transition>
-    </template>
+    </g>
   </svg>
 </template>
 
