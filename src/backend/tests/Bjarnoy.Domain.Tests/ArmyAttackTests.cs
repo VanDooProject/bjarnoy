@@ -140,6 +140,35 @@ public class ArmyAttackTests
     }
 
     [Fact]
+    public void The_defenders_garrison_right_after_the_fight_is_kept_apart_from_what_starves_on_before_now()
+    {
+        var settlement = Found();
+        var decision = DispatchAttack(settlement, Guid.CreateVersion7(), provisions: 100);
+        var army = decision.Army!;
+        var arrivesAt = ((ArmyLocation.InTransit)army.Location).Movement.ArrivesAt;
+
+        // A beach camp with two docked longships (4 food an hour) and only 5 food left when the attack lands, which the winner
+        // takes to refill its provisions: the ships starve right after the fight.
+        var hours = (arrivesAt - T0).TotalHours;
+        var camp = new Settlement
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Camp",
+            Centre = TargetHex,
+            Buildings = [new PlacedBuilding(TargetHex, BuildingType.BeachCamp, 1)],
+            Resources = ResourcePool.Create(
+                new ResourceAmounts(Wood: 1000, Stone: 1000, Food: (4 * hours) + 5, Iron: 1000),
+                ResourceAmounts.Zero, ResourceAmounts.Uniform(2000), T0),
+        }.WithGarrison([new UnitStack(UnitType.Longship, 2)]);
+
+        var arrival = Army.SettleArrival(army, camp, defenderSpeedFactor: 1.0, arrivesAt.AddHours(1), seed: 3, terrainAt: AllGrass());
+
+        Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
+        Assert.Equal([new UnitStack(UnitType.Longship, 2)], arrival.DefenderGarrisonAtBattle);
+        Assert.Empty(arrival.DefenderSettlement.Garrison);
+    }
+
+    [Fact]
     public void A_won_attack_refills_the_provisions_from_the_targets_food_on_top_of_the_loot()
     {
         var settlement = Found();

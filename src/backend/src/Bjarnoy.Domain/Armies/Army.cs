@@ -868,7 +868,8 @@ public sealed partial record Army
             || army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit
             || now < inTransit.Movement.ArrivesAt)
         {
-            return new ArmyArrivalResult(army, defenderSettlement, Fought: false, Battle: null, GuestLosses: [], Siege: null, Attack: null);
+            return new ArmyArrivalResult(
+                army, defenderSettlement, Fought: false, Battle: null, GuestLosses: [], Siege: null, Attack: null, defenderSettlement.Garrison);
         }
 
         guestDefenderStacks ??= [];
@@ -960,7 +961,7 @@ public sealed partial record Army
         var survivorCount = plan.AttackerSurvivors.Sum(s => s.Count);
         if (survivorCount == 0)
         {
-            return new ArmyArrivalResult(null, finalDefender, Fought: true, plan, guestLosses, siege, attack);
+            return new ArmyArrivalResult(null, finalDefender, Fought: true, plan, guestLosses, siege, attack, defenderPostBattle.Garrison);
         }
 
         var returning = new Movement.Movement
@@ -986,7 +987,7 @@ public sealed partial record Army
             Loot = plan.LootTaken,
         }).WithProvisionsAt(battleInstant, provisionsAtBattle + attack.Refill);
 
-        return new ArmyArrivalResult(survivorArmy, finalDefender, Fought: true, plan, guestLosses, siege, attack);
+        return new ArmyArrivalResult(survivorArmy, finalDefender, Fought: true, plan, guestLosses, siege, attack, defenderPostBattle.Garrison);
     }
 
     /// <summary>
@@ -2632,9 +2633,15 @@ public sealed record WalkedLeg(Movement.Movement Leg, DateTimeOffset Until)
 /// <see cref="Combat.AttackPlan"/>). <paramref name="Battle"/> is its <see cref="Combat.AttackPlan.Overall"/> summary.
 /// <see langword="null"/> when nothing was fought.
 /// </param>
+/// <param name="DefenderGarrisonAtBattle">
+/// The defender's own garrison right after the fight, at the battle instant: before <paramref name="DefenderSettlement"/> was
+/// settled on to "now", so nothing that starved after the battle is missing from it. What decides whether a beach camp fell
+/// (<see cref="Combat.SiegeResolver.CampFalls"/>). The garrison as given when nothing was fought.
+/// </param>
 public sealed record ArmyArrivalResult(
     Army? Army, Settlement DefenderSettlement, bool Fought, Combat.BattlePlan? Battle,
-    IReadOnlyList<UnitStack> GuestLosses, Combat.SiegeOutcome? Siege, Combat.AttackPlan? Attack);
+    IReadOnlyList<UnitStack> GuestLosses, Combat.SiegeOutcome? Siege, Combat.AttackPlan? Attack,
+    IReadOnlyList<UnitStack> DefenderGarrisonAtBattle);
 
 /// <param name="Arrived">
 /// True when this call actually brought the army to its host — the caller

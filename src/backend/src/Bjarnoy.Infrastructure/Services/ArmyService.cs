@@ -1903,10 +1903,12 @@ public sealed class ArmyService(
 
         // A beach camp falls (docs/design/skirmish/beach-camp.md) only to an attack that leaves no troops in it, ships and guests
         // included, while the attacker still has troops left, the same way destroying a Longhouse ends a realm. Siege engines and
-        // fire ships never bring it down (SiegeResolver.CanDamage), and a raid only plunders it.
+        // fire ships never bring it down (SiegeResolver.CanDamage), and a raid only plunders it. Who is left is read at the battle
+        // instant: troops that starve after it (the settle runs on to now) still stood in the camp when the fight ended, and the
+        // guests here are the battle instant's minus the fight's losses (the settle on to now has not run on them yet).
         var campFalls = SiegeResolver.CampFalls(
             arrival.DefenderSettlement, domain.Mission, arrival.Army?.Stacks ?? [],
-            [.. arrival.DefenderSettlement.Garrison, .. session.GuestStacksOf(targetId)]);
+            [.. arrival.DefenderGarrisonAtBattle, .. session.GuestStacksOf(targetId)]);
 
         // The loot left the pool at the battle instant; settle the group on from there to now and write every member back. A camp
         // that fell is taken out of its group first: it is not written back, its own piles are lost.

@@ -79,7 +79,8 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
         double? campArmyProvisions,
         ArmyMission mission = ArmyMission.Attack,
         (UnitType Unit, int Count)[]? attackUnits = null,
-        (UnitType Unit, int Count)[]? campGarrison = null)
+        (UnitType Unit, int Count)[]? campGarrison = null,
+        double? campFood = null)
     {
         using var client = _factory.CreateClient();
         var userName = $"jarl{Guid.CreateVersion7():N}"[..20];
@@ -100,6 +101,7 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
         var camp = Settlement(world.Id, island.Id, CampOwner, registered.User.Id, CampHex, now);
         camp.Name = "Strandlager";
         camp.CapacityFood = BuildingCatalogue.BeachCampStorage;
+        camp.StockFood = campFood ?? camp.StockFood;
         camp.Buildings.Add(new PlacedBuildingEntity { Q = CampHex.Q, R = CampHex.R, Type = BuildingType.BeachCamp, Level = 1 });
         foreach (var (unit, count) in campGarrison ?? [])
         {
@@ -312,6 +314,19 @@ public sealed class BeachCampDestructionEndpointsTests : IAsyncLifetime
         Assert.True(await InDbAsync(db => db.Settlements.AnyAsync(s => s.Id == scene.CampId, Ct)));
         var garrison = await InDbAsync(db => db.UnitStacks.Where(g => g.SettlementId == scene.CampId && g.Count > 0).ToListAsync(Ct));
         Assert.Equal([UnitType.Longship], garrison.Select(g => g.UnitType).Distinct());
+    }
+
+    [Fact]
+    public async Task A_camp_whose_docked_ships_starve_right_after_the_battle_still_stood_guarded_and_does_not_fall()
+    {
+        // Two longships eat 4 food an hour: 21 food leaves 5 when the attack lands four hours in, the axemen carry them off, and
+        // the ships starve right after the fight, before anything settles the attack.
+        var scene = await PlantAsync(campArmyProvisions: null, campGarrison: [(UnitType.Longship, 2)], campFood: 21);
+
+        await LandTheAttackAsync(scene);
+
+        Assert.True(await InDbAsync(db => db.Settlements.AnyAsync(s => s.Id == scene.CampId, Ct)));
+        Assert.False(await InDbAsync(db => db.UnitStacks.AnyAsync(g => g.SettlementId == scene.CampId && g.Count > 0, Ct)));
     }
 
     /// <summary>Plants an army of the attacker's rival (the camp owner's home settlement) supporting the camp.</summary>
