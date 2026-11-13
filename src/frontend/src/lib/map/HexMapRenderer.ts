@@ -112,6 +112,7 @@ import { bogEdgeShapes, bogEdgesOf, isBogGround, type BogEdgeShape } from './bog
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
 import { DOUBLE_TAP_MS, DOUBLE_TAP_ZOOM_MS, doubleTapZoomLog, isDoubleTap, type Tap } from './doubleTap';
+import { LongPressTracker } from './longPress';
 import { animationPreference } from '../perf/animationPreference';
 import { prefersReducedMotion } from '../motion';
 import { antialiasPreference } from '../perf/antialiasPreference';
@@ -533,6 +534,16 @@ export interface HexMapRendererOptions {
   // none, so nothing changes there (a stationary click on a pin previously
   // did nothing at all — see the pointerup early-return this replaces).
   onWaypointTap?: (index: number) => void;
+  /**
+   * A press held still on the map for LONG_PRESS_MS (lib/map/longPress.ts), the canvas position of it. Only fires while
+   * `setLongPressEnabled(true)`; the release that follows is not a tap. Drifting past the tap slop makes it a pan instead.
+   */
+  onLongPress?: (screen: { x: number; y: number }) => void;
+  /**
+   * The hold behind `onLongPress` while it fills: `{ screen }` when a press that could become one starts, `null` when it ends
+   * (fired, released, moved off, a second finger). The host draws the progress ring at that point.
+   */
+  onLongPressProgress?: (state: { screen: { x: number; y: number } } | null) => void;
   /**
    * A tap landed on an army's marker (while the send picker is open, only on its `pick` markers; otherwise on any own marker): the
    * army's id and the marker's canvas position, so the host can show a hint beside it. While the send picker is open the tap does not reach the tile below (`armyTapSwallowed`); otherwise it does.
@@ -2539,6 +2550,27 @@ export class HexMapRenderer {
   // this flag tells onPointerUp that particular click is the same gesture
   // that already closed the ring, so it shouldn't also reopen one.
   private suppressNextClick = false;
+  // Long press on the map (`setLongPressEnabled`): off, a press behaves exactly as it always did. On, a single-pointer press that
+  // stays within the tap slop for LONG_PRESS_MS fires `onLongPress`, and touch taps no longer wait out the double-tap window
+  // (`handleTap`): the mode that turns this on is one where repeated taps on one spot must each count.
+  private longPressEnabled = false;
+  private longPressScreen: { x: number; y: number } | null = null;
+  private longPress = new LongPressTracker(
+    {
+      onStart: () => this.options.onLongPressProgress?.(this.longPressScreen ? { screen: this.longPressScreen } : null),
+      onCancel: () => this.options.onLongPressProgress?.(null),
+      onFire: () => {
+        const screen = this.longPressScreen;
+        this.longPressScreen = null;
+        this.options.onLongPressProgress?.(null);
+        this.dropPendingTap();
+        // The release that ends this press is not a tap on whatever is under it.
+        this.suppressNextClick = true;
+        if (screen) this.options.onLongPress?.(screen);
+      },
+    },
+    { slopPx: DRAG_CLICK_SLOP_PX },
+  );
   private lastPointer = { x: 0, y: 0 };
   private hoveredKey: string | null = null;
   /** Mouse position in canvas px while hovering the canvas (never set for touch/pen); null otherwise. */
@@ -3263,11 +3295,16 @@ export class HexMapRenderer {
         return;
       }
       this.startDrag(e);
+      if (this.longPressEnabled && screen && (e.pointerType !== 'mouse' || e.button === 0)) {
+        this.longPressScreen = screen;
+        this.longPress.start({ x: e.clientX, y: e.clientY });
+      }
       return;
     }
     // A drag (or an existing pinch) is already in progress and another
     // finger just landed — join it as (or add to) a pinch. See the pinch
     // branch of onPointerMove and zoomBy's own doc comment.
+    this.longPress.cancel();
     this.idleDrift = false;
     this.pinch.down(e.pointerId, { x: e.clientX, y: e.clientY });
     this.setHoveredCoord(null);
@@ -3424,6 +3461,7 @@ export class HexMapRenderer {
     // move, or a finger onPointerDown ignored while a pin drag was active)
     // must not feed into someone else's pan.
     if (e.pointerId !== this.dragPointerId) return;
+    this.longPress.move({ x: e.clientX, y: e.clientY });
     const dx = e.clientX - this.lastPointer.x;
     const dy = e.clientY - this.lastPointer.y;
     this.dragMoved += Math.abs(dx) + Math.abs(dy);
@@ -3492,6 +3530,7 @@ export class HexMapRenderer {
    * logic `onPointerUp` always had, just pointerId-aware.
    */
   private endTrackedPointer(id: number, allowClick: boolean, e: PointerEvent) {
+    this.longPress.cancel();
     this.pinch.up(id);
     const remaining = this.pinch.primary();
     if (remaining) {
@@ -3914,7 +3953,7 @@ export class HexMapRenderer {
    * fires as a normal click.
    */
   private handleTap(e: PointerEvent) {
-    if (e.pointerType !== 'touch' || this.lockCamera) {
+    if (e.pointerType !== 'touch' || this.lockCamera || this.longPressEnabled) {
       this.flushPendingTap();
       this.handleClick(e);
       return;
@@ -7027,6 +7066,15 @@ export class HexMapRenderer {
   }
 
   /**
+   * Turns the map's long press on or off (`onLongPress`). Off is the renderer as it always was; turning it off drops a hold that
+   * is running.
+   */
+  setLongPressEnabled(enabled: boolean) {
+    this.longPressEnabled = enabled;
+    if (!enabled) this.longPress.cancel();
+  }
+
+  /**
    * The zoom-driven world<->settlement transition (docs/design/
    * zoom-transition.md §4/§8) — a level-of-detail switch only: `mode`
    * changes, nothing about `settlementId`/the camera does, which is what
@@ -7118,6 +7166,7 @@ export class HexMapRenderer {
     // would fire its rebuild into a torn-down app (see noteZoomActivity).
     this.endZoomActivity();
     this.dropPendingTap();
+    this.longPress.cancel();
     this.pinch.clear();
     this.app?.ticker.remove(this.onTick);
     this.detachFramePacing?.();
