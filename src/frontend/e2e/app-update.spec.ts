@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { claimLandfall, enterSettlementAfterOnboarding, placeGuidedBuildings } from './helpers';
+import { OnboardingComponent } from './pages';
 import { waitForMapReady } from './support/render';
 
 // After a deploy an open tab's lazy chunks 404. Entering the settlement used
@@ -14,8 +14,9 @@ test.describe('lazy chunk gone after a deploy', () => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await page.goto('/#no-intro');
     await waitForMapReady(page);
-    await claimLandfall(page);
-    await placeGuidedBuildings(page);
+    const onboarding = new OnboardingComponent(page);
+    await onboarding.claimLandfall();
+    await onboarding.placeGuidedBuildings();
 
     let mapChunkRequests = 0;
     await page.route('**/assets/MapView-*.js', async (route) => {
@@ -27,7 +28,7 @@ test.describe('lazy chunk gone after a deploy', () => {
       (window as unknown as { __marker: boolean }).__marker = true;
     });
 
-    await enterSettlementAfterOnboarding(page);
+    await onboarding.enterSettlement();
 
     // The marker only disappears with a full page load.
     await page.waitForFunction(() => !(window as unknown as { __marker?: boolean }).__marker);

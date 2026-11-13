@@ -1,8 +1,8 @@
 // See RingMenuComponent.ts for why `expect` comes from here, not `../fixtures`.
 import { expect, type Locator, type Page } from '@playwright/test';
-import { claimLandfall, foundSettlement, placeGuidedBuildings } from '../helpers';
 import { captureCanvas, waitForMapReady } from '../support/render';
 import { BuildingHudComponent } from './BuildingHudComponent';
+import { OnboardingComponent } from './OnboardingComponent';
 import { RingMenuComponent } from './RingMenuComponent';
 
 export interface HexCoord {
@@ -88,16 +88,8 @@ export class SettlementPage {
   readonly ring: RingMenuComponent;
   /** The building HUD: markers over the own buildings and its toggle. */
   readonly hud: BuildingHudComponent;
-  /** Design handoff "2a": the animated next-step arrow (GuidancePointer.vue). */
-  readonly guidancePointer: Locator;
-  /** The guided-onboarding checklist tray (OnboardingChecklist.vue). */
-  readonly checklist: Locator;
-  /** The landfall/completion pill banner (OnboardingBanner.vue) — filter with `.landfall`/`.complete`. */
-  readonly banner: Locator;
-  /** The completion banner's explicit hand-off to /settlement. */
-  readonly continueButton: Locator;
-  /** The profile-mark tooltip that replaces the old nickname modal (ProfileNudge.vue). */
-  readonly profileNudge: Locator;
+  /** The guided onboarding on the landing page: its UI and flows (see OnboardingComponent). */
+  readonly onboarding: OnboardingComponent;
   /** Player logout/login gate: HudNav's authenticated avatar dropdown trigger (only mounted once founded). */
   readonly accountMenuTrigger: Locator;
   /** The opened account dropdown panel (Profile / Log out). */
@@ -127,11 +119,7 @@ export class SettlementPage {
     this.questTray = page.getByTestId('quest-tray');
     this.ring = new RingMenuComponent(page);
     this.hud = new BuildingHudComponent(page);
-    this.guidancePointer = page.getByTestId('guidance-pointer');
-    this.checklist = page.getByTestId('onboarding-checklist');
-    this.banner = page.getByTestId('onboarding-banner');
-    this.continueButton = page.getByTestId('onboarding-continue');
-    this.profileNudge = page.getByTestId('profile-nudge');
+    this.onboarding = new OnboardingComponent(page, () => this.canvasBox());
     this.accountMenuTrigger = page.getByTestId('account-menu-trigger');
     this.accountMenu = page.getByTestId('account-menu');
     this.accountMenuLogoutButton = page.getByTestId('account-menu-logout');
@@ -142,9 +130,42 @@ export class SettlementPage {
     this.returningLoginNewRealmButton = page.getByTestId('returning-login-new-realm');
   }
 
-  /** Founds a settlement via the shared helper and returns its view. */
+  /**
+   * Founds a settlement on the landing page (zip 6a: the landing page is the
+   * village view — the starter plot is deterministic, so there's exactly one
+   * hex to click, not a grid sweep across a world map), places the 2 guided
+   * onboarding buildings, hands off to the settlement view
+   * (`onboarding.enterSettlement()`), and waits for /settlement. Returns its view.
+   *
+   * Design handoff "2a": onboarding's own forced nickname modal is gone —
+   * completion now shows a dismissible banner with an explicit "Enter your
+   * settlement" CTA (OnboardingBanner.vue), which is what this now waits on
+   * and clicks instead of the old button.confirm.
+   */
   static async found(page: Page): Promise<SettlementPage> {
-    await foundSettlement(page);
+    const onboarding = new OnboardingComponent(page);
+    // found() alone — page load plus a real PixiJS/texture mount —
+    // has been observed crossing the global 45s default on a loaded CI
+    // runner. See settlement-interactions.spec.ts's matching comments for the
+    // other tests that share this same root cause.
+    await page.goto('/#no-intro');
+
+    // Wait on the renderer's own mount-complete signal rather than guessing
+    // how long that takes — a fixed sleep here either wastes time on a fast
+    // machine or, on a loaded CI runner, races the click below landing before
+    // `mount()` has wired up pointer handling at all.
+    await waitForMapReady(page);
+
+    await onboarding.claimLandfall();
+
+    await onboarding.placeGuidedBuildings();
+
+    await onboarding.enterSettlement();
+    await page.waitForURL('**/settlement');
+    // The click navigates to a *new* SettlementCanvas mount (a fresh renderer,
+    // not the landing page's preview one) — wait for its own mount-complete
+    // signal instead of guessing how long that takes.
+    await waitForMapReady(page);
     return new SettlementPage(page);
   }
 
@@ -153,16 +174,6 @@ export class SettlementPage {
     await page.goto('/#no-intro');
     await waitForMapReady(page);
     return new SettlementPage(page);
-  }
-
-  /** Clicks the deterministic starter plot and waits for the settlement to exist. */
-  async claimLandfall(): Promise<void> {
-    await claimLandfall(this.page);
-  }
-
-  /** Places the two guided onboarding buildings, completing onboarding (the completion banner then shows). */
-  async placeGuidedBuildings(): Promise<void> {
-    await placeGuidedBuildings(this.page);
   }
 
   /** The canvas's on-screen box. Cached — the canvas fills the viewport and never moves. */
@@ -436,6 +447,66 @@ export class SettlementPage {
   async fund(amount: number): Promise<void> {
     await this.setStorageCaps({ wood: amount, stone: amount, food: amount, iron: amount });
     await this.setResources({ wood: amount, stone: amount, food: amount, iron: 0 });
+  }
+
+  /**
+   * Puts five standing fleets on five different hexes of the open sea, up to ~300 hexes from the settlement (demo mode has no army simulation, so they go straight
+   * into the store) and returns an empty, inland grass hex of the realm: no fleet can ever reach it, so every route search for it fails.
+   * `screen` is that hex's centre on the settlement canvas. The fleets' home (where a leg must be able to return to) is the settlement, an
+   * inland hex no fleet can reach, unless `homeAt` names another (a coastal hex of the realm).
+   */
+  async putFleetsFarAtSea(
+    homeAt?: { q: number; r: number },
+  ): Promise<{ hex: { q: number; r: number }; screen: { x: number; y: number } }> {
+    return this.page.evaluate((homeOverride) => {
+      const world = window.__demoWorld() as { model: any; selectedSettlementId: string; armies: unknown[] };
+      const home = world.model.getSettlement(world.selectedSettlementId);
+      const sides = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]] as const;
+      const isSea = (q: number, r: number) => world.model.getTile(q, r).terrain === 'sea';
+      // One far open-sea hex per fleet, all different: every fleet is its own route search (its own cache key).
+      const seas: Array<{ q: number; r: number }> = [];
+      for (let d = 300; d > 50 && seas.length < 5; d -= 5) {
+        for (const [dq, dr] of sides) {
+          const at = { q: home.q + dq * d, r: home.r + dr * d };
+          if (seas.length < 5 && isSea(at.q, at.r) && sides.every(([a, b]) => isSea(at.q + a, at.r + b))) seas.push(at);
+        }
+      }
+      if (seas.length < 5) throw new Error('no five open-sea hexes far from home');
+      const arrived = new Date(Date.now() - 60_000).toISOString();
+      world.armies = seas.map((sea, i) => ({
+        id: `fleet-${i}`,
+        settlementId: world.selectedSettlementId,
+        mission: 'move',
+        targetSettlementId: null,
+        atHome: false,
+        supporting: false,
+        position: sea,
+        provisions: 1_000_000,
+        totalSpeed: 10,
+        totalUpkeepPerHour: 1,
+        visionRadius: 4,
+        stacks: [{ unit: 'longship', count: 1 }],
+        movement: { path: [homeOverride ?? { q: home.q, r: home.r }, sea], isReturning: false, departedAt: arrived, arrivesAt: arrived },
+      }));
+      for (let dq = -3; dq <= 3; dq++) {
+        for (let dr = -3; dr <= 3; dr++) {
+          const at = { q: home.q + dq, r: home.r + dr };
+          const tile = world.model.getTile(at.q, at.r);
+          if (tile.ownerId !== world.selectedSettlementId || tile.buildingType || tile.terrain !== 'grass') continue;
+          if (sides.some(([a, b]) => isSea(at.q + a, at.r + b))) continue;
+          return { hex: at, screen: window.__settlementRenderer().hexCenterScreen(at) };
+        }
+      }
+      throw new Error('no empty inland grass hex in the realm');
+    }, homeAt);
+  }
+
+  /** Triggers an armies refresh, as the live poll does: every army is replaced by a copy. */
+  async refreshArmies(): Promise<void> {
+    await this.page.evaluate(() => {
+      const world = window.__demoWorld() as { armies: object[] };
+      world.armies = world.armies.map((a) => ({ ...a }));
+    });
   }
 
   /** The HUD's current resource read-out. */

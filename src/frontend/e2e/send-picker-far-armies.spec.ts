@@ -1,5 +1,4 @@
 import { expect, test } from './fixtures';
-import { putFleetsFarAtSea, refreshArmies } from './helpers';
 import { longestTask, observeLongTasks } from './support/render';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
@@ -21,7 +20,7 @@ test.describe('send picker with armies far away', () => {
   test('opening the picker and refreshing the armies with five far-away fleets out does not freeze the page, and every fleet ends up unreachable', { tag: '@g3' }, async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
-    const target = await putFleetsFarAtSea(page);
+    const target = await settlement.putFleetsFarAtSea();
     await observeLongTasks(page);
 
     await settlement.clickHex(target);
@@ -30,7 +29,7 @@ test.describe('send picker with armies far away', () => {
     const picker = page.locator('.send-picker');
     await expect(picker).toBeVisible();
     // An armies refresh while the picker is open (what the live poll does) re-evaluates every row.
-    await refreshArmies(page);
+    await settlement.refreshArmies();
 
     const unreachable = enHud.sendPicker.reasons.unreachable;
     for (let i = 0; i < 5; i++) {
@@ -38,7 +37,7 @@ test.describe('send picker with armies far away', () => {
       await expect(row).toContainText(unreachable);
       await expect(row).toHaveClass(/is-off/);
     }
-    await refreshArmies(page);
+    await settlement.refreshArmies();
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
     const longest = await longestTask(page);
@@ -54,7 +53,7 @@ test.describe('send picker with armies far away', () => {
     const reach = await settlement.standTowerTowardCoast();
     const target = await settlement.findHex({ terrain: 'sea', coastalWater: true, reach });
     // The fleets' leg has to return home as well, and the longhouse is inland: their home is the shore hex itself.
-    await putFleetsFarAtSea(page, target.hex);
+    await settlement.putFleetsFarAtSea(target.hex);
     await observeLongTasks(page);
 
     await settlement.clickHex(target);
@@ -62,7 +61,7 @@ test.describe('send picker with armies far away', () => {
     await settlement.ring.click(settlement.ring.action('Send army here').first());
     const picker = page.locator('.send-picker');
     await expect(picker).toBeVisible();
-    await refreshArmies(page);
+    await settlement.refreshArmies();
 
     for (let i = 0; i < 5; i++) {
       const row = picker.locator(`[data-source="fleet-${i}"]`);

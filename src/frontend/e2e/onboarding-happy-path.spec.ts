@@ -2,7 +2,7 @@ import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
-import { buildThroughOpenRing, enterSettlementAfterOnboarding, openHudDrawer } from './helpers';
+import { openHudDrawer } from './support/hud';
 import { waitForMapReady } from './support/render';
 
 /**
@@ -70,15 +70,15 @@ async function foundAndFinishGuidedBuilds(page: Page) {
   const settlement = await SettlementPage.openLanding(page);
   const playerIdAtRegistration = await page.evaluate(() => localStorage.getItem('bjarnoy.playerId'));
 
-  await settlement.claimLandfall();
-  await expect(settlement.banner).toBeVisible();
-  await expect(settlement.banner).toContainText('Landfall made.');
+  await settlement.onboarding.claimLandfall();
+  await expect(settlement.onboarding.banner).toBeVisible();
+  await expect(settlement.onboarding.banner).toContainText('Landfall made.');
 
   // --- Guided build 1: Reindeer Herder on a grass hex, via the real ring menu -------
   const grassHex = await settlement.findHex({ terrain: 'grass' });
   await settlement.clickHex(grassHex);
   const buildingsBeforeFarm = await settlement.countBuildings();
-  await buildThroughOpenRing(settlement, 'Resource', 'Reindeer Herder');
+  await settlement.ring.build('Resource', 'Reindeer Herder');
   // Read once, not `expect.poll(..., { timeout: 5_000 })`: in demo mode the
   // bubble's click handler places the building synchronously
   // (LandingView.vue's onRingSelect -> useBuildRing's placeBuildingDemo), so the
@@ -96,15 +96,15 @@ async function foundAndFinishGuidedBuilds(page: Page) {
   const forestHex = await settlement.findHex({ terrain: 'forest' });
   await settlement.clickHex(forestHex);
   const buildingsBeforeLumberjack = await settlement.countBuildings();
-  await buildThroughOpenRing(settlement, 'Resource', 'Lumberjack');
+  await settlement.ring.build('Resource', 'Lumberjack');
   // Synchronous placement, as for the farm above.
   expect(await settlement.countBuildings()).toBe(buildingsBeforeLumberjack + 1);
 
   // --- Completion hand-off -------------------------------------------------
-  await expect(settlement.checklist).toHaveCount(0);
-  await expect(settlement.profileNudge).toBeVisible();
-  await expect(settlement.banner).toHaveCount(0);
-  await enterSettlementAfterOnboarding(page);
+  await expect(settlement.onboarding.checklist).toHaveCount(0);
+  await expect(settlement.onboarding.profileNudge).toBeVisible();
+  await expect(settlement.onboarding.banner).toHaveCount(0);
+  await settlement.onboarding.enterSettlement();
   await page.waitForURL('**/settlement');
   await waitForMapReady(page);
 
@@ -233,8 +233,8 @@ for (const size of SCREEN_SIZES) {
         // underneath the gate — a visitor who just logged out of a real account
         // must not be nudged toward starting a throwaway new realm on top of it.
         await expect(page.getByRole('heading', { name: /choose where your realm begins/i })).toHaveCount(0);
-        await expect(settlement.guidancePointer).toHaveCount(0);
-        await expect(settlement.checklist).toHaveCount(0);
+        await expect(settlement.onboarding.guidancePointer).toHaveCount(0);
+        await expect(settlement.onboarding.checklist).toHaveCount(0);
 
         // localStorage: every key tying this browser to the account that just
         // logged out is gone, and a brand new local identity has taken its

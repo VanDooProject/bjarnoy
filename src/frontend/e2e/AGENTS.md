@@ -42,11 +42,9 @@ production build via `vite preview`, no backend — specs mock the API themselve
     into several of these (see the cost model below).
   - `support/cdp.ts` — `cdpSessionFor(page)`: the one-CDP-session-per-page
     cache that the gestures and `captureCanvas` share.
-- `helpers.ts` — only the multi-step user flows built on `support/`:
-  `gotoWorldMap(page)`, `clickHudMenuEntry`, `openHudDrawer`, `claimLandfall`,
-  `enterSettlementAfterOnboarding`, `foundSettlement`, `placeGuidedBuildings`,
-  `openRingOnGuidedHex`, `buildThroughOpenRing`, `bubbleNearestPointerTip`,
-  `putFleetsFarAtSea`, `refreshArmies`. (These move into page objects over time.)
+- `helpers.ts` — only `clickHudMenuEntry(page, label)` is left (it moves into the HUD page objects in a later
+  change). Every other multi-step flow is a page-object method (`pages/`); `support/hud.ts` holds
+  `openHudDrawer(page)`, which the pages need too, so it cannot live in `helpers.ts` (pages never import it).
 - `budgets.ts` — `MAP_SPEC_TIMEOUT_MS`, `HEAVY_MAP_SPEC_TIMEOUT_MS`.
 
 Cost model for specs that drive a map view: a Playwright call is a round trip
@@ -120,9 +118,10 @@ one-off abstraction inside the spec.
 
 | Class | Covers |
 | --- | --- |
-| `SettlementPage` | The settlement view and the landing page's onboarding step: `found()` / `openLanding()`, `findHex({ terrain, notTerrain, coastalWater, withRiver, reach, nearest })` (`nearest`: the matching hex drawn closest to a screen point), `standTowerTowardCoast()` (a start position keeps two hexes from the sea, so a spec that needs sand or coastal water stands a tower toward the shore and passes its `reach` to `findHex`), `centreHex()`, `clickHex()`, `countBuildings()`, `buildingTypeAt()`, `setSettlementLevel()`, `setResources()`, `hudResources()`, `canvasBox()` / `canvasCentre()`, plus `.ring`. Guided-onboarding UI (design handoff "2a"): `.guidancePointer`, `.checklist`, `.banner` (filter `.landfall`/`.complete`), `.continueButton`, `.profileNudge`. |
-| `RingMenuComponent` | The radial menu: `bubbles` / `backBubble` / `categoryBubbles` / `childBubbles` / `card`, `action()` / `category()` / `child()`, `hover()` (previews a card), `click()`, `openBuildCategories()` / `openCategory()` (click — hover never navigates). |
-| `WorldMapPage` | `/settlement#world`: `open()`, `box()`, `centre()`, `pointAt(dx, dy)`, `moveTo(point)`, `screenshot()` for the canvas pixel-diff assertions. |
+| `SettlementPage` | The settlement view and the landing page's onboarding step: `found()` (does the founding itself: landing page, onboarding flows, hand-off to /settlement) / `openLanding()`, `findHex({ terrain, notTerrain, coastalWater, withRiver, reach, nearest })` (`nearest`: the matching hex drawn closest to a screen point), `standTowerTowardCoast()` (a start position keeps two hexes from the sea, so a spec that needs sand or coastal water stands a tower toward the shore and passes its `reach` to `findHex`), `centreHex()`, `clickHex()`, `countBuildings()`, `buildingTypeAt()`, `setSettlementLevel()`, `setResources()`, `hudResources()`, `putFleetsFarAtSea(homeAt?)` / `refreshArmies()` (demo-world seeding, like `setResources()` / `standBuildings()`), `canvasBox()` / `canvasCentre()`, plus `.ring` and `.onboarding` (an `OnboardingComponent`). |
+| `OnboardingComponent` | The guided onboarding on the landing page (design handoff "2a"): `.guidancePointer`, `.checklist`, `.banner` (filter `.landfall`/`.complete`), `.continueButton`, `.profileNudge`; flows `claimLandfall()`, `placeGuidedBuildings()`, `enterSettlement()`, `openRingOnGuidedHex(chipText?)`, `bubbleNearestPointerTip()`. Reached as `settlement.onboarding`, or `new OnboardingComponent(page)` before a `SettlementPage` exists. |
+| `RingMenuComponent` | The radial menu: `bubbles` / `backBubble` / `categoryBubbles` / `childBubbles` / `card`, `action()` / `category()` / `child()`, `hover()` (previews a card), `click()`, `openBuildCategories()` / `openCategory()` (click — hover never navigates), `build(category, building)` (the whole Build → category → building path on an open ring; taps on a phone). |
+| `WorldMapPage` | `/settlement#world`: `open()` (logs in, founds, switches to world mode), `enter()` (only the switch to world mode, for a spec already in the settlement), `box()`, `centre()`, `pointAt(dx, dy)`, `moveTo(point)`, `screenshot()` for the canvas pixel-diff assertions. |
 | `AdminAuthFixture` | The mocked session. Reached as the **`adminAuth` fixture** (`async ({ page, adminAuth })`), then `adminAuth.login()` / `loginAsPlayer(name)`. |
 | `AdminTablePage` | The shared `table.table` list: `table` / `body` / `rows` / `row(text)` / `myRow`. |
 | `AdminSettlementsPage` | `/admin/settlements`: `openManagePanel()`, `hex(q, r)`, `hexForm` / `garrisonForm` / `armyEditor` / `grantForm` / `stocks` / `clampNotice`. |

@@ -1,9 +1,8 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { SettlementPage } from './pages';
+import { SettlementPage, WorldMapPage } from './pages';
 import { RingMenuComponent } from './pages/RingMenuComponent';
-import { gotoWorldMap } from './helpers';
 import { layoutOverflow } from './support/geometry';
 import { hexCenterScreen } from './support/renderer';
 import { loginTestUser } from './support/session';
@@ -62,7 +61,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await SettlementPage.found(page);
     await expect(page.locator('.army-panel')).toHaveCount(0);
 
-    await gotoWorldMap(page);
+    await WorldMapPage.enter(page);
     await expect(page.locator('.army-panel')).toHaveCount(0);
   });
 
@@ -207,7 +206,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     const ring = new RingMenuComponent(page);
     const centre = await settlement.canvasCentre();
 
-    await gotoWorldMap(page);
+    await WorldMapPage.enter(page);
     await page.mouse.click(centre.x, centre.y);
 
     await expect(page).toHaveURL(/\/settlement#world(&.*)?$/);

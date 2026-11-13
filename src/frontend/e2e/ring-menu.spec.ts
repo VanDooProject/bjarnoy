@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { clickHudMenuEntry, putFleetsFarAtSea, refreshArmies } from './helpers';
+import { clickHudMenuEntry } from './helpers';
 import { distanceFrom, rectsOf } from './support/geometry';
 import { longestTask, observeLongTasks } from './support/render';
 import { loginTestUser } from './support/session';
@@ -61,7 +61,7 @@ test.describe('ring menu drill-down', () => {
       // sleep expires before the ring renders and a perfectly good tile
       // gets discarded as unbuildable — burning an offset, and eventually
       // the test's whole budget (issue #167). This is the same move
-      // foundSettlement() already makes with waitForMapReady(): a condition
+      // SettlementPage.found() already makes with waitForMapReady(): a condition
       // wait, not a longer timeout. A tile that genuinely has no ring still
       // costs only the 2s cap, and only on the offsets that miss.
       await buildBubble.first().waitFor({ state: 'visible', timeout: 2_000 }).catch(() => {});
@@ -661,13 +661,13 @@ test.describe('ring menu and armies in the field', () => {
   test('opening a ring with far-away fleets out does not stall the page, and Send army here stays enabled', { tag: '@g3' }, async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
-    const target = await putFleetsFarAtSea(page);
+    const target = await settlement.putFleetsFarAtSea();
     await observeLongTasks(page);
 
     await settlement.clickHex(target);
     await settlement.ring.waitForOpen();
     // An armies refresh while the ring is open (what the live poll does) re-renders the ring's actions.
-    await refreshArmies(page);
+    await settlement.refreshArmies();
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
     // With the route checks this was one task of ~7 s; without them the open is a fraction of a second. 3 s leaves room for a

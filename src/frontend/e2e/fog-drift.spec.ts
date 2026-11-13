@@ -70,7 +70,7 @@ async function frameDelta(
 
 test.describe('fog wind drift', { tag: '@g3' }, () => {
   test('the vision edge keeps moving at rest, and freezes when drift is off', async ({ page }) => {
-    // foundSettlement() alone (page load + a real PixiJS/texture mount) can
+    // SettlementPage.found() alone (page load + a real PixiJS/texture mount) can
     // already run close to the global 45s budget under software-rendered
     // headless Chromium, and this test then sits still for several seconds
     // on purpose — the thing under test is elapsed time.

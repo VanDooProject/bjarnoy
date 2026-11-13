@@ -1,8 +1,8 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { SettlementPage } from './pages';
-import { claimLandfall, openHudDrawer, openRingOnGuidedHex } from './helpers';
+import { OnboardingComponent, SettlementPage } from './pages';
+import { openHudDrawer } from './support/hud';
 import { layoutOverflow } from './support/geometry';
 import { waitForMapReady } from './support/render';
 import { loginTestUser } from './support/session';
@@ -66,7 +66,7 @@ async function expectColumnClear(page: Page): Promise<void> {
   const column = page.locator('.founding-col');
   await expect(column).toBeVisible();
   await expect(column.getByTestId('map-usp-multiplayer').locator('span')).toBeHidden();
-  await expectNoOverlap(column, settlement.guidancePointer.locator('.chip'), 'column covers the "click this plot" chip');
+  await expectNoOverlap(column, settlement.onboarding.guidancePointer.locator('.chip'), 'column covers the "click this plot" chip');
   const badge = page.locator('.demo-badge');
   if (await badge.isVisible()) await expectNoOverlap(column, badge, 'column covers the demo badge');
   await expectInsideViewport(page, column);
@@ -145,16 +145,16 @@ test.describe('phone layout', { tag: '@g1' }, () => {
   test('onboarding overlays stay on screen before and after landfall', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
-    await expectInsideViewport(page, settlement.checklist);
-    await expectInsideViewport(page, settlement.guidancePointer.locator('.chip'));
+    await expectInsideViewport(page, settlement.onboarding.checklist);
+    await expectInsideViewport(page, settlement.onboarding.guidancePointer.locator('.chip'));
     await expectNothingOffscreen(page, 'landing before founding');
 
-    await settlement.claimLandfall();
-    await expect(settlement.banner).toBeVisible();
-    await expect(settlement.checklist).toHaveAttribute('aria-label', 'Step 2 of 3');
-    await expectInsideViewport(page, settlement.banner);
-    await expectInsideViewport(page, settlement.checklist);
-    await expectInsideViewport(page, settlement.guidancePointer.locator('.chip'));
+    await settlement.onboarding.claimLandfall();
+    await expect(settlement.onboarding.banner).toBeVisible();
+    await expect(settlement.onboarding.checklist).toHaveAttribute('aria-label', 'Step 2 of 3');
+    await expectInsideViewport(page, settlement.onboarding.banner);
+    await expectInsideViewport(page, settlement.onboarding.checklist);
+    await expectInsideViewport(page, settlement.onboarding.guidancePointer.locator('.chip'));
   });
 });
 
@@ -176,7 +176,7 @@ test.describe('phone layout, landscape', { tag: '@g1' }, () => {
     const hitsCanvas = await plotHitsCanvas(page);
     expect(hitsCanvas).toBe(true);
 
-    await claimLandfall(page);
+    await new OnboardingComponent(page).claimLandfall();
     await expect(page.getByTestId('onboarding-checklist')).toHaveAttribute('aria-label', 'Step 2 of 3');
   });
 });
@@ -193,8 +193,8 @@ test.describe('phone layout, narrow (320px)', { tag: '@g1' }, () => {
     const hitsCanvas = await plotHitsCanvas(page);
     expect(hitsCanvas).toBe(true);
 
-    await settlement.claimLandfall();
-    await expect(settlement.checklist).toHaveAttribute('aria-label', 'Step 2 of 3');
+    await settlement.onboarding.claimLandfall();
+    await expect(settlement.onboarding.checklist).toHaveAttribute('aria-label', 'Step 2 of 3');
   });
 
   test('the compact landing column leaves the plot chip and demo badge uncovered', async ({ page }) => {
@@ -209,9 +209,9 @@ test.describe('phone layout, narrow (320px)', { tag: '@g1' }, () => {
   test('the guidance chip stays fully on screen once the ring opens', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
-    await settlement.claimLandfall();
-    await openRingOnGuidedHex(settlement);
-    await expectInsideViewport(page, settlement.guidancePointer.locator('.chip'));
+    await settlement.onboarding.claimLandfall();
+    await settlement.onboarding.openRingOnGuidedHex();
+    await expectInsideViewport(page, settlement.onboarding.guidancePointer.locator('.chip'));
   });
 });
 
@@ -227,7 +227,7 @@ test.describe('phone layout, landscape (667x375)', { tag: '@g1' }, () => {
     await waitForMapReady(page);
     expect(await plotHitsCanvas(page)).toBe(true);
 
-    await claimLandfall(page);
+    await new OnboardingComponent(page).claimLandfall();
     await expect(page.getByTestId('onboarding-checklist')).toHaveAttribute('aria-label', 'Step 2 of 3');
   });
 
@@ -237,9 +237,9 @@ test.describe('phone layout, landscape (667x375)', { tag: '@g1' }, () => {
   test('the guidance chip stays fully on screen and clear of the HUD bar once the ring opens', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
-    await settlement.claimLandfall();
-    await openRingOnGuidedHex(settlement);
-    const chip = settlement.guidancePointer.locator('.chip');
+    await settlement.onboarding.claimLandfall();
+    await settlement.onboarding.openRingOnGuidedHex();
+    const chip = settlement.onboarding.guidancePointer.locator('.chip');
     await expectInsideViewport(page, chip);
     // Short landscape has no top bar: `.hud-bar` is the left rail (☰ + pills).
     const hudBar = page.locator('.hud-bar');
@@ -275,7 +275,7 @@ test.describe('mobile tutorial focus', { tag: '@g1' }, () => {
     await expect(page.locator('.hud-bar')).toHaveCount(0);
     await expect(page.getByTestId('returning-player-trigger')).toBeVisible();
 
-    await settlement.claimLandfall();
+    await settlement.onboarding.claimLandfall();
 
     // Once founded, the header (and everything it carries) is gone, not
     // merely hidden — both must be truly absent from the DOM.
@@ -289,8 +289,8 @@ test.describe('mobile tutorial focus', { tag: '@g1' }, () => {
       const badgeBox = (await badge.boundingBox())!;
       expect(badgeBox.x, 'demo tag should hug the left edge').toBeLessThan(12);
       expect(badgeBox.y + badgeBox.height, 'demo tag should hug the bottom edge').toBeGreaterThan(PHONE.height - 30);
-      await expect(settlement.banner).toBeVisible();
-      await expectNoOverlap(settlement.banner, badge, 'demo badge covers the landfall banner');
+      await expect(settlement.onboarding.banner).toBeVisible();
+      await expectNoOverlap(settlement.onboarding.banner, badge, 'demo badge covers the landfall banner');
     }
 
     // Opening the ring on a guided hex hides the progress checklist (the phone layer stack: a layer shows alone over the
@@ -298,14 +298,14 @@ test.describe('mobile tutorial focus', { tag: '@g1' }, () => {
     const target = await settlement.findHex({ terrain: 'grass' });
     await settlement.clickHex(target);
     await settlement.ring.waitForOpen();
-    await expect(settlement.checklist).toBeHidden();
+    await expect(settlement.onboarding.checklist).toBeHidden();
 
     // Closing the ring (Escape) brings the checklist straight back.
     await page.keyboard.press('Escape');
-    await expect(settlement.checklist).toBeVisible();
+    await expect(settlement.onboarding.checklist).toBeVisible();
 
     // Completing onboarding brings the header back.
-    await settlement.placeGuidedBuildings();
+    await settlement.onboarding.placeGuidedBuildings();
     await expect(page.locator('.hud-bar')).toBeVisible();
   });
 });
@@ -325,18 +325,18 @@ test.describe('phone overlay layering', { tag: '@g1' }, () => {
   test('the floating header: trigger clear of the top edge, nudge on screen and off the settlement bubble', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
-    await settlement.claimLandfall();
-    await settlement.placeGuidedBuildings();
-    await expect(settlement.profileNudge).toBeVisible();
+    await settlement.onboarding.claimLandfall();
+    await settlement.onboarding.placeGuidedBuildings();
+    await expect(settlement.onboarding.profileNudge).toBeVisible();
 
     await expect(page.locator('header.hud-bar')).toHaveClass(/hud-bar--floating/);
     const trigger = (await page.getByTestId('returning-player-trigger').boundingBox())!;
     expect(trigger.y, 'trigger hugs the top edge').toBeGreaterThanOrEqual(8);
-    const nudge = (await settlement.profileNudge.boundingBox())!;
+    const nudge = (await settlement.onboarding.profileNudge.boundingBox())!;
     expect(nudge.y, 'nudge hangs below its trigger').toBeGreaterThan(trigger.y + trigger.height);
     expect(nudge.x).toBeGreaterThanOrEqual(16);
     expect(nudge.x + nudge.width).toBeLessThanOrEqual(PHONE.width - 16);
-    await expectNoOverlap(settlement.profileNudge, page.locator('.settlement-bubble'), 'profile nudge covers the settlement bubble');
+    await expectNoOverlap(settlement.onboarding.profileNudge, page.locator('.settlement-bubble'), 'profile nudge covers the settlement bubble');
   });
 
   // Owner request: "Name your jarl" stays an on-screen button after the nudge
@@ -346,10 +346,10 @@ test.describe('phone overlay layering', { tag: '@g1' }, () => {
   test('the "Name your jarl" chip stays after Later, on landing and on /settlement', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
-    await settlement.claimLandfall();
-    await settlement.placeGuidedBuildings();
-    await settlement.profileNudge.getByTestId('profile-nudge-later').click();
-    await expect(settlement.profileNudge).toHaveCount(0);
+    await settlement.onboarding.claimLandfall();
+    await settlement.onboarding.placeGuidedBuildings();
+    await settlement.onboarding.profileNudge.getByTestId('profile-nudge-later').click();
+    await expect(settlement.onboarding.profileNudge).toHaveCount(0);
 
     const trigger = page.getByTestId('returning-player-trigger');
     await expect(trigger).toBeVisible();

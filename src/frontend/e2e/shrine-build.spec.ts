@@ -16,7 +16,7 @@ import { SettlementPage } from './pages';
  */
 test('building a shrine from the ring menu places it without a rendering error', async ({ page }) => {
   // Same reasoning as settlement-interactions.spec.ts's building-placement
-  // test: foundSettlement() plus driving a real click through the render
+  // test: SettlementPage.found() plus driving a real click through the render
   // runs close to (and on CI, over) the global 45s budget.
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.found(page);

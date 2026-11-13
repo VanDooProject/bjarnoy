@@ -11,6 +11,7 @@ export { AdminActivityPage, type ActivityBucket, type ActivityUser } from './Adm
 export { AdminSettlementsPage } from './AdminSettlementsPage';
 export { AdminTablePage } from './AdminTablePage';
 export { BuildingHudComponent, type OwnedBuilding } from './BuildingHudComponent';
+export { OnboardingComponent } from './OnboardingComponent';
 export { RingMenuComponent } from './RingMenuComponent';
 export { ScrollableView } from './ScrollableView';
 export {
