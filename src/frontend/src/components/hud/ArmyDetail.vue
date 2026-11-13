@@ -202,14 +202,16 @@ const nowKey = computed(() => {
   font-variant-numeric: tabular-nums;
 }
 .army-bar-time {
-  flex: 0 0 auto;
+  /* Each time sits under the start of its section; where the sections are short the times give way to each other. */
+  flex-grow: 0;
+  flex-shrink: 1;
   min-width: 0;
   overflow: hidden;
+  padding-right: 8px;
   white-space: nowrap;
 }
 .army-bar-time.is-end {
-  margin-left: auto;
-  flex: 0 0 auto;
+  flex: none;
 }
 .army-food-grid {
   display: grid;
@@ -287,6 +289,8 @@ const nowKey = computed(() => {
   cursor: pointer;
 }
 .army-detail-units {
+  flex: 1 1 auto;
+  min-width: 0;
   display: inline-flex;
   flex-wrap: wrap;
   gap: 2px 10px;
@@ -299,7 +303,9 @@ const nowKey = computed(() => {
   gap: 4px;
 }
 .is-sheet .army-detail-link {
+  flex: none;
   margin-left: auto;
+  white-space: nowrap;
   padding: 12px 8px;
   font-size: 14px;
 }
@@ -354,7 +360,9 @@ const nowKey = computed(() => {
   font-weight: 600;
 }
 .army-event-time {
-  width: 44px;
+  flex: none;
+  width: 72px;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
