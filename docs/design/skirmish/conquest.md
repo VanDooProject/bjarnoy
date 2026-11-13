@@ -18,8 +18,9 @@ in [Taking over a realm](realm-takeover.md).
   building never loses more levels in one attack than they allow, however many Fire Ships come.
 - An attack on a building in the water (a dock, a fisher, the Shrine of Njörd, a wall's sea end) is a ship fight only, with no
   loot: the troops and siege engines on board cannot reach it. Attack on a beach camp: ship fight first, then the land fight. The land troops
-  fight from on board and do not land. If the attacker loses the ship fight, there is no land fight. The camp's buildings are
-  damaged by land siege in the land fight, never by ships.
+  fight from on board and do not land. If the attacker loses the ship fight, there is no land fight. Siege engines and fire
+  ships do not damage a beach camp; it falls only to an attack that leaves no troops in it
+  ([beach-camp.md](beach-camp.md)).
 - If the target has no fleet, the ship fight is skipped and counts as won.
 - Wildlife camps follow the same split. Water camps (the whale road) are fought by fleets only. Sand camps (seal and walrus
   haul-outs) are fought by land troops only, from on board; the fleet does no fighting there. A fleet without land troops on board
