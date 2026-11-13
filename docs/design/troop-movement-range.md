@@ -194,6 +194,14 @@ Consequences:
   provisions never get worse). On open sea this turns the two-leg shape (one diagonal, one
   axis-straight leg) into one straight line. `HexPathfinder.Smooth` and `smooth` in `hexPath.ts`
   do the same, on the same `HexCoord.Line` / `hexLine` hex line, so both sides return identical routes.
+- **The drawn route never enters a hex the army does not travel through.** The route line on the
+  map may be drawn simplified and may run along the edge of such a hex, but never crosses into it.
+  `routeDisplayPointsOnMap` in `routeLine.ts` picks the straight segments greedily; a segment is
+  allowed only if it does not enter the interior of any off-route hex (tolerance `1e-6 * TILE_H`).
+  The geometry is worked out with the squashed top face stretched back into a regular hexagon, so
+  every between-axis direction (horizontal on screen, and the two at ±60°) becomes one segment.
+  The army marker rides the drawn line: each hex's display point is its centre projected onto the
+  segment, and the marker moves between the display points of its leg. Game state stays per hex.
 - **The search is capped.** `HexPathfinder` expands at most 250,000 nodes per order, shared by
   all the searches the order makes: every leg through its waypoints, and a field order's way
   home (the TS twin `MAX_EXPANDED_NODES` in `hexPath.ts` matches for a single search); a long sea
