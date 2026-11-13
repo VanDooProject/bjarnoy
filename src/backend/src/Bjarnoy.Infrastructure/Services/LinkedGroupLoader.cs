@@ -168,7 +168,7 @@ public sealed class LinkedGroupSession
 
             var spotsNow = outcome.Settlement.GarrisonSpots.Select(s => s.Coord).ToHashSet();
             var lost = member.Buildings
-                .Where(b => b.Type is BuildingType.Tower or BuildingType.Harbour or BuildingType.Shipyard && b.Level >= 1)
+                .Where(b => b.Type.HoldsGarrison() && b.Level >= 1)
                 .Select(b => new HexCoord(b.Q, b.R))
                 .Where(c => !spotsNow.Contains(c))
                 .ToList();

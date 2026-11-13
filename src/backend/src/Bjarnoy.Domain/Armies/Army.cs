@@ -1068,7 +1068,7 @@ public sealed partial record Army
         }
 
         return buildings
-            .Where(b => b.Type is BuildingType.Harbour or BuildingType.Shipyard && b.IsFunctioning)
+            .Where(b => b.Type.IsDock() && b.IsFunctioning)
             .Select(b => b.Coord)
             .OrderBy(c => c.DistanceTo(centre)).ThenBy(c => c.Q).ThenBy(c => c.R)
             .Cast<HexCoord?>()

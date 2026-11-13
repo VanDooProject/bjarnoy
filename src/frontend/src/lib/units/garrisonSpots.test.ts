@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { allocateFromSpots, isGarrisonSpotTile, spotKindsForUnit, spotsNearestFirst, toDispatchFrom } from './garrisonSpots';
+import { allocateFromSpots, holdsGarrison, isDockBuilding, isGarrisonSpotTile, spotKindsForUnit, spotsNearestFirst, toDispatchFrom } from './garrisonSpots';
+
+describe('isDockBuilding and holdsGarrison', () => {
+  it('count the Harbour and the Shipyard as docks, and the tower as a spot too', () => {
+    expect(['harbour', 'shipyard', 'tower', 'farm', undefined].map(isDockBuilding)).toEqual([true, true, false, false, false]);
+    expect(['harbour', 'shipyard', 'tower', 'farm', undefined].map(holdsGarrison)).toEqual([true, true, true, false, false]);
+  });
+});
 
 describe('isGarrisonSpotTile', () => {
   const centre = { q: 3, r: 3 };
-  it('is the centre hex, a tower and a harbour, nothing else', () => {
+  it('is the centre hex, a tower, a harbour and a shipyard, nothing else', () => {
     expect(isGarrisonSpotTile({ q: 3, r: 3 }, centre)).toBe(true);
     expect(isGarrisonSpotTile({ q: 4, r: 3, buildingType: 'tower' }, centre)).toBe(true);
     expect(isGarrisonSpotTile({ q: 5, r: 3, buildingType: 'harbour' }, centre)).toBe(true);
+    expect(isGarrisonSpotTile({ q: 6, r: 3, buildingType: 'shipyard' }, centre)).toBe(true);
     expect(isGarrisonSpotTile({ q: 5, r: 4, buildingType: 'hut' }, centre)).toBe(false);
     expect(isGarrisonSpotTile({ q: 6, r: 4 }, centre)).toBe(false);
   });

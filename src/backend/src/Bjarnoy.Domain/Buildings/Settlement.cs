@@ -120,7 +120,7 @@ public sealed record Settlement
         {
             var coords = new List<(HexCoord Coord, GarrisonSpotKind Kind)> { (Centre, IsBeachCamp ? GarrisonSpotKind.BeachCamp : GarrisonSpotKind.Longhouse) };
             coords.AddRange(Buildings
-                .Where(b => b.Type is BuildingType.Tower or BuildingType.Harbour or BuildingType.Shipyard && b.Level >= 1 && b.Coord != Centre)
+                .Where(b => b.Type.HoldsGarrison() && b.Level >= 1 && b.Coord != Centre)
                 .OrderBy(b => b.Coord.Q).ThenBy(b => b.Coord.R)
                 .Select(b => (b.Coord, b.Type == BuildingType.Tower ? GarrisonSpotKind.Tower : GarrisonSpotKind.Dock)));
 

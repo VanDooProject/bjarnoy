@@ -1222,7 +1222,7 @@ public static class BuildingCatalogue
         RequiresCoastalWater = true,
     };
 
-    // The Shipyard: the second half of the old Dockyard (docs/design/units-and-ships.md §1). Stands in coastal water like the Harbour, costs and builds like it (economy.md),
+    // The Shipyard: the second half of the old Dockyard (docs/design/units-and-ships.md §1). Stands in coastal water like the Harbour and builds in the same time (the Harbour is cheaper; economy.md),
     // trains the warships and the fire craft, and is a garrison spot for every ship.
     private static BuildingDefinition Shipyard(int level) => new()
     {

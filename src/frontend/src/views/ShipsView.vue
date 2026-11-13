@@ -9,7 +9,7 @@ import DocsPageLink from '../components/docs/DocsPageLink.vue';
 import BuildingLink from '../components/docs/BuildingLink.vue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
-import { buildingName, resourceName, shipGroupName, unitName } from '../i18n/catalogueNames';
+import { resourceName, shipGroupName, unitName } from '../i18n/catalogueNames';
 import { groupByShipGroup } from '../lib/units/shipGroups';
 import { prerequisitesOf } from '../lib/techtree/nodes';
 import { favourAt } from '../lib/docs/shrineDocs';
@@ -146,7 +146,7 @@ const loc = computed(() => String(locale.value));
               <th scope="row" class="name">{{ $t('docs.ships.table.rows.needs') }}</th>
               <td v-for="ship in ships" :key="ship.type">
                 <BuildingLink :type="ship.requiredBuildingType" /> {{ ship.requiredBuildingLevel }}
-                <template v-if="ship.requiredLonghouseLevel > 1">· {{ buildingName('longhouse') }} {{ ship.requiredLonghouseLevel }}</template>
+                <template v-if="ship.requiredLonghouseLevel > 1">· <BuildingLink type="longhouse" /> {{ ship.requiredLonghouseLevel }}</template>
               </td>
             </tr>
           </tbody>
@@ -162,7 +162,6 @@ const loc = computed(() => String(locale.value));
       <p>{{ $t('docs.ships.history.longship') }}</p>
       <p>{{ $t('docs.ships.history.skeid') }}</p>
       <p>{{ $t('docs.ships.history.fireShip') }}</p>
-      <p>{{ $t('docs.ships.history.fireCraft') }}</p>
     </DocsHistoryNote>
 
     <section id="sailing" class="block">

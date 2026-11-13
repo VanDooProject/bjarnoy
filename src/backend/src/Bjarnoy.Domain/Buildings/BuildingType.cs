@@ -263,6 +263,15 @@ public enum BuildingType
 
 public static class BuildingTypeExtensions
 {
+    /// <summary>The docks: the buildings every ship can lie at, trained in or sent home to (<see cref="BuildingType.Harbour"/>, <see cref="BuildingType.Shipyard"/>).</summary>
+    public static readonly IReadOnlyList<BuildingType> DockTypes = [BuildingType.Harbour, BuildingType.Shipyard];
+
+    /// <summary>Whether this is a dock (Harbour or Shipyard). In an EF query use <see cref="DockTypes"/> with <c>Contains</c>.</summary>
+    public static bool IsDock(this BuildingType type) => type is BuildingType.Harbour or BuildingType.Shipyard;
+
+    /// <summary>Whether units stand at this building: a Tower (land units) or a dock (ships). The Longhouse and a beach camp are spots too, but not buildings of this kind.</summary>
+    public static bool HoldsGarrison(this BuildingType type) => type == BuildingType.Tower || type.IsDock();
+
     public static string ToWireName(this BuildingType type) => type switch
     {
         BuildingType.Longhouse => "longhouse",

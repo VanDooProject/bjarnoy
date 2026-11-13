@@ -1938,7 +1938,7 @@ public sealed class ArmyService(
         if (fireSiege.Applied)
         {
             _logger.LogInformation(
-                "Army {ArmyId}'s fire ships burned {Burned} ship(s) and reduced {TargetType} at ({Q},{R}) in settlement {TargetId} "
+                "Army {ArmyId}'s fire craft burned {Burned} ship(s) and reduced {TargetType} at ({Q},{R}) in settlement {TargetId} "
                     + "from level {Before} to {After}.",
                 armyEntity.Id, arrival.Attack!.FireShipsBurned, fireSiege.TargetType, fireSiege.TargetCoord!.Value.Q,
                 fireSiege.TargetCoord.Value.R, targetId, fireSiege.LevelBefore, fireSiege.LevelAfter);
@@ -2466,14 +2466,14 @@ public sealed class ArmyService(
             .Include(s => s.Runes)
             .Where(s => s.WorldId == worldId && s.Id != excludeSettlementId
                 && ((s.CentreQ == hex.Q && s.CentreR == hex.R)
-                    || s.Buildings.Any(b => (b.Type == BuildingType.Harbour || b.Type == BuildingType.Shipyard) && b.Q == hex.Q && b.R == hex.R)))
+                    || s.Buildings.Any(b => BuildingTypeExtensions.DockTypes.Contains(b.Type) && b.Q == hex.Q && b.R == hex.R)))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         foreach (var candidate in candidates)
         {
-            var functioning = candidate.Buildings.Any(b => b.Type is BuildingType.Harbour or BuildingType.Shipyard && b.OutsideRealmSince == null);
+            var functioning = candidate.Buildings.Any(b => b.Type.IsDock() && b.OutsideRealmSince == null);
             var byCentre = candidate.CentreQ == hex.Q && candidate.CentreR == hex.R;
-            if (functioning && (byCentre || candidate.Buildings.Any(b => b.Type is BuildingType.Harbour or BuildingType.Shipyard && b.Q == hex.Q && b.R == hex.R && b.OutsideRealmSince == null)))
+            if (functioning && (byCentre || candidate.Buildings.Any(b => b.Type.IsDock() && b.Q == hex.Q && b.R == hex.R && b.OutsideRealmSince == null)))
             {
                 return (candidate, byCentre);
             }

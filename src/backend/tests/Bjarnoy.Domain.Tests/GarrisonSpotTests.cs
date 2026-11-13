@@ -64,6 +64,15 @@ public class GarrisonSpotTests
     }
 
     [Fact]
+    public void Only_the_tower_and_the_two_docks_hold_a_garrison()
+    {
+        Assert.Equal(
+            [BuildingType.Tower, BuildingType.Harbour, BuildingType.Shipyard],
+            Enum.GetValues<BuildingType>().Where(t => t.HoldsGarrison()).OrderBy(t => t == BuildingType.Tower ? 0 : (int)t));
+        Assert.Equal([BuildingType.Harbour, BuildingType.Shipyard], BuildingTypeExtensions.DockTypes);
+    }
+
+    [Fact]
     public void A_shipyard_is_a_ship_only_garrison_spot_like_a_harbour_and_holds_every_ship()
     {
         var shipyard = new PlacedBuilding(new HexCoord(4, 1), BuildingType.Shipyard, 1);
