@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { WorldMapPage, SettlementPage } from './pages';
-import { doubleTap } from './helpers';
+import { doubleTap } from './support/gestures';
 
 // The map canvases suppress the browser's own double-tap zoom (touch-action:
 // none + touchstart preventDefault, which pinch needs), so the renderer

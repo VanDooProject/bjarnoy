@@ -41,7 +41,7 @@
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
-import { waitForRenderedFrames } from './helpers';
+import { waitForRenderedFrames } from './support/render';
 
 // This spec judges the map's pixels, so it renders with the player's default smooth edges.
 // Asserts the fog / water really move, so it opts in to their motion (the suite emulates reduced motion, which freezes them).

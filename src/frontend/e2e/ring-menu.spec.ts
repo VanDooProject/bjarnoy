@@ -1,5 +1,8 @@
 import { expect, test } from './fixtures';
-import { clickHudMenuEntry, distanceFrom, loginTestUser, longestTask, observeLongTasks, putFleetsFarAtSea, rectsOf, refreshArmies } from './helpers';
+import { clickHudMenuEntry, putFleetsFarAtSea, refreshArmies } from './helpers';
+import { distanceFrom, rectsOf } from './support/geometry';
+import { longestTask, observeLongTasks } from './support/render';
+import { loginTestUser } from './support/session';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage, type ScreenPoint } from './pages';
 

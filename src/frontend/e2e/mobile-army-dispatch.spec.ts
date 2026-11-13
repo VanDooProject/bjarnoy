@@ -3,7 +3,9 @@ import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 import { RingMenuComponent } from './pages/RingMenuComponent';
-import { gotoWorldMap, layoutOverflow, loginTestUser } from './helpers';
+import { gotoWorldMap } from './helpers';
+import { layoutOverflow } from './support/geometry';
+import { loginTestUser } from './support/session';
 import { DOUBLE_TAP_SLOP_PX } from '../src/lib/map/doubleTap';
 
 /**

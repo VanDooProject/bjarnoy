@@ -2,7 +2,10 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
-import { claimLandfall, layoutOverflow, loginTestUser, openHudDrawer, openRingOnGuidedHex, waitForMapReady } from './helpers';
+import { claimLandfall, openHudDrawer, openRingOnGuidedHex } from './helpers';
+import { layoutOverflow } from './support/geometry';
+import { waitForMapReady } from './support/render';
+import { loginTestUser } from './support/session';
 
 // Mobile-readiness audit: every one of these was a real defect at phone width
 // — the onboarding checklist's third card and the guidance chip clipped past

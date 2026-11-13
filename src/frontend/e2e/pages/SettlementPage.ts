@@ -1,6 +1,7 @@
 // See RingMenuComponent.ts for why `expect` comes from here, not `../fixtures`.
 import { expect, type Locator, type Page } from '@playwright/test';
-import { captureCanvas, claimLandfall, foundSettlement, placeGuidedBuildings, waitForMapReady } from '../helpers';
+import { claimLandfall, foundSettlement, placeGuidedBuildings } from '../helpers';
+import { captureCanvas, waitForMapReady } from '../support/render';
 import { BuildingHudComponent } from './BuildingHudComponent';
 import { RingMenuComponent } from './RingMenuComponent';
 

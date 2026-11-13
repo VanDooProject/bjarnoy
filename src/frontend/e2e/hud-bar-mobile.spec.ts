@@ -25,7 +25,8 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { loginTestUser, openHudDrawer } from './helpers';
+import { openHudDrawer } from './helpers';
+import { loginTestUser } from './support/session';
 import { SettlementPage } from './pages';
 
 // DOM and game state only: water pixels cannot change these results (see `mapLayers` in fixtures.ts).
