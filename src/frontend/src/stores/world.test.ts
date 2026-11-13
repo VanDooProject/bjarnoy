@@ -3083,6 +3083,18 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
       await done;
     });
 
+    it('two quick upgrades in a row, the first not answered yet, order level n+1 and then n+2', async () => {
+      const store = await setupWithLumberjack(2);
+      queueBuild.mockReturnValue(new Promise<void>(() => {}));
+
+      void store.upgradeBuildingLive(at);
+      void store.upgradeBuildingLive(at);
+
+      // The second one starts from the first one's optimistic entry, not from the built level.
+      expect(store.hud.queue.map((o) => o.targetLevel)).toEqual([3, 4]);
+      expect(queueBuild).toHaveBeenCalledTimes(2);
+    });
+
     it('records the confirmed spend for the resources that really dropped', async () => {
       const store = await setupWithLumberjack(2);
       queueBuild.mockResolvedValue(undefined);

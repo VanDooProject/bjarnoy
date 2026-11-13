@@ -26,10 +26,13 @@ export class LongPressTracker {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private origin: Point | null = null;
 
-  constructor(
-    private readonly callbacks: LongPressCallbacks,
-    private readonly options: { ms?: number; slopPx?: number } = {},
-  ) {}
+  private readonly callbacks: LongPressCallbacks;
+  private readonly options: { ms?: number; slopPx?: number };
+
+  constructor(callbacks: LongPressCallbacks, options: { ms?: number; slopPx?: number } = {}) {
+    this.callbacks = callbacks;
+    this.options = options;
+  }
 
   /** Whether a hold is running right now. */
   get holding(): boolean {
