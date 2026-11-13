@@ -77,12 +77,12 @@ public class CampBattleResolverTests
     [Fact]
     public void Hunt_loot_is_capped_by_the_survivors_carry_capacity()
     {
-        // 7 survivors * 30 carry = 210 of the 1800 pool; the rest stays behind.
+        // 7 survivors * 40 carry = 280 of the 1800 pool; the rest stays behind.
         var army = new[] { new UnitStack(UnitType.Axeman, 10) };
         var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         var total = plan.Loot.Wood + plan.Loot.Stone + plan.Loot.Food + plan.Loot.Iron;
-        Assert.Equal(210, total, 6);
+        Assert.Equal(280, total, 6);
         Assert.Equal(0, plan.Loot.Stone);
         Assert.Equal(new ResourceAmounts(600, 0, 600, 600), plan.LootAvailable);
     }
@@ -136,10 +136,10 @@ public class CampBattleResolverTests
     [Fact]
     public void Hunt_empty_camp_pickup_is_capped_by_carry()
     {
-        var army = new[] { new UnitStack(UnitType.Axeman, 1) }; // carry 30
+        var army = new[] { new UnitStack(UnitType.Axeman, 1) }; // carry 40
         var plan = CampBattleResolver.Hunt(
             army, CampGarrison.Empty, Strong(), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity, leftover: new ResourceAmounts(0, 0, 500, 0));
-        Assert.Equal(30, plan.Loot.Food);
+        Assert.Equal(40, plan.Loot.Food);
     }
 
     [Fact]
@@ -156,7 +156,7 @@ public class CampBattleResolverTests
         Assert.Equal(1, after.Clears);
         Assert.Equal(T0, after.ClearedAt);
         var leftoverTotal = after.Leftover.Wood + after.Leftover.Food + after.Leftover.Iron;
-        Assert.Equal(1800 - 210, leftoverTotal, 6);
+        Assert.Equal(1800 - 280, leftoverTotal, 6);
     }
 
     [Fact]
@@ -358,8 +358,8 @@ public class CampBattleResolverTests
         var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1, provisionsAtBattle: 100);
 
         Assert.Equal(180, plan.Refill);
-        // The loot is the survivors' 7 x 30 = 210 from what is left; the refill is on top of it.
-        Assert.Equal(210, plan.Loot.Wood + plan.Loot.Stone + plan.Loot.Food + plan.Loot.Iron, 3);
+        // The loot is the survivors' 7 x 40 = 280 from what is left; the refill is on top of it.
+        Assert.Equal(280, plan.Loot.Wood + plan.Loot.Stone + plan.Loot.Food + plan.Loot.Iron, 3);
         Assert.Equal(180 + plan.Loot.Food, plan.Taken.Food, 3);
     }
 
@@ -390,7 +390,7 @@ public class CampBattleResolverTests
 
         var availableTotal = plan.LootAvailable.Wood + plan.LootAvailable.Stone + plan.LootAvailable.Food + plan.LootAvailable.Iron;
         var leftoverTotal = after.Leftover.Wood + after.Leftover.Stone + after.Leftover.Food + after.Leftover.Iron;
-        Assert.Equal(availableTotal - 210 - 180, leftoverTotal, 3);
+        Assert.Equal(availableTotal - 280 - 180, leftoverTotal, 3);
         Assert.Equal(plan.LootAvailable.Food - plan.Taken.Food, after.Leftover.Food, 3);
     }
 

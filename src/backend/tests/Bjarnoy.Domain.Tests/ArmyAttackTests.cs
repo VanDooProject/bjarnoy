@@ -180,13 +180,13 @@ public class ArmyAttackTests
 
         var arrival = Army.SettleArrival(army, defender, defenderSpeedFactor: 1.0, movement.ArrivesAt, seed: 7);
 
-        // 20 axemen: food capacity 800, carry 600. They burned some of the 100 on the way; the room is refilled in full.
+        // 20 axemen: food capacity 800, carry 800. They burned some of the 100 on the way; the room is refilled in full.
         var provisionsAtBattle = army.ProvisionsAt(movement.ArrivesAt);
         var refill = 800 - provisionsAtBattle;
         Assert.Equal(800, arrival.Army!.Provisions, 6);
         Assert.Equal(refill, arrival.Attack!.Refill, 6);
         var loot = arrival.Army.Loot;
-        Assert.Equal(600, loot.Wood + loot.Stone + loot.Food + loot.Iron, 6);
+        Assert.Equal(800, loot.Wood + loot.Stone + loot.Food + loot.Iron, 6);
         // The defender lost the loot and the refill, both.
         var stockAfter = arrival.DefenderSettlement.Resources.At(movement.ArrivesAt);
         Assert.Equal(stockBefore.Food - loot.Food - refill, stockAfter.Food, 3);

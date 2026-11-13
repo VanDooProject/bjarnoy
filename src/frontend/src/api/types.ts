@@ -2006,6 +2006,8 @@ export interface UnitDefinitionResponse {
   /** Slots this ship offers to land troops (0 for every other unit). */
   shipSlots: number;
   upkeepPerHour: number;
+  /** True for the units that strike in the volley before a land fight (Bowman, Skirmisher). */
+  ranged: boolean;
   trainingCost: ResourceLine;
   trainingSeconds: number;
   requiredLonghouseLevel: number;
