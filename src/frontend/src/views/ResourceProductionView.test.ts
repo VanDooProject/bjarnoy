@@ -70,10 +70,10 @@ describe('ResourceProductionView', () => {
       'longhouse',
     ]);
     const cells = (type: string) => wrapper.get(`[data-producer=${type}]`).findAll('td').map((td) => td.text());
-    expect(cells('lumberjack').slice(0, 3)).toEqual(['Wood', '40', '206']);
-    expect(cells('pumpkinfarm').slice(0, 3)).toEqual(['Food', '44', '227']);
-    expect(cells('bogoreworks').slice(0, 3)).toEqual(['Iron', '20', '103']);
-    expect(cells('longhouse').slice(0, 3)).toEqual(['Wood / Brick / Food / Iron', '15 / 12 / 15 / 2', '150 / 120 / 150 / 20']);
+    expect(cells('lumberjack').slice(0, 3)).toEqual(['Wood', '8', '208']);
+    expect(cells('pumpkinfarm').slice(0, 3)).toEqual(['Food', '13', '337']);
+    expect(cells('bogoreworks').slice(0, 3)).toEqual(['Iron', '4', '104']);
+    expect(cells('longhouse').slice(0, 3)).toEqual(['Wood / Food', '15 / 15', '150 / 150']);
     wrapper.unmount();
   });
 
@@ -115,16 +115,15 @@ describe('ResourceProductionView', () => {
     wrapper.unmount();
   });
 
-  it('shows the storage buildings and the storehouse steps', async () => {
+  it('shows the storage buildings and the Great Storehouse count rule', async () => {
     const wrapper = await mountPage();
 
     const longhouse = wrapper.get('[data-storage=longhouse]').text();
     expect(longhouse).toContain('Level 1: 250');
     expect(longhouse).toContain('Level 30: 7,500');
     expect(wrapper.get('#storage').text()).toContain('the limit is 500 of each resource');
-    const steps = wrapper.findAll('[data-testid=storehouse-steps] tbody tr').map((r) => r.findAll('td').map((td) => td.text()));
-    expect(steps[0]).toEqual(['No. 2', '1 storehouse at level 10']);
-    expect(steps[3]).toEqual(['No. 5 and every one after', '4 storehouses at level 25']);
+    expect(wrapper.get('#storage').text()).toContain('needs a Storehouse at level 25');
+    expect(wrapper.find('[data-testid=storehouse-steps]').exists()).toBe(false);
     wrapper.unmount();
   });
 

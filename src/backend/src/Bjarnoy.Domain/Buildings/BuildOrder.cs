@@ -174,11 +174,11 @@ public enum BuildRejection
     TowerLimitReached,
 
     /// <summary>
-    /// An additional Storage House was ordered while the settlement does not yet
-    /// hold the houses at the level <see cref="BuildingCatalogue.AdditionalStorageHouseRequirement"/> asks for.
-    /// The first storage house and upgrades are never refused for this reason.
+    /// A new Great Storehouse was ordered while the settlement does not hold one more Storage House at level
+    /// <see cref="BuildingCatalogue.GreatStorehouseStorageHouseLevel"/> than it has Great Storehouses (standing plus queued):
+    /// the n-th Great Storehouse needs n maxed Storage Houses. Upgrading one is never refused for this reason.
     /// </summary>
-    StorageHouseTooLow,
+    GreatStorehouseNeedsStorageHouses,
 
     /// <summary>
     /// A wildlife camp stands on the hex — never buildable while the camp is there. Every camp

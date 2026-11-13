@@ -118,6 +118,16 @@ describe('BuildingHudLayer', () => {
       return frames.length;
     });
     vi.stubGlobal('cancelAnimationFrame', () => {});
+    // jsdom has no ResizeObserver, which the layer requires: a silent one that never reports a size (the box tests below
+    // replace it with one a test can drive).
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
   });
 
   afterEach(() => {
@@ -333,7 +343,7 @@ describe('BuildingHudLayer', () => {
         const entries = [...o.targets].map((target) => {
           Object.defineProperty(target, 'offsetWidth', { configurable: true, value: 100 });
           Object.defineProperty(target, 'offsetHeight', { configurable: true, value: 40 });
-          return { target } as ResizeObserverEntry;
+          return { target, contentRect: { width: 1000, height: 800 } } as ResizeObserverEntry;
         });
         o.cb(entries, {} as ResizeObserver);
       }
@@ -488,7 +498,7 @@ describe('BuildingHudLayer', () => {
       // The entry's border-box size (60 x 20) replaces the 100 x 40 the layout reported: the box spans x 180..270 at 1.5.
       for (const o of observers) {
         o.cb(
-          [...o.targets].map((target) => ({ target, borderBoxSize: [{ inlineSize: 60, blockSize: 20 }] }) as unknown as ResizeObserverEntry),
+          [...o.targets].map((target) => ({ target, contentRect: { width: 1000, height: 800 }, borderBoxSize: [{ inlineSize: 60, blockSize: 20 }] }) as unknown as ResizeObserverEntry),
           {} as ResizeObserver,
         );
       }
@@ -496,6 +506,21 @@ describe('BuildingHudLayer', () => {
       advance();
       // 300 is beyond the 90 px wide box of 1,0 (it is on 2,0's, which is hovered instead).
       expect(wrapper!.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain('scale(1.500)');
+    });
+
+    it('writes a marker transform only when it changed', async () => {
+      const renderer = await mountAt(1.5);
+      const el = wrapper!.get<HTMLElement>('[data-coord="1,0"]').element;
+      const written = el.style.transform;
+      expect(written).toContain('translate3d');
+      // A frame that places the marker where it already is leaves the style alone (a foreign value survives it) ...
+      el.style.transform = 'none';
+      runFrame();
+      expect(el.style.transform).toBe('none');
+      // ... and one that moves it writes the new transform.
+      renderer.dialScreenPoint = (coord) => ({ x: 500 + coord.q * 80, y: 300 + coord.r * 10 });
+      runFrame();
+      expect(el.style.transform).toContain('translate3d(580.0px');
     });
 
     it('stops observing a box that goes away and disconnects on unmount', async () => {

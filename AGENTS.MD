@@ -335,7 +335,18 @@
 - when an `AskUserQuestion` call comes back with questions unanswered or skipped (e.g. "User did not answer this question"),
   ask them again with the tool once the message I sent instead is handled; a skipped question is still open, not declined
 - if u take screenshots always show the in chat to me too
+- a question that refers to text, a list or a proposal ("as shown", "the text above", "save this") comes after that text in the
+  chat: write it out in full first, then ask. Never ask about content the chat doesn't show
 - for planning u can use a opus or fable subtask/subagent
+- a request for an artifact means UI or other design work: show what it looks like (mockups on real screenshots
+  of the game, the variants side by side, how each state and entry point looks on desktop and phone), not a plan
+  for how to build it. An implementation plan only when I explicitly ask for a plan
+- when I say design artifact, artifact or design study, I mean several variants side by side most of the time, not one
+  worked-out proposal; show one only when the request is clearly about a single fixed design
+- tools as artifacts (calculators, balancing sheets, simulators, ...) are fine too; they are likely to move into
+  the repo later, so build them that way: logic in plain, separable functions that read the game's real numbers
+  and formulas (catalogue, `docs/design/`), not hard-coded copies, and no page-only shortcuts that would need a
+  rewrite to port
 - artifacts that go through rounds (UX reviews, design options, motion
   demos, ...) keep every earlier round viewable: publish the new round as
   its own page or section in the same artifact and link the rounds to each

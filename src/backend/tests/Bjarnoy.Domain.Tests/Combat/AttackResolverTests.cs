@@ -445,4 +445,60 @@ public class AttackResolverTests
 
         Assert.Equal(0, Attack([new(UnitType.Karve, 5)], provisions: 0).Refill);
     }
+
+    // ---- Siege: only a won Attack does land siege damage; a Raid only plunders (owner decision 2026-11-12)
+
+    public static TheoryData<BuildingType> SiegeTargetTypes => new()
+    {
+        BuildingType.Farm, BuildingType.Palisade, BuildingType.PalisadeGate, BuildingType.Tower, BuildingType.Bridge, BuildingType.Longhouse,
+    };
+
+    private static readonly UnitStack[] SiegeArmy =
+        [new(UnitType.Axeman, 30), new(UnitType.Catapult, 20), new(UnitType.Ram, 20)];
+
+    [Theory]
+    [MemberData(nameof(SiegeTargetTypes))]
+    public void A_won_raid_with_catapults_and_rams_takes_no_levels_off_the_target(BuildingType type)
+    {
+        var hex = type == BuildingType.Longhouse ? Centre : LandHex;
+        var buildings = type == BuildingType.Longhouse ? Buildings() : Buildings(new PlacedBuilding(hex, type, 4));
+
+        var plan = Attack(SiegeArmy, home: [new(UnitType.Spearman, 2)], buildings: buildings, target: hex, raid: true);
+
+        Assert.Equal(BattleWinner.Attacker, plan.Winner);
+        Assert.False(plan.LandSiege.Applied);
+        Assert.Equal(buildings, plan.Buildings);
+    }
+
+    [Theory]
+    [MemberData(nameof(SiegeTargetTypes))]
+    public void A_won_attack_with_the_same_army_still_damages_the_target(BuildingType type)
+    {
+        var hex = type == BuildingType.Longhouse ? Centre : LandHex;
+        var buildings = type == BuildingType.Longhouse ? Buildings() : Buildings(new PlacedBuilding(hex, type, 4));
+
+        var plan = Attack(SiegeArmy, home: [new(UnitType.Spearman, 2)], buildings: buildings, target: hex, raid: false);
+
+        Assert.True(plan.LandSiege.Applied);
+        Assert.NotEqual(buildings, plan.Buildings);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void A_fleet_with_siege_engines_aboard_damages_a_beach_building_only_in_an_attack(bool raid, bool sieges)
+    {
+        var farm = new PlacedBuilding(LandHex, BuildingType.Farm, 4);
+        var buildings = Buildings(farm);
+
+        // 10 Karves carry 100 slots: 10 Axemen (2 each) and 8 Catapults (10 each) fit, so the engines reach the land fight.
+        var plan = Attack(
+            [new(UnitType.Karve, 10), new(UnitType.Axeman, 10), new(UnitType.Catapult, 8)],
+            home: [new(UnitType.Spearman, 2)], buildings: buildings, target: LandHex, raid: raid);
+
+        Assert.Equal(BattleWinner.Attacker, plan.Winner);
+        Assert.Equal(8, Count(plan.AttackerSurvivors, UnitType.Catapult));
+        Assert.Equal(sieges, plan.LandSiege.Applied);
+        Assert.Equal(sieges, !buildings.SequenceEqual(plan.Buildings));
+    }
 }

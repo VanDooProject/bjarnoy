@@ -109,7 +109,7 @@
   },
   "ringMenu": {
     "shrineLimitLock": "Your realm already has a shrine",
-    "storageHouseLock": "Needs {count} Storehouse at level {level} | Needs {count} Storehouses at level {level}",
+    "greatStorehouseLock": "Needs {count} Storehouse at level {level} | Needs {count} Storehouses at level {level}",
     "occupiedLock": {
       "giant": "Occupied by a giant landmark",
       "camp": "Wild beasts hold this hex: clear their camp first",
@@ -180,6 +180,7 @@
       "upgradeSub": "{building} · Level {from} → {to}",
       "givesTotal": "{amount} total",
       "needResources": "Need {resources}",
+      "needResourcesIn": "Need {resources} · enough in {time}",
       "needSlots": "Needs {needed} build slot · {free} of {total} free | Needs {needed} build slots · {free} of {total} free",
       "needSlotsNext": "Needs {needed} build slot · {free} of {total} free · next free in {time} | Needs {needed} build slots · {free} of {total} free · next free in {time}",
       "willQueue": "Will queue behind current builds ({waiting} of {max} waiting)",
@@ -417,7 +418,7 @@
     "fieldOrderInstructions": "Click hexes on the map to plot where this army should go next — the last click is the new destination. {count} {hexWord} plotted.",
     "hexWord": "hex | hexes",
     "freeAccountWaypoints": "Free with the account: one destination, no stops along the way.",
-    "premiumWaypointsNeeded": "is needed to plot extra waypoints.",
+    "premiumWaypointsNeeded": "is needed to plot extra waypoints, up to 10.",
     "premium": "Premium",
     "dragPinHint": "Drag a pin on the map to move a waypoint.",
     "destinationTag": "destination",

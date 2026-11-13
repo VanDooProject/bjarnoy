@@ -822,7 +822,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     ).toHaveCount(8);
     await expect(page.locator('[data-producer="quarry"]')).toHaveCount(0);
     await expect(page.locator('[data-producer="lumberjack"]')).toContainText(
-      "206",
+      "208",
     );
     await expect(page.locator('[data-mill="cropmill"]')).toContainText(
       "Straight river",
@@ -851,9 +851,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   }) => {
     await page.goto("/docs/founding");
     await expectPlayerPage(page, "Founding settlements", "price-table");
-    await expect(page.locator('[data-settlement="2"]')).toContainText("55,000");
+    await expect(page.locator('[data-settlement="2"]')).toContainText("80,000");
     // Settlers cost the same for every settlement; only the renown doubles.
-    await expect(page.locator('[data-settlement="3"]')).toContainText("110,000");
+    await expect(page.locator('[data-settlement="3"]')).toContainText("160,000");
     await expect(page.getByTestId("settler-table")).toContainText("120 / 90 / 60 / 60");
     await expect(page.getByText("issue #447")).toHaveCount(0);
   });

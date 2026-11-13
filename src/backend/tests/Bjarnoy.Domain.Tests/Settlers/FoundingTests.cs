@@ -125,21 +125,22 @@ public class FoundingTests
     public void CheckSpacing_reports_TooClose_when_a_tower_chain_reaches_past_the_centre_distance_phase()
     {
         // A max-level longhouse (claim radius 3) plus a connected max-level tower
-        // (TowerClaimRadius(10)) placed right at that border, chaining real
+        // (TowerClaimRadius(5)) placed right at that border, chaining real
         // territory out past minimumSpacing's own centre-only radius — the
         // same scenario SettlementEndpointsTests already covers for
         // FoundAsync itself.
-        var towerClaimRadius = Settlement.TowerClaimRadius(10);
+        var towerClaimRadius = Settlement.TowerClaimRadius(5);
         var neighbour = new Founding.NeighbourSnapshot(
             new HexCoord(0, 0),
             [
                 new PlacedBuilding(new HexCoord(0, 0), BuildingType.Longhouse, 10),
-                new PlacedBuilding(new HexCoord(3, 0), BuildingType.Tower, 10),
+                new PlacedBuilding(new HexCoord(3, 0), BuildingType.Tower, 5),
             ]);
 
         var candidate = new HexCoord(3 + towerClaimRadius + 2, 0);
 
-        var verdict = Founding.CheckSpacing(candidate, [neighbour], minimumSpacing: 15, safetyMargin: 2);
+        // minimumSpacing 8 sits below the tower chain's reach (3 + 5 rings): only the real claim discs can catch these.
+        var verdict = Founding.CheckSpacing(candidate, [neighbour], minimumSpacing: 8, safetyMargin: 2);
 
         Assert.Equal(Founding.SpacingVerdict.TooClose, verdict);
     }
@@ -147,17 +148,18 @@ public class FoundingTests
     [Fact]
     public void CheckSpacing_is_ok_just_past_a_tower_chains_reach()
     {
-        var towerClaimRadius = Settlement.TowerClaimRadius(10);
+        var towerClaimRadius = Settlement.TowerClaimRadius(5);
         var neighbour = new Founding.NeighbourSnapshot(
             new HexCoord(0, 0),
             [
                 new PlacedBuilding(new HexCoord(0, 0), BuildingType.Longhouse, 10),
-                new PlacedBuilding(new HexCoord(3, 0), BuildingType.Tower, 10),
+                new PlacedBuilding(new HexCoord(3, 0), BuildingType.Tower, 5),
             ]);
 
         var candidate = new HexCoord(3 + towerClaimRadius + 3, 0);
 
-        var verdict = Founding.CheckSpacing(candidate, [neighbour], minimumSpacing: 15, safetyMargin: 2);
+        // minimumSpacing 8 sits below the tower chain's reach (3 + 5 rings): only the real claim discs can catch these.
+        var verdict = Founding.CheckSpacing(candidate, [neighbour], minimumSpacing: 8, safetyMargin: 2);
 
         Assert.Equal(Founding.SpacingVerdict.Ok, verdict);
     }

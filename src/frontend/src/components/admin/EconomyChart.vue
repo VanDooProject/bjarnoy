@@ -51,8 +51,10 @@ const props = withDefaults(
     /** Render x tick labels as days from minutes-derived days already; callback-free. */
     stepped?: boolean;
     legend?: boolean;
+    /** Draw a marker on every point; off for dense series. */
+    markers?: boolean;
   }>(),
-  { kind: 'line', xTitle: '', yTitle: '', logY: false, integerX: false, stepped: false, legend: true },
+  { kind: 'line', xTitle: '', yTitle: '', logY: false, integerX: false, stepped: false, legend: true, markers: true },
 );
 
 const lineData = computed(() => ({
@@ -61,7 +63,7 @@ const lineData = computed(() => ({
     data: s.points as unknown as { x: number; y: number }[],
     borderColor: s.color,
     backgroundColor: s.color,
-    pointRadius: props.stepped ? 0 : s.dashed ? 2 : 3,
+    pointRadius: props.stepped || !props.markers ? 0 : s.dashed ? 2 : 3,
     pointHoverRadius: 5,
     borderWidth: 2,
     borderDash: s.dashed ? [6, 4] : [],

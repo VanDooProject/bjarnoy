@@ -369,7 +369,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
 
         Assert.Equal(1, renown!.SettlementCount);
-        Assert.Equal(55_000, renown.RequiredForNextSettlement);
+        Assert.Equal(80_000, renown.RequiredForNextSettlement);
         Assert.False(renown.CanFoundAnother);
     }
 
@@ -405,7 +405,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
 
         Assert.Equal(1, renown!.SettlementCount);
-        Assert.Equal(55_000, renown.RequiredForNextSettlement);
+        Assert.Equal(RenownThresholds.RequiredFor(2), renown.RequiredForNextSettlement);
 
         // The settlement list says which row is the camp: the flag, not the missing Longhouse level, tells.
         var mine = await client.GetFromJsonAsync<List<SettlementSummary>>(
@@ -423,7 +423,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         Authorize(client, player.AccessToken);
 
         // Longhouse level 10 + a Cart Workshop => 11 renown/hour; 100 hours is
-        // about a thousand renown, nowhere near the 55 000 the 2nd settlement needs.
+        // about a thousand renown, nowhere near the 80 000 the 2nd settlement needs.
         _factory.Time.Advance(TimeSpan.FromHours(100));
         await RefreshAsync(client, player.RefreshToken);
 
@@ -431,7 +431,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
 
         Assert.True(renown!.Total >= 500);
-        Assert.True(renown.Total < 55_000);
+        Assert.True(renown.Total < 80_000);
         Assert.False(renown.CanFoundAnother);
     }
 
@@ -642,7 +642,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         var afterTraining = await TrainFiveSettlersAsync(client, settlement.Id, player.RefreshToken);
 
         // Clear the renown threshold for a 2nd settlement (feasts and buildings
-        // are covered on their own above; 55 000 renown is weeks of play).
+        // are covered on their own above; 80 000 renown is weeks of play).
         await GrantRenownAsync(player.User.Id, RenownThresholds.RequiredFor(2));
         _factory.Time.Advance(TimeSpan.FromHours(100));
         var afterRenownWait = await RefreshAsync(client, afterTraining.RefreshToken);

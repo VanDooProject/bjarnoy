@@ -20,7 +20,6 @@ import {
   boostTerrainsOf,
   millBoostAt,
   neighbourBoost,
-  storageHouseSteps,
 } from '../lib/docs/productionDocs';
 
 // The production page: what each producer makes, the neighbour boost, the mills that raise producers, the storage
@@ -79,12 +78,14 @@ const producerRows = computed(() =>
   }),
 );
 
+// The Longhouse makes only what its level-1 row makes (wood and food), so its row lists just those resources.
+const longhouseResources = computed(() => RESOURCES.filter((r) => (definitionAt('longhouse', 1)?.productionPerHour[r] ?? 0) > 0));
 const longhouseRow = computed(() => ({
   cells: PRODUCER_LEVELS.map((level) => ({
     level,
-    amounts: RESOURCES.map((r) => Math.round(definitionAt('longhouse', level)?.productionPerHour[r] ?? 0)),
+    amounts: longhouseResources.value.map((r) => Math.round(definitionAt('longhouse', level)?.productionPerHour[r] ?? 0)),
   })),
-  perLevel: RESOURCES.map((r) => Math.round(definitionAt('longhouse', 1)?.productionPerHour[r] ?? 0)),
+  perLevel: longhouseResources.value.map((r) => Math.round(definitionAt('longhouse', 1)?.productionPerHour[r] ?? 0)),
 }));
 
 const pumpkinPerHour = computed(() => Math.round(definitionAt('pumpkinfarm', 1)?.productionPerHour.food ?? 0));
@@ -130,7 +131,6 @@ const storageRows = computed(() =>
     }),
   })),
 );
-const steps = storageHouseSteps();
 
 const tocLinks = computed(() =>
   ['producers', 'boost', 'mills', 'storage', 'upkeep'].map((id) => ({ href: `#${id}`, label: t(`docs.production.toc.${id}`) })),
@@ -177,7 +177,7 @@ const tocLinks = computed(() =>
             </tr>
             <tr data-producer="longhouse">
               <th scope="row" class="name"><BuildingLink type="longhouse" always /></th>
-              <td>{{ RESOURCES.map(resourceName).join(' / ') }}</td>
+              <td>{{ longhouseResources.map(resourceName).join(' / ') }}</td>
               <td v-for="cell in longhouseRow.cells" :key="cell.level" class="value">{{ cell.amounts.map((a) => n(a)).join(' / ') }}</td>
               <td>{{ standsOn('longhouse') }}</td>
               <td>{{ $t('docs.production.producers.longhouseUnlock') }}</td>
@@ -293,28 +293,13 @@ const tocLinks = computed(() =>
         </table>
       </div>
       <i18n-t keypath="docs.production.storage.levelCap" tag="p" class="text" scope="global">
-        <template #storehouse><BuildingLink type="storagehouse" /></template>
         <template #great><BuildingLink type="greatstorehouse" /></template>
         <template #longhouse><BuildingLink type="longhouse" /></template>
       </i18n-t>
-      <h3>{{ $t('docs.production.storage.moreHeading') }}</h3>
-      <p class="text">{{ $t('docs.production.storage.moreBody') }}</p>
-      <div class="table-scroll">
-        <table class="small" data-testid="storehouse-steps">
-          <thead>
-            <tr>
-              <th>{{ $t('docs.production.storage.step.which') }}</th>
-              <th>{{ $t('docs.production.storage.step.needs') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="step in steps" :key="step.nth">
-              <td>{{ $t(step.later ? 'docs.production.storage.step.later' : 'docs.production.storage.step.nth', { n: step.nth }) }}</td>
-              <td>{{ $t('docs.production.storage.step.needsCell', { count: step.count, level: step.level }) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <i18n-t keypath="docs.production.storage.greatCount" tag="p" class="text" scope="global">
+        <template #great><BuildingLink type="greatstorehouse" /></template>
+        <template #storehouse><BuildingLink type="storagehouse" /></template>
+      </i18n-t>
       <p class="text">{{ $t('docs.production.storage.overCap') }}</p>
     </section>
 

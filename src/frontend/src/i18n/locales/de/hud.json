@@ -109,7 +109,7 @@
   },
   "ringMenu": {
     "shrineLimitLock": "Dein Gebiet hat bereits einen Schrein",
-    "storageHouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
+    "greatStorehouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
     "occupiedLock": {
       "giant": "Von einem Riesenwahrzeichen belegt",
       "camp": "Hier hausen wilde Tiere – räum erst ihr Lager",
@@ -180,6 +180,7 @@
       "upgradeSub": "{building} · Stufe {from} → {to}",
       "givesTotal": "gesamt {amount}",
       "needResources": "Es fehlen {resources}",
+      "needResourcesIn": "Es fehlen {resources} · reicht in {time}",
       "needSlots": "Braucht {needed} Bauplatz · {free} von {total} frei | Braucht {needed} Bauplätze · {free} von {total} frei",
       "needSlotsNext": "Braucht {needed} Bauplatz · {free} von {total} frei · nächster frei in {time} | Braucht {needed} Bauplätze · {free} von {total} frei · nächster frei in {time}",
       "willQueue": "Wird hinter den laufenden Bauten eingereiht ({waiting} von {max} wartend)",
@@ -417,7 +418,7 @@
     "fieldOrderInstructions": "Klicke auf Hexfelder, um festzulegen, wohin diese Armee als Nächstes ziehen soll — der letzte Klick ist das neue Ziel. {count} {hexWord} geplant.",
     "hexWord": "Hexfeld | Hexfelder",
     "freeAccountWaypoints": "Kostenlos im Konto enthalten: ein Ziel, keine Zwischenstopps.",
-    "premiumWaypointsNeeded": "wird benötigt, um zusätzliche Wegpunkte zu planen.",
+    "premiumWaypointsNeeded": "wird benötigt, um bis zu 10 Wegpunkte zu planen.",
     "premium": "Premium",
     "dragPinHint": "Ziehe eine Markierung auf der Karte, um einen Wegpunkt zu verschieben.",
     "destinationTag": "Ziel",

@@ -166,6 +166,7 @@ public static class ArmyEndpoints
     private static async Task<Results<Created<ArmyResponse>, NotFound, Conflict<ProblemDetails>, BadRequest<ProblemDetails>>> Dispatch(
         Guid settlementId,
         DispatchArmyRequest request,
+        ClaimsPrincipal principal,
         ArmyService armies,
         TimeProvider time,
         CancellationToken cancellationToken)
@@ -233,7 +234,7 @@ public static class ArmyEndpoints
 
         var result = await armies.DispatchAsync(
             settlementId, [.. bySpot.Select(g => (g.Spot, (IReadOnlyList<UnitStack>)g.Stacks))], waypoints, destination, request.Provisions,
-            mission, request.TargetSettlementId, request.TargetBuildingCoord?.ToHexCoord(), cancellationToken);
+            CallerUserId(principal), mission, request.TargetSettlementId, request.TargetBuildingCoord?.ToHexCoord(), cancellationToken);
 
         if (result.WorldPaused)
         {
@@ -477,6 +478,20 @@ public static class ArmyEndpoints
         return TypedResults.Ok(ArmyResponse.From(entity!, clock.ToGameTime(time.GetUtcNow())));
     }
 
+    /// <summary>
+    /// The authenticated caller's id, or <see langword="null"/> for anonymous play, a real, ordinary caller of every army
+    /// endpoint: <c>ArmyService</c> treats a null id as never premium.
+    /// </summary>
+    private static Guid? CallerUserId(ClaimsPrincipal principal)
+    {
+        var idClaim = principal.Identity?.IsAuthenticated == true
+            ? principal.FindFirstValue(ClaimTypes.NameIdentifier)
+            : null;
+        return Guid.TryParse(idClaim, out var parsed) ? parsed : null;
+    }
+
+    private const string TooManyWaypoints = "Too many waypoints: an order takes at most 5, or 10 with premium.";
+
     private static async Task<Results<Ok<ArmyResponse>, NotFound, BadRequest<ProblemDetails>, Conflict<ProblemDetails>>> FieldOrder(
         Guid armyId,
         FieldOrderRequest request,
@@ -521,16 +536,8 @@ public static class ArmyEndpoints
         var waypoints = (request.Waypoints ?? []).Select(w => w.ToHexCoord()).ToList();
         var destination = request.Destination?.ToHexCoord();
 
-        // Anonymous play is a real, ordinary caller here (same as every other
-        // army endpoint) — GetIsPremiumAsync has nothing to check for one, so
-        // ArmyService.FieldOrderAsync just treats a null id as never premium.
-        var idClaim = principal.Identity?.IsAuthenticated == true
-            ? principal.FindFirstValue(ClaimTypes.NameIdentifier)
-            : null;
-        Guid? callerUserId = Guid.TryParse(idClaim, out var parsed) ? parsed : null;
-
         var result = await armies.FieldOrderAsync(
-            armyId, waypoints, destination, callerUserId, mission, request.TargetSettlementId,
+            armyId, waypoints, destination, CallerUserId(principal), mission, request.TargetSettlementId,
             request.TargetBuildingCoord?.ToHexCoord(), unitStacks, cancellationToken);
 
         if (result.ArmyNotFound)
@@ -600,6 +607,7 @@ public static class ArmyEndpoints
                 FieldOrderRejection.UnreachableLeg => NoLandRoute,
                 FieldOrderRejection.NoSeaRoute => NoSeaRoute,
                 FieldOrderRejection.RouteTooLong => RouteTooLong,
+                FieldOrderRejection.TooManyWaypoints => TooManyWaypoints,
                 FieldOrderRejection.InsufficientProvisionsForRoundTrip =>
                     "The provisions remaining (for a split, the share that goes with the leaving units) would not cover the round trip to the new destination.",
                 FieldOrderRejection.PremiumRequired =>
@@ -816,6 +824,7 @@ public static class ArmyEndpoints
                 DispatchRejection.UnreachableLeg => NoLandRoute,
                 DispatchRejection.NoSeaRoute => NoSeaRoute,
                 DispatchRejection.RouteTooLong => RouteTooLong,
+                DispatchRejection.TooManyWaypoints => TooManyWaypoints,
                 DispatchRejection.InsufficientProvisionsForRoundTrip =>
                     "The loaded provisions would not cover the full round trip's upkeep.",
                 DispatchRejection.TargetSettlementRequired => "This mission requires a target settlement.",

@@ -1,6 +1,7 @@
 // See RingMenuComponent.ts for why `expect` comes from here, not `../fixtures`.
 import { expect, type Locator, type Page } from '@playwright/test';
-import { captureCanvas, claimLandfall, foundSettlement, placeGuidedBuildings, waitForMapReady } from '../helpers';
+import { claimLandfall, foundSettlement, placeGuidedBuildings } from '../helpers';
+import { captureCanvas, waitForMapReady } from '../support/render';
 import { BuildingHudComponent } from './BuildingHudComponent';
 import { RingMenuComponent } from './RingMenuComponent';
 
@@ -448,6 +449,15 @@ export class SettlementPage {
       world.model.getSettlement(world.selectedSettlementId).capacity = c;
       world.syncHud();
     }, caps);
+  }
+
+  /**
+   * Funds the settlement for a late building: raises the storage caps and fills the stock to `amount` of wood, stone and food
+   * (stock is clamped to capacity, so the cap goes first).
+   */
+  async fund(amount: number): Promise<void> {
+    await this.setStorageCaps({ wood: amount, stone: amount, food: amount, iron: amount });
+    await this.setResources({ wood: amount, stone: amount, food: amount, iron: 0 });
   }
 
   /** The HUD's current resource read-out. */

@@ -46,8 +46,8 @@ public sealed class LinkedSettlementContextTests
     {
         var s = Found(10);
 
-        Assert.Equal(10, s.OwnConstructionSlots);
-        Assert.Equal(10, s.ConstructionSlots);
+        Assert.Equal(6, s.OwnConstructionSlots);
+        Assert.Equal(6, s.ConstructionSlots);
     }
 
     [Fact]
@@ -187,27 +187,26 @@ public sealed class LinkedSettlementContextTests
     }
 
     [Fact]
-    public void PlanBuild_counts_the_storage_houses_of_the_whole_group_for_an_extra_one()
+    public void PlanBuild_counts_the_maxed_storage_houses_and_great_storehouses_of_the_whole_group()
     {
         var coord = new HexCoord(1, 0);
         var ownHouse = new PlacedBuilding(new HexCoord(3, 0), BuildingType.StorageHouse, 25);
         var own = Found(25) with { Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, 25), ownHouse] };
-        var lowOther = new PlacedBuilding(new HexCoord(4, 0), BuildingType.StorageHouse, 1);
-        var highOther = new PlacedBuilding(new HexCoord(4, 0), BuildingType.StorageHouse, 25);
+        var otherHouse = new PlacedBuilding(new HexCoord(4, 0), BuildingType.StorageHouse, 25);
+        var otherGreat = new PlacedBuilding(new HexCoord(4, 1), BuildingType.GreatStorehouse, 1);
 
-        // Alone, one maxed house is enough for a second. With a second one standing in the group a third needs two high ones.
-        var alone = own.PlanBuild(BuildingType.StorageHouse, coord, Terrain.Grass, T0, Guid.CreateVersion7());
-        var withLow = (own with { Linked = Context(lh: 25, buildings: [lowOther]) })
-            .PlanBuild(BuildingType.StorageHouse, coord, Terrain.Grass, T0, Guid.CreateVersion7());
-        var withHigh = (own with { Linked = Context(lh: 25, buildings: [highOther]) })
-            .PlanBuild(BuildingType.StorageHouse, coord, Terrain.Grass, T0, Guid.CreateVersion7());
-        var withQueued = (own with { Linked = Context(lh: 25, queue: [Order(BuildingType.StorageHouse, new HexCoord(4, 1))]) })
-            .PlanBuild(BuildingType.StorageHouse, coord, Terrain.Grass, T0, Guid.CreateVersion7());
+        BuildDecision Plan(Settlement s) => s.PlanBuild(BuildingType.GreatStorehouse, coord, Terrain.Grass, T0, Guid.CreateVersion7());
 
-        Assert.NotEqual(BuildRejection.StorageHouseTooLow, alone.Rejection);
-        Assert.Equal(BuildRejection.StorageHouseTooLow, withLow.Rejection);
-        Assert.NotEqual(BuildRejection.StorageHouseTooLow, withHigh.Rejection);
-        Assert.Equal(BuildRejection.StorageHouseTooLow, withQueued.Rejection);
+        // Alone, one maxed house is enough for the first one. A great storehouse standing in the group makes the next need a second maxed house.
+        var alone = Plan(own);
+        var withGreat = Plan(own with { Linked = Context(lh: 25, buildings: [otherGreat]) });
+        var withGreatAndHouse = Plan(own with { Linked = Context(lh: 25, buildings: [otherGreat, otherHouse]) });
+        var withQueued = Plan(own with { Linked = Context(lh: 25, queue: [Order(BuildingType.GreatStorehouse, new HexCoord(4, 1))]) });
+
+        Assert.NotEqual(BuildRejection.GreatStorehouseNeedsStorageHouses, alone.Rejection);
+        Assert.Equal(BuildRejection.GreatStorehouseNeedsStorageHouses, withGreat.Rejection);
+        Assert.NotEqual(BuildRejection.GreatStorehouseNeedsStorageHouses, withGreatAndHouse.Rejection);
+        Assert.Equal(BuildRejection.GreatStorehouseNeedsStorageHouses, withQueued.Rejection);
     }
 
     [Fact]

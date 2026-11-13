@@ -7,7 +7,8 @@
 import { coordKey, hexDistance, hexesInRadius, hexRing, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import {
   SHRINE_BUILDING_TYPES,
-  additionalStorageHouseRequirement,
+  GREAT_STOREHOUSE_STORAGE_HOUSE_LEVEL,
+  greatStorehouseStorageHousesNeeded,
   maxTowers,
   ravensRings,
   wisdomBuildTimeFactor,
@@ -1999,13 +2000,23 @@ export class WorldModel {
 
   /**
    * This settlement's standing storage houses (hex and level), for the
-   * additional-storage-house rule (`additionalStorageHouseRequirement`): a new
-   * one needs enough of these at a high enough level.
+   * Great Storehouse count rule: the n-th Great Storehouse needs n of them at level 25.
    */
   storageHouses(settlementId: string): { q: number; r: number; level: number }[] {
     const levels: { q: number; r: number; level: number }[] = [];
     for (const tile of this.tiles.values()) {
       if (tile.ownerId === settlementId && tile.buildingType === 'storagehouse') {
+        levels.push({ q: tile.q, r: tile.r, level: tile.buildingLevel ?? 1 });
+      }
+    }
+    return levels;
+  }
+
+  /** This settlement's standing Great Storehouses (hex and level). */
+  greatStorehouses(settlementId: string): { q: number; r: number; level: number }[] {
+    const levels: { q: number; r: number; level: number }[] = [];
+    for (const tile of this.tiles.values()) {
+      if (tile.ownerId === settlementId && tile.buildingType === 'greatstorehouse') {
         levels.push({ q: tile.q, r: tile.r, level: tile.buildingLevel ?? 1 });
       }
     }
@@ -2298,13 +2309,12 @@ export class WorldModel {
     // A settlement raises one shrine in total, of any god (matches
     // BuildRejection.SettlementAlreadyHasShrine).
     if (type && SHRINE_BUILDING_TYPES.has(type) && this.shrineCoords(settlementId).length >= 1) return false;
-    // An additional storage house needs enough standing ones at a high enough
-    // level (matches BuildRejection.StorageHouseTooLow). Upgrades never go
-    // through here.
-    if (type === 'storagehouse') {
-      const held = this.storageHouses(settlementId);
-      const need = additionalStorageHouseRequirement(held.length);
-      if (held.length >= 1 && held.filter((h) => h.level >= need.level).length < need.count) return false;
+    // The n-th Great Storehouse needs n Storage Houses at level 25 (matches
+    // BuildRejection.GreatStorehouseNeedsStorageHouses). Upgrades never go through here.
+    if (type === 'greatstorehouse') {
+      const needed = greatStorehouseStorageHousesNeeded(this.greatStorehouses(settlementId).length);
+      const maxed = this.storageHouses(settlementId).filter((h) => h.level >= GREAT_STOREHOUSE_STORAGE_HOUSE_LEVEL).length;
+      if (maxed < needed) return false;
     }
     // A wall hex must keep every wall hex drawable (matches BuildRejection.PalisadeWouldBranch/GateNotOnStraight and the terrain
     // refusals): no branch, a gate only on a straight, no river, the sea end on exactly one land wall.

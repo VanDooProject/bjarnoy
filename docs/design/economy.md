@@ -13,11 +13,11 @@ formula changes, re-run the lab and check all of them.
 
 | # | Target | Measured as |
 |---|---|---|
-| T1 | A new player is never waiting in the first 10 minutes | founding stock covers every build started in the first 10 min; first builds take 1–3 min |
+| T1 | A new player is never waiting in the first 10 minutes | founding stock covers every build started in the first 10 min; first builds take 1–3 min (1, 2.8 and 8 min at levels 1 to 3) |
 | T2 | Something new unlocks often, one building at a time | at most one new building per Longhouse level (LH1 excepted); no run of 3+ LH levels without an unlock before LH 18 |
-| T3 | 2nd settlement: optimising player ≈ **5 days**, average player ≈ **2 weeks** | simulator profiles `pro` / `average` (§6) |
-| T4 | A settlement is "full" (LH 30, producers maxed) after **1–2 months** | `pro` ≈ 5–6 weeks, `average` ≈ 8–9 weeks |
-| T5 | Later levels still pay off, but ever more slowly | producer payback grows ~7% per level (cost ×1.30 vs output ×1.20) |
+| T3 | 2nd settlement: optimising player ≈ **1 week**, average player ≈ **2 weeks** | simulated (§6, with feasts): active d7.1, 4 check-ins d15.0, 2 check-ins d30.0; without feasts the active player d11.6; with the §9 build-time curves d16.3, d24.5, d34.5 (§6) |
+| T4 | A settlement is "full" (LH 30, producers maxed) after about **4–7 months** (LH 30 needs Great Storehouses, the Longhouse costs ×1.60 per level from level 11) | simulated: active ≈ d138 (about 4.5 months), 4 check-ins ≈ d207 (about 7 months) |
+| T5 | Later levels still pay off, but ever more slowly | producer payback grows ~8% per level (cost ×1.30 vs the level's added output ×1.20) |
 | T6 | Troops come before settling | Cart Workshop (settlers) at LH 10, after Barracks (LH 5) and Dockyard (LH 8) |
 | T7 | Territory grows through towers, not the Longhouse | Longhouse claim radius stops growing at LH 3 (§5) |
 
@@ -48,9 +48,8 @@ keys); it can be renamed to brick or clay when we work on those parts. The Germa
 - **Iron** — comes from **bog ore**: the bog-ore works stand on bog ground
   (§8, `bog.md`), and a **Hammer Forge** (water-powered hammer mill) on a
   bog creek boosts them later, the way the Sawmill boosts Lumberjacks. Before
-  the bog-ore works, the Longhouse is the only iron source, so buildings
-  cost no iron;
-  iron is a military resource (units, Tower).
+  the bog-ore works there is no iron source, so buildings cost no iron;
+  iron is a military resource (units).
 
 The **Magic Tower is removed**. The **Smithy** is renamed **Weaponsmith**
 (Waffenschmiede; its art has an anvil) so it doesn't clash with the
@@ -60,39 +59,94 @@ Only its display name changes; the internal type stays `smithy`.
 ## 3. Level formulas
 
 For a building with level-1 values `C₁` (cost, per resource), `P₁`
-(production/h) and `t₁` (build minutes):
+(production/h); build time follows its own curves (below):
 
 ```
-cost(L)       = C₁ · g_c^(L−1)           g_c = 1.30  (Longhouse 1.34)
-production(L) = P₁ · g_p^(L−1)           g_p = 1.20
-buildTime(L)  = t₁ · g_t^(L−1)           g_t = 1.33
+cost(L)       = C₁ · g_c^(L−1)           g_c = 1.30  (some buildings have their own, see below)
+                                         producers: levels 1, 2, 3 are multiplied by 0.6, 0.75, 0.9
+cost_LH(L)    = C₁ · 1.34^(L−1)          for L ≤ 10
+cost_LH(L)    = C₁ · 1.34^9 · 1.60^(L−10)  for L > 10
+production(L) = I₁ · (g_p^L − 1) / (g_p − 1)   g_p = 1.20
+buildTime(L)  = see "Build times" below       early curve (Longhouse, producers, Storage House) or tech curve (the rest)
 ```
 
-Costs and output are both geometric (Travian's shape), so the payback
-`cost(L) / (production(L) − production(L−1))` grows by 1.30/1.20 ≈ 1.08
+Build times, in minutes, rounded to whole seconds (`BuildingCatalogue.BuildTime`, one table):
+
+- **Early curve** (Longhouse, all resource producers, Storage House): 1 min at level 1, `8^(1/2)` = 2.83 min at level 2, 8 min at level 3, then doubling (16, 32, 64 min) up to level 6; from level 6 to the max level a log-like tail `64 + (top − 64) · ln(1 + 3u) / ln 4` with `u = (L − 6) / (max − 6)`.
+- **Tech curve** (every other building): a level-1 time by tech-tree position, then a straight line to the top-level time at the max level: `t₁ + (top − t₁) · (L − 1) / (max − 1)`.
+
+Costs and output are both geometric (Travian's shape). Each level of a
+producer adds `I₁ · g_p^(L−1)` per hour (increment-geometric), so `production(L)`
+is the level total, the same shape as the storage buildings' capacity. The payback
+`cost(L) / (production(L) − production(L−1))` therefore grows by 1.30/1.20 ≈ 1.08
 per level: the next level is always worth building, just less obviously.
+
+Every cost is rounded once for display and charge, per resource: below 100 to a
+whole number, 100–999 to the nearest 10, 1 000–9 999 to the nearest 50,
+10 000–99 999 to the nearest 500 (from four digits, a step of `5 · 10^(digits−3)`).
 
 ### Level-1 values
 
-| Building | C₁ wood/brick/food | P₁ /h | t₁ min |
+| Building | C₁ wood/brick/food | I₁ /h | build time: t₁ → top (max level) |
 |---|---|---|---|
-| Producers (Lumberjack, Quarry, Clay, Herder, Farm, Fishing) | 50 / 40 / 15 | 40 | 3 |
-| Longhouse | 120 / 100 / 60 | +15 wood, +12 brick, +15 food per level (linear) | 1.5 |
-| Storage House | 80 / 60 / 0 | +600 capacity · 1.22^(L−1) | 2.5 |
+| Lumberjack | 16 / 49 / 30 | 8 wood | 1 min → 20 h (L25) |
+| Clay Brickworks | 52 / 10 / 33 | 8 brick | 1 min → 22 h (L25) |
+| Quarry | 55 / 8 / 33 | 8 brick | 1 min → 22 h (L25) |
+| Reindeer Herder | 52 / 36 / 7 | 8 food | 1 min → 20 h (L25) |
+| Farm | 57 / 29 / 9 | 12 food | 1 min → 22 h (L25) |
+| Pumpkin Farm | 55 / 33 / 8 | 13 food | 1 min → 22 h (L25) |
+| Fishing Hut | 49 / 39 / 7 | 16 food | 1 min → 22 h (L25) |
+| Bog-ore works | 42 / 34 / 20 | 4 iron | 1 min → 24 h (L25) |
+| Longhouse | 120 / 100 / 60 | +15 wood, +15 food per level (linear; no brick, no iron) | 1 min → 26 h (L30) |
+| Storage House | 90 / 50 / 0, g_c 1.20 | +300 capacity · 1.22^(L−1) | 1 min → 20 h (L25) |
+| Great Storehouse | 4 500 / 3 000 / 0, g_c 1.23 | +50 000 capacity · 1.25^(L−1) | 2 h → 30 h (L10) |
+| Tower | 140 / 200 / 30 | | 10 min → 12 h (L5) |
+| Barracks | 100 / 78 / 43 | | 15 min → 22 h (L20) |
+| Town Square | 120 / 130 / 44 | | 20 min → 22 h (L20) |
+| Dockyard | 410 / 99 / 33 | | 30 min → 24 h (L20) |
+| Archery Range | 470 / 200 / 58 | | 45 min → 22 h (L20) |
+| Cart Workshop | 680 / 230 / 75 | | 1 h → 22 h (L20) |
+| Meadery | 860 / 470 / 230, g_c 1.30 | | 1 h → 24 h (L20) |
+| Druid Hut | 1 050 / 640 / 780, g_c 1.619 | | 1.5 h → 24 h (L20) |
+| Weaponsmith (Smithy) | 4 100 / 5 100 / 1 000, g_c 1.486 | | 2 h → 24 h (L20) |
+| Siege Workshop | 26 500 / 13 000 / 2 200, g_c 1.379 | | 3 h → 24 h (L20) |
+| Sawmill | 41 500 / 59 500 / 5 950, g_c 1.313 | | 4 h → 24 h (L20) |
+| Crop Mill | 59 500 / 41 500 / 5 950, g_c 1.313 | | 4 h → 24 h (L20) |
+| Hammer Forge (Hammerschmiede) | 59 000 / 37 500 / 10 500, g_c 1.313 | | 4 h → 24 h (L20) |
+| Shrines (Thor, Freyja, Ullr, Njörd, Odin Statue) | 475 000 / 505 000 / 150 000, g_c 2.140 | | 6 h → 24 h (L5) |
+| Palisade, Palisade Gate (per hex) | 540 / 150 / 40 | | 10 min → 1 h (L3) |
 
-(Other buildings: same formulas, `C₁`/`t₁` set per building in the
+- The starting buildings (Longhouse, Tower, Lumberjack, Reindeer Herder) cost no brick up to and including level 5. The Clay Brickworks costs no brick at level 1.
+- The Longhouse produces wood and food only: no brick, no iron.
+- Each producer level adds 20% more output than the level before it, starting at 8/h for wood and brick.
+- The food buildings are worth different amounts, so where you build food is a choice: Reindeer Herder 8/h (the start building), Farm 12/h, Pumpkin Farm 13/h, Fishing Hut 16/h (going to the shore for fish pays off).
+- Farms are the upgrade over Reindeer Herders: once Farms unlock, it pays to build Farms instead and tear the old Herders down.
+- The Pumpkin Farm yields more than the Farm, but no mill boosts it (the Crop Mill boosts Farms only).
+- A building costs least of the resource it produces; each building has its own mix of wood, brick and food.
+- Producer levels 1–3 cost less than the formula: ×0.6, ×0.75 and ×0.9.
+- A building's level 1 costs about a quarter of the Longhouse upgrade at the level it unlocks. The late buildings (the Druid Hut and everything unlocking from Longhouse 15 on) grow so that their top level costs 40% of a Longhouse 30; the shrines and the Druid Hut 50%.
+- The Longhouse gets dearer faster from level 11, after the level the second settlement needs.
+- The Palisade is priced as a strong defensive building: 540 wood, 150 brick and 40 food per wall hex at level 1.
+- Any number of Storage Houses may be built, and their level is not capped by the Longhouse.
+- The Great Storehouse is the follow-up to the Storage House: to hold n Great Storehouses you need n Storage Houses at level 25.
+- Maxing a storage building pays: each level is a little better value than the one before, because its cost grows slower than its capacity.
+- Building costs are round numbers: below 100 exact, three digits to the nearest 10 (148 → 150), from four digits to the nearest half step of the second digit (1 458 → 1 450).
+
+(Other buildings: same formulas, `C₁` set per building in the
 catalogue; the lab shows all of them.)
 
 What this gives for a producer:
 
+(a Farm, I₁ = 12; the brick and food costs are 29/57 and 9/57 of the wood)
+
 | L | cost (wood) | output /h | build time |
 |---|---|---|---|
-| 1 | 50 | 40 | 3 min |
-| 5 | 143 | 83 | 9 min |
-| 10 | 530 | 206 | 39 min |
-| 15 | 1 969 | 514 | 2.7 h |
-| 20 | 7 310 | 1 278 | 11 h |
-| 25 | 27 140 | 3 180 | 47 h |
+| 1 | 34 | 12 | 1 min |
+| 5 | 160 | 89 | 32 min |
+| 10 | 600 | 312 | 8.5 h |
+| 15 | 2 250 | 864 | 14.4 h |
+| 20 | 8 350 | 2 240 | 18.7 h |
+| 25 | 31 000 | 5 664 | 22 h |
 
 ## 4. Max level per building
 
@@ -106,26 +160,23 @@ has 3–8 stages per building, and each level maps onto a stage
 | Resource producers (incl. the bog-ore works), Storage House | 25 |
 | Military and civic buildings (Barracks, Archery Range, Siege Workshop, Dockyard, Town Square, Cart Workshop, Druid Hut, Weaponsmith, Meadery) | 20 |
 | Mills (Sawmill, Crop Mill, Hammer Forge) | 20 |
-| Tower | 10 |
+| Tower | 5 |
 | Great Storehouse | 10 |
 | Shrines | 5 (one per settlement) |
 | Palisade | 3 |
 | Bridge | 4 |
 
-Construction slots: `max(2, LH)` → 2 at LH 1–2, then one more per level (10 at LH 10, 30 at LH 30). A Longhouse upgrade occupies 90 % of them, rounded down (min 1): 1 of 2 at LH 1–2, 9 of 10 at LH 10.
+Construction slots: `max(2, 1 + floor(LH / 2))` → 2 at LH 1–3 (level 1 is the exception), then one more every second level (3 at LH 4, 6 at LH 10, 11 at LH 20, 16 at LH 30). A Longhouse upgrade occupies 90 % of them, rounded down (min 1): 1 of 2 at LH 1–3, 5 of 6 at LH 10, 9 of 11 at LH 20.
 
 **What caps a building's level.** Most buildings can never be a higher level
-than the Longhouse (level `L` needs LH `max(unlock, L)`), and Storage Houses
-keep that cap. The **resource producers** (Lumberjack, Quarry, Clay Brickworks,
-Reindeer Herder, Farm, Pumpkin Farm, Fishing Hut, bog-ore works) are capped by **storage**
+than the Longhouse (level `L` needs LH `max(unlock, L)`). The **resource producers** (Lumberjack, Quarry, Clay Brickworks,
+Reindeer Herder, Farm, Pumpkin Farm, Fishing Hut, bog-ore works) and the **Storage House** are capped by **storage**
 instead: they only need their unlock LH at every level, and a level whose cost
 exceeds what the settlement can store can never be afforded, so the next level
-has to fit in storage. Each **additional Storage House** raises the bar: with `n` held (standing plus
-queued), the next needs `min(n, 4)` Storage Houses at level
-`min(10 + 5·(n − 1), 25)`, so the second needs one at L10, the third two at L15,
-the fourth three at L20, the fifth four at L25, and once four are maxed any
-number more is allowed (the first is never held back, and upgrading is always
-allowed). See §5 for why.
+has to fit in storage. Any number of Storage Houses may be built. A new
+**Great Storehouse** needs one more Storage House at level 25 than the settlement
+already holds Great Storehouses (standing plus queued): the n-th needs n maxed
+Storage Houses (upgrading one is always allowed). See §5 for why.
 
 ## 5. Unlock ladder
 
@@ -150,7 +201,7 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 | 10 | Cart Workshop (settlers) | Town Square 3 |
 | 11 | Meadery | Farm 5 |
 | 12 | Druid Hut | Town Square 5 |
-| 15 | Weaponsmith, Great Storehouse | Barracks 10 / Storage House 15 |
+| 15 | Weaponsmith, Great Storehouse | Barracks 10 / Storage House 25 (the n-th Great Storehouse: n Storage Houses at 25) |
 | 18 | Siege Workshop (trains the catapult and the battering ram) | Archery Range 3 |
 | 20 | Sawmill, Crop Mill, Hammer Forge | Lumberjack 10 / Farm 10 / Bog-ore works 10 |
 | 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue | Sawmill 5 / Crop Mill 5 / Dockyard 10 / Weaponsmith 5 / **Druid Hut 10** (Odin) |
@@ -182,9 +233,9 @@ stalls at the cap; without it the active player's lead keeps growing.
 
 Storage stays a real brake because a higher producer level costs more than
 base capacity plus the Longhouse can hold, so storage has to grow with it.
-Storage Houses themselves keep the Longhouse cap, and each additional one needs
-more houses at a higher level (1 at L10, 2 at L15, 3 at L20, 4 at L25), so
-storage cannot be stacked cheaply in place of upgrading.
+Storage Houses are capped by storage too (any number, no Longhouse cap), and the
+Great Storehouse, the big capacity step, needs maxed Storage Houses (the n-th
+needs n at level 25), so the biggest storage cannot be had cheaply.
 
 **Design principle.** When an active player's first settlement slows down (the
 Longhouse and storage become the limit), the answer is a second settlement,
@@ -260,7 +311,7 @@ play.
 - **Linked realms share their stores.** Two of your settlements are linked when their realms touch (share a hex edge). Linked settlements share one stock: it is kept split between them in proportion to each one's storage capacity, per resource; production goes into it and a build in any of them draws from all of them in that ratio. When the link breaks, each keeps its share. The oldest settlement of a linked group is the one the game shows; the stock of the others is shown with it.
 - **A linked group is one realm.** It has one name (the oldest settlement's) and one stock. The newer settlements are left out of every list, yours and your rivals', and rivals see the oldest settlement's name on every longhouse of the group. Only their longhouses and the border stay on the map. You run the whole linked realm from the oldest settlement and can build on any of its hexes from there. A raid on any longhouse of the group can loot the whole stock.
 - A linked realm has one build queue: its construction slots are the members' slots added up, and a build on any of its hexes joins that queue.
-- In a linked realm, build requirements count for the whole realm: its highest longhouse level unlocks buildings on all of its ground, its tower limit is the members' limits added up, and the extra-storage-house requirement counts all of its storage houses.
+- In a linked realm, build requirements count for the whole realm: its highest longhouse level unlocks buildings on all of its ground, its tower limit is the members' limits added up, and the Great Storehouse count requirement counts all of its Storage Houses and Great Storehouses.
 - A linked realm's units eat from the shared food. When it runs out, the units with the highest upkeep across the whole realm starve first, until the shared food stops falling.
 - Leaderboards show a linked realm once, under the oldest settlement's name, with the members' scores added up; battle and trade reports use the realm's name.
 - A linked realm holds one shrine in total, like a settlement: while it holds one or more, no new shrine can be built in it. Settlements that each raised a shrine before they linked keep them all, and all of them keep working, so linking settlements is a way to combine favours.
@@ -308,9 +359,9 @@ merging them later.
 The settlement's wall, built **one hex at a time** (`BuildingType.Palisade` 30 and
 `BuildingType.PalisadeGate` 31, wire ids `palisade` and `palisadegate`; they share
 one tech-tree card, "Palisade / Gate", in the LH 7 row). It unlocks at Longhouse 7
-behind a level-5 Tower, and has **3 levels**. Per hex it costs `C₁ = 40 wood /
-10 brick`, no food, and takes `t₁ = 2 min` at level 1, with the standard growth
-(cost ×1.30 and time ×1.33 per level). It has no production, storage or claim.
+behind a level-5 Tower, and has **3 levels**. Per hex it costs `C₁ = 540 wood /
+150 brick / 40 food`, and takes 10 min at level 1 and 1 h at level 3 (tech curve), with the standard cost growth
+(×1.30 per level). It has no production, storage or claim.
 
 **Placement** (`Settlement.PlanBuild`, `Palisades/PalisadeRules.cs`; the frontend
 mirrors it in `palisadeTiles.ts`, and `src/shared/palisade-golden.json` keeps the
@@ -435,15 +486,15 @@ A bridge over a **wide river** (`BuildingType.Bridge` 32, wire id `bridge`). A w
 is impassable to every land army (`troop-movement-range.md` section 5); a bridge is the
 only way to open one. It unlocks at Longhouse 7 behind a level-1 Town Square, has **4
 levels** (a causeway, a footbridge, a king's bridge and a guarded bridge), and no
-production, storage or claim. Costs and times are set per level (no cost growth), wood-heavy,
+production, storage or claim. Costs are set per level (no cost growth), times follow the tech curve, wood-heavy,
 with brick from level 3 and no iron:
 
 | Level | Name | Wood | Brick | Food | Iron | Time |
 |---|---|---|---|---|---|---|
-| 1 | Causeway | 120 | 0 | 20 | 0 | 10 min |
-| 2 | Footbridge | 220 | 0 | 30 | 0 | 20 min |
-| 3 | King's bridge | 380 | 160 | 40 | 0 | 45 min |
-| 4 | Guarded bridge | 660 | 340 | 60 | 0 | 90 min |
+| 1 | Causeway | 120 | 0 | 20 | 0 | 30 min |
+| 2 | Footbridge | 220 | 0 | 30 | 0 | 1 h 20 min |
+| 3 | King's bridge | 380 | 160 | 40 | 0 | 2 h 10 min |
+| 4 | Guarded bridge | 660 | 340 | 60 | 0 | 3 h |
 
 **Placement** (`Settlement.PlanBuild`, `BuildingCatalogue.BridgeHex`): on the river hex
 itself, inside the claim, when the river tile is of shape Straight, Bend or Bend60 and
@@ -510,7 +561,7 @@ A new settlement needs:
 1. a Cart Workshop (LH 10, Town Square 3), so troops come first (T6);
 2. 5 Settlers, at the same price for every settlement;
 3. **renown**: +1 per building level per hour × world speed, across all settlements
-   (`Renown.cs`), never spent. Thresholds: **55 000** for the 2nd, then
+   (`Renown.cs`), never spent. Thresholds: **80 000** for the 2nd, then
    ×2 per settlement.
 
 Ships and land escorts may travel with the settlers, overland and by sea. With a ship in it the convoy is a fleet: it
@@ -534,21 +585,22 @@ player turns surplus into feasts.
 ### Tuning the gain
 
 The first guess, `6 000 · 1.20^(TS−1)`, was too strong: by day 60 the lab
-showed 2.4–3.7 million renown against a 55 000 threshold, so feasts stopped
+showed 2.4–3.7 million renown against a 55 000 threshold (the threshold is 80 000 now, see the rebalance note below), so feasts stopped
 mattering and the Cart Workshop's Longhouse 10 unlock became the only gate.
 The gain `G1 · g^(TS−1)` was picked on a grid, with the live catalogue and the
 lab's defaults (join 09:00, 3/3/3 producers, 2 storage houses, producers 3
-ahead), against four targets:
+ahead), against four targets (the grid and the chosen-gain table below were run on the catalogue before the rebalance;
+the numbers after the rebalance are in the last paragraph of this section):
 
 - active with feasts founds the 2nd settlement around day 5 (4.5–6.5), without
-  around day 13–14;
+  around day 12–14 (about day 12 since the lab's default start has clay pits and bog-ore works instead of quarries);
 - 4 check-ins with feasts around day 13–15;
-- renown is the binding gate for the active player (it reaches 55 000 well
-  after Longhouse 10, which is done on day 3.4);
-- renown on day 30 with feasts stays within 3–6× the no-feast figure, so the
-  3rd and 4th thresholds (110k, 220k) still mean something.
+- renown is the binding gate for the active player (it reaches 80 000 well
+  after Longhouse 10, which is done on day 4.1);
+- renown on day 30 with feasts stays within 2–6× the no-feast figure, so the
+  3rd and 4th thresholds (160k, 320k) still mean something.
 
-| G1 | g | active 2nd | active renown 55k | active r30 (x no-feast) | 4 check-ins 2nd | 4 check-ins r30 (x) | 2 check-ins 2nd |
+| G1 | g | active 2nd | active renown 55k (old threshold) | active r30 (x no-feast) | 4 check-ins 2nd | 4 check-ins r30 (x) | 2 check-ins 2nd |
 |---|---|---|---|---|---|---|---|
 | no feasts | | d13.48 | d13.47 | 162k | d20.65 | 106k | d28.18 |
 | 1500 | 1 | d10.08 | d10.08 | 241k (1.5x) | d16.18 | 157k (1.5x) | d25.98 |
@@ -584,14 +636,28 @@ ahead), against four targets:
 
 **Chosen: `G(TS) = 3 500 · 1.15^(TS−1)`.**
 
-| Profile | 2nd settlement, no feasts | 2nd settlement, feasts | Renown reaches 55k (feasts) | Longhouse 10 | Renown day 30, feasts (no feasts) | Binds with feasts |
+| Profile | 2nd settlement, no feasts | 2nd settlement, feasts | Renown reaches 55k (feasts, old threshold) | Longhouse 10 | Renown day 30, feasts (no feasts) | Binds with feasts |
 |---|---|---|---|---|---|---|
 | active | d13.5 | d6.4 | d6.4 | d3.4 | 773k (162k, 4.8×) | renown |
 | 4 check-ins | d20.7 | d13.0 | d12.5 | d13.0 | 408k (106k, 3.9×) | Longhouse 10 (renown half a day earlier) |
 | 2 check-ins | d28.2 | d26.0 | d18.5 | d26.0 | 211k (61k, 3.4×) | Longhouse 10 |
 
-These runs predate the faster Longhouse (t₁ 1.5 min ×1.33, §3). With it, the
-4-check-ins player settles about half a day earlier (d12.35 in the lab test).
+These runs predate the faster Longhouse and the cost rebalance, and the build-time curves of §9.
+
+**After the rebalance** (threshold 80 000, Longhouse ×1.60 from level 11, producers' first levels cheaper, every
+tower adding one more producer of each type, the Cart Workshop and its Town Square paid for, three Lumberjacks, Clay
+Brickworks and Reindeer Herders and two bog-ore works, join 09:00, producers 3 ahead; the same gain
+`3 500 · 1.15^(TS−1)`): the 2nd settlement comes on day 7.1 for the active player with feasts (11.6 without), day 15.0
+for 4 check-ins and day 30.0 for 2 check-ins. Longhouse 10 is reached on day 4.1 (active) and day 14.5 (4 check-ins),
+so renown binds the active player and the Longhouse the 4-check-ins player. Feasts multiply the day-30 renown by about
+2.7× for the active player and 3.3× for 4 check-ins.
+
+**With the build-time curves of §9 and one builder slot every second Longhouse level** (construction-slots.md; same
+settings, simulated 2026-11): the 2nd settlement comes on day 10.0 for the active player with feasts (16.6 without), day
+17.0 for 4 check-ins and day 29.5 for 2 check-ins. Longhouse 10 is reached on day 9.9 (active, feasts), day 10.3 (active,
+no feasts) and day 16.9 (4 check-ins), Longhouse 30 on day 255 (active). Renown reaches 80 000 on day 9.4 for the active
+player with feasts, so the Longhouse 10 unlock binds every profile by about half a day, not renown as the §6 target above
+asks. Feasts multiply the day-30 renown by about 3.1× for the active player.
 
 Feasts are what lets an active player settle a week early. A casual player
 gains a few days at most, because the Longhouse 10 unlock is still ahead of
@@ -602,13 +668,13 @@ their renown.
 - Founding stock: the starting storage nearly full — capacity (500 base +
   250 from the Longhouse) less 50, so 700 wood / 700 brick / 700 food, no
   iron.
-- Level-1 producers cost 50 / 40 / 15 and build in 3 min; the Longhouse is
-  +15 / 12 / 15 per level.
+- Level-1 producers cost between 16 and 57 wood, 8 and 49 brick, 7 and 33 food (each its own mix, §3; no brick for the Lumberjack and the
+  Reindeer Herder, nor for the Clay Brickworks) and build in 1 min; the
+  Longhouse is +15 wood and +15 food per level.
 - **Onboarding quests pay resources** (Travian's task list), so the first
   hour keeps moving. They never hand out a finished building, so the
   Longhouse 2 upgrade the tutorial asks for has to build fast: the
-  Longhouse's `t₁` is 1.5 min at the shared ×1.33, so LH 2 builds in about 2
-  min. The tutorial also walks the player through placing a Storage
+  Longhouse builds level 2 in 2.8 min. The tutorial also walks the player through placing a Storage
   House and upgrading the Longhouse.
 
   The quests come in this order (`Bjarnoy.Domain.Settlers.Quests`, mirrored
@@ -632,7 +698,9 @@ their renown.
   - **Manual claim.** A completed quest pays nothing until the player presses
     Claim in the quest tray (`POST /settlements/{id}/quests/{questId}/claim`).
     The tray shows the first unclaimed quest, plus any other completed one so
-    it can be claimed; quests can be claimed in any order. Claims are optional
+    it can be claimed, plus (when the first one is already claimable) the first
+    unfinished quest as "Up next" so there is always something to work on;
+    quests can be claimed in any order. Claims are optional
     and never gate anything (not even "Hunt a camp"), so a player may hold
     rewards back: unclaimed quest loot works as a hidden storage buffer.
   - **Exactly once per settlement.** Each quest has a bit in the settlement's
@@ -659,7 +727,7 @@ their renown.
     became claimable.
 
 Simulated: the first 25 minutes are continuous building (9 producers, then
-LH 2 at about 13 min), LH 3 at about 1h45.
+LH 2 at about 13 min), LH 3 at about 1h15.
 
 ## 8. Iron: bog ore
 
@@ -690,8 +758,8 @@ The art for this is the **bog set** in `VanDooProject/3D_assets`
   within range, with the mills' percent and range curve. It is drawn with the
   river hammer-mill art until its own bog-creek art exists.
 
-A furnace alone creates no ore, so bog ore is the only real source, and the
-Longhouse gives a small trickle (+2 iron/h per level).
+A furnace alone creates no ore, so bog ore is the only source: the Longhouse
+makes no iron.
 
 **Iron is an indirect gate for the army.** Buildings cost no iron. Every
 unit costs iron except the cheap first unit (Thrall), so how fast you can
@@ -700,7 +768,7 @@ sources have to line up with the unit unlocks:
 
 | When | Iron source | Units it has to carry |
 |---|---|---|
-| LH 1–2 | Longhouse trickle only (2–4 iron/h) | Thrall (no iron) |
+| LH 1–2 | none | Thrall (no iron) |
 | from LH 3 | bog-ore works: bog ground has to be in reach of every start (`bog.md`) | the Barracks' first Spearmen (LH 5), then the main army: Axeman, Bowman, Karve, Settler, Provisioner |
 | LH 20 | Hammer Forge (bog creek) boosts bog ore | elite units: Berserker, Catapult, Longship |
 
@@ -731,52 +799,50 @@ them so the levels match. *Implemented:*
 
 ### Bog-ore works numbers (Economy lab)
 
-The bog-ore works follow the producer formulas (§3): cost 50 / 40 / 15 like
-the other producers, output `P₁ · 1.20^(L−1)`, terrain boost +10% per
-neighbouring bog, creek or lake hex up to +50%, storage-capped (§4). **P₁ = 20
-iron/h** (the other producers: 40). The lab places a producer that unlocks late
+The bog-ore works follow the producer formulas (§3): cost 42 / 34 / 20 (its own mix, §3),
+ each level adds `I₁ · 1.20^(L−1)`, terrain boost +10% per
+neighbouring bog, creek or lake hex up to +50%, storage-capped (§4). **I₁ = 4
+iron/h** (the other producers: 8 to 13). The lab places a producer that unlocks late
 (a level-1 gate above Longhouse 1) when its Longhouse level, prerequisites, a
 free slot and the stock allow, instead of assuming it stands from minute 0.
 
-Why 20: iron is the indirect gate for the army, so it must stay scarcer than
+Why 4: iron is the indirect gate for the army, so it must stay scarcer than
 wood. A unit costs about half as much iron as wood (Spearman 40 iron / 80
 wood, Karve 100 / 250, Catapult 250 / 300), so iron income at about **half of
-wood income** makes both equally binding. With the default three bog-ore
-works the lab (three producers each of wood, brick and food, two storage
-houses, producers up to three levels ahead) gives iron/wood 0.44 to 0.49 from
-Longhouse 8 on; one works gives 0.16, so a settlement with one works is
-iron-limited. P₁ 40 gave 0.9 (iron never binds), P₁ 10 gave 0.23.
+wood income** makes both equally binding. With three bog-ore works the lab
+(three Lumberjacks, Quarries and Farms, one Clay Brickworks, two storage
+houses, producers up to three levels ahead) gives iron/wood 0.40 to 0.48 from
+Longhouse 5 on; one works gives 0.14 to 0.16, so a settlement with one works is
+iron-limited.
 
-Iron per hour by Longhouse level (three works, P₁ 20; the Longhouse trickle
-included). The profile only shifts *when* a level is reached:
+Iron per hour by Longhouse level (three works, I₁ 4; the Longhouse makes no
+iron). The profile only shifts *when* a level is reached:
 
 | LH | iron/h | reached: active | 4 check-ins | 2 check-ins |
 |---|---|---|---|---|
-| 3 (works open) | 66 | day 0.9 | day 3.0 | day 6.0 |
-| 5 (Barracks) | 189 | day 1.6 | day 7.1 | day 14.5 |
-| 6 | 227 | day 2.0 | day 9.0 | day 18.0 |
-| 8 | 326 | day 3.1 | day 12.3 | day 25.0 |
-| 10 | 466 | day 4.2 | day 16.3 | day 33.0 |
-| 15 | 1 139 | day 9.0 | day 25.4 | day 49.0 |
-| 20 | 2 800 | day 20.2 | day 40.6 | — (past day 60) |
+| 3 (works open) | 22 | day 0.4 | day 2.3 | day 5.0 |
+| 5 (Barracks) | 155 | day 1.5 | day 6.1 | day 12.5 |
+| 6 | 198 | day 2.0 | day 7.5 | day 15.5 |
+| 8 | 312 | day 3.1 | day 10.5 | day 21.5 |
+| 10 | 475 | day 4.9 | day 14.1 | day 28.5 |
+| 15 | 1 271 | day 12.0 | day 22.0 | day 42.0 |
+| 20 | 3 252 | day 32.2 | day 39.2 | day 55.7 |
 
-Iron before the works (Longhouse 1 and 2) is the Longhouse trickle alone
-(2/h per level). From Longhouse 3 the works carry it, so the Barracks' first
-Spearmen (LH 5) are paid from works income, and every other unit is
-affordable the moment its gate opens, because its gate opens with or after
-the works: Axeman at LH 6, Karve at LH 8, Settler and Provisioner at
-LH 10, the elite units at LH 20 (income 2 800/h against a Catapult's 250).
-The table is the Economy lab's own default setup re-run for the LH 3 unlock
-(three Lumberjacks, Quarries and Reindeer Herders, three bog-ore works, two
-storage houses, producers up to three levels ahead, joining at 09:00, 60 days).
+There is no iron before the works (Longhouse 1 and 2). From Longhouse 3
+the works carry it, so the Barracks' first Spearmen (LH 5) are paid from
+works income, and every other unit is affordable the moment its gate opens,
+because its gate opens with or after the works: Axeman at LH 6, Karve at LH 8,
+Settler and Provisioner at LH 10, the elite units at LH 20 (income 3 252/h
+against a Catapult's 250). The table is the Economy lab's own setup re-run for the
+rebalanced catalogue (three Lumberjacks, Quarries and Farms, one Clay
+Brickworks, three bog-ore works, two storage houses, producers up to three
+levels ahead, joining at 09:00, 60 days).
 
-Second-settlement timing (§6) is unchanged as long as the lab's default
-producers are used (no bog-ore works: 6.4 / 12.3 / 25.0 days for active / 4
-check-ins / 2 check-ins). A lab run that adds works delays it, because the
-simulator's greedy player upgrades the scarce iron producer ahead of the others:
-one works gives 7.4 / 14.3 / 29.0 days, three works 7.1 / 16.1 / 32.5. That is a
-simulator artefact (a player raises iron only as far as the army needs), not a
-target; the default count stays 0.
+Second-settlement timing (§6) needs iron for the Settlers, so a lab run without
+bog-ore works never settles. With the lab's default producers plus two bog-ore works
+(three Lumberjacks, Clay Brickworks and Reindeer Herders, feasts on) it
+is 7.1 days for the active player and 15.0 for 4 check-ins; without feasts the
+active player settles at 11.6 days (§6, after the rebalance).
 
 ## 9. Pacing model (the Economy lab)
 
@@ -798,7 +864,18 @@ acts inside them, starting at a join time (default 09:00). The lab also has a
 24 h reference profile and an editable custom schedule, a *producers ahead of
 the Longhouse* strategy setting, a what-if panel (growth factors and level-1
 values, shown dashed next to the live catalogue) and a second-settlement
-check (renown, optional feasts).
+check (renown, optional feasts). It models the settlement's growth the way a player plays it: every tower the
+Longhouse allows adds one more producer of each owned type (a setting, default 1, placed when affordable; they do not hold
+the Longhouse back, and the starting set is upgraded first); while saving for the Longhouse it still starts a producer
+upgrade that pays back sooner than the Longhouse would be affordable; storage is built only when the next Longhouse level
+or a producer's next level costs more than the current capacity (upgrade the lowest Storage House, a new one only when none
+can be upgraded, the lowest or a new Great Storehouse, the best capacity per cost); and the Town Square and the Cart Workshop
+are built and paid for like any building.
+
+The admin page **Pacing bench** (`/admin/pacing-bench`) runs this simulator on the what-if catalogue (`whatIf.ts`) for four fixed
+profiles (active with and without feasts, 4 and 2 check-ins with feasts) and compares them with a pinned reference run: the
+producer counts and level-1 outputs, the producers' cost growth and early price factors, the Longhouse's growth and break level,
+the two storage buildings' capacity and cost, the renown threshold and the simulated days are its knobs.
 
 ### What the simulator showed
 
@@ -830,15 +907,32 @@ check (renown, optional feasts).
 Short build times do two things at once: the first hour is a run of real
 moves instead of waiting, and a player who checks in often can chain builds
 while an infrequent player's slots sit idle. The cost is that casual players
-fall further behind and everyone reaches the caps sooner. Hence the growing
-curve (×1.33 per level): short early for the entry, long late so a casual
-player can keep up.
+fall further behind and everyone reaches the caps sooner. Hence the curves:
+short early for the entry (1 min, 2.8 min, 8 min, then doubling to 64 min at
+level 6), long late so a casual player can keep up.
 
-Towers follow the same logic (8 min at level 1, about 1 h 45 at level 10).
+| Curve | Buildings | Level 1 | Level 3 | Level 6 | Top level |
+|---|---|---|---|---|---|
+| Early, log-like tail | Longhouse | 1 min | 8 min | 64 min | 26 h (L30) |
+| | Lumberjack, Reindeer Herder | 1 min | 8 min | 64 min | 20 h (L25) |
+| | Clay Brickworks, Quarry, Farm, Pumpkin Farm, Fishing Hut | 1 min | 8 min | 64 min | 22 h (L25) |
+| | Bog-ore works | 1 min | 8 min | 64 min | 24 h (L25) |
+| | Storage House | 1 min | 8 min | 64 min | 20 h (L25) |
+| Tech, straight line | Tower, Barracks, Town Square, Palisade and Gate, Bridge, Dockyard | 10–30 min | | | 1–24 h |
+| | Archery Range, Cart Workshop, Meadery, Druid Hut, Weaponsmith, Siege Workshop | 45 min–3 h | | | 22–24 h |
+| | Great Storehouse | 2 h | | | 30 h (L10) |
+| | Sawmill, Crop Mill, Hammer Forge | 4 h | | | 24 h |
+| | Shrines | 6 h | | | 24 h |
+
+The tech buildings start at a time that grows with their place in the tech
+tree, so a late building is a real commitment from its first level. Towers
+follow the same logic (10 min at level 1, 12 h at level 5).
 The active edge there is bounded by the tower count, which grows with the
 Longhouse (§5), so the edge is getting each tower sooner, not getting more
 of them. The premium build queue works the other way: it lets a casual
 player queue past full slots, which gives back some of the idle time.
+
+The Pacing bench (admin) has the curves' knee level, tail shape and top hours as knobs and charts them per level.
 
 ## 10. Raiding, wildlife and snowballing
 
@@ -891,7 +985,7 @@ Open work, in rough order. Each is its own PR.
 1. ~~**Economy lab:** session-based profiles, what-if panel, producers-ahead
    strategy and second settlement.~~ Done.
 2. ~~**Feasts and renown** (§6): Town Square feasts, and the renown threshold
-   for the 2nd settlement at 55 000.~~ Done.
+   for the 2nd settlement at 80 000.~~ Done.
 3. **Tutorial** (§7): placing a Storage House and upgrading the Longhouse,
    resource rewards for the onboarding steps, and a fast Longhouse 2 (about
    2 minutes).

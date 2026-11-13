@@ -23,6 +23,30 @@ public class HexPathfinderTests
     }
 
     [Fact]
+    public void Search_with_a_small_budget_reports_the_limit_and_the_budget_as_expanded()
+    {
+        var search = HexPathfinder.Search(new HexCoord(0, 0), new HexCoord(20, 0), AllGrass(), isLandUnit: true, maxExpandedNodes: 5);
+
+        Assert.True(search.LimitReached);
+        Assert.Null(search.Path);
+        Assert.Equal(5, search.Expanded);
+    }
+
+    [Fact]
+    public void Search_that_finds_its_route_reports_how_many_nodes_it_expanded()
+    {
+        var search = HexPathfinder.Search(new HexCoord(0, 0), new HexCoord(4, 0), AllGrass(), isLandUnit: true);
+
+        Assert.False(search.LimitReached);
+        Assert.NotNull(search.Path);
+        Assert.InRange(search.Expanded, 1, HexPathfinder.MaxExpandedNodes);
+
+        // Exactly that budget is enough, one less is not.
+        Assert.NotNull(HexPathfinder.Search(new HexCoord(0, 0), new HexCoord(4, 0), AllGrass(), isLandUnit: true, maxExpandedNodes: search.Expanded).Path);
+        Assert.True(HexPathfinder.Search(new HexCoord(0, 0), new HexCoord(4, 0), AllGrass(), isLandUnit: true, maxExpandedNodes: search.Expanded - 1).LimitReached);
+    }
+
+    [Fact]
     public void Returns_a_single_hex_path_when_from_and_to_are_the_same()
     {
         var coord = new HexCoord(2, 2);
@@ -791,5 +815,111 @@ public class HexPathfinderTests
         }
 
         return line;
+    }
+
+    private static int Turns(IReadOnlyList<HexCoord> path)
+    {
+        var turns = 0;
+        for (var i = 2; i < path.Count; i++)
+        {
+            if (path[i] - path[i - 1] != path[i - 1] - path[i - 2])
+            {
+                turns++;
+            }
+        }
+
+        return turns;
+    }
+
+    private static void AssertHexByHex(IReadOnlyList<HexCoord> path)
+    {
+        for (var i = 1; i < path.Count; i++)
+        {
+            Assert.Equal(1, path[i - 1].DistanceTo(path[i]));
+        }
+    }
+
+    [Fact]
+    public void Open_sea_fleet_route_between_off_axis_points_is_one_straight_hex_line()
+    {
+        var from = new HexCoord(0, 0);
+        var to = new HexCoord(30, -11);
+
+        var path = HexPathfinder.FindPath(from, to, _ => Terrain.Sea, isLandUnit: false);
+
+        Assert.NotNull(path);
+        Assert.Equal(HexCoord.Line(from, to), path);
+        Assert.Equal(from.DistanceTo(to) + 1, path!.Count);
+        // Not the unsmoothed shape: an axis leg and a diagonal leg meeting in one corner.
+        Assert.NotEqual(1, Turns(path));
+        AssertHexByHex(path);
+    }
+
+    [Fact]
+    public void Open_grass_land_route_between_off_axis_points_is_the_straight_hex_line()
+    {
+        var from = new HexCoord(0, 0);
+        var to = new HexCoord(30, -11);
+
+        var path = HexPathfinder.FindPath(from, to, AllGrass(), isLandUnit: true);
+
+        Assert.Equal(HexCoord.Line(from, to), path);
+    }
+
+    [Fact]
+    public void Keeps_the_detour_when_the_straight_line_is_passable_but_dearer()
+    {
+        var from = new HexCoord(0, 0);
+        var to = new HexCoord(8, 0);
+
+        // Forest band along the straight line, a grass strip one row above it.
+        Terrain TerrainAt(HexCoord c) =>
+            c.R == -1 && c.Q is >= 0 and <= 8 ? Terrain.Grass
+            : c.R == 0 && c.Q is >= 1 and <= 7 ? Terrain.Forest
+            : c.R == 0 && c.Q is 0 or 8 ? Terrain.Grass
+            : Terrain.Sea;
+
+        var path = HexPathfinder.FindPath(from, to, TerrainAt, isLandUnit: true)!;
+        var line = HexCoord.Line(from, to);
+
+        Assert.NotEqual(line, path);
+        Assert.Contains(path, c => c.R == -1);
+        Assert.True(
+            HexPathfinder.CumulativeHours(line, TerrainAt, 1.0, true)[^1] > HexPathfinder.CumulativeHours(path, TerrainAt, 1.0, true)[^1]);
+        AssertHexByHex(path);
+    }
+
+    [Fact]
+    public void Smoothing_never_makes_the_route_dearer_on_mixed_terrain()
+    {
+        Terrain[] kinds = [Terrain.Grass, Terrain.Grass, Terrain.Forest, Terrain.Sand, Terrain.Bog];
+        Terrain TerrainAt(HexCoord c) =>
+            c.Q is >= 0 and <= 14 && c.R is >= -14 and <= 0 ? kinds[((c.Q * 7) + (c.R * 5) + 140) % kinds.Length] : Terrain.Sea;
+
+        var from = new HexCoord(0, 0);
+        var to = new HexCoord(14, -9);
+
+        var path = HexPathfinder.FindPath(from, to, TerrainAt, isLandUnit: true)!;
+        AssertHexByHex(path);
+
+        // Never below the grass-only lower bound (the hex distance), never above the straight line (when that is passable it is a candidate).
+        var cost = HexPathfinder.CumulativeHours(path, TerrainAt, 1.0, true)[^1];
+        Assert.True(cost >= from.DistanceTo(to) - 1e-9);
+        var line = HexCoord.Line(from, to);
+        Assert.True(cost <= HexPathfinder.CumulativeHours(line, TerrainAt, 1.0, true)[^1] + 1e-9);
+    }
+
+    [Fact]
+    public void Fleet_route_to_a_shore_goal_is_hex_by_hex_with_the_goal_as_its_only_land_hex()
+    {
+        var to = new HexCoord(20, -7);
+
+        Terrain TerrainAt(HexCoord c) => c == to ? Terrain.Sand : Terrain.Sea;
+
+        var path = HexPathfinder.FindPath(new HexCoord(0, 0), to, TerrainAt, isLandUnit: false)!;
+
+        AssertHexByHex(path);
+        Assert.Equal(to, path[^1]);
+        Assert.All(path.Take(path.Count - 1), c => Assert.Equal(Terrain.Sea, TerrainAt(c)));
     }
 }
