@@ -321,9 +321,11 @@ public sealed record ResourceAmountsResponse(double Wood, double Stone, double F
         new(amounts.Wood, amounts.Stone, amounts.Food, amounts.Iron);
 }
 
-public sealed record BattleReportAttackerLineResponse(string Unit, int Sent, int Lost, int Survived);
+/// <param name="Lost">Every loss of the fight; <paramref name="VolleyLost"/> is the part the volley took.</param>
+public sealed record BattleReportAttackerLineResponse(string Unit, int Sent, int Lost, int Survived, int VolleyLost = 0);
 
-public sealed record BattleReportDefenderLineResponse(string Unit, int Lost, int Survived);
+/// <param name="Lost">Every loss of the fight; <paramref name="VolleyLost"/> is the part the volley took.</param>
+public sealed record BattleReportDefenderLineResponse(string Unit, int Lost, int Survived, int VolleyLost = 0);
 
 /// <summary>The building-damage section of a battle report (issue #40 phase 5) — present only when catapult damage actually happened.</summary>
 public sealed record BattleReportSiegeResponse(
@@ -349,8 +351,8 @@ public sealed record BattleReportShipFightResponse(
         fight is null
             ? null
             : new BattleReportShipFightResponse(
-                [.. fight.AttackerLines.Select(l => new BattleReportAttackerLineResponse(l.Type.ToWireName(), l.Sent, l.Lost, l.Survived))],
-                [.. fight.DefenderLines.Select(l => new BattleReportDefenderLineResponse(l.Type.ToWireName(), l.Lost, l.Survived))],
+                [.. fight.AttackerLines.Select(l => new BattleReportAttackerLineResponse(l.Type.ToWireName(), l.Sent, l.Lost, l.Survived, l.VolleyLost))],
+                [.. fight.DefenderLines.Select(l => new BattleReportDefenderLineResponse(l.Type.ToWireName(), l.Lost, l.Survived, l.VolleyLost))],
                 fight.AttackPower,
                 fight.DefensePower,
                 fight.Winner.ToString().ToLowerInvariant());
@@ -363,6 +365,8 @@ public sealed record BattleReportShipFightResponse(
 /// </param>
 /// <param name="Winner">The whole attack's winner: <c>"attacker"</c> unless a fight was lost.</param>
 /// <param name="AttackPower">The land fight's attack power (the only fight of a land army); zero when a fleet fought no land fight.</param>
+/// <param name="AttackerVolleyPower">The attacker's ranged attack in the land fight's volley; zero without ranged units.</param>
+/// <param name="DefenderVolleyPower">The defender's ranged attack in the land fight's volley; zero without ranged units.</param>
 /// <param name="AttackerLines">The land fight's attacking side; empty when a fleet fought no land fight.</param>
 /// <param name="Siege">The siege engines' building damage after a won land fight.</param>
 /// <param name="ShipFight">The fight at sea of a fleet; <see langword="null"/> for a land army, a target without ships and older reports.</param>
@@ -383,6 +387,8 @@ public sealed record BattleReportResponse(
     string Winner,
     double AttackPower,
     double DefensePower,
+    double AttackerVolleyPower,
+    double DefenderVolleyPower,
     int Seed,
     ResourceAmountsResponse LootTaken,
     IReadOnlyList<BattleReportAttackerLineResponse> AttackerLines,
@@ -421,10 +427,12 @@ public sealed record BattleReportResponse(
             domain.Winner.ToString().ToLowerInvariant(),
             domain.AttackPower,
             domain.DefensePower,
+            domain.AttackerVolleyPower,
+            domain.DefenderVolleyPower,
             domain.Seed,
             ResourceAmountsResponse.From(domain.LootTaken),
-            [.. domain.AttackerLines.Select(l => new BattleReportAttackerLineResponse(l.Type.ToWireName(), l.Sent, l.Lost, l.Survived))],
-            [.. domain.DefenderLines.Select(l => new BattleReportDefenderLineResponse(l.Type.ToWireName(), l.Lost, l.Survived))],
+            [.. domain.AttackerLines.Select(l => new BattleReportAttackerLineResponse(l.Type.ToWireName(), l.Sent, l.Lost, l.Survived, l.VolleyLost))],
+            [.. domain.DefenderLines.Select(l => new BattleReportDefenderLineResponse(l.Type.ToWireName(), l.Lost, l.Survived, l.VolleyLost))],
             BattleReportSiegeResponse.From(domain.Siege),
             BattleReportShipFightResponse.From(domain.ShipFight),
             [.. domain.Drowned.Select(d => new ArmyUnitStackResponse(d.Type.ToWireName(), d.Count))],
@@ -433,10 +441,11 @@ public sealed record BattleReportResponse(
     }
 }
 
-public sealed record FieldBattleReportLineResponse(string Side, bool IsLoss, string Unit, int Count)
+/// <param name="VolleyCount">On a loss line: the part of <paramref name="Count"/> the volley took.</param>
+public sealed record FieldBattleReportLineResponse(string Side, bool IsLoss, string Unit, int Count, int VolleyCount = 0)
 {
     public static FieldBattleReportLineResponse From(FieldBattleReportLineEntity line) =>
-        new(line.Side.ToString().ToLowerInvariant(), line.IsLoss, line.UnitType.ToWireName(), line.Count);
+        new(line.Side.ToString().ToLowerInvariant(), line.IsLoss, line.UnitType.ToWireName(), line.Count, line.VolleyCount);
 }
 
 /// <summary>
@@ -462,6 +471,8 @@ public sealed record FieldBattleReportResponse(
     string Winner,
     double SideAPower,
     double SideBPower,
+    double SideAVolleyPower,
+    double SideBVolleyPower,
     bool SideAWasDefending,
     bool SideBWasDefending,
     int Seed,
@@ -495,6 +506,8 @@ public sealed record FieldBattleReportResponse(
             ((FieldBattleWinner)entity.Winner).ToString().ToLowerInvariant(),
             entity.SideAPower,
             entity.SideBPower,
+            entity.SideAVolleyPower,
+            entity.SideBVolleyPower,
             entity.SideAWasDefending,
             entity.SideBWasDefending,
             entity.Seed,
@@ -514,7 +527,8 @@ public sealed record CampReportCampResponse(int Q, int R, string Family, int Eff
 public sealed record CampReportUnitLineResponse(string Type, int Sent, int Lost);
 
 /// <summary>One beast tier's count before a camp fight and how many died.</summary>
-public sealed record CampReportBeastLineResponse(string Tier, int Before, int Lost);
+/// <param name="Lost">Every beast of the tier that died; <paramref name="VolleyLost"/> is the part the army's volley killed.</param>
+public sealed record CampReportBeastLineResponse(string Tier, int Before, int Lost, int VolleyLost = 0);
 
 /// <summary>
 /// A camp fight (hunt, ambush or tower attack), as read from the player's settlement inbox — see
@@ -534,6 +548,7 @@ public sealed record CampReportResponse(
     string Winner,
     double ArmyPower,
     double CampPower,
+    double ArmyVolleyPower,
     IReadOnlyList<CampReportUnitLineResponse> Units,
     IReadOnlyList<CampReportBeastLineResponse> Beasts,
     ResourceAmountsResponse Loot,
@@ -556,8 +571,9 @@ public sealed record CampReportResponse(
             report.Winner == CampFightWinner.Army ? "army" : "camp",
             report.ArmyPower,
             report.CampPower,
+            report.ArmyVolleyPower,
             [.. report.UnitLines.Select(l => new CampReportUnitLineResponse(l.Type.ToWireName(), l.Sent, l.Lost))],
-            [.. report.BeastLines.Select(l => new CampReportBeastLineResponse(l.Tier.ToWireName(), l.Before, l.Lost))],
+            [.. report.BeastLines.Select(l => new CampReportBeastLineResponse(l.Tier.ToWireName(), l.Before, l.Lost, l.VolleyLost))],
             ResourceAmountsResponse.From(report.Loot),
             report.CampCleared,
             report.TowerCoord is { } tower ? HexPointResponse.From(tower) : null,
