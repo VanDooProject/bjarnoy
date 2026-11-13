@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { fingerDown, fingerUp } from './helpers';
+import { fingerDown, fingerUp } from './support/gestures';
 import { SettlementPage } from './pages';
 
 /**

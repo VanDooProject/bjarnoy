@@ -891,6 +891,7 @@ public sealed class WorldService(
         DateTimeOffset? endbossAt,
         string? name = null,
         bool? hidden = null,
+        bool? renownFollowsSpeed = null,
         CancellationToken cancellationToken = default)
     {
         var world = await _dbContext.Worlds
@@ -935,6 +936,11 @@ public sealed class WorldService(
         if (frozenIslesEnabled is { } frozenIsles)
         {
             world.FrozenIslesEnabled = frozenIsles;
+        }
+
+        if (renownFollowsSpeed is { } followsSpeed)
+        {
+            world.RenownFollowsSpeed = followsSpeed;
         }
 
         if (hasEndbossAt)

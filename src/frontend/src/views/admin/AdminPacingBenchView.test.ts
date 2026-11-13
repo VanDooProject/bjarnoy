@@ -10,8 +10,15 @@ import adminPacingBench from '../../i18n/locales/en/adminPacingBench.json';
 import buildingSnapshot from '../../data/building-catalogue.json';
 import type { BuildingDefinitionResponse } from '../../api/types';
 
+// A run is real CPU work (the simulator, ~450 ms for the default 200 days and growing faster than linearly with the horizon),
+// and these tests trigger up to three. Tests that only check how the view reacts to a changed knob start from a shorter
+// remembered horizon, so a run stays cheap on a loaded machine.
+const SHORT_HORIZON_DAYS = 100;
+const STORE_KEY = 'bjarnoy-pacing-bench-v2';
+
 // jsdom has no Worker, so the bench runs inline; the chart is stubbed (no canvas) and the debounce is skipped with fake timers.
-function mountView() {
+function mountView(opts: { horizonDays?: number } = {}) {
+  if (opts.horizonDays !== undefined) localStorage.setItem(STORE_KEY, JSON.stringify({ knobs: { horizonDays: opts.horizonDays } }));
   return mount(AdminPacingBenchView, {
     global: { plugins: [createTestI18n({ adminPacingBench })], stubs: { EconomyChart: true } },
   });
@@ -55,8 +62,10 @@ describe('AdminPacingBenchView', () => {
   });
 
   it('a changed knob re-runs after the debounce and shows the change against the reference; pinning makes it the reference', async () => {
-    const wrapper = mountView();
+    const wrapper = mountView({ horizonDays: SHORT_HORIZON_DAYS });
     await flushPromises();
+    // Fails loudly if the seeded horizon stops being picked up (the point of seeding is a cheaper run).
+    expect(wrapper.get('[data-testid="bench-status"]').text()).toMatch(/Simulated 100 days/);
     const before = wrapper.get('[data-testid="bench-activeFeasts-10"]').text();
     // A steeper Longhouse build-time tail makes the early Longhouse levels take longer.
     const input = wrapper.get('[data-testid="bench-lhShape"]');
@@ -87,17 +96,19 @@ describe('AdminPacingBenchView', () => {
   });
 
   it('Reset to live values restores every knob', async () => {
-    const wrapper = mountView();
+    const wrapper = mountView({ horizonDays: SHORT_HORIZON_DAYS });
     await flushPromises();
+    expect(wrapper.get('[data-testid="bench-status"]').text()).toMatch(/Simulated 100 days/);
     const input = wrapper.get<HTMLInputElement>('[data-testid="bench-storageHouseCapacity"]');
     const live = input.element.value;
     await input.setValue('100');
-    await settle();
     expect(input.classes()).toContain('changed');
+    // No debounce wait: the knobs reset synchronously, and letting the re-runs fire would only add simulator work.
     await wrapper.get('[data-testid="bench-reset"]').trigger('click');
-    await settle();
     expect(input.element.value).toBe(live);
     expect(input.classes()).not.toContain('changed');
+    // The seeded horizon counted as a change before the reset, so this covers every knob.
+    expect(wrapper.findAll('input.changed')).toHaveLength(0);
   });
 
   it('Copy settings writes the knobs as JSON to the clipboard', async () => {
