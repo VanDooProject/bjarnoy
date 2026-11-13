@@ -30,6 +30,7 @@ import ResourceIcon from '../ResourceIcon.vue';
 import { computed, nextTick, onMounted, onUnmounted, onUpdated, ref, shallowRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AtlasSprite from '../AtlasSprite.vue';
+import HoldProgress from './HoldProgress.vue';
 import type { ArtRef } from '../../lib/map/buildingArt';
 import type { MessageSchema } from '../../i18n/schema';
 import { resourceName } from '../../i18n/catalogueNames';
@@ -37,6 +38,7 @@ import { formatBuildTime } from '../../lib/map/ringCatalogue';
 import { hyphenate, loadHyphenation, SOFT_HYPHEN } from '../../lib/hyphenation';
 import { isActionable, type RingAvailability, type RingAvailabilityState } from '../../lib/map/ringAvailability';
 import { tapArm, type RingDock } from '../../lib/map/ringDock';
+import { LongPressTracker } from '../../lib/map/longPress';
 import { ringFootprint } from '../../lib/map/markerOcclusion';
 import { motionEnabled, supportsWaapi } from '../../lib/motion';
 import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
@@ -75,6 +77,11 @@ export interface RingAction {
   state?: RingAvailabilityState;
   /** Read-out card shown while this root action is hovered (Upgrade). */
   card?: RingCard;
+  /**
+   * A root bubble that can also be held (LONG_PRESS_MS): the hold fills a ring around it and emits `hold` with its id instead
+   * of `select`. A disabled bubble stays holdable. Releasing early is the bubble's normal click.
+   */
+  holdable?: boolean;
 }
 
 /** What a detail card for a buildable thing (a building, or an upgrade) shows. */
@@ -105,6 +112,8 @@ export interface RingCard {
   /** Art for the card thumbnail. */
   art?: ArtRef;
   availability?: RingAvailability;
+  /** The card's last line: what holding the bubble does (gold arrows), or, locked, that it needs premium (lock, muted). */
+  holdHint?: { text: string; locked: boolean };
 }
 
 export interface RingBuilding extends RingAction, Omit<RingCard, 'title'> {
@@ -195,6 +204,8 @@ const layer = usePhoneLayer(true, 'ring');
 
 const emit = defineEmits<{
   select: [id: string];
+  /** A holdable root bubble was held for the full LONG_PRESS_MS; no `select` follows from that press. */
+  hold: [id: string];
   close: [];
   // A mousedown on the backdrop (not a bubble) hands the same PointerEvent
   // back so the caller can turn that one gesture straight into a map drag —
@@ -487,6 +498,7 @@ interface CardView {
   statuses: { text: string; tone: Tone }[];
   /** Touch: "Tap X again to build" — only while the shown item is armed and committable. */
   tapHint?: string;
+  holdHint?: { text: string; locked: boolean };
 }
 
 function resourceList(shortfall: Partial<Record<(typeof RESOURCE_KEYS)[number], number>>): string {
@@ -560,6 +572,7 @@ const cardView = computed<CardView | null>(() => {
     warning: card.warning,
     statuses,
     tapHint: tapHint.value,
+    holdHint: card.holdHint,
   };
 });
 
@@ -799,6 +812,10 @@ async function onBackClick(e: MouseEvent) {
 // Navigation is click-only: Build opens its categories, a category opens its
 // buildings, exactly as going back already needed a click. Hover only previews.
 function onLaneClick(e: MouseEvent, item: RingAction) {
+  if (swallowClick) {
+    swallowClick = false;
+    return;
+  }
   if (item.disabled) {
     // A blocked root action (Raze on the longhouse, Send army without units ...) shakes and flashes its reason.
     blockedFeedback(e.currentTarget as HTMLElement);
@@ -868,6 +885,51 @@ function onLaneTouchStart(e: TouchEvent, item: RingAction) {
   hoverLane1.value = item.id;
   hover.value = null;
 }
+// Holding a holdable root bubble (Upgrade, for the quick upgrade mode): the press fills a ring around the bubble over
+// LONG_PRESS_MS, then `hold` fires and the click the release would bring is swallowed. A release (or leaving the bubble, or
+// drifting off it) before that cancels the hold and leaves the ordinary click alone. A disabled bubble is holdable too: it
+// reads its refusal in the caller. The same tracker the map's long press uses (lib/map/longPress.ts).
+const HOLD_SLOP_PX = 10;
+/** The bubble whose hold ring is filling. */
+const holdingId = ref<string | null>(null);
+let holdId: string | null = null;
+/** Set when a hold fired: the click that follows its release is not a tap on the bubble. */
+let swallowClick = false;
+const holdTracker = new LongPressTracker(
+  {
+    onStart: () => {
+      holdingId.value = holdId;
+    },
+    onCancel: () => {
+      holdingId.value = null;
+    },
+    onFire: () => {
+      const id = holdId;
+      holdingId.value = null;
+      swallowClick = true;
+      armed.value = null;
+      if (id) emit('hold', id);
+    },
+  },
+  { slopPx: HOLD_SLOP_PX },
+);
+function onLanePointerDown(e: PointerEvent, item: RingAction) {
+  swallowClick = false;
+  if (!atRoot.value || !item.holdable || swapping.value || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  holdId = item.id;
+  holdTracker.start({ x: e.clientX, y: e.clientY });
+}
+function onLanePointerMove(e: PointerEvent) {
+  holdTracker.move({ x: e.clientX, y: e.clientY });
+}
+// The long press of a touch also asks for the browser's context menu, which would reach the backdrop's own and close the ring.
+function onLaneContextMenu(e: Event) {
+  if (!holdTracker.holding && !swallowClick) return;
+  e.preventDefault();
+  e.stopPropagation();
+}
+onUnmounted(() => holdTracker.cancel());
+
 // Where the hint chip of a hovered, disabled root bubble sits: just outside the
 // bubble, away from the tile, anchored so it grows away from the bubble.
 const hintStyle = computed(() => {
@@ -960,6 +1022,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         category: entry.category,
         armed: armed === entry.item.id,
         'no-commit': entry.item.disabled,
+        holdable: entry.item.holdable,
       }"
       :style="{
         left: `${entry.x}px`,
@@ -974,6 +1037,12 @@ function onBackdropPointerDown(e: PointerEvent) {
       :aria-description="entry.item.disabled ? entry.item.hint : undefined"
       :aria-label="entry.item.label"
       @touchstart="onLaneTouchStart($event, entry.item)"
+      @pointerdown="onLanePointerDown($event, entry.item)"
+      @pointermove="onLanePointerMove"
+      @pointerup="holdTracker.cancel()"
+      @pointercancel="holdTracker.cancel()"
+      @pointerleave="holdTracker.cancel()"
+      @contextmenu="onLaneContextMenu"
       @click="onLaneClick($event, entry.item)"
       @mouseenter="hoverLane1 = entry.item.id"
       @mouseleave="hoverLane1 = null"
@@ -985,7 +1054,8 @@ function onBackdropPointerDown(e: PointerEvent) {
         <svg v-else-if="entry.state === 'waiting'" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" /><path d="M6 3.4V6l1.8 1.1" /></svg>
         <svg v-else viewBox="0 0 12 12"><path d="M3 6h6" /></svg>
       </span><span
-        v-if="armed === entry.item.id && !entry.item.disabled" class="arm-badge" data-testid="ring-arm-badge" aria-hidden="true" />
+        v-if="armed === entry.item.id && !entry.item.disabled" class="arm-badge" data-testid="ring-arm-badge" aria-hidden="true" /><span
+        v-if="holdingId === entry.item.id" class="hold-ring" :style="{ '--hold-pad': `${px(5)}px` }"><HoldProgress :size="px(BUB1) + px(10)" tone="gold" /></span>
     </button>
 
     <button
@@ -1087,7 +1157,12 @@ function onBackdropPointerDown(e: PointerEvent) {
       <p v-if="cardView.tapHint" class="card-tap-hint" data-testid="ring-tap-hint">
         <i class="tap-bubble" aria-hidden="true" />{{ cardView.tapHint }}
       </p>
-      <div v-else-if="!(cardView.statuses.length || error)" class="card-foot" />
+      <div v-else-if="!(cardView.statuses.length || error || cardView.holdHint)" class="card-foot" />
+      <p v-if="cardView.holdHint" class="card-hold-hint" :class="{ locked: cardView.holdHint.locked }" data-testid="ring-hold-hint">
+        <svg v-if="cardView.holdHint.locked" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
+        <svg v-else viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.5 6 3l3.5 3.5M2.5 10 6 6.5 9.5 10" /></svg>
+        {{ cardView.holdHint.text }}
+      </p>
     </div>
 
     <div
@@ -1448,6 +1523,42 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .card-foot {
   height: 12px;
+}
+.card-hold-hint {
+  margin: 0;
+  padding: 8px 14px 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-top: 1px solid var(--panel-border);
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--gold);
+}
+.card-hold-hint svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.card-hold-hint.locked {
+  color: var(--muted);
+}
+/* The hold ring sits around the bubble, outside its border; the press itself stays on the bubble. */
+.ring-bubble.holdable {
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.hold-ring {
+  position: absolute;
+  inset: calc(var(--hold-pad, 5px) * -1);
+  pointer-events: none;
+  display: block;
 }
 .card-tap-hint {
   margin: 0;

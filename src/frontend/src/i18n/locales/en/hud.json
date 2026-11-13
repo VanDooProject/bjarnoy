@@ -608,5 +608,15 @@
     "withCount": "{panel} ({count})",
     "collapse": "Collapse {panel}",
     "expand": "Expand {panel}"
+  },
+  "quickUpgrade": {
+    "chipTitle": "Quick upgrade",
+    "chipHintTouch": "Tap a building · hold the map to stop",
+    "chipHintMouse": "Click a building · Esc to stop",
+    "stop": "Stop quick upgrade",
+    "holdHint": "Hold to keep upgrading: one tap per building",
+    "premiumHold": "Premium: hold to upgrade with one tap per building",
+    "shiftHint": "Shift+click: upgrade to level {level}",
+    "premiumShift": "Premium: Shift+click upgrades"
   }
 }
