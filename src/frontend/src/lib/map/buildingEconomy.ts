@@ -585,7 +585,7 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   archeryrange: line(470, 200, 58),
   siegeworkshop: line(26500, 13000, 2200),
   beachcamp: line(0, 0, 0),
-  harbour: line(410, 99, 33),
+  harbour: line(150, 37, 12),
   shipyard: line(410, 99, 33),
   barracks: line(100, 78, 43),
   sawmill: line(41500, 59500, 5950),

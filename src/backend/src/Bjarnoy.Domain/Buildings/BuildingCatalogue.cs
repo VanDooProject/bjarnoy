@@ -1217,7 +1217,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.Harbour,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 410, Stone: 99, Food: 33, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 150, Stone: 37, Food: 12, Iron: 0) * CostFactor(level),
         BuildDuration = BuildTime(BuildingType.Harbour, level),
         RequiresCoastalWater = true,
     };

@@ -475,13 +475,11 @@ public class EconomyDesignTests
     {
         // Excluded: Storage House, Tower, Palisade and Gate are cheap infrastructure that unlock early and is built in numbers,
         // the Bridge has its own per-level cost table, the Great Storehouse is priced by its storage, not by this share, and the
-        // Beach Camp a sea landing sets up is never built and costs nothing. The Harbour and the Shipyard keep the Dockyard's
-        // price (economy.md §3 table) although the Harbour now unlocks at Longhouse 5 (units-and-ships.md §1), so the Harbour
-        // costs 93% of that Longhouse upgrade; the share rule is open for them until the design says otherwise.
+        // Beach Camp a sea landing sets up is never built and costs nothing.
         BuildingType[] excluded =
         [
             BuildingType.StorageHouse, BuildingType.Tower, BuildingType.Palisade, BuildingType.PalisadeGate,
-            BuildingType.Bridge, BuildingType.GreatStorehouse, BuildingType.BeachCamp, BuildingType.Harbour, BuildingType.Shipyard,
+            BuildingType.Bridge, BuildingType.GreatStorehouse, BuildingType.BeachCamp,
         ];
         var outside = new List<string>();
         foreach (var type in BuildingCatalogue.AllTypes.Except(excluded).Except(Producers).Where(t => t != BuildingType.Longhouse))

@@ -106,7 +106,7 @@ whole number, 100–999 to the nearest 10, 1 000–9 999 to the nearest 50,
 | Tower | 140 / 200 / 30 | | 10 min → 12 h (L5) |
 | Barracks | 100 / 78 / 43 | | 15 min → 22 h (L20) |
 | Town Square | 120 / 130 / 44 | | 20 min → 22 h (L20) |
-| Harbour (was Dockyard) | 410 / 99 / 33 | | 30 min → 24 h (L20) |
+| Harbour (was Dockyard) | 150 / 37 / 12 (about 35 % of the Longhouse 5 upgrade) | | 30 min → 24 h (L20) |
 | Shipyard | 410 / 99 / 33 | | 30 min → 24 h (L20) |
 | Archery Range | 470 / 200 / 58 | | 45 min → 22 h (L20) |
 | Cart Workshop | 680 / 230 / 75 | | 1 h → 22 h (L20) |
