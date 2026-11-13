@@ -30,6 +30,7 @@
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
+import { waitForRenderedFrames } from './support/render';
 
 // This spec judges the map's pixels, so it renders with the player's default smooth edges.
 // Asserts the fog / water really move, so it opts in to their motion (the suite emulates reduced motion, which freezes them).
@@ -82,7 +83,7 @@ test.describe('fog wind drift', { tag: '@g3' }, () => {
     await page.evaluate(() => {
       window.__waterDebug.water = false;
     });
-    await page.waitForTimeout(500);
+    await waitForRenderedFrames(page);
 
     const box = await settlement.canvasBox();
     // A band around the settlement wide enough to contain the whole vision
@@ -111,8 +112,11 @@ test.describe('fog wind drift', { tag: '@g3' }, () => {
     await page.evaluate(() => {
       window.__fogDebug.drift = false;
     });
-    // One frame for the flag to take effect before the baseline is taken.
-    await page.waitForTimeout(500);
+    // The flag only takes effect on the render loop's next tick, and the composite then drops its drift cross-fade for
+    // the newest snapshot, a jump of up to a whole frame's worth of drift. A busy software-rendered runner draws about
+    // a frame a second, so a fixed wait can end before that tick and put the baseline in front of the jump (28% of the
+    // clip moved, CI e2e g3). Wait for frames the loop really drew instead.
+    await waitForRenderedFrames(page);
 
     const frozenFrom = await page.screenshot({ clip });
     await page.waitForTimeout(2_000);
