@@ -76,6 +76,7 @@
     "SplitRequiresStandingArmy": "Only an army that is standing can be split. A marching army moves whole.",
     "InvalidUnitSelection": "Pick at least one unit, and no more than the army holds.",
     "PremiumRequired": "This action requires Premium.",
+    "TooManyWaypoints": "Too many waypoints. An order takes at most 5, or 10 with premium.",
     "UnitNotAvailable": "That unit is not available at this longhouse level yet.",
     "TrainingQueueFull": "This building's training queue is full.",
     "InvalidCount": "The count must be at least 1.",

@@ -86,11 +86,31 @@ public sealed partial record Army
 {
     /// <summary>
     /// The route and time functions every planner needs with the same terrain, river, wall and speed inputs, so a route is searched and
-    /// timed one way everywhere: the dispatch planners, the gathering's departure and the legs between.
+    /// timed one way everywhere: the dispatch planners, the field orders, the gathering's departure and the legs between.
+    /// One router plans one order: every search it makes draws from one budget of <paramref name="searchBudget"/> node expansions
+    /// (default <see cref="HexPathfinder.MaxExpandedNodes"/>), so an order with many legs cannot cost a full search per leg; a search that
+    /// finds the budget used up reports <see cref="PathSearch.LimitReached"/> (refused as <c>RouteTooLong</c>).
     /// </summary>
     private sealed class Router(
-        Func<HexCoord, Terrain> terrainAt, double speedFactor, Func<HexCoord, bool>? isRiver, Func<HexCoord, bool>? isWideRiver, WallRules? walls)
+        Func<HexCoord, Terrain> terrainAt, double speedFactor, Func<HexCoord, bool>? isRiver, Func<HexCoord, bool>? isWideRiver, WallRules? walls,
+        int searchBudget = HexPathfinder.MaxExpandedNodes)
     {
+        private int budget = searchBudget;
+
+        /// <summary>One search of this order, drawn from the order's budget: it runs against what earlier searches left and subtracts what it used.</summary>
+        public PathSearch Find(
+            HexCoord from, HexCoord to, bool isLandUnit,
+            Func<HexCoord, bool>? blocked, Func<HexCoord, bool>? friendlyGate, Func<HexCoord, bool>? halfOpen)
+        {
+            var search = HexPathfinder.Search(from, to, terrainAt, isLandUnit, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, walls?.BridgeCost, budget);
+            budget -= search.Expanded;
+            return search;
+        }
+
+        /// <summary><see cref="Find(HexCoord, HexCoord, bool, Func{HexCoord, bool}?, Func{HexCoord, bool}?, Func{HexCoord, bool}?)"/> with the order's walls.</summary>
+        public PathSearch Find(HexCoord from, HexCoord to, bool isLandUnit) =>
+            Find(from, to, isLandUnit, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen);
+
         /// <param name="avoid">A hex no route may enter (the target when the groups only meet next to it, so no group walks through it).</param>
         public (IReadOnlyList<HexCoord>? Path, DispatchRejection Rejection) Search(HexCoord from, HexCoord to, bool isLandUnit, HexCoord? avoid = null)
         {
@@ -107,7 +127,7 @@ public sealed partial record Army
                 halfOpen = hex => hex != closed && (wallHalfOpen?.Invoke(hex) ?? false);
             }
 
-            var search = HexPathfinder.Search(from, to, terrainAt, isLandUnit, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, walls?.BridgeCost);
+            var search = Find(from, to, isLandUnit, blocked, friendlyGate, halfOpen);
             if (search.Path is { Count: > 0 } path)
             {
                 return (path, DispatchRejection.None);
@@ -335,6 +355,8 @@ public sealed partial record Army
     /// </remarks>
     /// <param name="groups">The units of each spot, two spots or more.</param>
     /// <param name="newId">Makes the ids of the armies and gatherings.</param>
+    /// <param name="routeSearchBudget">Node expansions every route search of this order shares; see <see cref="PlanDispatch"/>.</param>
+    /// <param name="isPremium">Whether the player has a premium account (waypoint cap); see <see cref="PlanDispatch"/>.</param>
     public static GatheredDispatchDecision PlanGatheredDispatch(
         Settlement settlement,
         IReadOnlyList<(HexCoord Spot, IReadOnlyList<UnitStack> Units)> groups,
@@ -359,13 +381,20 @@ public sealed partial record Army
         bool targetCampIsWater = false,
         bool targetCampIsSand = false,
         IReadOnlyList<GarrisonSpot>? targetSpots = null,
-        Func<HexCoord, bool>? isCampSiteOccupied = null)
+        Func<HexCoord, bool>? isCampSiteOccupied = null,
+        int routeSearchBudget = HexPathfinder.MaxExpandedNodes,
+        bool isPremium = false)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(groups);
         ArgumentNullException.ThrowIfNull(waypoints);
         ArgumentNullException.ThrowIfNull(newId);
         ArgumentNullException.ThrowIfNull(terrainAt);
+
+        if (waypoints.Count > MaxWaypointsFor(isPremium))
+        {
+            return GatheredDispatchDecision.Rejected(DispatchRejection.TooManyWaypoints);
+        }
 
         var union = MergeStacksByType(groups.SelectMany(g => g.Units.Where(s => s.Count > 0)).ToList(), []);
         var isFleet = union.Any(s => UnitCatalogue.Get(s.Type).Class == UnitClass.Ship);
@@ -407,7 +436,7 @@ public sealed partial record Army
         }
 
         var spots = settlementDecision.GroupStacks!;
-        var router = new Router(terrainAt, speedFactor, isRiver, isWideRiver, walls);
+        var router = new Router(terrainAt, speedFactor, isRiver, isWideRiver, walls, routeSearchBudget);
         var upkeepAll = union.Sum(s => UnitCatalogue.Get(s.Type).UpkeepPerHour * s.Count);
         var paceAll = ShipCargo.Pace(union);
         var firstStop = waypoints.Count > 0 ? waypoints[0] : routeDestination;

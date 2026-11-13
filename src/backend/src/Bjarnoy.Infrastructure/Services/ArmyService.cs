@@ -202,6 +202,10 @@ public sealed class ArmyService(
     /// whose destination is always the target settlement's own hex (a support army walks to the garrison spot it names) —
     /// resolved here rather than trusted from the caller.
     /// </param>
+    /// <param name="callerUserId">
+    /// The authenticated caller's id, if any, resolved to a premium flag like <see cref="FieldOrderAsync"/> does (only the
+    /// waypoint cap depends on it here). <see langword="null"/> (anonymous) is never premium.
+    /// </param>
     /// <param name="targetSettlementId">
     /// Required for <see cref="ArmyMission.Attack"/> (the settlement to fight
     /// on arrival — issue #40 phase 3) and <see cref="ArmyMission.Support"/>
@@ -225,16 +229,17 @@ public sealed class ArmyService(
         IReadOnlyList<HexCoord> waypoints,
         HexCoord? destination,
         double provisions,
+        Guid? callerUserId,
         ArmyMission mission = ArmyMission.Move,
         Guid? targetSettlementId = null,
         HexCoord? targetBuildingCoord = null,
         CancellationToken cancellationToken = default) =>
         DispatchAsync(
-            settlementId, [(fromSpot, unitCounts)], waypoints, destination, provisions, mission, targetSettlementId, targetBuildingCoord,
-            cancellationToken);
+            settlementId, [(fromSpot, unitCounts)], waypoints, destination, provisions, callerUserId, mission, targetSettlementId,
+            targetBuildingCoord, cancellationToken);
 
     /// <summary>
-    /// <see cref="DispatchAsync(Guid, HexCoord, IReadOnlyList{UnitStack}, IReadOnlyList{HexCoord}, HexCoord?, double, ArmyMission, Guid?, HexCoord?, CancellationToken)"/>
+    /// <see cref="DispatchAsync(Guid, HexCoord, IReadOnlyList{UnitStack}, IReadOnlyList{HexCoord}, HexCoord?, double, Guid?, ArmyMission, Guid?, HexCoord?, CancellationToken)"/>
     /// for units standing at one or several garrison spots. With one group the army leaves its spot, which becomes its home spot; with
     /// several, each group leaves its own spot as an army of its own and they meet on the way
     /// (<see cref="Army.PlanGatheredDispatch"/>). Answers with the one army the caller reports: the group that reaches the meeting first.
@@ -246,6 +251,7 @@ public sealed class ArmyService(
         IReadOnlyList<HexCoord> waypoints,
         HexCoord? destination,
         double provisions,
+        Guid? callerUserId,
         ArmyMission mission = ArmyMission.Move,
         Guid? targetSettlementId = null,
         HexCoord? targetBuildingCoord = null,
@@ -372,6 +378,7 @@ public sealed class ArmyService(
             isCampSiteOccupied = hex => campSiteOccupied && hex == campSite;
         }
 
+        var isPremium = await IsPremiumAsync(callerUserId, cancellationToken).ConfigureAwait(false);
         var targetSettlement = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null;
         var targetBuilding = mission is ArmyMission.Attack or ArmyMission.Raid or ArmyMission.Support ? targetBuildingCoord : null;
 
@@ -388,7 +395,7 @@ public sealed class ArmyService(
                 mission, targetSettlement, targetBuilding, targetClaimDiscs,
                 isHexFoundable, renownAndSlotAllowed, session.SpeedFactor, rivers.IsRiver, rivers.IsWide,
                 dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater,
-                targetCampIsSand: targetCampIsSand, targetSpots: targetSpots, isCampSiteOccupied: isCampSiteOccupied);
+                targetCampIsSand: targetCampIsSand, targetSpots: targetSpots, isCampSiteOccupied: isCampSiteOccupied, isPremium: isPremium);
             if (!decision.Accepted)
             {
                 // Even a refused dispatch may have completed queued work while
@@ -408,7 +415,7 @@ public sealed class ArmyService(
                 mission, targetSettlement, targetBuilding, targetClaimDiscs,
                 isHexFoundable, renownAndSlotAllowed, session.SpeedFactor, rivers.IsRiver, rivers.IsWide,
                 dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater,
-                targetCampIsSand: targetCampIsSand, targetSpots: targetSpots, isCampSiteOccupied: isCampSiteOccupied);
+                targetCampIsSand: targetCampIsSand, targetSpots: targetSpots, isCampSiteOccupied: isCampSiteOccupied, isPremium: isPremium);
             if (!decision.Accepted)
             {
                 await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
@@ -757,6 +764,14 @@ public sealed class ArmyService(
     }
 
     /// <summary>
+    /// Whether the caller has a premium account, live via <see cref="AuthService.GetIsPremiumAsync"/> like
+    /// <see cref="Bjarnoy.Api.Auth.PremiumUserEndpointFilter"/>; an anonymous caller is never premium.
+    /// </summary>
+    private async Task<bool> IsPremiumAsync(Guid? callerUserId, CancellationToken cancellationToken) =>
+        callerUserId is { } userId
+        && await _authService.GetIsPremiumAsync(userId, cancellationToken).ConfigureAwait(false) == true;
+
+    /// <summary>
     /// Sends an army already out in the field onward (issue #156) — "move on" once it has arrived and is standing, "append
     /// goal" while it is still travelling — on a Move, Attack, Support, Hunt or Raid, optionally taking only part of a
     /// standing army along. See <see cref="Army.PlanFieldOrder"/> for the domain rule this wraps.
@@ -831,8 +846,7 @@ public sealed class ArmyService(
             return await RejectAsync(FieldOrderRejection.MissionNotFieldOrderable).ConfigureAwait(false);
         }
 
-        var isPremium = callerUserId is { } userId
-            && await _authService.GetIsPremiumAsync(userId, cancellationToken).ConfigureAwait(false) == true;
+        var isPremium = await IsPremiumAsync(callerUserId, cancellationToken).ConfigureAwait(false);
 
         var worldId = army.Settlement.WorldId;
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);

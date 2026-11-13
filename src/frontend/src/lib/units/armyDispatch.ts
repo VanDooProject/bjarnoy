@@ -284,6 +284,28 @@ export function canFieldOrderArmy(army: {
   return army.mission === 'move' || army.mission === 'found';
 }
 
+/** The most waypoints one order takes (`Army.MaxWaypoints` in the backend). */
+export const MAX_WAYPOINTS = 5;
+/** The most waypoints one order takes for a premium account (`Army.MaxWaypointsPremium` in the backend). */
+export const MAX_WAYPOINTS_PREMIUM = 10;
+
+export function maxWaypoints(isPremium: boolean): number {
+  return isPremium ? MAX_WAYPOINTS_PREMIUM : MAX_WAYPOINTS;
+}
+
+/**
+ * How many waypoints a plotted route sends: a route that ends on the destination (a move) holds one hex less than it has
+ * clicks as waypoints, a route that only holds waypoints (attack, support, a dispatched hunt) sends all of them.
+ */
+export function routeWaypointCount(routeLength: number, routeEndsOnDestination: boolean): number {
+  return Math.max(0, routeEndsOnDestination ? routeLength - 1 : routeLength);
+}
+
+/** Whether a route of this length, once one more hex is plotted, would carry more waypoints than the account's order takes. */
+export function wouldExceedWaypointLimit(routeLength: number, routeEndsOnDestination: boolean, isPremium: boolean): boolean {
+  return routeWaypointCount(routeLength + 1, routeEndsOnDestination) > maxWaypoints(isPremium);
+}
+
 /**
  * Whether a field-order-eligible army is still travelling to its current
  * destination (an "append goal" order) rather than already standing there

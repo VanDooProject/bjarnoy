@@ -286,6 +286,15 @@ public sealed partial record Army
         _ => [home],
     };
 
+    /// <summary>The most waypoints one order takes.</summary>
+    public const int MaxWaypoints = 5;
+
+    /// <summary>The most waypoints one order takes for a premium account.</summary>
+    public const int MaxWaypointsPremium = 10;
+
+    /// <summary>The waypoint cap of an order: <see cref="MaxWaypointsPremium"/> with a premium account, else <see cref="MaxWaypoints"/>.</summary>
+    public static int MaxWaypointsFor(bool isPremium) => isPremium ? MaxWaypointsPremium : MaxWaypoints;
+
     /// <summary>
     /// The settlement side and the movement side of dispatching an army in
     /// one pure decision — mirrors <see cref="Settlement.PlanBuild"/>'s shape.
@@ -357,6 +366,14 @@ public sealed partial record Army
     /// <paramref name="isRiver"/> into every <see cref="HexPathfinder"/> call this makes.
     /// <see langword="null"/> (the default) treats every river hex as a crossable stream.
     /// </param>
+    /// <param name="routeSearchBudget">
+    /// Node expansions all route searches of this order share (default <see cref="HexPathfinder.MaxExpandedNodes"/>); an
+    /// order that uses it up is refused <see cref="DispatchRejection.RouteTooLong"/>. Tests pass a small one.
+    /// </param>
+    /// <param name="isPremium">
+    /// Whether the dispatching player has a premium account: only lifts the waypoint cap from <see cref="MaxWaypoints"/> to
+    /// <see cref="MaxWaypointsPremium"/> (a dispatch from home has free waypoints).
+    /// </param>
     public static DispatchDecision PlanDispatch(
         Settlement settlement,
         HexCoord fromSpot,
@@ -382,12 +399,19 @@ public sealed partial record Army
         bool targetCampIsWater = false,
         bool targetCampIsSand = false,
         IReadOnlyList<GarrisonSpot>? targetSpots = null,
-        Func<HexCoord, bool>? isCampSiteOccupied = null)
+        Func<HexCoord, bool>? isCampSiteOccupied = null,
+        int routeSearchBudget = HexPathfinder.MaxExpandedNodes,
+        bool isPremium = false)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
         ArgumentNullException.ThrowIfNull(waypoints);
         ArgumentNullException.ThrowIfNull(terrainAt);
+
+        if (waypoints.Count > MaxWaypointsFor(isPremium))
+        {
+            return DispatchDecision.Rejected(DispatchRejection.TooManyWaypoints);
+        }
 
         var normalisedRequest = requestedUnits.Where(s => s.Count > 0).ToList();
 
@@ -440,7 +464,7 @@ public sealed partial record Army
         }
 
         // The army leaves from (and returns to) the garrison spot its units stood at.
-        var router = new Router(terrainAt, speedFactor, isRiver, isWideRiver, walls);
+        var router = new Router(terrainAt, speedFactor, isRiver, isWideRiver, walls, routeSearchBudget);
         var (fullPath, routeRejection) = router.Chain(fromSpot, [.. waypoints, routeDestination], isLandUnit);
         if (fullPath is null)
         {
@@ -1457,13 +1481,15 @@ public sealed partial record Army
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
         }
 
-        var path = HexPathfinder.FindPath(fromHex, newTarget, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        // Both searches are one order: they share one expansion budget.
+        var router = new Router(terrainAt, speedFactor, isRiver, isWideRiver, walls);
+        var path = router.Find(fromHex, newTarget, isLandUnit).Path;
         if (path is null || path.Count == 0)
         {
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
         }
 
-        var returnPath = HexPathfinder.FindPath(newTarget, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnPath = router.Find(newTarget, home, isLandUnit).Path;
         if (returnPath is null || returnPath.Count == 0)
         {
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
@@ -1965,6 +1991,9 @@ public sealed partial record Army
     /// <param name="giants">Giant hexes, for the fleet shore rule's territory test.</param>
     /// <param name="requestedUnits">What leaves; <see langword="null"/> means the whole army.</param>
     /// <param name="splitArmyId">The id of the new army when this is a split.</param>
+    /// <param name="routeSearchBudget">
+    /// Node expansions every route search of this order (each leg and the way home) shares; see <see cref="PlanDispatch"/>.
+    /// </param>
     public static FieldOrderResult PlanFieldOrder(
         Army army,
         IReadOnlyList<HexCoord> waypoints,
@@ -1987,11 +2016,18 @@ public sealed partial record Army
         IGiantIndex? giants = null,
         IReadOnlyList<UnitStack>? requestedUnits = null,
         Guid? splitArmyId = null,
-        IReadOnlyList<GarrisonSpot>? targetSpots = null)
+        IReadOnlyList<GarrisonSpot>? targetSpots = null,
+        int routeSearchBudget = HexPathfinder.MaxExpandedNodes)
     {
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(waypoints);
         ArgumentNullException.ThrowIfNull(terrainAt);
+
+        // Only the waypoints the player sent count: "append goal" adds the old destination as a stop itself.
+        if (waypoints.Count > MaxWaypointsFor(isPremium))
+        {
+            return FieldOrderResult.Rejected(FieldOrderRejection.TooManyWaypoints);
+        }
 
         // A fleeing army (after a lost field battle) takes orders from where it is even on its way home
         // (docs/design/troop-movement-range.md §2a); every other returning army has nothing left to extend.
@@ -2095,6 +2131,7 @@ public sealed partial record Army
         DateTimeOffset departedAt;
         double provisionsAtDeparture;
         List<HexCoord> fullPath;
+        var router = new Router(terrainAt, speedFactor, isRiver, isWideRiver, walls, routeSearchBudget);
         Army? remainder = null;
 
         if (arrived)
@@ -2112,7 +2149,7 @@ public sealed partial record Army
             fullPath = [fromHex];
             for (var i = 0; i < stops.Count - 1; i++)
             {
-                var search = HexPathfinder.Search(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+                var search = router.Find(stops[i], stops[i + 1], isLandUnit);
                 if (search.Path is not { Count: > 0 } leg)
                 {
                     return FieldOrderResult.Rejected(NoRouteRejection(search, isLandUnit));
@@ -2133,7 +2170,7 @@ public sealed partial record Army
             fullPath = [.. movement.Path];
             for (var i = 0; i < stops.Count - 1; i++)
             {
-                var search = HexPathfinder.Search(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+                var search = router.Find(stops[i], stops[i + 1], isLandUnit);
                 if (search.Path is not { Count: > 0 } leg)
                 {
                     return FieldOrderResult.Rejected(NoRouteRejection(search, isLandUnit));
@@ -2143,7 +2180,7 @@ public sealed partial record Army
             }
         }
 
-        var returnSearch = HexPathfinder.Search(routeDestination, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnSearch = router.Find(routeDestination, home, isLandUnit);
         if (returnSearch.Path is not { Count: > 0 } returnPath)
         {
             return FieldOrderResult.Rejected(NoRouteRejection(returnSearch, isLandUnit));
@@ -2666,6 +2703,9 @@ public enum FieldOrderRejection
     /// own remarks and the design doc's rule table (issue #156 §3).
     /// </summary>
     PremiumRequired,
+
+    /// <summary>The order carries more waypoints than <see cref="Army.MaxWaypointsFor"/> allows.</summary>
+    TooManyWaypoints,
 }
 
 /// <summary>The outcome of asking to send an already-fielded army onward — mirrors <see cref="RetargetFoundingResult"/>.</summary>
@@ -2784,6 +2824,9 @@ public enum DispatchRejection
 
     /// <summary>The route search hit its node cap before reaching the destination: the trip is too long to plan.</summary>
     RouteTooLong,
+
+    /// <summary>The order carries more waypoints than <see cref="Army.MaxWaypointsFor"/> allows.</summary>
+    TooManyWaypoints,
 
     /// <summary>An <see cref="ArmyMission.SetUpCamp"/> dispatch did not name exactly <see cref="BeachCamp.RequiredBuilders"/> camp builders.</summary>
     WrongCampBuilderCount,

@@ -23,6 +23,30 @@ public class HexPathfinderTests
     }
 
     [Fact]
+    public void Search_with_a_small_budget_reports_the_limit_and_the_budget_as_expanded()
+    {
+        var search = HexPathfinder.Search(new HexCoord(0, 0), new HexCoord(20, 0), AllGrass(), isLandUnit: true, maxExpandedNodes: 5);
+
+        Assert.True(search.LimitReached);
+        Assert.Null(search.Path);
+        Assert.Equal(5, search.Expanded);
+    }
+
+    [Fact]
+    public void Search_that_finds_its_route_reports_how_many_nodes_it_expanded()
+    {
+        var search = HexPathfinder.Search(new HexCoord(0, 0), new HexCoord(4, 0), AllGrass(), isLandUnit: true);
+
+        Assert.False(search.LimitReached);
+        Assert.NotNull(search.Path);
+        Assert.InRange(search.Expanded, 1, HexPathfinder.MaxExpandedNodes);
+
+        // Exactly that budget is enough, one less is not.
+        Assert.NotNull(HexPathfinder.Search(new HexCoord(0, 0), new HexCoord(4, 0), AllGrass(), isLandUnit: true, maxExpandedNodes: search.Expanded).Path);
+        Assert.True(HexPathfinder.Search(new HexCoord(0, 0), new HexCoord(4, 0), AllGrass(), isLandUnit: true, maxExpandedNodes: search.Expanded - 1).LimitReached);
+    }
+
+    [Fact]
     public void Returns_a_single_hex_path_when_from_and_to_are_the_same()
     {
         var coord = new HexCoord(2, 2);

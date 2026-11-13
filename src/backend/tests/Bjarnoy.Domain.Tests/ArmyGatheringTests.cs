@@ -59,9 +59,20 @@ public class ArmyGatheringTests
         HexCoord destination,
         Func<HexCoord, Terrain> terrain,
         params (HexCoord Spot, UnitStack[] Units)[] groups) =>
+        Send(settlement, provisions, waypoints, destination, terrain, HexPathfinder.MaxExpandedNodes, false, groups);
+
+    private static GatheredDispatchDecision Send(
+        Settlement settlement,
+        double provisions,
+        IReadOnlyList<HexCoord> waypoints,
+        HexCoord destination,
+        Func<HexCoord, Terrain> terrain,
+        int routeSearchBudget,
+        bool isPremium,
+        params (HexCoord Spot, UnitStack[] Units)[] groups) =>
         Army.PlanGatheredDispatch(
             settlement, [.. groups.Select(g => (g.Spot, (IReadOnlyList<UnitStack>)g.Units))], provisions, waypoints, destination, T0,
-            Guid.CreateVersion7, terrain);
+            Guid.CreateVersion7, terrain, routeSearchBudget: routeSearchBudget, isPremium: isPremium);
 
     private static Bjarnoy.Domain.Movement.Movement MovementOf(Army army) => ((ArmyLocation.InTransit)army.Location).Movement;
 
@@ -89,6 +100,44 @@ public class ArmyGatheringTests
         Assert.Equal(tower, MovementOf(GroupAt(decision, Centre)).Path[^1]);
         Assert.Equal([tower], MovementOf(GroupAt(decision, tower)).Path);
         Assert.All(decision.Armies!, a => Assert.Equal(gathering.Id, a.GatheringId));
+    }
+
+    [Theory]
+    [InlineData(5, false, true)]
+    [InlineData(6, false, false)]
+    [InlineData(10, true, true)]
+    [InlineData(11, true, false)]
+    public void A_gathered_dispatch_takes_at_most_five_waypoints_or_ten_with_premium(int count, bool isPremium, bool accepted)
+    {
+        var tower = new HexCoord(3, 0);
+        var settlement = WithUnits(Found((tower, BuildingType.Tower)), (Centre, Spearmen(10)), (tower, Spearmen(10)));
+        List<HexCoord> waypoints = [.. Enumerable.Range(1, count).Select(i => new HexCoord(3 + i, 0))];
+
+        var decision = Send(
+            settlement, 200, waypoints, new HexCoord(count + 4, 0), Grass, HexPathfinder.MaxExpandedNodes, isPremium,
+            (Centre, Spearmen(10)), (tower, Spearmen(10)));
+
+        Assert.True(accepted == decision.Accepted, $"expected accepted={accepted}, got {decision.Rejection}");
+        if (!accepted)
+        {
+            Assert.Equal(DispatchRejection.TooManyWaypoints, decision.Rejection);
+        }
+    }
+
+    [Fact]
+    public void Every_route_search_of_a_gathered_dispatch_draws_from_one_budget()
+    {
+        var tower = new HexCoord(3, 0);
+        var target = new HexCoord(10, 0);
+        var settlement = WithUnits(Found((tower, BuildingType.Tower)), (Centre, Spearmen(10)), (tower, Spearmen(10)));
+        var longest = HexPathfinder.Search(Centre, target, Grass, isLandUnit: true).Expanded;
+
+        // Enough for the longest single search, not for all the searches the order makes together.
+        var decision = Send(
+            settlement, 100, [], target, Grass, longest, false, (Centre, Spearmen(10)), (tower, Spearmen(10)));
+
+        Assert.Equal(DispatchRejection.RouteTooLong, decision.Rejection);
+        Assert.True(Send(settlement, 100, [], target, Grass, (Centre, Spearmen(10)), (tower, Spearmen(10))).Accepted);
     }
 
     [Fact]

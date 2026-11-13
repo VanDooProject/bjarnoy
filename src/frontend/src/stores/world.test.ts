@@ -576,7 +576,7 @@ describe('useWorldStore addFieldOrderWaypoint (premium gate)', () => {
     expect(store.fieldOrderDraft!.error).toMatch(/premium/i);
   });
 
-  it('lets a premium account plot as many stops as it likes', async () => {
+  it('lets a premium account plot several stops', async () => {
     const store = await withAuth(true);
     store.startFieldOrder('army-1');
 
@@ -590,6 +590,75 @@ describe('useWorldStore addFieldOrderWaypoint (premium gate)', () => {
       { q: 3, r: 0 },
     ]);
     expect(store.fieldOrderDraft!.error).toBeNull();
+  });
+
+  it('takes ten waypoints plus the destination from a premium account and refuses the eleventh waypoint', async () => {
+    const store = await withAuth(true);
+    store.startFieldOrder('army-1');
+
+    for (let i = 1; i <= 11; i++) store.addFieldOrderWaypoint({ q: i, r: 0 });
+    expect(store.fieldOrderDraft!.route).toHaveLength(11);
+    expect(store.fieldOrderDraft!.error).toBeNull();
+
+    store.addFieldOrderWaypoint({ q: 12, r: 0 });
+
+    expect(store.fieldOrderDraft!.route).toHaveLength(11);
+    expect(store.fieldOrderDraft!.error).toMatch(/at most 5, or 10 with premium/i);
+  });
+});
+
+describe('useWorldStore dispatch waypoint limit', () => {
+  async function withAuth(isPremium: boolean) {
+    const store = await loadStoreModule(true);
+    const { useAuthStore } = await import('./auth');
+    useAuthStore().user = {
+      id: 'u1',
+      userName: 'ragnar',
+      role: 'player',
+      status: 'active',
+      displayName: null,
+      isPremium,
+      preferredLocale: null,
+    };
+    return store;
+  }
+
+  it('takes five waypoints plus the destination from a free account and refuses the sixth waypoint', async () => {
+    const store = await withAuth(false);
+    store.startDispatch();
+
+    for (let i = 1; i <= 6; i++) store.addWaypoint({ q: i, r: 0 });
+    expect(store.dispatchDraft!.route).toHaveLength(6);
+    expect(store.dispatchDraft!.error).toBeNull();
+
+    store.addWaypoint({ q: 7, r: 0 });
+
+    expect(store.dispatchDraft!.route).toHaveLength(6);
+    expect(store.dispatchDraft!.error).toMatch(/at most 5, or 10 with premium/i);
+  });
+
+  it('takes ten waypoints plus the destination from a premium account and refuses the eleventh waypoint', async () => {
+    const store = await withAuth(true);
+    store.startDispatch();
+
+    for (let i = 1; i <= 11; i++) store.addWaypoint({ q: i, r: 0 });
+    expect(store.dispatchDraft!.route).toHaveLength(11);
+
+    store.addWaypoint({ q: 12, r: 0 });
+
+    expect(store.dispatchDraft!.route).toHaveLength(11);
+    expect(store.dispatchDraft!.error).toMatch(/at most 5, or 10 with premium/i);
+  });
+
+  it('counts every plotted hex of an attack route as a waypoint', async () => {
+    const store = await withAuth(false);
+    store.startDispatch();
+    store.setDispatchMission('attack');
+
+    for (let i = 1; i <= 6; i++) store.addWaypoint({ q: i, r: 0 });
+
+    expect(store.dispatchDraft!.route).toHaveLength(5);
+    expect(store.dispatchDraft!.error).toMatch(/at most 5/i);
   });
 });
 

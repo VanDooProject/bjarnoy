@@ -417,7 +417,7 @@
     "fieldOrderInstructions": "Click hexes on the map to plot where this army should go next — the last click is the new destination. {count} {hexWord} plotted.",
     "hexWord": "hex | hexes",
     "freeAccountWaypoints": "Free with the account: one destination, no stops along the way.",
-    "premiumWaypointsNeeded": "is needed to plot extra waypoints.",
+    "premiumWaypointsNeeded": "is needed to plot extra waypoints, up to 10.",
     "premium": "Premium",
     "dragPinHint": "Drag a pin on the map to move a waypoint.",
     "destinationTag": "destination",
