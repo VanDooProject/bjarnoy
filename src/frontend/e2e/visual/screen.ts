@@ -1,5 +1,7 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { buildPaletteReport, collectPagePalette, readRootTokenNames } from './palette';
 
 const SCREENSHOT_CSS = fileURLToPath(new URL('./screenshot.css', import.meta.url));
 
@@ -13,6 +15,19 @@ export async function expectScreen(page: Page, name: string, opts?: { fullPage?:
     stylePath: SCREENSHOT_CSS,
     fullPage: opts?.fullPage ?? false,
   });
+  await attachPalette(page, name);
+}
+
+/**
+ * Report-only palette audit of the screen just compared (see palette.ts); never fails. Written to the test's output
+ * folder (test-results/, which CI uploads) and attached from there, so the JSON is also in the HTML report.
+ */
+async function attachPalette(page: Page, name: string): Promise<void> {
+  const raw = await page.evaluate(collectPagePalette, readRootTokenNames());
+  const report = buildPaletteReport(name, test.info().project.name, raw);
+  const path = test.info().outputPath(`palette-${name}.json`);
+  writeFileSync(path, JSON.stringify(report, null, 2));
+  await test.info().attach(`palette-${name}.json`, { path, contentType: 'application/json' });
 }
 
 /**
