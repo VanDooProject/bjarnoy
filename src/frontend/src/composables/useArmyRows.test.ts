@@ -183,6 +183,34 @@ describe('useArmyRows', () => {
     expect(mountArmyRows().value[0].eta).toBe('1m 0s');
   });
 
+  it('shows an army that has arrived as standing, counting down to when it heads home', () => {
+    const world = useWorldStore();
+    const base = army();
+    world.armies = [
+      army({
+        position: { q: 2, r: 2 },
+        movement: { ...base.movement!, arrivesAt: '2026-01-01T00:30:00Z', turnAroundAt: '2026-01-01T03:00:00Z' },
+      }),
+    ];
+
+    const r = mountArmyRows().value[0];
+
+    expect(r.status).toBe('Standing at (2, 2)');
+    expect(r.eta).toBe('heads home in 2h 0m');
+    expect(r.etaMs).toBe(Date.parse('2026-01-01T03:00:00Z'));
+  });
+
+  it('keeps counting a marching army down to its arrival', () => {
+    const world = useWorldStore();
+    world.armies = [army()];
+
+    const r = mountArmyRows().value[0];
+
+    expect(r.status).toBe('In transit');
+    expect(r.eta).toBe('1h 0m');
+    expect(r.etaMs).toBe(Date.parse('2026-01-01T02:00:00Z'));
+  });
+
   it('still counts a camp army that has not arrived yet down to its arrival', () => {
     const world = useWorldStore();
     world.armies = [army({ mission: 'setupcamp' })];

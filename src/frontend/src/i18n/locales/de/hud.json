@@ -390,6 +390,8 @@
     "supportingNamed": "Unterstützt {name}",
     "supporting": "Unterstützt",
     "returning": "Kehrt zurück",
+    "standingAt": "Steht bei ({q}, {r})",
+    "headsHomeIn": "Rückkehr in {eta}",
     "inTransit": "Unterwegs",
     "hunting": "Auf der Jagd",
     "cannotGetHome": "Kein Weg nach Hause",

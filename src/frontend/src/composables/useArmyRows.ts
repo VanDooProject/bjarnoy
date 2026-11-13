@@ -13,6 +13,7 @@ import {
   campReadyAtMs,
   canFieldOrderArmy,
   formatEta,
+  isArmyStanding,
   isFieldOrderMidMarch,
 } from '../lib/units/armyDispatch';
 import type { MessageSchema } from '../i18n/schema';
@@ -64,19 +65,25 @@ export function useArmyRows() {
       const campReadyAt = campReadyAtMs(army, now, world.worldSpeedFactor);
       const status = campReadyAt !== null
         ? t('hud.armyStatus.buildingCamp', { time: d(new Date(campReadyAt), 'time') })
-        : armyStatusLabel(army, army.supporting ? targetName : null);
+        : armyStatusLabel(army, now, army.supporting ? targetName : null);
+      // A standing army has arrived: its countdown runs to the moment it heads home, not to its arrival.
+      const standing = campReadyAt === null && isArmyStanding(army, now);
       const etaIso = campReadyAt !== null
         ? new Date(campReadyAt).toISOString()
         : army.movement
           ? army.movement.isReturning
             ? army.movement.returnArrivesAt
-            : army.movement.arrivesAt
+            : standing
+              ? army.movement.turnAroundAt
+              : army.movement.arrivesAt
           : null;
       // An army that cannot get home has no arrival to count down to, only the moment its food runs out.
       const eta = army.starvesAt
         ? t('hud.armyStatus.starvesIn', { eta: formatEta(army.starvesAt, now) })
         : etaIso
-          ? formatEta(etaIso, now)
+          ? standing
+            ? t('hud.armyStatus.headsHomeIn', { eta: formatEta(etaIso, now) })
+            : formatEta(etaIso, now)
           : null;
       const etaMs = army.starvesAt ? Date.parse(army.starvesAt) : etaIso ? Date.parse(etaIso) : null;
       // Nor any way home to recall it on.

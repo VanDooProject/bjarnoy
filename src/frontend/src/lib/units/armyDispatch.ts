@@ -325,6 +325,20 @@ export function isFieldOrderMidMarch(
 }
 
 /**
+ * Whether an army is standing on its destination: outbound, arrived, not stranded, and not yet past the moment the backend
+ * turns it home by itself (`turnAroundAt`, when given). See `docs/design/troop-movement-range.md` section 2.
+ */
+export function isArmyStanding(
+  army: { movement: { isReturning: boolean; isStranded?: boolean; arrivesAt: string; turnAroundAt?: string } | null },
+  now: number,
+): boolean {
+  const movement = army.movement;
+  if (movement === null || movement.isReturning || movement.isStranded) return false;
+  if (isFieldOrderMidMarch({ movement }, now)) return false;
+  return movement.turnAroundAt === undefined || now < Date.parse(movement.turnAroundAt);
+}
+
+/**
  * Whether a dispatch selection is a fleet: any ship among the selected units makes it one, and the land units selected
  * with it are its passengers (`ShipCargo` in the backend). `'land'` when only land units are selected, `'none'` when
  * nothing is selected yet.
@@ -588,9 +602,11 @@ export function armyStatusLabel(
   army: {
     atHome: boolean;
     supporting: boolean;
-    movement: { isReturning: boolean; isStranded?: boolean } | null;
+    position?: { q: number; r: number };
+    movement: { isReturning: boolean; isStranded?: boolean; arrivesAt?: string; turnAroundAt?: string } | null;
     mission?: string;
   },
+  now: number,
   targetSettlementName?: string | null,
 ): string {
   if (army.atHome) return i18n.global.t('hud.armyStatus.atHome');
@@ -601,6 +617,9 @@ export function armyStatusLabel(
       : i18n.global.t('hud.armyStatus.supporting');
   }
   if (army.movement?.isReturning) return i18n.global.t('hud.armyStatus.returning');
+  if (army.position && army.movement?.arrivesAt !== undefined && isArmyStanding({ movement: { ...army.movement, arrivesAt: army.movement.arrivesAt } }, now)) {
+    return i18n.global.t('hud.armyStatus.standingAt', { q: army.position.q, r: army.position.r });
+  }
   if (army.mission === 'hunt') return i18n.global.t('hud.armyStatus.hunting');
   return i18n.global.t('hud.armyStatus.inTransit');
 }
