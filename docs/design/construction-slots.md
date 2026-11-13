@@ -27,9 +27,20 @@ Level 1 has 2 slots (the exception); from there one more every second level:
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | Slots | 2 | 2 | 2 | 3 | 3 | 4 | 4 | 5 | 5 | 6 | 11 | 16 |
 
-A Longhouse upgrade occupies 90 % of them, rounded down (min 1): 5 of 6 at level 10, 9 of 11 at level 20. A razed settlement (`LonghouseLevel == 0`) still reports
+A razed settlement (`LonghouseLevel == 0`) still reports
 2 slots — harmless, since every building needs `RequiredLonghouseLevel >= 1` and nothing can be queued on a
 razed settlement anyway.
+
+## What an order occupies
+
+`BuildingDefinition.SlotCost` is set per level by `BuildingCatalogue.SlotCostFor`:
+
+- **Buildings:** `1 + floor(level / 6)` — 1 slot up to level 5, 2 from level 6, 3 from 12, 4 from 18, 5 from 24. Nothing but the
+  Longhouse goes past level 25, so 5 is the most a non-Longhouse building ever needs.
+- **Longhouse:** upgrading to level L occupies the slots its own level L-1 gave (`Settlement.ConstructionSlotsAtLonghouseLevel(L - 1)`),
+  e.g. 5 slots for the upgrade to level 11, 15 for the upgrade to level 30. No percentage is involved: the cost comes from the
+  Longhouse's own slot formula. In a linked realm it is still this one Longhouse's own cost, so the other Longhouses' slots stay
+  free for other construction.
 
 ## Two order states, one `Queue`
 
@@ -43,7 +54,7 @@ premium tier). `BuildOrder.IsWaiting => StartedAt is null`.
 | Raidable | no (already gone) | yes — see "raids" below |
 | Spendable on anything else | n/a | **no** — see "reservations are settlement-wide" below |
 | On the hex | level-0 stub in `Buildings` | nothing |
-| Slots | occupies `SlotCost` (all of them, for a Longhouse) | occupies none |
+| Slots | occupies `SlotCost` | occupies none |
 | Can be dropped | only by catapults / realm loss / an admin edit | yes, by a raid taking the stock below the reservations |
 
 A waiting order is promoted to *building* the instant a slot frees — `Settlement.PromoteWaitingOrders`, the
@@ -60,11 +71,10 @@ determinism the whole lazy model rests on.
 
 ## Multi-slot buildings
 
-`BuildingDefinition.SlotCost` (default 1) and `BuildingDefinition.OccupiesMostSlots`. The Longhouse sets
-`OccupiesMostSlots = true`: its effective cost is `settlement.ConstructionSlots`, not a fixed number, so a
-Longhouse upgrade can only start with **every** slot free, and blocks everything queued behind it while it
-runs — the issue's original request ("longhouse upgrades should block all other construction"), for free
-from the same mechanism that gives multi-slot buildings their cost.
+`BuildingDefinition.SlotCost` (see "What an order occupies"). A Longhouse upgrade can only start once as many slots as its own
+previous level gave are free, so in a stand-alone realm it blocks all other construction while it runs — the issue's original
+request ("longhouse upgrades should block all other construction"), from the same mechanism that gives multi-slot buildings
+their cost.
 
 ## Reserved resources are settlement-wide, not construction-only
 
@@ -151,7 +161,7 @@ A player can raze their own buildings, one level at a time.
 - `BuildOrderResponse` gains `state` (`"building"` / `"waiting"`) and `slotCost`; `completesAtGameTime` is
   `null` for a waiting order (it hasn't started, so there's no real completion instant yet — `totalSeconds`
   is an estimate in that case, since the real duration is only fixed at promotion).
-- `BuildingDefinitionResponse` gains `slotCost`/`occupiesMostSlots`.
+- `BuildingDefinitionResponse` gains `slotCost`.
 - `Describe(BuildRejection)` covers the new `NoFreeSlot` ("Every construction slot is busy" + a premium
   hint), and every `NotEnoughResources` text (build/train/trade/dispatch/guild-fee) gained a "may be reserved
   for queued construction" clause. `QueueBuild`'s 409 now also sets `ProblemDetails.Extensions["rejection"]`,

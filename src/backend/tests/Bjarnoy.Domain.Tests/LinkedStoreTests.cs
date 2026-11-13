@@ -280,9 +280,9 @@ public sealed class LinkedStoreTests
     }
 
     [Fact]
-    public void A_longhouse_upgrade_occupies_90_percent_of_the_slots_of_the_group()
+    public void A_longhouse_upgrade_occupies_its_own_levels_slots_not_the_groups()
     {
-        var busyB = new[] { Order(BuildingType.Farm, new HexCoord(5, 0)), Order(BuildingType.Farm, new HexCoord(6, 0)) };
+        var busyB = new[] { Order(BuildingType.Farm, new HexCoord(5, 0)), Order(BuildingType.Farm, new HexCoord(6, 0)), Order(BuildingType.Farm, new HexCoord(7, 0)) };
         var upgrade = Order(BuildingType.Longhouse, CentreA, level: 2, waiting: true, queuedSeconds: 1);
         var behind = Order(BuildingType.Farm, new HexCoord(-1, 0), waiting: true, queuedSeconds: 2);
         var behindToo = Order(BuildingType.Farm, new HexCoord(-1, 1), waiting: true, queuedSeconds: 3);
@@ -290,14 +290,15 @@ public sealed class LinkedStoreTests
         var b = Member(CentreB, ResourceAmounts.Uniform(10_000), queue: busyB);
         var store = Store(a, b);
 
-        // The group has 4 slots and the upgrade needs 3; B's two orders leave only 2 free, so everything waits.
+        // The group has 4 slots and the upgrade to level 2 needs the 2 its own level 1 gives; B's three orders leave only 1 free,
+        // so everything waits (head of line: the farms behind the upgrade do not jump it).
         Assert.True(store.Outcome(a.Id).Settlement.Queue.All(o => o.IsWaiting));
 
         store.SettleTo(T0.AddMinutes(11));
         var queueA = store.Outcome(a.Id).Settlement.Queue;
         Assert.Equal(T0.AddMinutes(10), queueA.Single(o => o.Id == upgrade.Id).StartedAt);
-        Assert.False(queueA.Single(o => o.Id == behind.Id).IsWaiting, "the slot the upgrade leaves free goes to the next order");
-        Assert.True(queueA.Single(o => o.Id == behindToo.Id).IsWaiting, "the upgrade and one farm fill the group's 4 slots");
+        Assert.False(queueA.Single(o => o.Id == behind.Id).IsWaiting, "the upgrade takes 2 of the group's 4 slots, not most of them");
+        Assert.False(queueA.Single(o => o.Id == behindToo.Id).IsWaiting, "the upgrade and two farms fill the group's 4 slots");
     }
 
     [Fact]

@@ -62,31 +62,58 @@ public sealed class ConstructionSlotTests
     }
 
     [Theory]
-    [InlineData(2, 1)]
-    [InlineData(3, 2)]
-    [InlineData(5, 4)]
-    [InlineData(6, 5)]
-    [InlineData(11, 9)]
-    [InlineData(16, 14)]
-    public void A_longhouse_upgrade_occupies_90_percent_of_the_slots_rounded_down(int slots, int expectedCost)
-    {
-        Assert.Equal(expectedCost, Settlement.LonghouseSlotCost(slots));
-    }
-
-    [Theory]
+    [InlineData(1, 2)]
+    [InlineData(2, 2)]
+    [InlineData(5, 3)]
     [InlineData(10, 5)]
-    [InlineData(20, 9)]
-    public void A_longhouse_upgrade_at_level_costs_90_percent_of_that_levels_slots(int longhouseLevel, int expectedCost)
+    [InlineData(11, 6)]
+    [InlineData(20, 10)]
+    [InlineData(30, 15)]
+    public void A_longhouse_upgrade_occupies_the_slots_its_own_previous_level_gave(int targetLevel, int expectedCost)
     {
-        var settlement = Found(longhouseLevel);
-
-        Assert.Equal(expectedCost, Settlement.LonghouseSlotCost(settlement.ConstructionSlots));
+        Assert.Equal(expectedCost, BuildingCatalogue.Get(BuildingType.Longhouse, targetLevel).SlotCost);
+        Assert.Equal(Settlement.ConstructionSlotsAtLonghouseLevel(targetLevel - 1), expectedCost);
     }
 
     [Fact]
-    public void A_longhouse_upgrade_needs_90_percent_of_the_slots_free_and_blocks_most_of_the_rest()
+    public void A_longhouse_upgrade_cost_does_not_grow_with_a_linked_realms_other_longhouses()
     {
-        // Longhouse level 4 has 3 slots; an upgrade occupies floor(0.9 * 3) = 2.
+        // The cost is read off this Longhouse's level alone, so it is the same however many slots the realm has in total.
+        var own = Found(10);
+
+        Assert.Equal(own.OwnConstructionSlots, BuildingCatalogue.Get(BuildingType.Longhouse, 11).SlotCost);
+    }
+
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(5, 1)]
+    [InlineData(6, 2)]
+    [InlineData(11, 2)]
+    [InlineData(12, 3)]
+    [InlineData(17, 3)]
+    [InlineData(18, 4)]
+    [InlineData(23, 4)]
+    [InlineData(24, 5)]
+    [InlineData(25, 5)]
+    public void A_building_level_needs_one_more_slot_every_sixth_level(int level, int expectedCost)
+    {
+        Assert.Equal(expectedCost, BuildingCatalogue.Get(BuildingType.Lumberjack, level).SlotCost);
+    }
+
+    [Fact]
+    public void No_building_other_than_the_longhouse_needs_more_than_5_slots()
+    {
+        var most = Enum.GetValues<BuildingType>()
+            .Where(t => t != BuildingType.Longhouse && BuildingCatalogue.MaxLevelFor(t) > 0)
+            .Max(t => BuildingCatalogue.Get(t, BuildingCatalogue.MaxLevelFor(t)).SlotCost);
+
+        Assert.Equal(5, most);
+    }
+
+    [Fact]
+    public void A_longhouse_upgrade_needs_every_slot_of_its_own_level_free()
+    {
+        // Longhouse level 4 has 3 slots; the upgrade to 5 occupies all 3.
         // Two other builds occupy two slots, so only one is free.
         var settlement = Found(4);
         var first = settlement.PlanBuild(
@@ -100,8 +127,6 @@ public sealed class ConstructionSlotTests
 
         Assert.Equal(1, withTwo.FreeSlots);
 
-        // The upgrade needs two slots; it cannot start (and has nowhere to
-        // wait since maxWaitingOrders is 0 here), even though one is free.
         var upgrade = withTwo.PlanBuild(
             BuildingType.Longhouse, Centre, Terrain.Grass, T0, Guid.CreateVersion7());
         Assert.Equal(BuildRejection.NoFreeSlot, upgrade.Rejection);
@@ -116,23 +141,26 @@ public sealed class ConstructionSlotTests
         var queued = withTwo.Enqueue(upgradeWaiting.Order!, T0);
         Assert.Equal(2, queued.UsedSlots);
 
-        // Once the earlier build frees its slot, two are free: the upgrade
-        // is promoted and takes 2 of 3 slots, leaving one for the other build.
+        // One build done: two slots free, the upgrade needs three — still waiting.
         var afterOne = queued.SettleTo(first.Order!.CompletesAt!.Value).Settlement;
-        var promotedLonghouse = Assert.Single(afterOne.ActiveOrders, o => o.Type == BuildingType.Longhouse);
-        Assert.False(promotedLonghouse.IsWaiting);
-        Assert.Equal(3, afterOne.UsedSlots);
+        Assert.True(Assert.Single(afterOne.Queue, o => o.Type == BuildingType.Longhouse).IsWaiting);
+
+        // Both done: all three free, the upgrade is promoted and takes them.
+        var afterBoth = queued.SettleTo(second.Order!.CompletesAt!.Value).Settlement;
+        var promoted = Assert.Single(afterBoth.ActiveOrders, o => o.Type == BuildingType.Longhouse);
+        Assert.False(promoted.IsWaiting);
+        Assert.Equal(3, afterBoth.UsedSlots);
     }
 
     [Fact]
-    public void A_longhouse_upgrade_at_level_1_leaves_one_of_two_slots_free()
+    public void A_longhouse_upgrade_at_level_1_takes_both_slots()
     {
         var settlement = Found();
         var upgrade = settlement.PlanBuild(
             BuildingType.Longhouse, Centre, Terrain.Grass, T0, Guid.CreateVersion7());
         Assert.True(upgrade.Accepted);
 
-        Assert.Equal(1, settlement.Enqueue(upgrade.Order!, T0).FreeSlots);
+        Assert.Equal(0, settlement.Enqueue(upgrade.Order!, T0).FreeSlots);
     }
 
     [Fact]

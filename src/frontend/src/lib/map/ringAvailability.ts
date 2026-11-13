@@ -60,12 +60,8 @@ export interface RingAvailability {
   resourcesReadyInSeconds: number | null;
 }
 
-/** Slots one order of this definition occupies: 90 % of the slots (rounded down, min 1) for an `occupiesMostSlots` level, else its `slotCost` (default 1). Mirrors `Settlement.LonghouseSlotCost`. */
-export function slotsNeeded(
-  definition: { slotCost?: number; occupiesMostSlots?: boolean } | undefined,
-  totalSlots: number,
-): number {
-  if (definition?.occupiesMostSlots) return Math.max(1, Math.floor(totalSlots * 0.9));
+/** Slots one order of this definition occupies: its `slotCost` (default 1), which the backend already sets per level (Longhouse included). */
+export function slotsNeeded(definition: { slotCost?: number } | undefined): number {
   return Math.max(1, definition?.slotCost ?? 1);
 }
 

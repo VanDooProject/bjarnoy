@@ -257,7 +257,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
   /** Availability against what is actually spendable: `hud.available` (stock minus the waiting queue's reservation). */
   function availabilityFor(
     cost: RingCard['cost'],
-    definition: { slotCost?: number; occupiesMostSlots?: boolean } | undefined,
+    definition: { slotCost?: number } | undefined,
     locked: boolean,
     hexBusy = false,
   ): RingAvailability {
@@ -267,7 +267,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
       available: world.hud.available,
       rates: world.hud.rates,
       storageCap: world.hud.storageCap,
-      slotsNeeded: slotsNeeded(definition, construction.slots),
+      slotsNeeded: slotsNeeded(definition),
       construction,
       queue: world.hud.queue,
       locked,

@@ -184,21 +184,11 @@ public sealed record BuildingDefinition
     public IReadOnlyList<BuildingPrerequisite> Prerequisites { get; init; } = [];
 
     /// <summary>
-    /// How many construction slots one order for this building occupies while
-    /// it is actively building (issue #158). Ignored when
-    /// <see cref="OccupiesMostSlots"/> is set.
+    /// How many construction slots one order for this level occupies while it is actively building. Set by
+    /// <see cref="BuildingCatalogue.TryGet"/> from the level (<see cref="BuildingCatalogue.SlotCostFor"/>): the Longhouse takes the
+    /// slots its own previous level gave, every other building one slot plus one per full six levels.
     /// </summary>
     public int SlotCost { get; init; } = 1;
-
-    /// <summary>
-    /// When set, a building order for this level occupies 90 % (rounded down, at
-    /// least 1) of the slots the settlement currently has
-    /// (<see cref="Settlement.ConstructionSlots"/>), rather than
-    /// <see cref="SlotCost"/> — the Longhouse's rule: an upgrade can only start
-    /// with that many slots free, and leaves at most ~10 % for other
-    /// construction while it runs.
-    /// </summary>
-    public bool OccupiesMostSlots { get; init; }
 
     /// <summary>
     /// Whether this building may stand on one hex, from everything that can decide it: the terrain, whether it is coastal water,

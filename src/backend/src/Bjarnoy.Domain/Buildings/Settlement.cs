@@ -436,15 +436,11 @@ public sealed record Settlement
             return 0;
         }
 
-        var longhouseLevel = buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
-        return Math.Max(2, 1 + (longhouseLevel / 2));
+        return ConstructionSlotsAtLonghouseLevel(buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level);
     }
 
-    /// <summary>
-    /// Slots a Longhouse order occupies out of <paramref name="constructionSlots"/>: 90 %, rounded down, at least 1
-    /// (level 10: 5 of 6 slots). The rest stay free for other construction.
-    /// </summary>
-    public static int LonghouseSlotCost(int constructionSlots) => Math.Max(1, constructionSlots * 9 / 10);
+    /// <summary>The slots one Longhouse of <paramref name="longhouseLevel"/> gives: <c>max(2, 1 + floor(level / 2))</c>.</summary>
+    public static int ConstructionSlotsAtLonghouseLevel(int longhouseLevel) => Math.Max(2, 1 + (longhouseLevel / 2));
 
     /// <summary>Queued orders already under construction — see <see cref="BuildOrder.IsWaiting"/>.</summary>
     public IEnumerable<BuildOrder> ActiveOrders => Queue.Where(o => !o.IsWaiting);
@@ -453,16 +449,10 @@ public sealed record Settlement
     public IEnumerable<BuildOrder> WaitingOrders => Queue.Where(o => o.IsWaiting);
 
     /// <summary>How many construction slots <see cref="ActiveOrders"/> currently occupies.</summary>
-    public int UsedSlots => UsedSlotsFor(Linked is null ? Queue : [.. Queue, .. Linked.OtherQueue], ConstructionSlots);
+    public int UsedSlots => UsedSlotsFor(Linked is null ? Queue : [.. Queue, .. Linked.OtherQueue]);
 
-    private static int EffectiveSlotCost(BuildOrder order, int constructionSlots)
-    {
-        var definition = BuildingCatalogue.Get(order.Type, order.LevelInWork);
-        return definition.OccupiesMostSlots ? LonghouseSlotCost(constructionSlots) : definition.SlotCost;
-    }
-
-    private static int UsedSlotsFor(IReadOnlyList<BuildOrder> queue, int constructionSlots) =>
-        queue.Where(o => !o.IsWaiting).Sum(o => EffectiveSlotCost(o, constructionSlots));
+    private static int UsedSlotsFor(IReadOnlyList<BuildOrder> queue) =>
+        queue.Where(o => !o.IsWaiting).Sum(o => BuildingCatalogue.Get(o.Type, o.LevelInWork).SlotCost);
 
     /// <summary><see cref="ConstructionSlots"/> minus <see cref="UsedSlots"/>, floored at zero.</summary>
     public int FreeSlots => Math.Max(0, ConstructionSlots - UsedSlots);
@@ -999,7 +989,7 @@ public sealed record Settlement
     /// </summary>
     internal static BuildOrder? NextPromotable(IReadOnlyList<BuildOrder> fifoQueue, int constructionSlots)
     {
-        var free = Math.Max(0, constructionSlots - UsedSlotsFor(fifoQueue, constructionSlots));
+        var free = Math.Max(0, constructionSlots - UsedSlotsFor(fifoQueue));
         if (free <= 0)
         {
             return null;
@@ -1020,7 +1010,7 @@ public sealed record Settlement
             return null;
         }
 
-        var slotCost = EffectiveSlotCost(candidate, constructionSlots);
+        var slotCost = BuildingCatalogue.Get(candidate.Type, candidate.LevelInWork).SlotCost;
 
         // Head-of-line blocking: the waiting queue is FIFO, not a pool a smaller order can jump.
         return slotCost > free ? null : candidate;
@@ -1813,7 +1803,7 @@ public sealed record Settlement
         double speedFactor,
         int maxWaitingOrders)
     {
-        var slotCost = slotDefinition.OccupiesMostSlots ? LonghouseSlotCost(ConstructionSlots) : slotDefinition.SlotCost;
+        var slotCost = slotDefinition.SlotCost;
 
         // A stacked order (maxOrdersPerHex > 1) can only ever start once
         // every earlier order already queued on this same hex is done — an

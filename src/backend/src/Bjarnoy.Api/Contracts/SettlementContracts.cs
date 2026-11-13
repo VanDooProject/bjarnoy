@@ -130,10 +130,8 @@ public sealed record PlacedBuildingResponse(
 /// waiting queue.
 /// </param>
 /// <param name="SlotCost">
-/// How many construction slots this order occupies once building — 90 % of the
-/// slots the settlement currently has (rounded down), for a Longhouse upgrade
-/// (<c>OccupiesMostSlots</c>); otherwise the catalogue's per-order
-/// <c>SlotCost</c> (1 for everything today).
+/// How many construction slots this order occupies once building: the catalogue's <c>SlotCost</c> of the level in work —
+/// 1 + floor(level / 6) for a building, the slots the Longhouse's own previous level gave for a Longhouse upgrade.
 /// </param>
 /// <param name="Kind">
 /// <c>"build"</c> for an order that builds a level, <c>"raze"</c> for one that razes a level: then
@@ -403,9 +401,7 @@ public sealed record SettlementResponse(
                 o.Type.ToWireName(),
                 o.TargetLevel,
                 o.IsWaiting ? "waiting" : "building",
-                BuildingCatalogue.Get(o.Type, o.LevelInWork).OccupiesMostSlots
-                    ? Settlement.LonghouseSlotCost(domain.ConstructionSlots)
-                    : BuildingCatalogue.Get(o.Type, o.LevelInWork).SlotCost,
+                BuildingCatalogue.Get(o.Type, o.LevelInWork).SlotCost,
                 o.CompletesAt,
                 (clock.FreezesTime || o.IsWaiting) ? null : o.RemainingAt(gameNow).TotalSeconds,
                 o.IsWaiting
@@ -528,7 +524,6 @@ public sealed record BuildingDefinitionResponse(
     bool AlsoOnInlandLakeShore,
     int RequiredLonghouseLevel,
     int SlotCost,
-    bool OccupiesMostSlots,
     int ClaimRadius,
     IReadOnlyList<BuildingPrerequisiteResponse> Prerequisites,
     string? RingCategory,
@@ -557,7 +552,6 @@ public sealed record BuildingDefinitionResponse(
             definition.AlsoOnInlandLakeShore,
             definition.RequiredLonghouseLevel,
             definition.SlotCost,
-            definition.OccupiesMostSlots,
             definition.ClaimRadius,
             [.. definition.Prerequisites.Select(p => new BuildingPrerequisiteResponse(p.Type.ToWireName(), p.Level))],
             definition.RingCategory?.ToString().ToLowerInvariant(),

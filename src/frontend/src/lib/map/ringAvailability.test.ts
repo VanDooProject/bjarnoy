@@ -26,15 +26,9 @@ function input(overrides: Partial<RingAvailabilityInput> = {}): RingAvailability
 
 describe('slotsNeeded', () => {
   it('defaults to one slot and honours slotCost', () => {
-    expect(slotsNeeded(undefined, 3)).toBe(1);
-    expect(slotsNeeded({ slotCost: 1, occupiesMostSlots: false }, 3)).toBe(1);
-    expect(slotsNeeded({ slotCost: 2, occupiesMostSlots: false }, 3)).toBe(2);
-  });
-
-  it('takes 90 % of the slots (rounded down) for an occupiesMostSlots level, whatever slotCost says', () => {
-    expect(slotsNeeded({ slotCost: 1, occupiesMostSlots: true }, 2)).toBe(1);
-    expect(slotsNeeded({ slotCost: 1, occupiesMostSlots: true }, 4)).toBe(3);
-    expect(slotsNeeded({ slotCost: 1, occupiesMostSlots: true }, 10)).toBe(9);
+    expect(slotsNeeded(undefined)).toBe(1);
+    expect(slotsNeeded({ slotCost: 1 })).toBe(1);
+    expect(slotsNeeded({ slotCost: 5 })).toBe(5);
   });
 });
 

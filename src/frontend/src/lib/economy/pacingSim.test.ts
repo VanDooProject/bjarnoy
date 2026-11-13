@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   constructionSlotsFor,
-  longhouseSlotCost,
   feastCost,
   feastRenown,
   isOnline,
@@ -55,10 +54,6 @@ function tiny(): BuildingDefinitionResponse[] {
 describe('helpers', () => {
   it('mirrors Settlement.ConstructionSlotsFor', () => {
     expect([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30].map(constructionSlotsFor)).toEqual([2, 2, 2, 3, 3, 4, 4, 5, 5, 6, 11, 16]);
-  });
-
-  it('mirrors Settlement.LonghouseSlotCost', () => {
-    expect([2, 3, 5, 6, 11, 16].map(longhouseSlotCost)).toEqual([1, 2, 4, 5, 9, 14]);
   });
 
   it('a session covers exactly its own minutes, on every day, and may wrap past midnight', () => {

@@ -62,14 +62,14 @@ public sealed class LinkedSettlementContextTests
     }
 
     [Fact]
-    public void A_longhouse_upgrade_occupies_90_percent_of_the_slots_of_the_group()
+    public void A_longhouse_upgrade_occupies_its_own_levels_slots_not_the_groups()
     {
         var upgrade = Order(BuildingType.Longhouse, Centre, level: 2);
         var s = Found() with { Linked = Context(slots: 2, queue: [upgrade]) };
 
         Assert.Equal(4, s.ConstructionSlots);
-        Assert.Equal(3, s.UsedSlots);
-        Assert.Equal(1, s.FreeSlots);
+        Assert.Equal(2, s.UsedSlots);
+        Assert.Equal(2, s.FreeSlots);
     }
 
     [Fact]

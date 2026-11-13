@@ -29,7 +29,6 @@ function def(level: number, over: Partial<BuildingDefinitionResponse> = {}): Bui
     buildSeconds: 60,
     requiredLonghouseLevel: 1,
     slotCost: 1,
-    occupiesMostSlots: false,
     prerequisites: [],
     ...over,
   } as BuildingDefinitionResponse;

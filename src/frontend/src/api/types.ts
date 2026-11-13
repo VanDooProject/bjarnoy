@@ -1497,10 +1497,11 @@ export interface BuildingDefinitionResponse {
   /** Also stands on an inland-lake hex beside land (the fishing hut) — see BuildingDefinition.AlsoOnInlandLakeShore. */
   alsoOnInlandLakeShore?: boolean;
   requiredLonghouseLevel: number;
-  /** Construction slots one order for this building occupies while building — ignored when `occupiesMostSlots` is set. */
+  /**
+   * Construction slots one order for this level occupies while building: 1 + floor(level / 6) for a building; for the Longhouse
+   * the slots its own previous level gave (BuildingCatalogue.SlotCostFor).
+   */
   slotCost: number;
-  /** When set, an order for this level always occupies every slot the settlement currently has (the Longhouse's rule). */
-  occupiesMostSlots: boolean;
   /**
    * Radius (in hexes) of the claim disc this building/level contributes, or
    * 0 for a building that contributes none — see BuildingDefinition.ClaimRadius.

@@ -367,7 +367,7 @@ function standingViewModel(input: BuildingHudInput): BuildingHudViewModel {
   const availability = computeAvailability({
     cost,
     available: input.available,
-    slotsNeeded: slotsNeeded(definition, input.construction.slots),
+    slotsNeeded: slotsNeeded(definition),
     construction: input.construction,
     queue: input.queue,
     locked: requirements.length > 0,

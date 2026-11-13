@@ -113,11 +113,6 @@ export function constructionSlotsFor(longhouseLevel: number): number {
   return Math.max(2, 1 + Math.floor(longhouseLevel / 2));
 }
 
-/** Slots a Longhouse upgrade occupies — mirrors Settlement.LonghouseSlotCost: 90 % rounded down, min 1. */
-export function longhouseSlotCost(slots: number): number {
-  return Math.max(1, Math.floor(slots * 0.9));
-}
-
 /** 'HH:MM' -> minutes since midnight. Unparseable input gives 0. */
 export function parseClock(text: string): number {
   const m = /^(\d{1,2}):(\d{2})$/.exec(text.trim());
@@ -169,7 +164,6 @@ interface Compiled {
   reqLh: number;
   prereqs: BuildingPrerequisiteResponse[];
   slotCost: number;
-  occupiesAll: boolean;
 }
 
 function line(l: ResourceLine): Float64Array {
@@ -192,7 +186,6 @@ function compile(defs: BuildingDefinitionResponse[] | undefined): Compiled[] {
       reqLh: d.requiredLonghouseLevel,
       prereqs: d.prerequisites,
       slotCost: d.slotCost,
-      occupiesAll: d.occupiesMostSlots,
     };
   }
   return out;
@@ -449,7 +442,7 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
 
   function startOne(minute: number, slots: number) {
     // (a) Longhouse: wanted once every producer has caught up with it. It
-    // can only start with 90 % of the slots free, but while it is wanted the
+    // can only start with all of its own slots free, but while it is wanted the
     // player saves for it — producer upgrades (c) are skipped — otherwise a
     // player who is online every minute keeps spending the stock the
     // Longhouse needs and levels it *later* than one who checks in rarely.
@@ -466,7 +459,7 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
         for (let r = 0; !blocked && r < 4; r++) if (up.cost[r] > capacity[r]) blocked = true;
         if (!blocked) lhWanted = false;
       }
-      const lhSlotCost = longhouseSlotCost(slots);
+      const lhSlotCost = next.slotCost;
       if (lhWanted && usedSlots + lhSlotCost <= slots && affordable(next)) {
         spend(next);
         jobs.push({ kind: 'lh', index: 0, finishMinute: minute + Math.ceil(next.buildMinutes), slotCost: lhSlotCost });

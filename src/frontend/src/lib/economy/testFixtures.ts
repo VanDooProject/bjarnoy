@@ -9,7 +9,6 @@ export interface DefOpts {
   storage?: number;
   reqLh?: number;
   prereqs?: BuildingPrerequisiteResponse[];
-  occupiesMostSlots?: boolean;
 }
 
 /** Hand-made catalogue row for tests. */
@@ -24,8 +23,8 @@ export function def(type: string, level: number, o: DefOpts = {}): BuildingDefin
     allowedTerrain: [],
     requiresCoastalWater: false,
     requiredLonghouseLevel: o.reqLh ?? 1,
-    slotCost: 1,
-    occupiesMostSlots: o.occupiesMostSlots ?? type === 'longhouse',
+    // Mirrors BuildingCatalogue.SlotCostFor: a Longhouse upgrade takes the slots its previous level gave.
+    slotCost: type === 'longhouse' ? Math.max(2, 1 + Math.floor((level - 1) / 2)) : 1 + Math.floor(level / 6),
     claimRadius: 0,
     prerequisites: o.prereqs ?? [],
     ringCategory: null,

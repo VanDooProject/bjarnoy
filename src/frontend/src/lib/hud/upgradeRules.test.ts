@@ -5,7 +5,7 @@ import { upgradeVerdict, type UpgradeVerdictInput } from './upgradeRules';
 
 const stock = (o: Partial<Record<'wood' | 'stone' | 'food' | 'iron', number>> = {}) => ({ wood: 0, stone: 0, food: 0, iron: 0, ...o });
 const def = (level: number, over: Partial<BuildingDefinitionResponse> = {}) =>
-  ({ type: 'lumberjack', level, cost: stock({ wood: 100 }), buildSeconds: 60, requiredLonghouseLevel: 1, slotCost: 1, occupiesMostSlots: false, prerequisites: [], ...over }) as BuildingDefinitionResponse;
+  ({ type: 'lumberjack', level, cost: stock({ wood: 100 }), buildSeconds: 60, requiredLonghouseLevel: 1, slotCost: 1, prerequisites: [], ...over }) as BuildingDefinitionResponse;
 
 const verdict = (over: Partial<UpgradeVerdictInput<BuildingDefinitionResponse>> = {}) =>
   upgradeVerdict({

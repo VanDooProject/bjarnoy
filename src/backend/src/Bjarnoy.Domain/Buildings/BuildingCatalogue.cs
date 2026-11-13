@@ -466,8 +466,23 @@ public static class BuildingCatalogue
             RequiredLonghouseLevel = RequiredLonghouseLevelFor(type, level),
             RingCategory = ring.Category,
             RingOrder = ring.Order,
+            SlotCost = SlotCostFor(type, level),
         };
     }
+
+    /// <summary>Levels per extra construction slot: a building needs one more slot at levels 6, 12, 18, 24.</summary>
+    public const int LevelsPerExtraSlot = 6;
+
+    /// <summary>
+    /// Construction slots one order for <paramref name="type"/> at <paramref name="level"/> occupies: <c>1 + floor(level / 6)</c>
+    /// (1 up to level 5, 2 from 6, 3 from 12, 4 from 18, 5 from 24). The Longhouse is the exception: upgrading to a level takes
+    /// every slot its own previous level gave (<see cref="Settlement.ConstructionSlotsAtLonghouseLevel"/>), so it blocks the
+    /// slots of its own realm only — a linked realm's other Longhouses add slots, not cost.
+    /// </summary>
+    public static int SlotCostFor(BuildingType type, int level) =>
+        type == BuildingType.Longhouse
+            ? Settlement.ConstructionSlotsAtLonghouseLevel(level - 1)
+            : 1 + (level / LevelsPerExtraSlot);
 
     /// <summary>
     /// Where each building sits in the build ring: its category and its position within it. The client builds its ring from this
@@ -963,10 +978,6 @@ public static class BuildingCatalogue
         // unlocks at LH 3; from then on territory grows through towers, see
         // MaxTowers and docs/design/economy.md section 5).
         ClaimRadius = level == 1 ? 2 : 3,
-        // A longhouse upgrade is the settlement's biggest single commitment —
-        // it consumes 90 % (rounded down) of the construction slots the
-        // settlement currently has, leaving the rest for other construction.
-        OccupiesMostSlots = true,
     };
 
     /// <summary>
