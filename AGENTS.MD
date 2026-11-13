@@ -335,6 +335,8 @@
 - when an `AskUserQuestion` call comes back with questions unanswered or skipped (e.g. "User did not answer this question"),
   ask them again with the tool once the message I sent instead is handled; a skipped question is still open, not declined
 - if u take screenshots always show the in chat to me too
+- a question that refers to text, a list or a proposal ("as shown", "the text above", "save this") comes after that text in the
+  chat: write it out in full first, then ask. Never ask about content the chat doesn't show
 - for planning u can use a opus or fable subtask/subagent
 - a request for an artifact means UI or other design work: show what it looks like (mockups on real screenshots
   of the game, the variants side by side, how each state and entry point looks on desktop and phone), not a plan
