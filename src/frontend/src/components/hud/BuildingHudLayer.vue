@@ -14,6 +14,7 @@ import { buildingName } from '../../i18n/catalogueNames';
 import { useAuthStore } from '../../stores/auth';
 import { useBuildingCatalogueStore } from '../../stores/buildingCatalogue';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
+import { useQuickUpgradeStore } from '../../stores/quickUpgrade';
 import { useWorldStore } from '../../stores/world';
 import { builtBuildingLevels, ownBuildings } from '../../composables/useBuildRing';
 import { useIsMobile } from '../../composables/useIsMobile';
@@ -101,12 +102,19 @@ const world = useWorldStore();
 const auth = useAuthStore();
 const catalogue = useBuildingCatalogueStore();
 const prefs = useHudPrefsStore();
+const quick = useQuickUpgradeStore();
 const isMobile = useIsMobile();
 const hudHidden = useHiddenUnderPhoneLayer();
 const motion = useBuildingHudMotion();
 
+/**
+ * The markers are wanted: the player switched building info on, or the quick upgrade applies (a held Shift, or its mode), whose
+ * glyphs live on them. One switch for both, so the show / hide animation below is the same one.
+ */
+const markersWanted = computed(() => prefs.buildingInfo || quick.applies);
+
 /** The markers are in the DOM: from the moment they are switched on until their hide animation has ended. */
-const rendered = ref(props.buildingMarkers && prefs.buildingInfo);
+const rendered = ref(props.buildingMarkers && markersWanted.value);
 
 /** Every marker's current tier (they differ while one is hovered); the placement loop writes it only when it changes. */
 const tiers = ref<Record<string, HudTier>>({});
@@ -311,12 +319,33 @@ function boxStyle(currentTier: HudTier) {
 const rowsOf = (m: Marker): HudRow[] => rowsByKey.value[m.key] ?? [];
 
 /**
+ * The quick upgrade look of a marker whose dial shows the plain state: while it applies, a glyph in place of the level - an
+ * upgrade that can be ordered now (`ready`) or one that cannot yet (short of resources, the longhouse, a prerequisite or room in
+ * the stores). Max, running, queued and the other order dials keep what they show; the far tier is the ring only.
+ */
+function glyphOf(m: Marker): 'up' | 'wait' | undefined {
+  if (!quick.applies || tierOf(m.key) === 'far' || m.vm.dial.kind !== 'state') return undefined;
+  switch (m.vm.upgrade.state) {
+    case 'ready':
+      return 'up';
+    case 'short':
+    case 'longhouse':
+    case 'prereq':
+    case 'storage':
+      return 'wait';
+    default:
+      return undefined;
+  }
+}
+
+/**
  * Inside the dial: the countdown of a running upgrade or raze, `#place` of a queued order, else the level; the far tier is the
  * ring only. A pending, refused or finishing dial draws its own symbols instead of a number; an upgrade or raze whose time is up
  * (`settling`, or the finish animation) shows none until the poll brings the new state.
  */
 function labelOf(m: Marker): string {
   if (tierOf(m.key) === 'far') return '';
+  if (glyphOf(m)) return '';
   const { dial } = m.vm;
   switch (dial.kind) {
     case 'upgrading':
@@ -633,7 +662,7 @@ function handOverAfter(key: string, ms: number, canvasDraws: boolean) {
 
 // Show / hide: a hide keeps the markers in the DOM until it has ended; a toggle while one runs reverses it.
 watch(
-  () => prefs.buildingInfo,
+  markersWanted,
   async (on) => {
     if (!props.buildingMarkers) return;
     if (on) {
@@ -656,7 +685,7 @@ watch(
       clearHandovers();
       for (const part of parts) if (!notOwned.value.has(part.key)) handOverAfter(part.key, dialGoneAfterMs(part.delayMs, reduced), true);
       await motion.setShown(false, parts);
-      if (!prefs.buildingInfo) {
+      if (!markersWanted.value) {
         rendered.value = false;
         clearHandovers();
         notOwned.value = new Set();
@@ -762,6 +791,7 @@ onUnmounted(() => {
                 :label-fade="labelFade(m.key)"
                 :order="m.vm.dial.order"
                 :label-visible="tierOf(m.key) !== 'far'"
+                :glyph="glyphOf(m)"
               />
             </span>
             <Transition :css="false" @enter="(el, done) => boxHook('in', el, done)" @leave="(el, done) => boxHook('out', el, done)">

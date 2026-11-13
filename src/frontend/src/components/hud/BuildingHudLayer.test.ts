@@ -9,6 +9,8 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import BuildingHudLayer, { type BuildingHudRenderer } from './BuildingHudLayer.vue';
 import { useWorldStore } from '../../stores/world';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
+import { useAuthStore } from '../../stores/auth';
+import { useQuickUpgradeStore } from '../../stores/quickUpgrade';
 import { installFakeAnimate, type FakeAnimate } from '../../test/fakeAnimate';
 import { DIAL_REJECT_MS, constructionDialsFromQueue, rejectDialAt, type ConstructionDial } from '../../lib/map/constructionDial';
 import { markerScale } from '../../lib/hud/buildingHud';
@@ -583,6 +585,61 @@ describe('BuildingHudLayer', () => {
     expect(localStorage.getItem('bjarnoy.hudBuildingInfo')).toBe('off');
     await toggle.trigger('click');
     expect(wrapper.findAll('.hud-marker')).toHaveLength(4);
+  });
+
+  describe('the quick upgrade look', () => {
+    function premium(on: boolean) {
+      useAuthStore().user = { id: 'u1', userName: 'p', role: 'player', preferredLocale: null, isPremium: on } as never;
+    }
+    const rich = { wood: 1e6, stone: 1e6, food: 1e6, iron: 1e6 };
+
+    it('shows the markers with glyphs in place of levels while Shift is held, even with building info off', async () => {
+      localStorage.setItem('bjarnoy.hudBuildingInfo', 'off');
+      premium(true);
+      const world = seedBuildings();
+      world.hud.available = { ...rich };
+      world.hud.storageCap = { ...rich };
+      wrapper = mountLayer(fakeRenderer());
+      expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
+
+      useQuickUpgradeStore().setShift(true);
+      await flushPromises();
+      expect(wrapper.findAll('.hud-marker')).toHaveLength(4);
+      // The barracks can be upgraded now: the double chevron, and no level number.
+      const barracks = wrapper.get('[data-coord="3,0"]');
+      expect(barracks.find('.hud-dial__glyph--up').exists()).toBe(true);
+      expect(barracks.find('text').exists()).toBe(false);
+      // The tower stands at its maximum: it keeps its level.
+      expect(wrapper.get('[data-coord="2,0"] text').text()).toBe('10');
+      expect(wrapper.find('[data-coord="2,0"] .hud-dial__glyph').exists()).toBe(false);
+
+      useQuickUpgradeStore().setShift(false);
+      await flushPromises();
+      expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
+    });
+
+    it('draws a clock for an upgrade that cannot be ordered yet', async () => {
+      premium(true);
+      const world = seedBuildings();
+      world.hud.available = { wood: 0, stone: 0, food: 0, iron: 0 };
+      wrapper = mountLayer(fakeRenderer());
+      useQuickUpgradeStore().start();
+      await flushPromises();
+      expect(wrapper.find('[data-coord="3,0"] .hud-dial__glyph--wait').exists()).toBe(true);
+      expect(wrapper.find('[data-coord="3,0"] .hud-dial__glyph--up').exists()).toBe(false);
+    });
+
+    it('a free account keeps the levels: Shift and the mode change nothing', async () => {
+      premium(false);
+      seedBuildings();
+      wrapper = mountLayer(fakeRenderer());
+      const quick = useQuickUpgradeStore();
+      quick.setShift(true);
+      quick.start();
+      await flushPromises();
+      expect(wrapper.find('.hud-dial__glyph').exists()).toBe(false);
+      expect(wrapper.get('[data-coord="3,0"] text').text()).toBe('2');
+    });
   });
 
   it('starts hidden when the player turned it off before', () => {

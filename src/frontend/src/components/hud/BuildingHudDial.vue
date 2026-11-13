@@ -37,6 +37,11 @@ const props = defineProps<{
   urgent?: boolean;
   /** The pending dial's centre dots show with the number (not on the far tier, like the canvas dial). */
   labelVisible?: boolean;
+  /**
+   * A glyph in place of the level (the quick upgrade look of a marker): `up` = a gold-filled hex with a dark double chevron (the
+   * upgrade can be ordered now), `wait` = the dark hex with a clock (it cannot yet). Only drawn on the plain state dial.
+   */
+  glyph?: 'up' | 'wait';
 }>();
 
 const RING_COLOR: Record<HudRing, string> = { ready: '#5fd08a', blocked: '#e2705f', upgrading: '#fff', max: '#ffd23f', none: '#fff' };
@@ -70,6 +75,21 @@ const geometry = computed(() => {
   const outline = `M${hex.map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' L')} Z`;
   const font = props.time ? (14.4 * r) / 27.5 : 13 + (r - 14) * 0.5;
   return { sw, size: 2 * c, c, hex: fmt(hex), hexAt, outline, font, unit: sw / 6 };
+});
+
+/** The marks of the glyphs, in the dial's own units (the radius scales them). */
+const glyphMarks = computed(() => {
+  const { c } = geometry.value;
+  const r = props.radius;
+  const w = 0.42 * r;
+  const h = 0.3 * r;
+  const chevron = (apexY: number) => fmt([[c - w, apexY + h], [c, apexY], [c + w, apexY + h]]);
+  return {
+    chevrons: [chevron(c - 0.34 * r), chevron(c + 0.04 * r)],
+    width: Math.max(2, 0.14 * r),
+    clockRadius: 0.38 * r,
+    hands: fmt([[c, c - 0.22 * r], [c, c], [c + 0.16 * r, c + 0.1 * r]]),
+  };
 });
 
 // ---- the elapsed arc --------------------------------------------------------------------------------------------------------
@@ -242,7 +262,7 @@ const pending = computed(() => {
       <polyline v-for="(mark, i) in burst.marks" :key="`m${i}`" :points="mark" fill="none" stroke="#fff" :stroke-opacity="burst.edgeOpacity" :stroke-width="burst.markWidth" stroke-linecap="round" stroke-linejoin="round" />
     </g>
     <template v-else>
-      <polygon :points="geometry.hex" fill="#0b1720" />
+      <polygon :points="geometry.hex" :fill="glyph === 'up' ? GOLD : '#0b1720'" />
       <polygon :points="geometry.hex" fill="none" :stroke="trackColor" :stroke-opacity="trackOpacity" :stroke-width="geometry.sw" stroke-linejoin="round" />
       <path v-if="arcShown" :ref="setArcEl" class="hud-dial__arc" :d="geometry.outline" pathLength="1" stroke-dasharray="1 1" :stroke-dashoffset="arcOffset" fill="none" :stroke="YELLOW" :stroke-width="geometry.sw" stroke-linecap="round" stroke-linejoin="round" />
       <template v-if="pending">
@@ -251,6 +271,13 @@ const pending = computed(() => {
           <circle v-for="(dot, i) in pending.dots" :key="`d${i}`" class="hud-dial__dot" :cx="dot.x" :cy="dot.y" :r="dot.r" fill="#fff" :fill-opacity="dot.opacity" />
         </template>
       </template>
+      <g v-if="glyph === 'up'" class="hud-dial__glyph hud-dial__glyph--up">
+        <polyline v-for="(chevron, i) in glyphMarks.chevrons" :key="i" :points="chevron" fill="none" :stroke="DARK" :stroke-width="glyphMarks.width" stroke-linecap="round" stroke-linejoin="round" />
+      </g>
+      <g v-else-if="glyph === 'wait'" class="hud-dial__glyph hud-dial__glyph--wait">
+        <circle :cx="geometry.c" :cy="geometry.c" :r="glyphMarks.clockRadius" fill="none" stroke="#fff" :stroke-width="glyphMarks.width" />
+        <polyline :points="glyphMarks.hands" fill="none" stroke="#fff" :stroke-width="glyphMarks.width" stroke-linecap="round" stroke-linejoin="round" />
+      </g>
       <Transition :css="false" @enter="(el, done) => (labelFade ? labelFade(el, 'in', done) : done())" @leave="(el, done) => (labelFade ? labelFade(el, 'out', done) : done())">
         <text
           v-if="label"

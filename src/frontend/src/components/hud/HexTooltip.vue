@@ -13,6 +13,7 @@ import type { MessageSchema } from '../../i18n/schema';
 import { formatBuildingModifier, formatBuildingOutput } from '../../lib/map/buildingStatsText';
 import { scaleOutput } from '../../lib/map/buildingEconomy';
 import { useWorldStore } from '../../stores/world';
+import ResourceIcon from '../ResourceIcon.vue';
 import { buildingName, terrainName, wastedTerrainName, giantName, campName, beastName, endgameName } from '../../i18n/catalogueNames';
 
 // Mirrors textures.ts's WASTED_TEXTURE_KEY (grass/forest/sand -> their
@@ -27,11 +28,26 @@ const WASTED_TERRAIN_LABEL_KEY: Partial<Record<string, string>> = {
   sea: 'blacksandcoast',
 };
 
+/**
+ * The quick upgrade line under an own building while the quick upgrade applies (MapView fills it): what a click orders, its price
+ * and time, or why it is blocked; for a free account only `locked`, the premium line.
+ */
+export interface HexTooltipUpgrade {
+  title?: string;
+  cost?: { wood?: number; stone?: number; food?: number; iron?: number };
+  time?: string;
+  /** Why the click would be refused (the ring's Upgrade bubble hint). */
+  blocked?: string;
+  /** A free account: the line that says quick upgrade is premium. */
+  locked?: string;
+}
+
 const world = useWorldStore();
 const props = defineProps<{
   info: HoverInfo;
   /** The other accounts a guarded bridge also lets through (the viewer's guild and the guilds at peace with it; `guild.friendlyUserIds`). */
   friendOwners?: ReadonlySet<string>;
+  upgrade?: HexTooltipUpgrade;
 }>();
 
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -122,6 +138,16 @@ const bridgeAccessText = computed(() => {
   return t('hud.hoverTooltip.bridgeAccessClosed');
 });
 
+const RESOURCE_KEYS = ['wood', 'stone', 'food', 'iron'] as const;
+const upgradeCost = computed(() =>
+  RESOURCE_KEYS.filter((key) => !!props.upgrade?.cost?.[key]).map((key) => ({
+    key,
+    // Upgrade costs scale by a fractional factor; show what the player has to have, rounded up (like the ring's card).
+    amount: Math.ceil(props.upgrade!.cost![key]!),
+    short: props.upgrade!.cost![key]! > world.hud.available[key],
+  })),
+);
+
 const outputText = computed(() =>
   props.info.stats?.output ? formatBuildingOutput(scaleOutput(props.info.stats.output, world.worldSpeedFactor), t) : undefined,
 );
@@ -165,6 +191,26 @@ const modifierText = computed(() =>
       <i18n-t keypath="hud.hoverTooltip.premiumGate" tag="span">
         <template #premium><strong>{{ t('hud.hoverTooltip.premium') }}</strong></template>
       </i18n-t>
+    </div>
+    <div v-if="upgrade" class="quick-upgrade" :class="{ locked: !!upgrade.locked, blocked: !!upgrade.blocked }" data-testid="tooltip-upgrade">
+      <template v-if="upgrade.locked">
+        <svg class="quick-upgrade__icon" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
+        <span>{{ upgrade.locked }}</span>
+      </template>
+      <template v-else>
+        <div class="quick-upgrade__title">
+          <svg class="quick-upgrade__icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.5 6 3l3.5 3.5M2.5 10 6 6.5 9.5 10" /></svg>
+          <span>{{ upgrade.title }}</span>
+        </div>
+        <div v-if="upgrade.blocked" class="quick-upgrade__blocked" data-testid="tooltip-upgrade-blocked">{{ upgrade.blocked }}</div>
+        <div v-if="upgradeCost.length || upgrade.time" class="quick-upgrade__rows">
+          <span v-for="chip in upgradeCost" :key="chip.key" class="quick-upgrade__chip">
+            <ResourceIcon :kind="chip.key" :size="12" />
+            <b :class="{ short: chip.short }">{{ chip.amount }}</b>
+          </span>
+          <span v-if="upgrade.time" class="quick-upgrade__time">{{ upgrade.time }}</span>
+        </div>
+      </template>
     </div>
     <div v-if="info.openable" class="cta">{{ t('hud.hoverTooltip.clickToOpen') }}</div>
   </div>
@@ -242,6 +288,59 @@ const modifierText = computed(() =>
   color: var(--text);
   font-weight: 500;
   text-align: right;
+}
+.quick-upgrade {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--gold);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--gold);
+}
+.quick-upgrade.locked {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.quick-upgrade__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.quick-upgrade__icon {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.quick-upgrade__blocked {
+  color: var(--muted);
+}
+.quick-upgrade__rows {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+}
+.quick-upgrade__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.quick-upgrade__chip .short {
+  color: #e2705f;
+}
+.quick-upgrade__time {
+  color: var(--muted);
 }
 .cta {
   margin-top: 8px;
