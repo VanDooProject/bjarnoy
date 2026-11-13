@@ -60,7 +60,7 @@ public sealed class LinkedGroupSession
     public SettlementEntity Anchor { get; }
 
     /// <summary>Every settlement of the player's island set, oldest first (tracked, full includes).</summary>
-    public IReadOnlyList<SettlementEntity> Members { get; }
+    public IReadOnlyList<SettlementEntity> Members { get; private set; }
 
     public LinkedStore Store { get; }
 
@@ -92,6 +92,16 @@ public sealed class LinkedGroupSession
     public Settlement View(Guid id) => Store.PooledView(id);
 
     public void Apply(Guid id, Settlement updated) => Store.Apply(id, updated);
+
+    /// <summary>
+    /// Takes the member <paramref name="id"/> out of the group (a beach camp that was destroyed): <see cref="WriteBackAsync"/> no longer
+    /// writes it, so what its own piles held is lost. Its entity stays tracked for the caller to delete.
+    /// </summary>
+    public void Drop(Guid id)
+    {
+        Members = [.. Members.Where(m => m.Id != id)];
+        _entities.Remove(id);
+    }
 
     /// <summary>The guest armies hosted by <paramref name="id"/> that still hold units.</summary>
     public IReadOnlyList<ArmyEntity> GuestArmiesOf(Guid id) => [.. _guestArmies[id].Where(a => a.Stacks.Count > 0)];
@@ -188,7 +198,7 @@ public sealed class LinkedGroupSession
 
                 var (army, resources) = GarrisonRelocation.WithWalkFood(found.March, view.Resources, Now);
                 view = view with { Resources = resources };
-                relocation.AddArmy(army);
+                relocation.AddArmy(army, member);
             }
 
             Store.Apply(member.Id, view);

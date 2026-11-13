@@ -158,7 +158,7 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
             var settlement = MakeSettlement(worldId, islandId, ownerId, centre, food: 10, (BuildingType.Tower, tower));
             var army = PlantArmy(settlement, tower, tower, centre, returning: true, provisions: 100, new UnitStack(UnitType.Spearman, 5));
             db.Settlements.Add(settlement);
-            db.Armies.Add(army);
+            db.AddArmyRows(army);
             await db.SaveChangesAsync(Ct);
             settlementId = settlement.Id;
             armyId = army.Id;
@@ -240,7 +240,7 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
             var near = PlantArmy(settlement, tower, tower, new HexCoord(6, 0), returning: false, provisions: 500, new UnitStack(UnitType.Spearman, 5));
             var stranded = PlantArmy(settlement, tower, tower, new HexCoord(6, 0), returning: false, provisions: 0, new UnitStack(UnitType.Spearman, 5));
             db.Settlements.Add(settlement);
-            db.Armies.AddRange(near, stranded);
+            db.AddArmyRows(near, stranded);
             await db.SaveChangesAsync(Ct);
             settlementId = settlement.Id;
             nearId = near.Id;
@@ -285,7 +285,7 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
                 settlement, dock, new HexCoord(-58, -42), dock, returning: true, provisions: 200,
                 new UnitStack(UnitType.Karve, 2), new UnitStack(UnitType.Spearman, 6));
             db.Settlements.Add(settlement);
-            db.Armies.Add(fleet);
+            db.AddArmyRows(fleet);
             await db.SaveChangesAsync(Ct);
             settlementId = settlement.Id;
             fleetId = fleet.Id;

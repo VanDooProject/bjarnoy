@@ -33,6 +33,8 @@ export interface ArmyRow {
   fieldOrderLabel: string;
   selected: boolean;
   mission: string | null;
+  /** The army has no home (its beach camp was destroyed): listed under "Without home" in every realm, never recalled. */
+  withoutHome: boolean;
 }
 
 function armyProgressFraction(army: ArmyResponse, now: number): number | null {
@@ -79,8 +81,10 @@ export function useArmyRows() {
           ? formatEta(etaIso, now)
           : null;
       const etaMs = army.starvesAt ? Date.parse(army.starvesAt) : etaIso ? Date.parse(etaIso) : null;
-      // Nor any way home to recall it on.
+      // Nor any way home to recall it on, nor a home at all.
+      const withoutHome = army.settlementId === null;
       const canRecall =
+        !withoutHome &&
         !army.atHome &&
         (army.supporting || (army.movement !== null && !army.movement.isReturning && !army.movement.isStranded));
       // Issue #156 phase 1: "Move on" once standing, "Append goal" while still
@@ -99,6 +103,7 @@ export function useArmyRows() {
         fieldOrderLabel: midMarch ? t('hud.armyPanel.appendGoal') : t('hud.armyPanel.moveOn'),
         selected: army.id === world.selectedArmyId,
         mission: army.mission !== 'move' ? missionName(army.mission) : null,
+        withoutHome,
       };
     });
   });
@@ -118,4 +123,23 @@ export function sortArmyRowsByEta(rows: ArmyRow[]): ArmyRow[] {
     if (a.etaMs !== b.etaMs) return a.etaMs - b.etaMs;
     return a.id.localeCompare(b.id);
   });
+}
+
+export interface ArmyRowGroup {
+  key: 'home' | 'withoutHome';
+  /** The group's heading; null for the realm's own armies, which need none. */
+  heading: string | null;
+  rows: ArmyRow[];
+}
+
+/**
+ * The rows split into the realm's own armies and the player's armies without a home (in the order given), empty groups left
+ * out: both army lists (ArmyPanel, QueueDrawer) show the second group under its own "Without home" heading.
+ */
+export function groupArmyRowsByHome(rows: ArmyRow[], withoutHomeHeading: string): ArmyRowGroup[] {
+  const groups: ArmyRowGroup[] = [
+    { key: 'home', heading: null, rows: rows.filter((r) => !r.withoutHome) },
+    { key: 'withoutHome', heading: withoutHomeHeading, rows: rows.filter((r) => r.withoutHome) },
+  ];
+  return groups.filter((g) => g.rows.length > 0);
 }

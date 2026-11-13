@@ -22,7 +22,7 @@ import {
   useBuildOrders,
   useTrainingOrders,
 } from '../../composables/useQueueOrders';
-import { sortArmyRowsByEta, useArmyRows } from '../../composables/useArmyRows';
+import { groupArmyRowsByHome, sortArmyRowsByEta, useArmyRows } from '../../composables/useArmyRows';
 import { confirmedBuild } from '../../composables/buildFeedback';
 import { motionEnabled } from '../../lib/motion';
 import { peek, pulseHandle, slideDrawer } from '../../lib/hud/queueMotion';
@@ -149,6 +149,8 @@ const reservedTotal = computed(() => {
 // supporting army (no active ETA) sorts last.
 const armyRows = useArmyRows();
 const sortedArmyRows = computed(() => sortArmyRowsByEta(armyRows.value));
+// The player's armies without a home show in every realm's list, under their own heading.
+const armyGroups = computed(() => groupArmyRowsByHome(sortedArmyRows.value, t('hud.armyPanel.withoutHome')));
 const { isRecalling, recall, refusalFor } = useArmyRecall();
 function beginFieldOrder(armyId: string) {
   close();
@@ -444,7 +446,9 @@ function onDrawerLeave(el: Element, done: () => void) {
               <span class="status-card-title">{{ t('hud.queueDrawer.armies') }}</span>
               <span class="status-card-count">{{ sortedArmyRows.length }}</span>
             </div>
-            <div v-for="row in sortedArmyRows" :key="row.id" class="status-row army-row" :class="{ 'is-selected': row.selected }">
+            <template v-for="group in armyGroups" :key="group.key">
+            <div v-if="group.heading" class="army-group-heading" data-testid="army-group-without-home">{{ group.heading }}</div>
+            <div v-for="row in group.rows" :key="row.id" class="status-row army-row" :class="{ 'is-selected': row.selected }">
               <button type="button" class="status-row-click" @click="selectArmy(row.id, $event)">
                 <div class="status-row-top">
                   <span class="status-row-name">{{ row.composition }}</span>
@@ -479,6 +483,7 @@ function onDrawerLeave(el: Element, done: () => void) {
               </div>
               <p v-if="refusalFor(row.id)" class="status-subtext error recall-refusal">{{ refusalFor(row.id) }}</p>
             </div>
+            </template>
           </template>
 
           <div class="status-card-header" :class="{ 'has-section-above': buildOrders.length || trainingOrders.length || sortedArmyRows.length }">

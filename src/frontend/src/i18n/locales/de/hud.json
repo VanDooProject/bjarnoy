@@ -406,6 +406,7 @@
   "armyPanel": {
     "title": "Armeen",
     "demoNote": "Die Entsendung von Armeen erfordert das echte Backend und ist im Demo-Modus noch nicht eingerichtet.",
+    "withoutHome": "Ohne Zuhause",
     "noArmies": "Keine Armeen unterwegs.",
     "dispatchArmy": "Armee entsenden",
     "premiumRedirectTitle": "Premium erforderlich, um eine noch reisende Armee umzuleiten",

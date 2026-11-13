@@ -38,4 +38,27 @@ public class ArmyEntityTests
         Assert.False(entity.IsStranded);
         Assert.Null(entity.RoutePlannedAt);
     }
+
+    [Fact]
+    public void A_guest_keeps_the_instant_it_arrived_at_its_host_through_the_entity()
+    {
+        var host = Guid.CreateVersion7();
+        var army = new Army
+        {
+            Id = Guid.CreateVersion7(),
+            SettlementId = Guid.CreateVersion7(),
+            HomeSpot = new HexCoord(0, 0),
+            Stacks = [new UnitStack(UnitType.Spearman, 10)],
+            Location = new ArmyLocation.Supporting(host, new HexCoord(4, 0), Since: T0.AddHours(5)),
+            Mission = ArmyMission.Support,
+            TargetSettlementId = host,
+            TargetBuildingCoord = new HexCoord(4, 0),
+            Provisions = 100,
+        };
+        var entity = new ArmyEntity { Id = army.Id };
+
+        entity.ApplyDomain(army);
+
+        Assert.Equal(new ArmyLocation.Supporting(host, new HexCoord(4, 0), T0.AddHours(5)), entity.ToDomain().Location);
+    }
 }

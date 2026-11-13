@@ -29,7 +29,7 @@ import DispatchTargetBuildingPicker from './DispatchTargetBuildingPicker.vue';
 import SendArmyPicker from './SendArmyPicker.vue';
 import DispatchSlots from './DispatchSlots.vue';
 import { useDispatchUnitPicker } from '../../composables/useDispatchUnitPicker';
-import { useArmyRows } from '../../composables/useArmyRows';
+import { groupArmyRowsByHome, useArmyRows } from '../../composables/useArmyRows';
 import { useArmyRowTap } from '../../composables/useArmyRowTap';
 import { useArmyRecall } from '../../composables/useArmyRecall';
 
@@ -159,6 +159,8 @@ async function confirm() {
 // derivation itself lives in useArmyRows (issue: mobile army dispatch),
 // shared with QueueDrawer's Armies section.
 const armyRows = useArmyRows();
+// The player's armies without a home show in every realm's list, under their own heading.
+const armyGroups = computed(() => groupArmyRowsByHome(armyRows.value, t('hud.armyPanel.withoutHome')));
 
 // Click selects / deselects the row's army; a double click focuses it on the map.
 const onRowClick = useArmyRowTap((armyId) => emit('focus-army', armyId));
@@ -203,8 +205,10 @@ async function confirmFieldOrderClick() {
 
     <template v-else-if="!draft && !fieldDraft">
       <div v-if="armyRows.length" class="army-list">
+        <template v-for="group in armyGroups" :key="group.key">
+        <div v-if="group.heading" class="army-group-heading" data-testid="army-group-without-home">{{ group.heading }}</div>
         <div
-          v-for="row in armyRows"
+          v-for="row in group.rows"
           :key="row.id"
           class="status-row army-row"
           :class="{ 'is-selected': row.selected }"
@@ -238,6 +242,7 @@ async function confirmFieldOrderClick() {
           </div>
           <p v-if="refusalFor(row.id)" class="status-subtext error-note recall-refusal">{{ refusalFor(row.id) }}</p>
         </div>
+        </template>
       </div>
       <div v-else class="status-subtext garrison-empty">{{ t('hud.armyPanel.noArmies') }}</div>
 

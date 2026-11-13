@@ -401,7 +401,7 @@ Troops of other players (and camp beasts) marching inside your sight are shown o
 a flag or ship. Sight is your settlements' and towers' visible rings and the vision of your own marching armies. You see
 only a short stretch of their route ahead of them, inside your sight (+1 hex): the marker moves along it, but the route
 itself is not drawn, and you see neither the stretch behind them nor their mission, target or units. Troops standing at
-home or as a guest garrison are not shown.
+home or as a guest garrison are not shown. An army without a home is drawn in its owner's realm colour.
 
 ## 2. Rendering mechanics — inlined (closes the "original plan" gap)
 

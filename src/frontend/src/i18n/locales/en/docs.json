@@ -1170,7 +1170,12 @@
     "risks": {
       "heading": "Dangers",
       "attacked": "A camp can be attacked from land and from sea. When no troops defend it, it can be plundered.",
-      "empty": "When no troops are in it, it can be destroyed even without siege engines."
+      "falls": "A camp falls only to an attack that leaves nobody in it while the attacker still has troops left. It needs no siege engines for that. A raid only plunders it.",
+      "guarded": "While troops guard the camp, yours or those of an army supporting it, ships included, nothing destroys it: not catapults, rams or fire ships.",
+      "destroyed": "Destroying the camp ends it, the same way destroying a Longhouse ends a realm. The camp is gone, and so is everything its piles held, except what the attacker took.",
+      "troopsOut": "Troops from the camp that are out when it falls go to your nearest garrison spot they can reach, and that becomes their home. If they can reach none, they stay where they are until their food runs out, and then starve.",
+      "onTheWay": "An army on its way to a camp that is destroyed goes on to the camp's hex and stays there.",
+      "withoutHome": "An army without a home still takes your orders: move, attack, support, or go to one of your garrison spots. The spot it joins becomes its new home. It cannot be recalled. You find it in the army list of each of your realms, under Without home."
     }
   },
   "realm": {

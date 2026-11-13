@@ -83,6 +83,8 @@ players cannot.
 
 - An army that cannot get home stays where it is: it has no home, or no route home (for example a wall in the way).
   When its provisions run out, the whole army starves.
+- An army without a home still takes field orders: move, attack, support, or go to one of your garrison spots. The spot
+  it folds into becomes its home.
 - A stranded army can be attacked in the field like any other army. When it starves, you get a starvation report:
   which army, where, and the troops lost.
 - Only an army fleeing after a lost field battle is protected from field battles and camp ambushes, for at most

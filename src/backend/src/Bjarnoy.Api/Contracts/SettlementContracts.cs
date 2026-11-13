@@ -616,15 +616,27 @@ public static class SettlementRelations
         GameDbContext db, Guid worldId, Guid? callerUserId, Func<SettlementEntity, bool> isMine, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(isMine);
+        var relationOfUser = await OfUserForCallerAsync(db, worldId, callerUserId, cancellationToken);
+        return s => isMine(s) ? Mine : relationOfUser(s.UserId);
+    }
+
+    /// <summary>
+    /// A lookup from an owner's account to how it stands to the caller: <c>mine</c> for the caller's own account, else <c>guild</c>
+    /// or <c>treaty</c> through <see cref="GuildRelations"/>, else <c>rival</c> (an anonymous owner or caller is in no guild). The
+    /// key a client colours by when it must not learn the owner's ids (a foreign army: <see cref="ForeignArmyResponse"/>).
+    /// </summary>
+    public static async Task<Func<Guid, string>> OfUserForCallerAsync(
+        GameDbContext db, Guid worldId, Guid? callerUserId, CancellationToken cancellationToken)
+    {
         var guildRelation = callerUserId is not null
             ? await GuildRelations.LoadAsync(db, worldId, cancellationToken)
             : null;
 
-        return s =>
+        return userId =>
         {
-            if (isMine(s)) return Mine;
             if (guildRelation is null || callerUserId is not { } caller) return Rival;
-            return guildRelation(caller, s.UserId) switch
+            if (userId == caller) return Mine;
+            return guildRelation(caller, userId) switch
             {
                 GuildRelation.SameGuild => Guild,
                 GuildRelation.Treaty => Treaty,

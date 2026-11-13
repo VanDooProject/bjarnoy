@@ -156,7 +156,7 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
             IsReturning = false,
             Stacks = [new ArmyUnitStackEntity { UnitType = unitType, Count = count }],
         };
-        db.Armies.Add(army);
+        db.AddArmyRows(army);
         await db.SaveChangesAsync(Ct);
         return army.Id;
     }

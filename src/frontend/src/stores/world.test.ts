@@ -3779,7 +3779,7 @@ describe('useWorldStore other realms as send sources', () => {
       summary('far-new', 'far', 'Vik'),
     ]);
     getSettlement.mockReset().mockImplementation(async (id: string) => realmResponse(id, 'Vik', [{ unit: 'spearman', count: 4 }]));
-    getSettlementArmies.mockReset().mockResolvedValue([{ id: 'fa' }]);
+    getSettlementArmies.mockReset().mockResolvedValue([{ id: 'fa', settlementId: 'far' }]);
     getArmy.mockReset().mockResolvedValue({ id: 'fa', settlementId: 'far', stacks: [] });
 
     await store.refreshOtherRealms();
@@ -3798,6 +3798,25 @@ describe('useWorldStore other realms as send sources', () => {
       },
     ]);
     expect(store.sendRealms.map((r) => [r.realmId, r.current])).toEqual([['open', true], ['far', false]]);
+  });
+
+  it("does not fetch an other realm's armies without a home: the open realm's list already carries them", async () => {
+    const store = await loadStoreModule(false);
+    await loggedIn();
+    store.worldId = 'w1';
+    store.selectedSettlementId = 'open';
+    listMySettlements.mockReset().mockResolvedValue([summary('open', 'open', 'Bjarnoy'), summary('far', 'far', 'Vik')]);
+    getSettlement.mockReset().mockImplementation(async (id: string) => realmResponse(id, 'Vik', []));
+    getSettlementArmies.mockReset().mockResolvedValue([
+      { id: 'fa', settlementId: 'far' },
+      { id: 'homeless', settlementId: null },
+    ]);
+    getArmy.mockReset().mockImplementation(async (id: string) => ({ id, settlementId: id === 'fa' ? 'far' : null, stacks: [] }));
+
+    await store.refreshOtherRealms();
+
+    expect(getArmy.mock.calls.map((c) => c[0])).toEqual(['fa']);
+    expect(store.otherRealms[0]!.armies.map((a) => a.id)).toEqual(['fa']);
   });
 
   it("keeps a realm's last snapshot when its read fails, and drops a realm the player no longer has", async () => {
