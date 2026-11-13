@@ -37,14 +37,7 @@ async function expectNothingOffscreen(page: Page, where: string): Promise<void> 
 /** Whether the preview plot's own screen point hits the canvas, not an overlay on top of it. */
 async function plotHitsCanvas(page: Page): Promise<boolean> {
   return page.evaluate(() => {
-    const renderer = (
-      window as unknown as {
-        __settlementRenderer: () => {
-          previewCenter?: { q: number; r: number };
-          hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number };
-        };
-      }
-    ).__settlementRenderer();
+    const renderer = window.__settlementRenderer();
     const canvas = document.querySelector('canvas')!;
     const box = canvas.getBoundingClientRect();
     const plot = renderer.hexCenterScreen(renderer.previewCenter!);
@@ -384,7 +377,7 @@ test.describe('phone overlay layering', { tag: '@g1' }, () => {
     await SettlementPage.found(page);
     // Any queued order mounts the drawer (see queue-drawer.spec.ts's seed).
     await page.evaluate(() => {
-      const world = (window as unknown as { __demoWorld: () => any }).__demoWorld();
+      const world = window.__demoWorld();
       world.hud.garrison = [{ unit: 'spearman', count: 5 }];
       world.hud.tick += 1;
       world.syncHud();

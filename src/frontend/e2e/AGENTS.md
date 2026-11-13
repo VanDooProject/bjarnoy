@@ -35,6 +35,11 @@ production build via `vite preview`, no backend — specs mock the API themselve
     `tap`): `pinch(page, centre, fromGap, toGap, steps?)`, `touchDrag(page,
     from, to, steps?)` and `doubleTap(page, p)`, used by `pinch-zoom.spec.ts` and
     `double-tap-zoom.spec.ts`.
+  - `support/renderer.ts` — one-`page.evaluate` helpers for the common single
+    renderer call: `hexCenterScreen(page, hex)`, `whenFrameRendered(page)`,
+    `lastArmyOverlayFrame(page)`, `cameraZoom(page)`. An evaluate that mixes the
+    renderer with other in-browser logic stays an `evaluate` — don't split it
+    into several of these (see the cost model below).
   - `support/cdp.ts` — `cdpSessionFor(page)`: the one-CDP-session-per-page
     cache that the gestures and `captureCanvas` share.
 - `helpers.ts` — only the multi-step user flows built on `support/`:
@@ -54,9 +59,14 @@ multiplies it. Read many things in one `evaluate`/`evaluateAll` (`rectsOf`,
 `ring.labels()`), use `ring.hover/click/press` for ring bubbles, and when a spec
 has to look at what was *drawn*, wait for `__settlementRenderer().whenFrameRendered()`:
 two `requestAnimationFrame`s no longer imply a Pixi render.
-- `globals.d.ts` — the app's `window.__fogDebug` / `__waterDebug` hooks. Don't
-  add a `declare global` to a spec; two specs doing that with different shapes
-  is a typecheck error across the suite.
+- `globals.d.ts` — the app's `window.__fogDebug` / `__waterDebug` hooks, the
+  typed `window.__settlementRenderer()` (`SettlementRendererHook`, the slice of
+  `HexMapRenderer` e2e uses, written structurally) and the untyped
+  `window.__demoWorld()` store (narrow it at the call site with a local slice
+  type: `window.__demoWorld() as { model: any; selectedSettlementId: string }`).
+  Don't add a `declare global` to a spec; two specs doing that with different
+  shapes is a typecheck error across the suite. A new renderer member e2e needs
+  goes into `SettlementRendererHook`.
 
 ## Rules that keep the suite from drifting
 
@@ -67,7 +77,8 @@ two `requestAnimationFrame`s no longer imply a Pixi render.
    position from `page.locator('canvas').boundingBox()`. Use the app's own test
    hooks — `window.__demoWorld()` for model state and
    `window.__settlementRenderer().hexCenterScreen({ q, r })` for the screen
-   point — the way `sawmill-build.spec.ts` and `shrine-build.spec.ts` do. If a
+   point (`hexCenterScreen(page, hex)` from
+   `support/renderer.ts` when that is the only thing the evaluate does) — the way `sawmill-build.spec.ts` and `shrine-build.spec.ts` do. If a
    new spec needs a variant (e.g. "find an empty owned grass hex"), add it to
    `helpers.ts` rather than pasting the loop again.
 3. **No duplicated login.** Use the `adminAuth` fixture (`adminAuth.login()` /
