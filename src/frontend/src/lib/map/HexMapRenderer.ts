@@ -42,6 +42,7 @@ import { Application, Container, Graphics, GraphicsContext, Rectangle, Sprite, T
 import type { AxialCoord } from '../hex/coords';
 import { axialToOddQ, coordKey, hexesInRadius, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
+import { routeDisplayPointsOnMap } from './routeLine';
 import type { Camera } from './camera';
 import { DIAL_FINISH_MS, DIAL_REJECT_MS, retainFinishingDials, rejectDialAt, flashBlockedAt, type BlockedMarker, type ConstructionDial } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
@@ -974,6 +975,12 @@ export function fadeAlphaAt(elapsedMs: number, delayMs: number, durationMs: numb
 // One tile-art size for both views — see the module comment above.
 export const TILE_W = 168;
 export const TILE_H = TILE_W * TILE_ART_TOPFACE_H_FRAC;
+
+/**
+ * Tolerance for "on the edge" when drawing an army route: the line may run along the edge of (or touch a vertex of) a hex
+ * that is not on the route, but not enter its interior by more than this, in world px.
+ */
+const ROUTE_LINE_EPS = 1e-6 * TILE_H;
 const TILE_CANVAS_H = TILE_W * (TILE_ART_NATIVE_H / TILE_ART_NATIVE_W);
 const TILE_TOPFACE_Y_OFFSET = TILE_W * TILE_ART_TOPFACE_Y_FRAC;
 // How far past the viewport edge (world-space) coordsInRect/isEntirelyDeepFog
@@ -6595,6 +6602,23 @@ export class HexMapRenderer {
     this.fogViewportListener(range);
   }
 
+  /**
+   * World-space display points of a route, one per hex (see `routeDisplayPoints`): the line and the army marker follow
+   * these instead of the hex centres. Memoized per route, since the marker reads it every frame.
+   */
+  private routeDisplayWorld(route: readonly AxialCoord[]): { x: number; y: number }[] {
+    const key = route.map(coordKey).join(';');
+    let points = this.routeDisplayCache.get(key);
+    if (!points) {
+      points = routeDisplayPointsOnMap(route, TILE_W, TILE_H, ROUTE_LINE_EPS);
+      if (this.routeDisplayCache.size >= 8) this.routeDisplayCache.clear();
+      this.routeDisplayCache.set(key, points);
+    }
+    return points;
+  }
+
+  private readonly routeDisplayCache = new Map<string, { x: number; y: number }[]>();
+
   /** World-space centre of a hex's top face — `hexCenterScreen` before the camera transform. */
   private hexCenterWorld(coord: AxialCoord): { x: number; y: number } {
     return hexCenterWorldOf(coord);
@@ -6640,8 +6664,9 @@ export class HexMapRenderer {
     let heading: { x: number; y: number } | null = null;
     let hexes: AxialCoord[];
     if (progress && !progress.arrived) {
-      const from = this.hexCenterWorld(progress.from);
-      const to = this.hexCenterWorld(progress.to);
+      const display = this.routeDisplayWorld(movement!.path);
+      const from = display[progress.legIndex];
+      const to = display[progress.legIndex + 1];
       target = lerpPoint(from, to, progress.t);
       interpolated = progress.t > 0;
       heading = { x: to.x - from.x, y: to.y - from.y };
@@ -6774,7 +6799,7 @@ export class HexMapRenderer {
     const sink: ArmyDrawSink = { g, icons: this.staticIcons };
 
     if (overlay.route.length > 1) {
-      const points = overlay.route.map(at);
+      const points = this.routeDisplayWorld(overlay.route).map((w) => ({ x: w.x * zoom, y: w.y * zoom }));
       if (splitLeg >= 0) {
         this.drawRoute(sink, points.slice(0, splitLeg + 1), { color: ROUTE_COLOR, alpha: 0.3, width: 2 });
         this.drawRoute(sink, points.slice(splitLeg + 1), { color: ROUTE_COLOR, alpha: 0.85, width: 2 });
@@ -6897,8 +6922,9 @@ export class HexMapRenderer {
         progress && !progress.arrived && selected!.movement!.path.length === overlay.route.length ? progress : null;
       if (split) {
         // Only the leg being walked changes from frame to frame; the legs before and after it are in the static part.
-        const legStart = this.hexCenterScreen(overlay.route[split.legIndex]);
-        const legEnd = this.hexCenterScreen(overlay.route[split.legIndex + 1]);
+        const display = this.routeDisplayWorld(overlay.route);
+        const legStart = this.toScreen(display[split.legIndex]);
+        const legEnd = this.toScreen(display[split.legIndex + 1]);
         const marker = lerpPoint(legStart, legEnd, split.t);
         this.drawRoute(movingSink, [legStart, marker], { color: ROUTE_COLOR, alpha: 0.3, width: 2 });
         this.drawRoute(movingSink, [marker, legEnd], { color: ROUTE_COLOR, alpha: 0.85, width: 2 });
