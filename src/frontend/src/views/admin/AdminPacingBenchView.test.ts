@@ -64,6 +64,8 @@ describe('AdminPacingBenchView', () => {
   it('a changed knob re-runs after the debounce and shows the change against the reference; pinning makes it the reference', async () => {
     const wrapper = mountView({ horizonDays: SHORT_HORIZON_DAYS });
     await flushPromises();
+    // Fails loudly if the seeded horizon stops being picked up (the point of seeding is a cheaper run).
+    expect(wrapper.get('[data-testid="bench-status"]').text()).toMatch(/Simulated 100 days/);
     const before = wrapper.get('[data-testid="bench-activeFeasts-10"]').text();
     // A steeper Longhouse build-time tail makes the early Longhouse levels take longer.
     const input = wrapper.get('[data-testid="bench-lhShape"]');
@@ -96,6 +98,7 @@ describe('AdminPacingBenchView', () => {
   it('Reset to live values restores every knob', async () => {
     const wrapper = mountView({ horizonDays: SHORT_HORIZON_DAYS });
     await flushPromises();
+    expect(wrapper.get('[data-testid="bench-status"]').text()).toMatch(/Simulated 100 days/);
     const input = wrapper.get<HTMLInputElement>('[data-testid="bench-storageHouseCapacity"]');
     const live = input.element.value;
     await input.setValue('100');
@@ -104,6 +107,8 @@ describe('AdminPacingBenchView', () => {
     await wrapper.get('[data-testid="bench-reset"]').trigger('click');
     expect(input.element.value).toBe(live);
     expect(input.classes()).not.toContain('changed');
+    // The seeded horizon counted as a change before the reset, so this covers every knob.
+    expect(wrapper.findAll('input.changed')).toHaveLength(0);
   });
 
   it('Copy settings writes the knobs as JSON to the clipboard', async () => {
