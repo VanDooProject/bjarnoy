@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { WorldMapPage } from './pages';
-import { clickHudMenuEntry, gotoWorldMap } from './helpers';
+import { clickHudMenuEntry } from './helpers';
 import { waitForMapReady } from './support/render';
 import { cameraZoom } from './support/renderer';
 import { DEFAULT_ENTER_SETTLEMENT_ZOOM } from '../src/lib/map/zoomTransition';
@@ -18,7 +18,7 @@ import { DEFAULT_ENTER_SETTLEMENT_ZOOM } from '../src/lib/map/zoomTransition';
 // Demo mode never persists `hasFoundedSettlement` across a hard reload
 // (player.ts's own remarks — its WorldModel is pure in-memory) — every
 // navigation here that needs to stay founded uses a real client-side click
-// (HudNav), never `page.goto`, for the same reason gotoWorldMap now does
+// (HudNav), never `page.goto`, for the same reason WorldMapPage.enter now does
 // (see helpers.ts).
 async function clickNav(page: Page, label: string): Promise<void> {
   await page.locator('.hud-nav a.link', { hasText: label }).click();
@@ -76,7 +76,7 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
 
     // Same-document query-string change (Vue Router reacts to it without a
     // reload) — a hard `page.goto('...?debug=1')` would reload and lose the
-    // founded-settlement state, same reason gotoWorldMap avoids it.
+    // founded-settlement state, same reason WorldMapPage.enter avoids it.
     await page.evaluate(() => {
       history.replaceState(history.state, '', location.pathname + '?debug=1' + location.hash);
       window.dispatchEvent(new PopStateEvent('popstate'));
@@ -155,7 +155,7 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     await waitForMapReady(page);
     await expect(page.locator('canvas')).toHaveCount(1);
 
-    await gotoWorldMap(page);
+    await WorldMapPage.enter(page);
     await expect(page.locator('canvas')).toHaveCount(1);
 
     // Navigate away from both map routes entirely — the renderer must tear

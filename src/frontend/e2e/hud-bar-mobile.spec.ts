@@ -25,7 +25,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { openHudDrawer } from './helpers';
+import { openHudDrawer } from './support/hud';
 import { loginTestUser } from './support/session';
 import { SettlementPage } from './pages';
 
@@ -844,8 +844,8 @@ test('bottom docking never covers the onboarding completion banner', async ({ pa
   await page.addInitScript(() => window.localStorage.setItem('bjarnoy.hudBarPosition', 'bottom'));
   await loginTestUser(page);
   const settlement = await SettlementPage.openLanding(page);
-  await settlement.claimLandfall();
-  await settlement.placeGuidedBuildings();
+  await settlement.onboarding.claimLandfall();
+  await settlement.onboarding.placeGuidedBuildings();
 
   const cta = page.getByTestId('onboarding-continue');
   await expect(cta).toBeVisible();

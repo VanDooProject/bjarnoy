@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { foundSettlement } from './helpers';
+import { SettlementPage } from './pages';
 
 /**
  * Regression coverage for the realm-border/Tower mismatch: WorldModel's
@@ -17,7 +17,7 @@ import { foundSettlement } from './helpers';
  * Demo mode has no build queue or leveling (see that same scope note), so
  * there's no way to click a Tower up to level 4 through the UI — this uses
  * the same `__demoWorld` "drive WorldModel directly" hook `helpers.ts`'s
- * own `foundSettlement` already relies on for exactly this reason, calling
+ * own `SettlementPage.found` already relies on for exactly this reason, calling
  * `applyServerSnapshot` (the fixed method) the same way a real poll would
  * once the backend reports a levelled-up Tower.
  */
@@ -26,7 +26,7 @@ test.describe('tower border expansion (realm borders)', { tag: '@g2' }, () => {
     page,
   }) => {
     test.setTimeout(90_000);
-    await foundSettlement(page);
+    await SettlementPage.found(page);
 
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;

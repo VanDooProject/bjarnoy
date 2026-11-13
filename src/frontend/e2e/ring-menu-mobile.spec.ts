@@ -210,7 +210,7 @@ for (const viewport of [
       test(`the onboarding page's build categories open on a circle round a hex ${low.where}, inside the screen`, async ({ page }) => {
         test.setTimeout(MAP_SPEC_TIMEOUT_MS);
         const settlement = await SettlementPage.openLanding(page);
-        await settlement.claimLandfall();
+        await settlement.onboarding.claimLandfall();
         const spot = { x: viewport.width / 2, y: viewport.height - low.fromBottom };
         const target = await bringGrassHexTo(page, settlement, viewport, spot);
         await settlement.clickHex(target);

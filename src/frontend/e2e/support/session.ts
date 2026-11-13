@@ -17,7 +17,7 @@ import { AdminAuthFixture } from '../pages/AdminAuthFixture';
  * clicks it needs a real authenticated session first. Must be
  * called before the page's first navigation — an `addInitScript` only takes
  * effect on a *subsequent* one — so call it before
- * `foundSettlement`/`SettlementPage.found`/`WorldMapPage.open`, not after.
+ * `SettlementPage.found`/`WorldMapPage.open`, not after.
  */
 export async function loginTestUser(page: Page, userName = 'e2e-player'): Promise<void> {
   await new AdminAuthFixture(page).loginAsPlayer(userName);

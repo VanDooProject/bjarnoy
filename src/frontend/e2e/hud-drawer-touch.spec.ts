@@ -225,8 +225,8 @@ test.describe('mobile HUD drawer, touch', () => {
     // The founded landing's header (with its drawer) is back on a phone
     // once the guided build steps are done (LandingView's hideBarForTutorial).
     const settlement = await SettlementPage.openLanding(page);
-    await settlement.claimLandfall();
-    await settlement.placeGuidedBuildings();
+    await settlement.onboarding.claimLandfall();
+    await settlement.onboarding.placeGuidedBuildings();
     await expect(page.getByTestId('onboarding-continue')).toBeVisible();
     await expect(page.locator('header.hud-bar')).toHaveClass(/hud-bar--floating/);
 
@@ -248,8 +248,8 @@ test.describe('mobile HUD drawer, touch', () => {
       test.setTimeout(MAP_SPEC_TIMEOUT_MS);
       await loginTestUser(page);
       const settlement = await SettlementPage.openLanding(page);
-      await settlement.claimLandfall();
-      await settlement.placeGuidedBuildings();
+      await settlement.onboarding.claimLandfall();
+      await settlement.onboarding.placeGuidedBuildings();
       await expect(page.getByTestId('onboarding-continue')).toBeVisible();
       await page.setViewportSize({ width: 390, height: 420 });
       await expect(page.locator('header.hud-bar')).toHaveClass(/hud-bar--floating/);

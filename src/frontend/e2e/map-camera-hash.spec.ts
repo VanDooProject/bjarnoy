@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { foundSettlement } from './helpers';
+import { SettlementPage } from './pages';
 import { waitForMapReady } from './support/render';
 
 type CameraView = { coord: { q: number; r: number }; zoom: number };
@@ -14,7 +14,7 @@ const cameraView = (page: import('@playwright/test').Page) =>
 // fresh MapView that reads the same hash a reload would.
 test('panning writes the camera into the URL hash and a fresh map view restores it', async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-  await foundSettlement(page);
+  await SettlementPage.found(page);
 
   const box = (await page.locator('.map-container canvas').boundingBox())!;
   const cx = box.x + box.width / 2;
@@ -52,7 +52,7 @@ test('panning writes the camera into the URL hash and a fresh map view restores 
 // undefined, so a camera anchor arriving while the map was already mounted (a report's "show on map" link behind a modal) never moved it.
 test('a camera hash that arrives while the map is mounted moves the camera', async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-  await foundSettlement(page);
+  await SettlementPage.found(page);
   const before = await cameraView(page);
   const target = { q: before.coord.q + 4, r: before.coord.r - 3 };
 
@@ -68,7 +68,7 @@ test('a camera hash that arrives while the map is mounted moves the camera', asy
 
 test('an invalid camera hash is ignored', async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-  await foundSettlement(page);
+  await SettlementPage.found(page);
   const before = await cameraView(page);
   await page.evaluate(() => {
     window.location.hash = 'q=abc&r=1&z=2';

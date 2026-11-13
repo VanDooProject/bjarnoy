@@ -4,7 +4,7 @@ import { SettlementPage } from './pages';
 
 test.describe('settlement view interactions', { tag: '@g2' }, () => {
   test('hovering a hex renders a highlight that follows the cursor', async ({ page }) => {
-    // foundSettlement() alone (page load + a real PixiJS/texture mount) can
+    // SettlementPage.found() alone (page load + a real PixiJS/texture mount) can
     // already run close to the global 45s budget under software-rendered
     // headless Chromium, before this test's own interaction — see the
     // panning test's comment below for the same reasoning.
@@ -61,7 +61,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
   });
 
   test('clicking an empty hex inside the realm places a building', async ({ page }) => {
-    // Same reasoning as the hover/panning tests above: foundSettlement()
+    // Same reasoning as the hover/panning tests above: SettlementPage.found()
     // plus driving a real click through the render runs close to (and on
     // CI, over) the global 45s budget.
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
@@ -118,7 +118,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
   });
 
   test('placing a lumberjack on a forest hex is a real, terrain-gated building', async ({ page }) => {
-    // Same reasoning as the other tests here: foundSettlement() plus driving
+    // Same reasoning as the other tests here: SettlementPage.found() plus driving
     // a real click through the render runs close to the global 45s budget.
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
@@ -226,7 +226,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
 
   test('panning the settlement view does not error', async ({ page }) => {
     // This test's own footprint is small (a 10-step drag plus two full
-    // canvas screenshots), but foundSettlement() plus a real drag through
+    // canvas screenshots), but SettlementPage.found() plus a real drag through
     // the live PixiJS scene has been observed taking 70-90s under
     // software-rendered headless Chromium — most of it genuine page-load
     // and rendering cost (confirmed by profiling: an isolated 10-step

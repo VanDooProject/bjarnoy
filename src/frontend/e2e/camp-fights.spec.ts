@@ -128,7 +128,7 @@ test.describe('wildlife camps on the landing ring', () => {
   test('a guarded camp hex in the claim shows Build locked until the camp is cleared', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
-    await settlement.claimLandfall();
+    await settlement.onboarding.claimLandfall();
     const target = await settlement.findHex({ terrain: 'grass' });
     await addCamp(page, 'harewarren', target.hex, 1);
 
@@ -138,7 +138,7 @@ test.describe('wildlife camps on the landing ring', () => {
     await expect(build).toHaveClass(/disabled|locked/);
     await expect(build).toHaveAttribute('aria-description', 'Wild beasts hold this hex: clear their camp first');
     // The onboarding pointer does not send the player into a locked Build; it points back at the guided hex.
-    await expect(settlement.guidancePointer).not.toContainText('Open Build');
+    await expect(settlement.onboarding.guidancePointer).not.toContainText('Open Build');
 
     await page.keyboard.press('Escape');
     await expect(settlement.ring.bubbles).toHaveCount(0);

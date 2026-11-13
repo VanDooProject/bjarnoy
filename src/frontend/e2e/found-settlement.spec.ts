@@ -3,7 +3,7 @@ import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 
 test('clicking an island founds a settlement and opens the village view', async ({ page }) => {
-  // foundSettlement() alone — page load plus a real PixiJS/texture mount —
+  // SettlementPage.found() alone — page load plus a real PixiJS/texture mount —
   // has been observed crossing the global 45s default on a loaded CI
   // runner (43.7s one run, 46.0s the next, same code): CI's own run-to-run
   // variance is wider than the margin 45s leaves for this test, even before

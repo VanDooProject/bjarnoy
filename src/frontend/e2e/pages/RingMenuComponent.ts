@@ -190,4 +190,28 @@ export class RingMenuComponent {
     await this.click(this.categoryBubbles.first());
     await this.settledLayer();
   }
+
+  /**
+   * Builds `building` through the ring on the already-clicked hex, the way a player does: Build hub, then
+   * the category, then the building (the ring is the map's own, see useBuildRing). A phone taps (the first tap on a
+   * building arms it and docks its card, the second commits); desktop clicks with the real pointer.
+   */
+  async build(category: string, building: string): Promise<void> {
+    await this.waitForOpen();
+    const phone = (this.page.viewportSize()?.width ?? 1280) <= 768;
+    if (phone) {
+      await this.action('Build').first().tap();
+      await this.settledLayer();
+      await this.category(category).first().tap();
+      await this.settledLayer();
+      const bubble = this.child(building).first();
+      await expect(bubble).toBeVisible();
+      await bubble.tap();
+      await bubble.tap();
+      return;
+    }
+    await this.openBuildCategories();
+    await this.openCategory(category);
+    await this.click(this.child(building).first());
+  }
 }

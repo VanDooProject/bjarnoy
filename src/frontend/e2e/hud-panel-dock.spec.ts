@@ -5,7 +5,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { foundSettlement } from './helpers';
 import { SettlementPage } from './pages';
 
 // DOM and game state only: the specs read panel boxes, never map pixels.
@@ -164,7 +163,7 @@ test.describe('HUD panel dock', { tag: '@g2' }, () => {
     expect(Math.round(collapsed.y + collapsed.height)).toBe(VIEWPORT.height - 16);
 
     await page.reload();
-    await foundSettlement(page);
+    await SettlementPage.found(page);
     await expect(settlement.questTray).toBeVisible();
     await expect(panel(page, 'quests')).toHaveClass(/is-collapsed/);
 
@@ -195,7 +194,7 @@ test.describe('HUD panel dock', { tag: '@g2' }, () => {
 
     // A reload leaves the demo world, so found a fresh settlement; the panel prefs live in localStorage.
     await page.reload();
-    await foundSettlement(page);
+    await SettlementPage.found(page);
 
     await expect(settlement.questTray).toBeVisible();
     await expect(panel(page, 'quests')).toHaveAttribute('data-side', 'right');

@@ -2,9 +2,8 @@ import type { Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { RING_TIP_GAP_PX } from '../src/lib/map/guidanceArrowGeometry';
-import { bubbleNearestPointerTip } from './helpers';
 import { waitForMapReady } from './support/render';
-import { SettlementPage } from './pages';
+import { OnboardingComponent, SettlementPage } from './pages';
 
 test('landing page is the village view, not a marketing page in front of it', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
@@ -38,15 +37,15 @@ test('landing page holds the guided pointer back until the map has loaded', { ta
 
   const settlement = new SettlementPage(page);
   await expect(page.getByRole('status').filter({ hasText: 'Loading map' })).toBeVisible();
-  await expect(settlement.guidancePointer).toHaveCount(0);
+  await expect(settlement.onboarding.guidancePointer).toHaveCount(0);
 
   releaseTerrain();
   // The pointer follows the map's own "loaded" state, so wait for that the
   // way every other landing spec does (openLanding) rather than giving the
   // whole terrain atlas download and decode a bare expect timeout.
   await waitForMapReady(page);
-  await expect(settlement.guidancePointer).toBeVisible();
-  await expect(settlement.guidancePointer).toContainText('Click this plot');
+  await expect(settlement.onboarding.guidancePointer).toBeVisible();
+  await expect(settlement.onboarding.guidancePointer).toContainText('Click this plot');
 });
 
 // Design handoff "2a" frame 1/1b: before founding, the animated pointer and
@@ -55,11 +54,11 @@ test('landing page shows the guided pointer and a step-1 checklist before foundi
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.openLanding(page);
 
-  await expect(settlement.guidancePointer).toBeVisible();
-  await expect(settlement.guidancePointer).toContainText('Click this plot');
+  await expect(settlement.onboarding.guidancePointer).toBeVisible();
+  await expect(settlement.onboarding.guidancePointer).toContainText('Click this plot');
 
-  await expect(settlement.checklist).toBeVisible();
-  await expect(settlement.checklist).toHaveAttribute('aria-label', 'Step 1 of 3');
+  await expect(settlement.onboarding.checklist).toBeVisible();
+  await expect(settlement.onboarding.checklist).toHaveAttribute('aria-label', 'Step 1 of 3');
   await expect(page.locator('.step.current')).toContainText('Longhouse & yard');
 });
 
@@ -67,7 +66,7 @@ test('landing page shows the guided pointer and a step-1 checklist before foundi
 async function expectPointerAtRimOf(page: import('@playwright/test').Page, name: string): Promise<void> {
   await expect
     .poll(async () => {
-      const at = await bubbleNearestPointerTip(page);
+      const at = await new OnboardingComponent(page).bubbleNearestPointerTip();
       return at && at.nearest === name && at.rimDistance >= -1 && at.rimDistance <= RING_TIP_GAP_PX + 2 && at.under === null;
     })
     .toBe(true);
@@ -108,24 +107,24 @@ test('onboarding build step uses the map\'s two-lane ring, and the pointer walks
   // dimmed or explained away; a building that can't stand on the hex is simply not there.
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.openLanding(page);
-  await settlement.claimLandfall();
+  await settlement.onboarding.claimLandfall();
 
   // Frame 2: the landfall banner and the map pointer, right after founding and before the ring has ever opened.
-  await expect(settlement.banner).toBeVisible();
-  await expect(settlement.banner).toContainText('Landfall made.');
-  await expect(settlement.guidancePointer).toContainText('Now build here');
-  await expect(settlement.checklist).toHaveAttribute('aria-label', 'Step 2 of 3');
+  await expect(settlement.onboarding.banner).toBeVisible();
+  await expect(settlement.onboarding.banner).toContainText('Landfall made.');
+  await expect(settlement.onboarding.guidancePointer).toContainText('Now build here');
+  await expect(settlement.onboarding.checklist).toHaveAttribute('aria-label', 'Step 2 of 3');
 
   const target = await settlement.findHex({ terrain: 'grass' });
   await settlement.clickHex(target);
 
   // The landfall banner is gone the moment the ring opens.
-  await expect(settlement.banner).toHaveCount(0);
+  await expect(settlement.onboarding.banner).toHaveCount(0);
   await settlement.ring.waitForOpen();
 
   // Root: just Build (the map's rule), and the pointer on it.
   expect(await settlement.ring.labels()).toEqual(['Build']);
-  await expect(settlement.guidancePointer).toContainText('Open Build');
+  await expect(settlement.onboarding.guidancePointer).toContainText('Open Build');
   // The arrow's tip rests at the rim of the bubble it names, not at a neighbour's, and covers no bubble.
   await expectPointerAtRimOf(page, 'Build');
   await expectChipClearOfBubbles(page);
@@ -138,7 +137,7 @@ test('onboarding build step uses the map\'s two-lane ring, and the pointer walks
     await settlement.ring.openBuildCategories();
   }
   expect(await settlement.ring.labels()).toEqual(expect.arrayContaining(['Resource', 'Military', 'Logistics', 'Defence', 'Shrines']));
-  await expect(settlement.guidancePointer).toContainText('Open Resource');
+  await expect(settlement.onboarding.guidancePointer).toContainText('Open Resource');
   await expectPointerAtRimOf(page, 'Resource');
   await expectChipClearOfBubbles(page);
 
@@ -153,7 +152,7 @@ test('onboarding build step uses the map\'s two-lane ring, and the pointer walks
   await expect(herder).toBeVisible();
   await expect(herder).toBeEnabled();
   await expect(settlement.ring.child('Lumberjack')).toHaveCount(0);
-  await expect(settlement.guidancePointer).toContainText('Build the Reindeer Herder');
+  await expect(settlement.onboarding.guidancePointer).toContainText('Build the Reindeer Herder');
   await expectPointerAtRimOf(page, 'Reindeer Herder');
   await expectChipClearOfBubbles(page);
   await expect(page.getByTestId('ring-note')).toHaveCount(0);
@@ -170,8 +169,8 @@ test('onboarding build step uses the map\'s two-lane ring, and the pointer walks
   await expect(page.locator('.step.done')).toHaveCount(2);
 
   // Frame 4: one guided building down, the pointer moves on to the other.
-  await expect(settlement.checklist).toHaveAttribute('aria-label', 'Step 3 of 3');
-  await expect(settlement.guidancePointer).toContainText('One more');
+  await expect(settlement.onboarding.checklist).toHaveAttribute('aria-label', 'Step 3 of 3');
+  await expect(settlement.onboarding.guidancePointer).toContainText('One more');
 });
 });
 }
@@ -179,7 +178,7 @@ test('onboarding build step uses the map\'s two-lane ring, and the pointer walks
 test('onboarding ring on a forest hex offers the lumberjack, and the map pointer still says where the herder goes', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.openLanding(page);
-  await settlement.claimLandfall();
+  await settlement.onboarding.claimLandfall();
 
   await settlement.clickHex(await settlement.findHex({ terrain: 'forest' }));
   await settlement.ring.openBuildCategories();
@@ -187,7 +186,7 @@ test('onboarding ring on a forest hex offers the lumberjack, and the map pointer
   await expect(settlement.ring.child('Lumberjack').first()).toBeVisible();
   await expect(settlement.ring.child('Reindeer Herder')).toHaveCount(0);
   // The herder is next but not offered here: no pointer at a ring bubble, the map pointer says where to go.
-  await expect(settlement.guidancePointer).toContainText('Now build here');
+  await expect(settlement.onboarding.guidancePointer).toContainText('Now build here');
 });
 
 // Design handoff "2a" frame 5: completion drops the checklist for a banner
@@ -196,7 +195,7 @@ test('onboarding ring on a forest hex offers the lumberjack, and the map pointer
 test('onboarding completion leads with the profile nudge, then the completion banner hands off to /settlement', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.openLanding(page);
-  await settlement.claimLandfall();
+  await settlement.onboarding.claimLandfall();
 
   // Places both guided buildings directly against the model — the ring
   // interaction itself (terrain gating, the dim note, the pointer) is
@@ -218,26 +217,26 @@ test('onboarding completion leads with the profile nudge, then the completion ba
     world.syncHud();
   });
 
-  await expect(settlement.checklist).toHaveCount(0);
+  await expect(settlement.onboarding.checklist).toHaveCount(0);
 
   // The profile-mark nudge, glow included, replaces the old forced nickname
   // modal — anchored to the returning-player trigger (ReturningPlayerMenu.vue),
   // not an avatar circle (retired along with the anonymous avatar itself).
-  await expect(settlement.profileNudge).toBeVisible();
-  await expect(settlement.profileNudge).toContainText('Three buildings, no jarl.');
+  await expect(settlement.onboarding.profileNudge).toBeVisible();
+  await expect(settlement.onboarding.profileNudge).toContainText('Three buildings, no jarl.');
   await expect(page.getByTestId('returning-player-trigger')).toHaveClass(/is-nudging/);
 
   // The nudge is the one call to action while it is up: the completion
   // banner and its "Enter your settlement" wait until it is answered.
-  await expect(settlement.banner).toHaveCount(0);
+  await expect(settlement.onboarding.banner).toHaveCount(0);
 
   await page.getByTestId('profile-nudge-later').click();
-  await expect(settlement.profileNudge).toHaveCount(0);
+  await expect(settlement.onboarding.profileNudge).toHaveCount(0);
   await expect(page.getByTestId('returning-player-trigger')).not.toHaveClass(/is-nudging/);
-  await expect(settlement.banner).toBeVisible();
-  await expect(settlement.banner).toContainText('All three placed.');
+  await expect(settlement.onboarding.banner).toBeVisible();
+  await expect(settlement.onboarding.banner).toContainText('All three placed.');
 
-  await settlement.continueButton.click();
+  await settlement.onboarding.continueButton.click();
   await page.waitForURL('**/settlement');
 });
 
@@ -251,7 +250,7 @@ test('onboarding ring menu closes on an outside click and on Escape', { tag: '@g
   // no longer a way to render one without these.
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.openLanding(page);
-  await settlement.claimLandfall();
+  await settlement.onboarding.claimLandfall();
 
   const target = await settlement.findHex({ notTerrain: 'sea' });
 
@@ -351,7 +350,7 @@ test('the pre-founding view has no header band or dead in-game nav, only How to 
 test('founding a settlement swaps the pre-founding header for the real in-game nav, but leaderboards stay hidden until login', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.openLanding(page);
-  await settlement.claimLandfall();
+  await settlement.onboarding.claimLandfall();
 
   // Reports/Alliance live in the returning-player menu, not inline.
   await expect(page.getByRole('link', { name: 'Reports', exact: true })).toHaveCount(0);
@@ -373,17 +372,17 @@ test('founding a settlement swaps the pre-founding header for the real in-game n
 test('desktop keeps the header and the onboarding checklist visible throughout, including while the ring is open', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.openLanding(page);
-  await settlement.claimLandfall();
+  await settlement.onboarding.claimLandfall();
 
   await expect(page.locator('.hud-bar')).toBeVisible();
-  await expect(settlement.checklist).toBeVisible();
+  await expect(settlement.onboarding.checklist).toBeVisible();
 
   const target = await settlement.findHex({ terrain: 'grass' });
   await settlement.clickHex(target);
   await settlement.ring.waitForOpen();
 
   await expect(page.locator('.hud-bar')).toBeVisible();
-  await expect(settlement.checklist).toBeVisible();
+  await expect(settlement.onboarding.checklist).toBeVisible();
 });
 
 test('impressum page is reachable and links back', { tag: '@g3' }, async ({ page }) => {

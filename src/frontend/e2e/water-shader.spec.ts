@@ -195,7 +195,7 @@ const PATCH_HALF = 22;
 // more settlement specs land on whichever shard takes them. g1 was the shortest.
 test.describe('water shader', { tag: '@g1' }, () => {
   test('draws on the sea and leaves the land alone', async ({ page }) => {
-    // foundSettlement() plus a real PixiJS mount, then several screenshots of a
+    // SettlementPage.found() plus a real PixiJS mount, then several screenshots of a
     // continuously animating canvas — see budgets.ts.
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);

@@ -2,7 +2,6 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { AdminActivityPage, SettlementPage } from './pages';
-import { openRingOnGuidedHex } from './helpers';
 import { layoutOverflow } from './support/geometry';
 
 // Second mobile-readiness sweep (after mobile.spec.ts): defects found by
@@ -94,8 +93,8 @@ test.describe('ring menu labels on a phone', { tag: '@g2' }, () => {
       });
     }
     const settlement = await SettlementPage.openLanding(page);
-    await settlement.claimLandfall();
-    await openRingOnGuidedHex(settlement, chip);
+    await settlement.onboarding.claimLandfall();
+    await settlement.onboarding.openRingOnGuidedHex(chip);
     // The onboarding ring is the map's: Build, then a category, then its buildings. Check every layer.
     const broken: string[] = [];
     broken.push(...(await brokenLabels(page)));
@@ -176,10 +175,10 @@ test.describe('touch wording on a phone', { tag: '@g2' }, () => {
   // empty hex"; a touch screen gets "Tap" instead.
   test('the onboarding says tap, not click, on a touch screen', async ({ page }) => {
     const settlement = await SettlementPage.openLanding(page);
-    await expect(settlement.guidancePointer).toContainText('Tap this plot');
-    await expect(settlement.checklist).toContainText('Tap your plot to place it');
-    await settlement.claimLandfall();
-    await expect(settlement.checklist).toContainText('Tap an empty hex in your border');
+    await expect(settlement.onboarding.guidancePointer).toContainText('Tap this plot');
+    await expect(settlement.onboarding.checklist).toContainText('Tap your plot to place it');
+    await settlement.onboarding.claimLandfall();
+    await expect(settlement.onboarding.checklist).toContainText('Tap an empty hex in your border');
     await expect(page.locator('#app')).not.toContainText(/click/i);
   });
 });
@@ -356,9 +355,9 @@ test.describe('landscape rail HUD', { tag: '@g2' }, () => {
   test('the account nudge stays on screen and the completion banner waits for it', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
-    await settlement.claimLandfall();
-    await settlement.placeGuidedBuildings();
-    const nudge = settlement.profileNudge;
+    await settlement.onboarding.claimLandfall();
+    await settlement.onboarding.placeGuidedBuildings();
+    const nudge = settlement.onboarding.profileNudge;
     await expect(nudge).toBeVisible();
     await expectFullyInViewport(page, nudge, 'profile nudge');
     const trigger = await box(page.getByTestId('returning-player-trigger'), 'jarl trigger');
@@ -366,10 +365,10 @@ test.describe('landscape rail HUD', { tag: '@g2' }, () => {
     expect(trigger.y).toBeLessThan(24);
     // The nudge is the one call to action while it is up; the completion
     // banner and its "Enter your settlement" follow once it is answered.
-    await expect(settlement.continueButton).toHaveCount(0);
+    await expect(settlement.onboarding.continueButton).toHaveCount(0);
     await nudge.getByTestId('profile-nudge-later').click();
-    await expect(settlement.continueButton).toBeVisible();
-    await expectFullyInViewport(page, settlement.continueButton, 'enter-settlement button');
+    await expect(settlement.onboarding.continueButton).toBeVisible();
+    await expectFullyInViewport(page, settlement.onboarding.continueButton, 'enter-settlement button');
   });
 
   // The landfall banner was a full-width card and the slim checklist docks
@@ -377,12 +376,12 @@ test.describe('landscape rail HUD', { tag: '@g2' }, () => {
   test('the landfall banner is a compact pill and the checklist sits in the corner', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
-    await settlement.claimLandfall();
+    await settlement.onboarding.claimLandfall();
     const viewport = page.viewportSize()!;
-    const banner = await box(settlement.banner.first(), 'landfall banner');
+    const banner = await box(settlement.onboarding.banner.first(), 'landfall banner');
     expect(banner.height, 'one line').toBeLessThanOrEqual(48);
     expect(banner.width).toBeLessThan(viewport.width * 0.7);
-    const tray = await box(settlement.checklist, 'checklist');
+    const tray = await box(settlement.onboarding.checklist, 'checklist');
     expect(viewport.height - (tray.y + tray.height), 'checklist bottom gap').toBeLessThanOrEqual(16);
     expect(viewport.width - (tray.x + tray.width), 'checklist right gap').toBeLessThanOrEqual(16);
   });
@@ -394,10 +393,10 @@ test.describe('landscape rail HUD', { tag: '@g2' }, () => {
     test('the guidance chip stays below the landfall banner', async ({ page }) => {
       test.setTimeout(MAP_SPEC_TIMEOUT_MS);
       const settlement = await SettlementPage.openLanding(page);
-      await settlement.claimLandfall();
-      const banner = settlement.banner.first();
+      await settlement.onboarding.claimLandfall();
+      const banner = settlement.onboarding.banner.first();
       await expect(banner).toBeVisible();
-      const chip = settlement.guidancePointer.locator('.chip');
+      const chip = settlement.onboarding.guidancePointer.locator('.chip');
       await expect(chip).toBeVisible();
       // One in-page read of both boxes per poll attempt. The map's render loop keeps the
       // main thread busy, so every Playwright box lookup waits for a frame; four of them in

@@ -43,7 +43,7 @@ test.describe('world map interactions', () => {
 
     // WorldMapPage.open() founds a settlement, so the world map is fogged
     // (HexMapRenderer.isFogActive(): world mode fogs once the local player
-    // owns any settlement) — before gotoWorldMap navigated via a real
+    // owns any settlement) — before WorldMapPage.enter navigated via a real
     // client-side navigation (see helpers.ts), this test had actually been
     // exercising the landing page's own never-fogged preview the whole
     // time, since its `.map-container[data-map-ready]` satisfied the same
