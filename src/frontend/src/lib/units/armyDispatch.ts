@@ -3,7 +3,14 @@
 // they're unit-testable without mounting a component or a Pinia store, same
 // reasoning as lib/units/trainingEconomy.ts.
 import { hexDistance, type AxialCoord } from '../hex/coords';
-import type { DispatchArmyRequest, DispatchFromSpot, FieldOrderRequest, HexPoint, UnitDefinitionResponse } from '../../api/types';
+import type {
+  DispatchArmyRequest,
+  DispatchFromSpot,
+  FieldOrderRequest,
+  HexPoint,
+  MovementResponse,
+  UnitDefinitionResponse,
+} from '../../api/types';
 import { i18n } from '../../i18n';
 import { BEACH_CAMP_BUILD_SECONDS } from '../founding';
 import { scaledBuildSeconds } from '../map/ringCatalogue';
@@ -324,18 +331,27 @@ export function isFieldOrderMidMarch(
   return army.movement !== null && !army.movement.isReturning && Date.parse(army.movement.arrivesAt) > now;
 }
 
+/** The movement fields `isArmyHeadingHome`, `isArmyStanding` and `armyStatusLabel` read — all of them required in `MovementResponse`. */
+type ArmyTimingMovement = Pick<MovementResponse, 'isReturning' | 'isStranded' | 'arrivesAt' | 'turnAroundAt'>;
+
 /**
- * Whether an army is standing on its destination: outbound, arrived, not stranded, and not yet past the moment the backend
- * turns it home by itself (`turnAroundAt`, when given). See `docs/design/troop-movement-range.md` section 2.
+ * Whether an army is on its way home: on the return leg, or past `turnAroundAt`, when the backend turns it home by itself
+ * (`Army.SettleTo`) and the next refresh will report `isReturning`. A stranded army has no way home.
  */
-export function isArmyStanding(
-  army: { movement: { isReturning: boolean; isStranded?: boolean; arrivesAt: string; turnAroundAt?: string } | null },
-  now: number,
-): boolean {
+export function isArmyHeadingHome(army: { movement: ArmyTimingMovement | null }, now: number): boolean {
   const movement = army.movement;
-  if (movement === null || movement.isReturning || movement.isStranded) return false;
-  if (isFieldOrderMidMarch({ movement }, now)) return false;
-  return movement.turnAroundAt === undefined || now < Date.parse(movement.turnAroundAt);
+  if (movement === null || movement.isStranded) return false;
+  return movement.isReturning || now >= Date.parse(movement.turnAroundAt);
+}
+
+/**
+ * Whether an army is standing on its destination: outbound, arrived, not stranded and not yet heading home. A hunt army
+ * never stands: it fights the camp on arrival. See `docs/design/troop-movement-range.md` section 2.
+ */
+export function isArmyStanding(army: { mission: string; movement: ArmyTimingMovement | null }, now: number): boolean {
+  const movement = army.movement;
+  if (movement === null || movement.isStranded || army.mission === 'hunt' || isArmyHeadingHome(army, now)) return false;
+  return !isFieldOrderMidMarch({ movement }, now);
 }
 
 /**
@@ -602,9 +618,9 @@ export function armyStatusLabel(
   army: {
     atHome: boolean;
     supporting: boolean;
-    position?: { q: number; r: number };
-    movement: { isReturning: boolean; isStranded?: boolean; arrivesAt?: string; turnAroundAt?: string } | null;
-    mission?: string;
+    position: HexPoint;
+    movement: ArmyTimingMovement | null;
+    mission: string;
   },
   now: number,
   targetSettlementName?: string | null,
@@ -616,8 +632,8 @@ export function armyStatusLabel(
       ? i18n.global.t('hud.armyStatus.supportingNamed', { name: targetSettlementName })
       : i18n.global.t('hud.armyStatus.supporting');
   }
-  if (army.movement?.isReturning) return i18n.global.t('hud.armyStatus.returning');
-  if (army.position && army.movement?.arrivesAt !== undefined && isArmyStanding({ movement: { ...army.movement, arrivesAt: army.movement.arrivesAt } }, now)) {
+  if (isArmyHeadingHome(army, now)) return i18n.global.t('hud.armyStatus.returning');
+  if (isArmyStanding(army, now)) {
     return i18n.global.t('hud.armyStatus.standingAt', { q: army.position.q, r: army.position.r });
   }
   if (army.mission === 'hunt') return i18n.global.t('hud.armyStatus.hunting');

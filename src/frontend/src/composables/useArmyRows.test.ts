@@ -200,6 +200,28 @@ describe('useArmyRows', () => {
     expect(r.etaMs).toBe(Date.parse('2026-01-01T03:00:00Z'));
   });
 
+  it('counts an army past its turn-around down to its return home before the next refresh reports it returning', () => {
+    const world = useWorldStore();
+    const base = army();
+    world.armies = [
+      army({
+        movement: {
+          ...base.movement!,
+          arrivesAt: '2026-01-01T00:20:00Z',
+          turnAroundAt: '2026-01-01T00:40:00Z',
+          returnArrivesAt: '2026-01-01T01:30:00Z',
+        },
+      }),
+    ];
+
+    const r = mountArmyRows().value[0];
+
+    expect(r.status).toBe('Returning');
+    expect(r.eta).toBe('30m 0s');
+    expect(r.etaMs).toBe(Date.parse('2026-01-01T01:30:00Z'));
+    expect(r.canRecall).toBe(false);
+  });
+
   it('keeps counting a marching army down to its arrival', () => {
     const world = useWorldStore();
     world.armies = [army()];

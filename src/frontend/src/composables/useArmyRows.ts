@@ -13,6 +13,7 @@ import {
   campReadyAtMs,
   canFieldOrderArmy,
   formatEta,
+  isArmyHeadingHome,
   isArmyStanding,
   isFieldOrderMidMarch,
 } from '../lib/units/armyDispatch';
@@ -39,8 +40,9 @@ export interface ArmyRow {
 function armyProgressFraction(army: ArmyResponse, now: number): number | null {
   const movement = army.movement;
   if (!movement) return null;
-  const start = Date.parse(movement.isReturning ? movement.turnAroundAt : movement.departedAt);
-  const end = Date.parse(movement.isReturning ? movement.returnArrivesAt : movement.arrivesAt);
+  const homeLeg = isArmyHeadingHome(army, now);
+  const start = Date.parse(homeLeg ? movement.turnAroundAt : movement.departedAt);
+  const end = Date.parse(homeLeg ? movement.returnArrivesAt : movement.arrivesAt);
   if (!(end > start)) return null;
   return Math.min(1, Math.max(0, (now - start) / (end - start)));
 }
@@ -67,11 +69,12 @@ export function useArmyRows() {
         ? t('hud.armyStatus.buildingCamp', { time: d(new Date(campReadyAt), 'time') })
         : armyStatusLabel(army, now, army.supporting ? targetName : null);
       // A standing army has arrived: its countdown runs to the moment it heads home, not to its arrival.
+      const headingHome = isArmyHeadingHome(army, now);
       const standing = campReadyAt === null && isArmyStanding(army, now);
       const etaIso = campReadyAt !== null
         ? new Date(campReadyAt).toISOString()
         : army.movement
-          ? army.movement.isReturning
+          ? headingHome
             ? army.movement.returnArrivesAt
             : standing
               ? army.movement.turnAroundAt
@@ -89,7 +92,7 @@ export function useArmyRows() {
       // Nor any way home to recall it on.
       const canRecall =
         !army.atHome &&
-        (army.supporting || (army.movement !== null && !army.movement.isReturning && !army.movement.isStranded));
+        (army.supporting || (army.movement !== null && !headingHome && !army.movement.isStranded));
       // Issue #156 phase 1: "Move on" once standing, "Append goal" while still
       // travelling — see isFieldOrderMidMarch's own doc comment.
       const midMarch = isFieldOrderMidMarch(army, now);
