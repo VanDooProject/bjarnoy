@@ -341,6 +341,8 @@
 - a request for an artifact means UI or other design work: show what it looks like (mockups on real screenshots
   of the game, the variants side by side, how each state and entry point looks on desktop and phone), not a plan
   for how to build it. An implementation plan only when I explicitly ask for a plan
+- when I say design artifact, artifact or design study, I mean several variants side by side most of the time, not one
+  worked-out proposal; show one only when the request is clearly about a single fixed design
 - tools as artifacts (calculators, balancing sheets, simulators, ...) are fine too; they are likely to move into
   the repo later, so build them that way: logic in plain, separable functions that read the game's real numbers
   and formulas (catalogue, `docs/design/`), not hard-coded copies, and no page-only shortcuts that would need a
