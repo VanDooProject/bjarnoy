@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // The battle outcome card: a land army's report is one fight as it always was, a fleet's report shows the ship fight, then the
-// land fight, the drowned passengers and the Fire Ships' fire damage.
+// land fight, the drowned passengers and the Fire Hulks' fire damage.
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import BattleReportCard, { type BattleReportCardData } from './BattleReportCard.vue';
@@ -27,17 +27,17 @@ const fleetReport: BattleReportCardData = {
   defenderLines: [{ unit: 'axeman', lost: 8, survived: 0, volleyLost: 0 }],
   shipFight: {
     attackerLines: [
-      { unit: 'longship', sent: 2, lost: 1, survived: 1, volleyLost: 0 },
-      { unit: 'fireship', sent: 30, lost: 4, survived: 26, volleyLost: 0 },
+      { unit: 'snekkja', sent: 2, lost: 1, survived: 1, volleyLost: 0 },
+      { unit: 'firehulk', sent: 30, lost: 4, survived: 26, volleyLost: 0 },
     ],
-    defenderLines: [{ unit: 'longship', lost: 2, survived: 0, volleyLost: 0 }],
+    defenderLines: [{ unit: 'snekkja', lost: 2, survived: 0, volleyLost: 0 }],
     attackPower: 120,
     defensePower: 80,
     winner: 'attacker',
   },
   drowned: [{ unit: 'spearman', count: 20 }],
   fireShipsBurned: 20,
-  fireSiege: { targetCoord: { q: 5, r: 0 }, targetType: 'dockyard', levelBefore: 3, levelAfter: 1, settlementRazed: false },
+  fireSiege: { targetCoord: { q: 5, r: 0 }, targetType: 'harbour', levelBefore: 3, levelAfter: 1, settlementRazed: false },
 };
 
 function mountCard(report: BattleReportCardData) {
@@ -106,7 +106,7 @@ describe('BattleReportCard', () => {
 
     const ship = wrapper.get('[data-testid=ship-fight]');
     expect(ship.get('h2').text()).toBe('Ship fight');
-    expect(ship.text()).toContain('Fire Ship');
+    expect(ship.text()).toContain('Fire Hulk');
     expect(ship.text()).toContain('120');
     expect(ship.text()).toContain('80');
 
@@ -120,8 +120,8 @@ describe('BattleReportCard', () => {
 
     expect(wrapper.get('[data-testid=drowned]').text()).toContain('20');
     const fire = wrapper.get('[data-testid=fire-damage]').text();
-    expect(fire).toContain('20 Fire Ships burned');
-    expect(fire).toContain('Dockyard damaged: level 3 → 1');
+    expect(fire).toContain('20 fire craft burned');
+    expect(fire).toContain('Harbour damaged: level 3 → 1');
   });
 
   it('says there was no land fight when a fleet fought only at sea', () => {

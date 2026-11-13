@@ -208,7 +208,7 @@ const art = computed(() => {
   return (buildingType ? buildingArtOnTile(buildingType, buildingLevel ?? 1, props.tile) : undefined) ?? terrainArt(terrain);
 });
 // Open water is otherwise unbuildable, but a water building (fishing hut,
-// dockyard, shrine of Njörd — see `isWaterOnlyBuilding`) already standing
+// harbour, shrine of Njörd — see `isWaterOnlyBuilding`) already standing
 // on a coastal-water tile still has to be inspectable/upgradeable here —
 // this only ever sees such a tile with a building on it already (nothing in
 // this modal's own `build` flow offers water as a target), so it can't be

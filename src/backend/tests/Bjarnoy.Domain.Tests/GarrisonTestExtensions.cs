@@ -7,7 +7,7 @@ using Bjarnoy.Domain.World;
 namespace Bjarnoy.Domain.Tests;
 
 /// <summary>
-/// Test helpers for garrisons that stand at spots: land units at the centre, ships at the first spot that can hold ships (a Dockyard,
+/// Test helpers for garrisons that stand at spots: land units at the centre, ships at the first spot that can hold ships (a Harbour,
 /// or a harbouring centre), and dispatching from the spot the requested units stand at.
 /// </summary>
 internal static class GarrisonTestExtensions

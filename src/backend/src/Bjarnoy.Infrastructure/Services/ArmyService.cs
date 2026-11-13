@@ -1718,9 +1718,9 @@ public sealed class ArmyService(
         }
 
         // docs/design/ship-movement.md §2: a fleet's home is the last owned
-        // Dockyard settlement it docked at. A plain Move whose destination
+        // Harbour settlement it docked at. A plain Move whose destination
         // hex turns out to be a *different* settlement the same player owns
-        // (with a Dockyard) folds into that settlement's garrison right away
+        // (with a Harbour) folds into that settlement's garrison right away
         // — same "arrival, then fold" treatment as coming home, just pointed
         // at wherever it actually landed. Checked before the generic
         // domain.SettleTo(now) below, same as every other mission's own
@@ -1730,11 +1730,11 @@ public sealed class ArmyService(
         //
         // §2's last paragraph closes the matching gap: a Move dispatch names
         // only a hex, not a target settlement, so nothing above stops one
-        // from landing on a *foreign* Dockyard settlement's centre — and
+        // from landing on a *foreign* Harbour settlement's centre — and
         // ordinary Move arrival (the domain.SettleTo(now) fallback below)
         // would otherwise let a fleet stand there peacefully forever, a free
         // scouting/blockade stop no Attack/Support dispatch gets. A fleet
-        // reaching a Dockyard settlement it doesn't own is redirected into
+        // reaching a Harbour settlement it doesn't own is redirected into
         // the same battle resolution an explicit Attack dispatch gets
         // instead (never Support — nothing here establishes host consent).
         if (domain.Mission == ArmyMission.Move
@@ -1744,25 +1744,25 @@ public sealed class ArmyService(
             && now >= moveTransit.Movement.ArrivesAt)
         {
             var destination = moveTransit.Movement.Path[^1];
-            var found = await FindDockyardSettlementAtAsync(
+            var found = await FindHarbourSettlementAtAsync(
                 army.WorldId, army.SettlementId, destination, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (found is { Settlement: var dockyardSettlement, ByCentre: var byCentre })
+            if (found is { Settlement: var harbourSettlement, ByCentre: var byCentre })
             {
-                if (dockyardSettlement.OwnerId == army.OwnerId)
+                if (harbourSettlement.OwnerId == army.OwnerId)
                 {
                     // The fleet folds into the harbour spot it reached (a dock hex), or the settlement's own harbour spot
                     // when it landed on the centre; that spot is its new home.
                     var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.World!, cancellationToken).ConfigureAwait(false);
-                    var spot = byCentre ? Army.FleetAnchor(dockyardSettlement.ToDomain(sampler.TerrainAt), sampler.TerrainAt) : destination;
-                    await FoldIntoDockAsync(army, dockyardSettlement, spot, domain, moveTransit.Movement.ArrivesAt, now, cancellationToken).ConfigureAwait(false);
+                    var spot = byCentre ? Army.FleetAnchor(harbourSettlement.ToDomain(sampler.TerrainAt), sampler.TerrainAt) : destination;
+                    await FoldIntoDockAsync(army, harbourSettlement, spot, domain, moveTransit.Movement.ArrivesAt, now, cancellationToken).ConfigureAwait(false);
                     return ArmySettleOutcome.FoldedHome;
                 }
 
                 if (byCentre)
                 {
-                    var asAttack = domain with { Mission = ArmyMission.Attack, TargetSettlementId = dockyardSettlement.Id };
+                    var asAttack = domain with { Mission = ArmyMission.Attack, TargetSettlementId = harbourSettlement.Id };
                     return await ResolveBattleAsync(army, asAttack, now, cancellationToken).ConfigureAwait(false);
                 }
             }
@@ -1938,7 +1938,7 @@ public sealed class ArmyService(
         if (fireSiege.Applied)
         {
             _logger.LogInformation(
-                "Army {ArmyId}'s fire ships burned {Burned} ship(s) and reduced {TargetType} at ({Q},{R}) in settlement {TargetId} "
+                "Army {ArmyId}'s fire craft burned {Burned} ship(s) and reduced {TargetType} at ({Q},{R}) in settlement {TargetId} "
                     + "from level {Before} to {After}.",
                 armyEntity.Id, arrival.Attack!.FireShipsBurned, fireSiege.TargetType, fireSiege.TargetCoord!.Value.Q,
                 fireSiege.TargetCoord.Value.R, targetId, fireSiege.LevelBefore, fireSiege.LevelAfter);
@@ -2342,21 +2342,21 @@ public sealed class ArmyService(
 
     /// <summary>
     /// docs/design/garrison.md: a fleet reaching a *different*
-    /// settlement it owns (with a Dockyard) folds into that settlement's
+    /// settlement it owns (with a Harbour) folds into that settlement's
     /// harbour spot exactly like <see cref="FoldHomeAsync"/> does for a return to
     /// origin — that spot becomes the fleet's new home, with no separate "home" field to track. Kept as its own method
     /// so the two call sites' log messages stay distinct: one is "came home", the other
     /// is "made a new home".
     /// </summary>
     private async Task FoldIntoDockAsync(
-        ArmyEntity armyEntity, SettlementEntity dockyardSettlement, HexCoord spot, Army dockedFleet, DateTimeOffset arrivedAt, DateTimeOffset now,
+        ArmyEntity armyEntity, SettlementEntity harbourSettlement, HexCoord spot, Army dockedFleet, DateTimeOffset arrivedAt, DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        await FoldStacksIntoAsync(dockyardSettlement, spot, armyEntity, dockedFleet, arrivedAt, now, cancellationToken).ConfigureAwait(false);
+        await FoldStacksIntoAsync(harbourSettlement, spot, armyEntity, dockedFleet, arrivedAt, now, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Fleet {ArmyId} docked at settlement {SettlementId}, which it owns but did not depart from ({OriginId}); folded into its garrison.",
-            armyEntity.Id, dockyardSettlement.Id, armyEntity.SettlementId);
+            armyEntity.Id, harbourSettlement.Id, armyEntity.SettlementId);
     }
 
     /// <summary>
@@ -2449,12 +2449,12 @@ public sealed class ArmyService(
 
     /// <summary>
     /// The settlement in <paramref name="worldId"/> a fleet that reached <paramref name="hex"/> docks at: one whose centre is
-    /// there and that has a functioning Dockyard (<c>ByCentre</c>), or one with a Dockyard standing on that hex. Never
+    /// there and that has a functioning Harbour or Shipyard (<c>ByCentre</c>), or one with a Harbour or Shipyard standing on that hex. Never
     /// <paramref name="excludeSettlementId"/> itself — the arriving fleet's own settlement of origin is not a docking target.
     /// Ownership is left to the caller: a fleet reaching an *owned* one folds into it, while reaching a *foreign* one by its centre
     /// resolves through battle instead — both need this same lookup first. <see langword="null"/> when there is none.
     /// </summary>
-    private async Task<(SettlementEntity Settlement, bool ByCentre)?> FindDockyardSettlementAtAsync(
+    private async Task<(SettlementEntity Settlement, bool ByCentre)?> FindHarbourSettlementAtAsync(
         Guid worldId, Guid? excludeSettlementId, HexCoord hex, CancellationToken cancellationToken)
     {
         var candidates = await _dbContext.Settlements
@@ -2466,14 +2466,14 @@ public sealed class ArmyService(
             .Include(s => s.Runes)
             .Where(s => s.WorldId == worldId && s.Id != excludeSettlementId
                 && ((s.CentreQ == hex.Q && s.CentreR == hex.R)
-                    || s.Buildings.Any(b => b.Type == BuildingType.Dockyard && b.Q == hex.Q && b.R == hex.R)))
+                    || s.Buildings.Any(b => BuildingTypeExtensions.DockTypes.Contains(b.Type) && b.Q == hex.Q && b.R == hex.R)))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         foreach (var candidate in candidates)
         {
-            var functioning = candidate.Buildings.Any(b => b.Type == BuildingType.Dockyard && b.OutsideRealmSince == null);
+            var functioning = candidate.Buildings.Any(b => b.Type.IsDock() && b.OutsideRealmSince == null);
             var byCentre = candidate.CentreQ == hex.Q && candidate.CentreR == hex.R;
-            if (functioning && (byCentre || candidate.Buildings.Any(b => b.Type == BuildingType.Dockyard && b.Q == hex.Q && b.R == hex.R && b.OutsideRealmSince == null)))
+            if (functioning && (byCentre || candidate.Buildings.Any(b => b.Type.IsDock() && b.Q == hex.Q && b.R == hex.R && b.OutsideRealmSince == null)))
             {
                 return (candidate, byCentre);
             }

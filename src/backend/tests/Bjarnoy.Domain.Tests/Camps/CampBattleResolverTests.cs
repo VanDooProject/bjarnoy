@@ -261,13 +261,13 @@ public class CampBattleResolverTests
     public void At_a_water_camp_a_hunting_fleets_passengers_do_not_fight_and_drown_beyond_the_slots_of_the_surviving_ships()
     {
         // 5 Longships attack 300 (100 slots) against 195; the 50 axemen aboard (100 slots) would have added 2000.
-        var army = new[] { new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 50) };
+        var army = new[] { new UnitStack(UnitType.Snekkja, 5), new UnitStack(UnitType.Axeman, 50) };
 
         var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(family: CampFamilies.Whaleroad), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         Assert.Equal(300, plan.ArmyPower);
         Assert.Equal(CampFightWinner.Army, plan.Winner);
-        var ships = Count(plan.ArmySurvivors, UnitType.Longship);
+        var ships = Count(plan.ArmySurvivors, UnitType.Snekkja);
         Assert.InRange(ships, 1, 4);
         Assert.Equal(ships * 10, Count(plan.ArmySurvivors, UnitType.Axeman));
         Assert.Equal(50 - (ships * 10), Count(plan.ArmyLosses, UnitType.Axeman));
@@ -276,24 +276,24 @@ public class CampBattleResolverTests
     [Fact]
     public void A_fleet_without_passengers_hunts_a_water_camp_as_before()
     {
-        var plan = CampBattleResolver.Hunt([new UnitStack(UnitType.Longship, 5)], FullStrong(), Strong(family: CampFamilies.Whaleroad), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
+        var plan = CampBattleResolver.Hunt([new UnitStack(UnitType.Snekkja, 5)], FullStrong(), Strong(family: CampFamilies.Whaleroad), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         Assert.Equal(300, plan.ArmyPower);
-        Assert.Equal(5, Count(plan.ArmyLosses, UnitType.Longship) + Count(plan.ArmySurvivors, UnitType.Longship));
+        Assert.Equal(5, Count(plan.ArmyLosses, UnitType.Snekkja) + Count(plan.ArmySurvivors, UnitType.Snekkja));
     }
 
     [Fact]
     public void At_a_sand_camp_the_land_troops_aboard_hunt_it_and_the_ships_take_no_part_and_no_losses()
     {
         // 50 axemen attack 2000 against 195; the 5 longships (attack 300, 20 carry each) would have added little and are not in it.
-        var army = new[] { new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 50) };
+        var army = new[] { new UnitStack(UnitType.Snekkja, 5), new UnitStack(UnitType.Axeman, 50) };
 
         var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(family: CampFamilies.Walrushaulout), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         Assert.Equal(2000, plan.ArmyPower);
         Assert.Equal(CampFightWinner.Army, plan.Winner);
-        Assert.Equal(5, Count(plan.ArmySurvivors, UnitType.Longship));
-        Assert.Equal(0, Count(plan.ArmyLosses, UnitType.Longship));
+        Assert.Equal(5, Count(plan.ArmySurvivors, UnitType.Snekkja));
+        Assert.Equal(0, Count(plan.ArmyLosses, UnitType.Snekkja));
         Assert.Equal(50, Count(plan.ArmySurvivors, UnitType.Axeman) + Count(plan.ArmyLosses, UnitType.Axeman));
     }
 
@@ -301,7 +301,7 @@ public class CampBattleResolverTests
     public void At_a_sand_camp_the_loot_is_capped_by_the_surviving_ships_carry_capacity_only()
     {
         // The axemen could carry far more; the 5 longships carry 5 x 80 = 400.
-        var army = new[] { new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 50) };
+        var army = new[] { new UnitStack(UnitType.Snekkja, 5), new UnitStack(UnitType.Axeman, 50) };
 
         var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(family: CampFamilies.Walrushaulout), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
@@ -422,11 +422,11 @@ public class CampBattleResolverTests
     public void A_fleet_at_a_water_camp_refills_for_everyone_aboard_but_carries_loot_with_its_ships_only()
     {
         // 5 Longships (food 5 x 320 = 1600 for the survivors) with passengers kept aboard.
-        var army = new[] { new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 10) };
+        var army = new[] { new UnitStack(UnitType.Snekkja, 5), new UnitStack(UnitType.Axeman, 10) };
 
         var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(family: CampFamilies.Whaleroad), 1, seed: 1, provisionsAtBattle: 0);
 
-        var ships = Count(plan.ArmySurvivors, UnitType.Longship);
+        var ships = Count(plan.ArmySurvivors, UnitType.Snekkja);
         var food = (ships * 320) + (Count(plan.ArmySurvivors, UnitType.Axeman) * 40);
         Assert.Equal(food, plan.Refill, 3);
         Assert.Equal(ships * 80, plan.Loot.Wood + plan.Loot.Stone + plan.Loot.Food + plan.Loot.Iron, 3);

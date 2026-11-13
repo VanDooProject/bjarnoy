@@ -96,9 +96,9 @@ describe('TechTreeGraph', () => {
 
     expect(wrapper.get('.status').text()).toContain('Hover a building');
 
-    await card(wrapper, 'dockyard').trigger('mouseenter');
+    await card(wrapper, 'harbour').trigger('mouseenter');
 
-    expect(wrapper.get('.status').text()).toContain('Dockyard');
+    expect(wrapper.get('.status').text()).toContain('Harbour');
     wrapper.unmount();
   });
 
@@ -110,7 +110,7 @@ describe('TechTreeGraph', () => {
 
     expect(water.classes()).toContain('active');
     expect(card(wrapper, 'fishinghut').classes()).toContain('card--full');
-    expect(card(wrapper, 'dockyard').classes()).toContain('card--full');
+    expect(card(wrapper, 'harbour').classes()).toContain('card--full');
     expect(card(wrapper, 'lumberjack').classes()).toContain('card--dim');
     expect(wrapper.get('.status').text()).toContain('Water');
     wrapper.unmount();

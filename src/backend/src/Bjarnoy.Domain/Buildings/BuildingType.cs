@@ -78,10 +78,10 @@ public enum BuildingType
     ArcheryRange = 12,
 
     /// <summary>
-    /// Trains ships in place of the Longhouse. Placed on shallow (coastal)
+    /// Trains the scouts, cargo ships and the troop transport in place of the Longhouse (the Dockyard before the Shipyard split it off). Placed on shallow (coastal)
     /// water, like <see cref="FishingHut"/>.
     /// </summary>
-    Dockyard = 13,
+    Harbour = 13,
 
     /// <summary>
     /// Trains the basic melee slice of the land roster (Spearman, Axeman,
@@ -127,7 +127,7 @@ public enum BuildingType
     /// capacity rather than any resource's production — sea-trade wealth
     /// rather than a harvest — so it never overlaps with
     /// <see cref="ShrineOfThor"/> or <see cref="ShrineOfFreyja"/>. The
-    /// water line's own capstone, alongside <see cref="Dockyard"/>.
+    /// water line's own capstone, alongside <see cref="Harbour"/>.
     /// </summary>
     ShrineOfNjord = 18,
 
@@ -252,10 +252,26 @@ public enum BuildingType
     /// integers do not shift.
     /// </summary>
     BeachCamp = 34,
+
+    /// <summary>
+    /// The Shipyard (<c>docs/design/units-and-ships.md</c> §1): trains the warships and the fire craft, in place of the Longhouse.
+    /// Placed on shallow (coastal) water like the <see cref="Harbour"/>; unlocks at Longhouse 10 behind a level-5 Harbour. A
+    /// garrison spot for every ship. Appended at the end so persisted integers do not shift.
+    /// </summary>
+    Shipyard = 35,
 }
 
 public static class BuildingTypeExtensions
 {
+    /// <summary>The docks: the buildings every ship can lie at, trained in or sent home to (<see cref="BuildingType.Harbour"/>, <see cref="BuildingType.Shipyard"/>).</summary>
+    public static readonly IReadOnlyList<BuildingType> DockTypes = [BuildingType.Harbour, BuildingType.Shipyard];
+
+    /// <summary>Whether this is a dock (Harbour or Shipyard). In an EF query use <see cref="DockTypes"/> with <c>Contains</c>.</summary>
+    public static bool IsDock(this BuildingType type) => type is BuildingType.Harbour or BuildingType.Shipyard;
+
+    /// <summary>Whether units stand at this building: a Tower (land units) or a dock (ships). The Longhouse and a beach camp are spots too, but not buildings of this kind.</summary>
+    public static bool HoldsGarrison(this BuildingType type) => type == BuildingType.Tower || type.IsDock();
+
     public static string ToWireName(this BuildingType type) => type switch
     {
         BuildingType.Longhouse => "longhouse",
@@ -271,7 +287,7 @@ public static class BuildingTypeExtensions
         BuildingType.ShrineOfFreyja => "shrineoffreyja",
         BuildingType.GreatStorehouse => "greatstorehouse",
         BuildingType.ArcheryRange => "archeryrange",
-        BuildingType.Dockyard => "dockyard",
+        BuildingType.Harbour => "harbour",
         BuildingType.Barracks => "barracks",
         BuildingType.FisherHut => "fisherhut",
         BuildingType.Sawmill => "sawmill",
@@ -293,6 +309,7 @@ public static class BuildingTypeExtensions
         BuildingType.Bridge => "bridge",
         BuildingType.SiegeWorkshop => "siegeworkshop",
         BuildingType.BeachCamp => "beachcamp",
+        BuildingType.Shipyard => "shipyard",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }

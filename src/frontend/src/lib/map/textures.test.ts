@@ -499,11 +499,11 @@ describe('classifyFamilyFrames', () => {
         { sparse: true },
       );
       const wrap = (c: typeof level1) =>
-        ({ base: {}, baseIndexed: { dockyard: c.baseIndexed }, top: { dockyard: c.top }, animTop: {}, wastedCoastalBase: emptyOrientationArrayMap(), wastedCoastalTop: emptyOrientationArrayMap(), lavaRiverBase: {}, lavaRiverTop: {}, giants: {}, giantAnims: {} }) as unknown as TileTextures;
+        ({ base: {}, baseIndexed: { harbour: c.baseIndexed }, top: { harbour: c.top }, animTop: {}, wastedCoastalBase: emptyOrientationArrayMap(), wastedCoastalTop: emptyOrientationArrayMap(), lavaRiverBase: {}, lavaRiverTop: {}, giants: {}, giantAnims: {} }) as unknown as TileTextures;
 
       const merged = mergeTileTextures(wrap(level1), wrap(statics));
 
-      expect(merged.baseIndexed.dockyard?.SE).toEqual(['dockyard_SE_level000_base', 'dockyard_SE_level001_base', 'dockyard_SE_level002_base']);
+      expect(merged.baseIndexed.harbour?.SE).toEqual(['dockyard_SE_level000_base', 'dockyard_SE_level001_base', 'dockyard_SE_level002_base']);
     });
   });
 });

@@ -122,7 +122,7 @@ public sealed class LinkedGroupSession
     /// guest deaths of the settle off the hosted armies. Does not save.
     /// </summary>
     /// <remarks>
-    /// The one write path that persists a settlement also finds the garrisons whose Tower or Dockyard is gone
+    /// The one write path that persists a settlement also finds the garrisons whose Tower, Harbour or Shipyard is gone
     /// (<see cref="Settlement.TakeOrphanedGarrisons"/>) and sends them marching to the owner's nearest fitting spot, and gives the
     /// armies that were homed there a new home (<see cref="GarrisonRelocation"/>).
     /// </remarks>
@@ -168,7 +168,7 @@ public sealed class LinkedGroupSession
 
             var spotsNow = outcome.Settlement.GarrisonSpots.Select(s => s.Coord).ToHashSet();
             var lost = member.Buildings
-                .Where(b => b.Type is BuildingType.Tower or BuildingType.Dockyard && b.Level >= 1)
+                .Where(b => b.Type.HoldsGarrison() && b.Level >= 1)
                 .Select(b => new HexCoord(b.Q, b.R))
                 .Where(c => !spotsNow.Contains(c))
                 .ToList();

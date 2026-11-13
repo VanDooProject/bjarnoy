@@ -15,7 +15,8 @@
     "shrineofnjord": "Schrein des Njörd",
     "greatstorehouse": "Großes Lagerhaus",
     "archeryrange": "Schießplatz",
-    "dockyard": "Werft",
+    "harbour": "Hafen",
+    "shipyard": "Werft",
     "barracks": "Kaserne",
     "sawmill": "Sägewerk",
     "meadery": "Met-Brennerei",
@@ -35,6 +36,13 @@
     "beachcamp": "Strandlager",
     "reindeerherder": "Rentierhirte"
   },
+  "shipGroups": {
+    "scouts": "Späher",
+    "cargo": "Fracht",
+    "transport": "Transport",
+    "warships": "Kriegsschiffe",
+    "fireCraft": "Brandschiffe"
+  },
   "units": {
     "thrall": "Knecht",
     "spearman": "Speerkämpfer",
@@ -45,8 +53,13 @@
     "catapult": "Katapult",
     "ram": "Rammbock",
     "karve": "Karve",
-    "longship": "Langschiff",
-    "fireship": "Brandschiff",
+    "faering": "Færing",
+    "byrding": "Byrding",
+    "knarr": "Knarr",
+    "snekkja": "Snekkja",
+    "skeid": "Skeid",
+    "fireraft": "Brandfloß",
+    "firehulk": "Brander",
     "settler": "Siedler",
     "campbuilder": "Lagerbauer",
     "skirmisher": "Speerwerfer"

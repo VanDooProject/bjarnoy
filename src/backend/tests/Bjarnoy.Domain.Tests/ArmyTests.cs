@@ -789,8 +789,8 @@ public class ArmyTests
     [Theory]
     [InlineData(UnitType.Karve, 1, 1, true)]
     [InlineData(UnitType.Karve, 1, 2, false)]
-    [InlineData(UnitType.Longship, 1, 2, true)]
-    [InlineData(UnitType.Longship, 1, 3, false)]
+    [InlineData(UnitType.Snekkja, 1, 2, true)]
+    [InlineData(UnitType.Snekkja, 1, 3, false)]
     [InlineData(UnitType.Karve, 2, 2, true)]
     public void Siege_engines_ride_aboard_at_ten_slots_each(UnitType ship, int ships, int rams, bool accepted)
     {
@@ -1311,7 +1311,7 @@ public class ArmyTests
         Assert.Equal(FieldOrderRejection.InsufficientProvisionsForRoundTrip, split.Rejection);
     }
 
-    // Fleets: a fleet stands at sea hex (5,0) of the Strait (sea in columns 3-8, grass either side); the dockyard home is (3,0).
+    // Fleets: a fleet stands at sea hex (5,0) of the Strait (sea in columns 3-8, grass either side); the harbour home is (3,0).
 
     private static Terrain Strait(HexCoord c) => c.Q is >= 3 and <= 8 ? Terrain.Sea : Terrain.Grass;
 

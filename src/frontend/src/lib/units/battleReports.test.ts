@@ -73,8 +73,8 @@ describe('reportSummaryLine for a fleet', () => {
   const fleet = {
     ...baseReport,
     shipFight: {
-      attackerLines: [{ unit: 'fireship', sent: 30, lost: 4, survived: 26, volleyLost: 0 }],
-      defenderLines: [{ unit: 'longship', lost: 2, survived: 0, volleyLost: 0 }],
+      attackerLines: [{ unit: 'firehulk', sent: 30, lost: 4, survived: 26, volleyLost: 0 }],
+      defenderLines: [{ unit: 'snekkja', lost: 2, survived: 0, volleyLost: 0 }],
     },
     drowned: [{ count: 20 }],
     fireShipsBurned: 10,

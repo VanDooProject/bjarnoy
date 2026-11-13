@@ -27,7 +27,7 @@ function setup(unitCounts: Record<string, number>, buildings?: { q: number; r: n
     unit('catapult', 'siege', ['towers', 'buildings']),
     unit('ram', 'siege', ['walls', 'towers']),
     unit('spearman', 'infantry'),
-    unit('longship', 'ship'),
+    unit('snekkja', 'ship'),
   ];
   world.startDispatch();
   world.setDispatchMission('attack');
@@ -38,7 +38,7 @@ function setup(unitCounts: Record<string, number>, buildings?: { q: number; r: n
     { q: 3, r: 0, type: 'farm', level: 4 },
     { q: 2, r: 0, type: 'palisade', level: 3 },
     { q: 0, r: 0, type: 'fishing_hut', level: 2 },
-    { q: -1, r: 0, type: 'dockyard', level: 1 },
+    { q: -1, r: 0, type: 'harbour', level: 1 },
   ];
   let picker: ReturnType<typeof useDispatchTargetBuilding> | null = null;
   const Host = defineComponent({
@@ -96,7 +96,7 @@ describe('useDispatchTargetBuilding', () => {
   });
 
   it('still lets a fleet carrying catapults be sent at a beach camp, which its engines cannot damage', () => {
-    const { world, picker } = setup({ longship: 2, catapult: 3 }, [{ q: 0, r: 0, type: 'beachcamp', level: 1 }]);
+    const { world, picker } = setup({ snekkja: 2, catapult: 3 }, [{ q: 0, r: 0, type: 'beachcamp', level: 1 }]);
 
     expect(picker.isRequired.value).toBe(true);
     // A fleet's pick is where it fights, so the row is not shown as out of reach and picking it warns about nothing.

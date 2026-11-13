@@ -280,7 +280,7 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
             var (worldId, islandId) = await AddWorldAsync(db, SmallIslandOptions);
-            var settlement = MakeSettlement(worldId, islandId, ownerId, centre, food: 400, (BuildingType.Dockyard, dock));
+            var settlement = MakeSettlement(worldId, islandId, ownerId, centre, food: 400, (BuildingType.Harbour, dock));
             var fleet = PlantArmy(
                 settlement, dock, new HexCoord(-58, -42), dock, returning: true, provisions: 200,
                 new UnitStack(UnitType.Karve, 2), new UnitStack(UnitType.Spearman, 6));
@@ -328,7 +328,7 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
             var (worldId, islandId) = await AddWorldAsync(db);
-            var host = MakeSettlement(worldId, islandId, hostOwner, hostCentre, food: 400, (BuildingType.Tower, hostTower), (BuildingType.Dockyard, hostDock));
+            var host = MakeSettlement(worldId, islandId, hostOwner, hostCentre, food: 400, (BuildingType.Tower, hostTower), (BuildingType.Harbour, hostDock));
             var guestHome = MakeSettlement(worldId, islandId, guestOwner, new HexCoord(0, 0), food: 400);
             guestHome.Garrison.Add(Stack(guestHome, new HexCoord(0, 0), UnitType.Spearman, 5));
             db.Settlements.AddRange(host, guestHome);

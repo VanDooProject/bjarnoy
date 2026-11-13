@@ -50,7 +50,7 @@
       },
       "training": {
         "founding": "Siedler bildet die Wagnerei aus.",
-        "ships": "Schiffe bildet die Werft aus.",
+        "ships": "Schiffe bildest du im Hafen und in der Werft aus.",
         "realm": "Gebäude außerhalb deines Gebiets bilden nichts mehr aus."
       },
       "founding": {
@@ -173,7 +173,7 @@
       },
       "ships": {
         "title": "Schiffe und Wasser",
-        "description": "Schiffe aus der Werft, Flotten auf See und was Mauern nicht aufhalten."
+        "description": "Schiffe aus Hafen und Werft, Flotten auf See und was Mauern nicht aufhalten."
       },
       "wildlifeCamps": {
         "title": "Wildtierlager",
@@ -204,7 +204,8 @@
     "shrineofullr": "Schrein des Ullr",
     "shrineofnjord": "Schrein des Njörd",
     "archeryrange": "Schießplatz",
-    "dockyard": "Werft",
+    "harbour": "Hafen",
+    "shipyard": "Werft",
     "greatstorehouse": "Großes Lagerhaus",
     "townsquare": "Dorfplatz",
     "cropmill": "Getreidemühle",
@@ -270,9 +271,10 @@
       "shrineofthor": "Für Thor auf Gras errichtet, hinter einer Waffenschmiede der Stufe 5. Die Gunst des Kriegsgottes stärkt den Angriff deiner Landeinheiten (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
       "shrineoffreyja": "Für Freyja auf Gras errichtet. Ihre Gunst steigert die Nahrungsproduktion. Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
       "shrineofullr": "Für Ullr im Wald errichtet. Seine Gunst steigert die Holzproduktion. Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
-      "shrineofnjord": "Für Njörd auf Küstenwasser errichtet, hinter einer Werft der Stufe 10. Die Gunst des Meeresgottes stärkt den Angriff deiner Schiffe (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
+      "shrineofnjord": "Für Njörd auf Küstenwasser errichtet, hinter einem Hafen der Stufe 10. Die Gunst des Meeresgottes stärkt den Angriff deiner Schiffe (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
       "archeryrange": "Bildet auf Gras die Bogenschützen der Landarmee aus.",
-      "dockyard": "Bildet auf flachem (Küsten-)Wasser Schiffe aus.",
+      "harbour": "Bildet auf flachem (Küsten-)Wasser Späher, Frachtschiffe und die Karve aus.",
+      "shipyard": "Bildet auf flachem (Küsten-)Wasser Kriegsschiffe und Brandschiffe aus.",
       "greatstorehouse": "Eine Lagerstufe für das Endspiel auf Gras. Du brauchst dafür ein Langhaus auf Stufe 15 und ein Lagerhaus auf Stufe 25. Jedes weitere verlangt ein zusätzliches Lagerhaus auf Stufe 25.",
       "barracks": "Bildet auf Gras an der Grenze die Kernlinie der Landarmee aus – Thralls, Speerkämpfer, Axtkämpfer und Berserker. Die Bogenschützen bildet der Schießplatz aus, die Belagerungswaffen die Belagerungswerkstatt. Keine Einheit lässt sich an zwei Gebäuden ausbilden.",
       "sawmill": "Verarbeitet Holz direkt auf einem geraden, sanft gebogenen oder eng gebogenen Flussfeld – ein Wasserrad, das sich mit der Strömung dreht, wie bei der Getreidemühle. Sie liefert kein eigenes Holz, sondern steigert jeden Holzfäller im Umkreis ihrer Stufe. Mit steigender Stufe wachsen Reichweite und Bonus.",
@@ -373,7 +375,7 @@
       },
       "inlandLake": {
         "title": "Binnensee",
-        "lore": "Ein Binnensee ist Wasser, das eine Insel ganz umschließt. Er sieht aus wie das Meer, aber kein Schiff kommt hin. Am Ufer kannst du eine Fischerhütte darauf bauen – Werft und Flotten können ihn nicht nutzen.",
+        "lore": "Ein Binnensee ist Wasser, das eine Insel ganz umschließt. Er sieht aus wie das Meer, aber kein Schiff kommt hin. Am Ufer kannst du eine Fischerhütte darauf bauen – Hafen, Werft und Flotten können ihn nicht nutzen.",
         "generation": "Wasser, das eine Insel umschließt und das nicht mit dem offenen Meer verbunden ist, wenn das Moor daraus keinen Moorsee gemacht hat."
       },
       "sand": {
@@ -939,10 +941,10 @@
     },
     "sieges": {
       "heading": "Belagerung",
-      "body": "Eine Mauer lässt sich durchbrechen, und zwar Stufe um Stufe. Das schaffen Rammböcke und am Seeende Brandschiffe, aber nur bei einem Angriff auf die Siedlung, zu der die Mauer gehört. Katapulte können keine Mauer beschädigen; sie brennen Türme und alle anderen Gebäude nieder.",
+      "body": "Eine Mauer lässt sich durchbrechen, und zwar Stufe um Stufe. Das schaffen Rammböcke und am Seeende Brander und Brandflöße, aber nur bei einem Angriff auf die Siedlung, zu der die Mauer gehört. Katapulte können keine Mauer beschädigen; sie brennen Türme und alle anderen Gebäude nieder.",
       "rules": {
         "who": "Schick einen Angriff mit Rammböcken gegen die Siedlung und wähl beim Losschicken das Mauerfeld als Ziel. Bei der Mauer eines Rivalen erledigt das die Aktion „Belagern“ im Ringmenü für dich (sie braucht einen Rammbock zu Hause). Gewinnt deine Armee die Schlacht, schlagen die überlebenden Rammböcke auf dieses Feld. Ein einziger überlebender Rammbock genügt. Verliert deine Armee die Schlacht, schlägt nichts zu. Rammböcke werden in der Belagerungswerkstatt ausgebildet. Auf einem Raubzug zerstören deine Rammböcke und Katapulte nichts.",
-        "ships": "Schiffe beschädigen keine Gebäude an Land. Schickst du ein Brandschiff gegen das Seeende einer Mauer und gewinnen deine Schiffe dort den Kampf, verbrennt es und nimmt der Mauer eine Stufe.",
+        "ships": "Schiffe beschädigen keine Gebäude an Land. Schickst du Brander (10 pro Stufe) oder Brandflöße (50 pro Stufe) gegen das Seeende einer Mauer und gewinnen deine Schiffe dort den Kampf, verbrennen sie und nehmen der Mauer eine Stufe.",
         "target": "Wählst du kein Ziel oder steht das gewählte Gebäude bei der Ankunft nicht mehr, trifft die Belagerung ein zufälliges Gebäude der Siedlung, das deine überlebenden Belagerungswaffen beschädigen können. Eine Mauer, die nur Katapulten genannt wird, nimmt keinen Schaden.",
         "level": "Eine gewonnene Belagerung nimmt einem Mauerfeld genau eine Stufe, egal wie viele Rammböcke überleben. Das gilt auch für das Tor. Die meisten Gebäude verlieren gegen eine starke Armee mehrere Stufen auf einmal, eine Mauer bricht dagegen Stufe für Stufe. Palisade und Tor haben {levels} Stufen, ein fertig ausgebautes Mauerfeld braucht also {levels} gewonnene Belagerungen. Eine beschädigte Mauer hält Armeen weiter auf, bis ihre letzte Stufe fällt.",
         "gone": "Auf Stufe 0 ist das Mauerfeld weg: Das Feld ist wieder freier Boden, und Armeen ziehen hindurch. Ein Bauauftrag, der noch für dieses Feld wartet, entfällt.",
@@ -1106,7 +1108,7 @@
     },
     "sea": {
       "heading": "Gründen über das Meer",
-      "body": "Gib den fünf Siedlern Schiffe aus deiner Heimatbesatzung mit, dann segelt der Zug los. Er startet an deiner {dockyard} und landet auf dem Feld, das du gewählt hast: einem Sandfeld direkt am Meer. Tipp dazu auf der Karte ein freies Feld an der Küste an und wähle „Hier landen“.",
+      "body": "Gib den fünf Siedlern Schiffe aus deiner Heimatbesatzung mit, dann segelt der Zug los. Er startet an deinem {harbour} und landet auf dem Feld, das du gewählt hast: einem Sandfeld direkt am Meer. Tipp dazu auf der Karte ein freies Feld an der Küste an und wähle „Hier landen“.",
       "slots": "Jeder Siedler belegt an Bord einen Platz. Eine Karve nimmt also alle fünf auf und hat noch Platz für Begleitschutz. Brauchen die Truppen mehr Plätze, als die Schiffe haben, kann der Zug nicht aufbrechen. Wie viele Plätze jede Einheit braucht, steht auf der Seite {ships}.",
       "speed": "Auf See ist der Zug so schnell wie sein langsamstes Schiff. Die Siedler bremsen ihn nicht.",
       "camps": "Lager an Land überfallen einen Zug auf See nie. Der Walweg schon (siehe {camps}).",
@@ -1145,7 +1147,7 @@
       "garrison": "Alle Einheiten, die mit den Siedlern gezogen sind, bleiben als Besatzung dort, nur die Siedler selbst nicht."
     },
     "adminNote": {
-      "sea": "Ein Zug mit mindestens einem Schiff ist eine Flotte (Army.IsFleet): Er startet an der Werft (Army.FleetAnchor), nutzt für Rückruf und Rückzug die Seerouten und fährt mit dem Tempo seines langsamsten Schiffs (ShipCargo.Pace). Das Landefeld ist ein Landfeld mit einem Meer-Nachbarn (Shoreline.IsShoreline), das die Route mit dem letzten Schritt erreicht."
+      "sea": "Ein Zug mit mindestens einem Schiff ist eine Flotte (Army.IsFleet): Er startet an Hafen oder Werft (Army.FleetAnchor), nutzt für Rückruf und Rückzug die Seerouten und fährt mit dem Tempo seines langsamsten Schiffs (ShipCargo.Pace). Das Landefeld ist ein Landfeld mit einem Meer-Nachbarn (Shoreline.IsShoreline), das die Route mit dem letzten Schritt erreicht."
     }
   },
   "beachCamp": {
@@ -1310,7 +1312,7 @@
     "pace": {
       "heading": "Wie schnell Armeen ziehen",
       "body": "Das Tempo wird in Feldern pro Stunde auf Gras angegeben. Eine Armee zieht so schnell wie ihre langsamste Einheit. Eine Flotte fährt so schnell wie ihr langsamstes Schiff; Truppen an Bord bremsen sie nicht.",
-      "start": "Deine Truppen stehen an Garnisonsorten: im Langhaus, in Wachtürmen und in Werften. Eine Armee kannst du aus mehreren Orten zusammenstellen. Jede Gruppe bricht sofort von ihrem Ort auf. Sie treffen sich auf dem ersten Feld, das ihre Wege gemeinsam haben. Teilen sie keines, treffen sie sich auf dem Feld direkt vor dem Ziel. Wer zuerst ankommt, wartet dort und isst. Danach zieht die Armee gemeinsam weiter, im Tempo ihrer langsamsten Einheit. Die Heimat der Armee ist der Ort, der dem Treffpunkt am nächsten liegt. Wird eine Gruppe vor dem Treffen zurückgerufen, bekommt sie einen anderen Befehl, wird sie abgespalten oder verliert sie einen Kampf, bleibt sie zurück, und die anderen ziehen weiter. Willst du die ganze Armee abbrechen, ruf jede Gruppe zurück. Passagiere einer Flotte, die an einem Ort ohne Schiffe stehen, laufen zu einer der Werften der Flotte und gehen dort an Bord.",
+      "start": "Deine Truppen stehen an Garnisonsorten: im Langhaus, in Wachtürmen, in Häfen und in Werften. Eine Armee kannst du aus mehreren Orten zusammenstellen. Jede Gruppe bricht sofort von ihrem Ort auf. Sie treffen sich auf dem ersten Feld, das ihre Wege gemeinsam haben. Teilen sie keines, treffen sie sich auf dem Feld direkt vor dem Ziel. Wer zuerst ankommt, wartet dort und isst. Danach zieht die Armee gemeinsam weiter, im Tempo ihrer langsamsten Einheit. Die Heimat der Armee ist der Ort, der dem Treffpunkt am nächsten liegt. Wird eine Gruppe vor dem Treffen zurückgerufen, bekommt sie einen anderen Befehl, wird sie abgespalten oder verliert sie einen Kampf, bleibt sie zurück, und die anderen ziehen weiter. Willst du die ganze Armee abbrechen, ruf jede Gruppe zurück. Passagiere einer Flotte, die an einem Ort ohne Schiffe stehen, laufen zu einer der Werften der Flotte und gehen dort an Bord.",
       "example": "Zum Beispiel braucht ein {unit} für ein Grasfeld {minutes}.",
       "columns": {
         "unit": "Einheit",
@@ -1341,7 +1343,7 @@
     },
     "sendOut": {
       "heading": "Eine Armee losschicken, die schon unterwegs ist",
-      "spots": "Deine Truppen stehen in deinem Langhaus, in deinen Wachtürmen und in deinen Werften. Schiffe liegen in den Werften, im Langhaus nur dann, wenn es am Meer auf Sand steht. Neue Einheiten ziehen an den nächstgelegenen Ort, der sie aufnehmen kann, und eine Armee kehrt dorthin zurück, wo sie losgezogen ist. Hast du sie aus mehreren Orten zusammengestellt, kehrt sie an den Ort zurück, der dem Treffpunkt ihrer Gruppen am nächsten liegt. Willst du Truppen in ein anderes deiner Reiche schicken, tippst du auf eines seiner Felder: Sie verstärken dort als Unterstützung die Besatzung, auf dem Feld, das du angetippt hast, oder im Langhaus.",
+      "spots": "Deine Truppen stehen in deinem Langhaus, in deinen Wachtürmen, in deinen Häfen und in deinen Werften. Schiffe liegen in Häfen und Werften, im Langhaus nur dann, wenn es am Meer auf Sand steht. Neue Einheiten ziehen an den nächstgelegenen Ort, der sie aufnehmen kann, und eine Armee kehrt dorthin zurück, wo sie losgezogen ist. Hast du sie aus mehreren Orten zusammengestellt, kehrt sie an den Ort zurück, der dem Treffpunkt ihrer Gruppen am nächsten liegt. Willst du Truppen in ein anderes deiner Reiche schicken, tippst du auf eines seiner Felder: Sie verstärken dort als Unterstützung die Besatzung, auf dem Feld, das du angetippt hast, oder im Langhaus.",
       "orders": "Tippe auf einem Feld auf „Armee hierher entsenden“, „Angreifen“ oder „Jagen“ und wähle die Armee, die losziehen soll: die Garnison eines deiner Reiche oder eine Armee von dir, die schon draußen ist. Jede Zeile nennt das Reich und was seine Truppen dort tun würden: Auf einem Feld deines eigenen Reichs ziehen sie hin, Truppen deiner anderen Reiche unterstützen es. Eine stehende Armee kann ziehen, angreifen, unterstützen oder jagen. Eine marschierende Armee leitest du mit Premium um. Willst du lieber woandershin, tippst du währenddessen einfach auf ein anderes Feld. Greifst du eine Siedlung an, greifst du ein Gebäude in ihrem Reich an. Hat das Gebäude eine Besatzung, verteidigt sie es. Unterstützt du eine Siedlung, verstärkst du eine ihrer Besatzungen.",
       "split": "Von einer stehenden Armee kannst du nur einen Teil losschicken. Der Rest bleibt, wo er steht. Eine marschierende Armee zieht immer komplett los.",
       "reach": "Eine Armee zieht nur los, wenn sie das Ziel erreicht und danach noch genug Proviant für den Rückweg hat. Alle anderen siehst du ausgegraut in der Liste, zusammen mit dem Grund.",
@@ -1380,11 +1382,14 @@
   },
   "ships": {
     "title": "Schiffe und Wasser",
-    "intro": "Schiffe aus der Werft, Flotten auf See und was Mauern nicht aufhalten.",
-    "dockyard": {
-      "heading": "Die Werft",
-      "body": "Schiffe bildest du in der {dockyard} aus. Sie braucht ein {longhouse} auf Stufe {level} und eine {hut} auf Stufe {hutLevel}.",
-      "shore": "Sie steht im flachen Küstenwasser. Schiffe bauen kann deshalb nur eine Siedlung, die Küste beansprucht."
+    "intro": "Schiffe aus Hafen und Werft, Flotten auf See und was Mauern nicht aufhalten.",
+    "harbour": {
+      "heading": "Hafen und Werft",
+      "body": "Im {harbour} bildest du Späher, Frachtschiffe und die Karve aus. Er braucht ein {longhouse} auf Stufe {level} und eine {hut} auf Stufe {hutLevel}.",
+      "shore": "Hafen und Werft stehen im flachen Küstenwasser. Schiffe bilden deshalb nur Siedlungen aus, die Küste beanspruchen. Ein Schiff liegt in dem Hafen oder der Werft, in der du es ausgebildet hast."
+    },
+    "shipyard": {
+      "body": "In der {shipyard} bildest du Kriegsschiffe und Brandschiffe aus. Sie braucht ein {longhouse} auf Stufe {level} und einen {harbour} auf Stufe {harbourLevel}."
     },
     "table": {
       "heading": "Die Schiffe",
@@ -1397,6 +1402,7 @@
         "slots": "Truppenplätze",
         "food": "Nahrungskapazität",
         "upkeep": "Unterhalt pro Stunde",
+        "fire": "Brandschiffe je verbrannter Stufe",
         "cost": "Kosten ({resources})",
         "time": "Ausbildungszeit",
         "needs": "Voraussetzung"
@@ -1419,7 +1425,7 @@
       "slots": "Schiffe tragen Landtruppen in Plätzen. Jedes Schiff bietet eine bestimmte Zahl an Plätzen (siehe Tabelle oben), und jede Einheit belegt einige davon (Tabelle unten).",
       "anyTrip": "Eine Flotte kann auf jeder Fahrt Truppen mitnehmen: beim Angriff, Plündern, Unterstützen, Gründen und Jagen. Brauchen die Truppen mehr Plätze, als die Schiffe haben, läuft die Flotte nicht aus.",
       "speed": "Eine Flotte fährt so schnell wie ihr langsamstes Schiff. Die Truppen an Bord bremsen sie nicht, und sie essen vom Proviant der Flotte.",
-      "fight": "Im Schiffskampf kämpfen die Truppen an Bord nicht mit. Im Landkampf danach kämpfen sie von Bord aus, Belagerungswaffen eingeschlossen. Bei einem Überfall auf See kämpfen nur die Schiffe. Von Bord gehen die Truppen nur an einem Strandlager oder an deiner eigenen Werft.",
+      "fight": "Im Schiffskampf kämpfen die Truppen an Bord nicht mit. Im Landkampf danach kämpfen sie von Bord aus, Belagerungswaffen eingeschlossen. Bei einem Überfall auf See kämpfen nur die Schiffe. Von Bord gehen die Truppen nur an einem Strandlager oder an deinem eigenen Hafen oder deiner eigenen Werft.",
       "drown": "Gehen Schiffe verloren, ertrinken die Truppen, für die auf den übrigen Schiffen kein Platz mehr ist. Die größten Einheiten trifft es zuerst. Nach einem Schiffskampf passiert das noch vor dem Landkampf.",
       "unit": "Einheit",
       "unitSlots": "Plätze"
@@ -1427,9 +1433,9 @@
     "battles": {
       "heading": "Kämpfe",
       "same": "Flotten kämpfen nach denselben Regeln wie Armeen an Land: Angriff gegen Verteidigung, bei Gleichstand gewinnt der Verteidiger.",
-      "shipsOnly": "Ein Angriff besteht aus zwei Kämpfen: zuerst Schiffe gegen Schiffe, dann Landtruppen gegen Landtruppen. Schiffe und Landtruppen kämpfen nie gegeneinander. Deine Schiffe im Hafen verteidigen deine Werft (oder dein Langhaus, wenn es am Ufer auf Sand steht), verbündete Flotten kämpfen mit ihnen. Hat das Ziel keine Schiffe, entfällt der Schiffskampf und gilt als gewonnen. Verlierst du ihn, gibt es keinen Landkampf.",
-      "shore": "Schiffe beschädigen keine Gebäude an Land. Nur das Brandschiff beschädigt Gebäude, und nur solche im Wasser: eine Werft, eine Fischerhütte, den Schrein des Njörd und das Seeende einer Mauer. Dabei verbrennt es: 10 Brandschiffe nehmen eine Stufe, und mehr Stufen, als ein gewonnener Angriff erlaubt, verliert ein Gebäude nie.",
-      "damage": "Beute gibt es nur nach einem gewonnenen Landkampf: Ein Angriff auf ein Gebäude im Wasser (Werft, Fischerhütte, Schrein des Njörd, das Seeende einer Mauer) ist nur ein Schiffskampf und bringt keine Beute, denn deine Truppen an Bord kommen nicht heran. Gebäude an Land beschädigen nur die Belagerungswaffen an Bord (Katapulte, Rammböcke), und zwar im Landkampf eines Angriffs. Bei einem Raubzug zerstören die Belagerungswaffen nichts.",
+      "shipsOnly": "Ein Angriff besteht aus zwei Kämpfen: zuerst Schiffe gegen Schiffe, dann Landtruppen gegen Landtruppen. Schiffe und Landtruppen kämpfen nie gegeneinander. Deine Schiffe im Hafen verteidigen den Hafen oder die Werft, in der sie liegen (oder dein Langhaus, wenn es am Ufer auf Sand steht), verbündete Flotten kämpfen mit ihnen. Hat das Ziel keine Schiffe, entfällt der Schiffskampf und gilt als gewonnen. Verlierst du ihn, gibt es keinen Landkampf.",
+      "shore": "Schiffe beschädigen keine Gebäude an Land. Nur Brander und Brandfloß beschädigen Gebäude, und nur solche im Wasser: einen Hafen, eine Werft, eine Fischerhütte, den Schrein des Njörd und das Seeende einer Mauer. Dabei verbrennen sie: 10 Brander oder 50 Brandflöße nehmen eine Stufe, und mehr Stufen, als ein gewonnener Angriff erlaubt, verliert ein Gebäude nie.",
+      "damage": "Beute gibt es nur nach einem gewonnenen Landkampf: Ein Angriff auf ein Gebäude im Wasser (Hafen, Werft, Fischerhütte, Schrein des Njörd, das Seeende einer Mauer) ist nur ein Schiffskampf und bringt keine Beute, denn deine Truppen an Bord kommen nicht heran. Gebäude an Land beschädigen nur die Belagerungswaffen an Bord (Katapulte, Rammböcke), und zwar im Landkampf eines Angriffs. Bei einem Raubzug zerstören die Belagerungswaffen nichts.",
       "tower": "Ein {tower} der verteidigenden Siedlung gibt pro Stufe {percent} % Verteidigung dazu.",
       "njord": "Der {shrine} steigert den Angriff deiner Schiffe auf Stufe 1 um {low} %, bis Stufe 5 um {high} %. Mehr unter {shrines}.",
       "shrinesLink": "Schreine"
@@ -1439,8 +1445,12 @@
     },
     "history": {
       "dockyard": "Kriegsschiffe lagen in Bootshäusern (naust, ein belegtes Wort) und wurden über das Leidang (leiðangr) aufgeboten: Jeder Küstenbezirk musste ein Schiff bauen, bemannen und verpflegen. Handelsschiffe nutzten die Stege und Kais der Hafenorte wie Haithabu, Birka und Kaupang.",
+      "faering": "Færing und Sexæring waren kleine Ruderboote mit vier oder sechs Riemen. Man fischte damit, setzte über, ging von einem großen Schiff an Land und erkundete die Küste. Im Gokstad-Grab (Norwegen, um 900) lagen drei davon.",
+      "byrding": "Das Byrding (byrðingr) war ein Frachtschiff für Küste und Ostsee, kleiner als das Knarr: etwa 14 m lang, 5 bis 8 Mann Besatzung und 4 bis 5 Tonnen Ladung. Skuldelev 3 (dänische Eiche, um 1040) ist eines, und das Wikingerschiffsmuseum in Roskilde segelt einen Nachbau, die Roar Ege.",
+      "knarr": "Das Knarr (knǫrr) war das breite, tiefe Frachtschiff für den Atlantik, mit dem der Nordatlantik besiedelt wurde. Es fuhr fast immer unter Segel und hatte nur wenige Riemen für Hafenarbeiten. An Bord waren Stockfisch, Walrosselfenbein, Holz, Vieh und Siedler. Skuldelev 1 (Westnorwegen, um 1030) ist etwa 16 m lang und fasste über 20 Tonnen Ladung. Nach dem Landnámabók brach Erik der Rote mit 25 Schiffen nach Grönland auf, 14 kamen an.",
       "karve": "Die Karve (karfi) war das Mehrzweckschiff eines Häuptlings: für Reisen, Truppen, etwas Fracht und den Küstenkrieg. Sie war breiter und flacher als ein reines Kriegsschiff. Oft bringt man sie mit dem Osebergschiff (um 820, etwa 21,5 m) und dem Gokstadschiff (um 890, etwa 23 m) in Verbindung; das ist eine Deutung. Ein Nachbau des Gokstadschiffs überquerte 1893 den Atlantik bis nach Chicago.",
-      "longship": "„Langschiff“ (langskip) ist der Sammelbegriff für alle langen, schmalen Kriegsschiffe mit Riemen. Die Nordleute ordneten sie nach ihrer Größe in „Räumen“ (rúm), den Abständen zwischen den Ruderbänken. Das Langschiff im Spiel entspricht der Snekkja: dem gängigen mittelgroßen Raub- und Aufgebotsschiff von etwa 17 m aufwärts mit 13 bis 20 Riemenpaaren. Skuldelev 5 (dänisch, um 1030, 13 Riemenpaare, mit wiederverwendetem Holz ausgebessert) gilt als eine solche, und das Wikingerschiffsmuseum in Roskilde segelt einen Nachbau, die Helge Ask. Auch die größere Skeid und das Drachenschiff waren Langschiffe.",
+      "longship": "„Langschiff“ (langskip) ist der Sammelbegriff für alle langen, schmalen Kriegsschiffe mit Riemen. Die Nordleute ordneten sie nach ihrer Größe in „Räumen“ (rúm), den Abständen zwischen den Ruderbänken. Die Snekkja im Spiel ist das gängige mittelgroßen Raub- und Aufgebotsschiff von etwa 17 m aufwärts mit 13 bis 20 Riemenpaaren. Skuldelev 5 (dänisch, um 1030, 13 Riemenpaare, mit wiederverwendetem Holz ausgebessert) gilt als eine solche, und das Wikingerschiffsmuseum in Roskilde segelt einen Nachbau, die Helge Ask. Auch die größere Skeid und das Drachenschiff waren Langschiffe.",
+      "skeid": "Das Skeid (skeið) war die größte Klasse der Langschiffe, mit 30 und mehr Riemenpaaren: das Schiff von Königen und großen Herren, bemannt mit ihrer Gefolgschaft und dem Aufgebot (leiðangr). Skuldelev 2 (bei Dublin gebaut, um 1042, etwa 30 m) ist eines, und sein Nachbau, die Havhingsten fra Glendalough, segelte 2007 und 2008 von Roskilde nach Dublin und zurück. Roskilde 6 (um 1025, etwa 37 m) ist das längste gefundene Wikingerschiff.",
       "fireShip": "Brandschiffe waren bei den Nordleuten keine übliche Waffe. Feuer auf See gehört zu den Byzantinern: Ihr Griechisches Feuer verbrannte 941 vor Konstantinopel die Flotte der Rus unter Fürst Igor. Einen Fall aus der Wikingerzeit gibt es vielleicht doch: Haithabu 1, ein Kriegsschiff von etwa 30 m, wurde verbrannt im Hafen von Haithabu gefunden und auf etwa 985 datiert. Nach einer Lesart der Archäologen in Roskilde wurde es mit Brennstoff gefüllt, angezündet und bei einem Angriff gegen die Hafenanlagen geschickt. Das stützt sich auf einen einzigen Fund und ist eine Deutung, keine Gewissheit."
     }
   },

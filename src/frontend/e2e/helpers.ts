@@ -400,7 +400,7 @@ export async function putFleetsFarAtSea(
       totalSpeed: 10,
       totalUpkeepPerHour: 1,
       visionRadius: 4,
-      stacks: [{ unit: 'longship', count: 1 }],
+      stacks: [{ unit: 'snekkja', count: 1 }],
       movement: { path: [homeOverride ?? { q: home.q, r: home.r }, sea], isReturning: false, departedAt: arrived, arrivesAt: arrived },
     }));
     for (let dq = -3; dq <= 3; dq++) {

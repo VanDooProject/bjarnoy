@@ -94,6 +94,12 @@ public sealed record UnitDefinition
     public SiegeTargets SiegeTargets { get; init; }
 
     /// <summary>
+    /// For a fire craft: how many of them take one building level off a building standing in the water (Fire Hulk 10, Fire Raft
+    /// 50); they are used up doing it. Zero for every other unit. See <see cref="Bjarnoy.Domain.Combat.SiegeResolver.Burn"/>.
+    /// </summary>
+    public int FireCraftPerLevel { get; init; }
+
+    /// <summary>
     /// True for the units that strike in the volley before the main fight of a land fight (Bowman, Skirmisher): see
     /// <see cref="Bjarnoy.Domain.Combat.Volley"/> and <c>docs/design/units-and-ships.md</c> section 4.
     /// </summary>
@@ -126,7 +132,7 @@ public sealed record UnitDefinition
     /// land roster (Spearman, Axeman, Berserker),
     /// <see cref="BuildingType.ArcheryRange"/> for the archer
     /// (Bowman), <see cref="BuildingType.SiegeWorkshop"/> for the siege
-    /// engines (Catapult, Ram), <see cref="BuildingType.Dockyard"/> for
+    /// engines (Catapult, Ram), <see cref="BuildingType.Harbour"/> for
     /// ships. Defaults to the Longhouse.
     /// </summary>
     public BuildingType RequiredBuildingType { get; init; } = BuildingType.Longhouse;

@@ -237,7 +237,7 @@ describe('isShoreBuildingHex', () => {
     expect(isShoreBuildingHex({ q: 0, r: 0 }, coast)).toBe(true);
   });
 
-  it('is true for a sea hex (coastal-water buildings such as the Dockyard)', () => {
+  it('is true for a sea hex (coastal-water buildings such as the Harbour)', () => {
     expect(isShoreBuildingHex({ q: -1, r: 0 }, coast)).toBe(true);
   });
 

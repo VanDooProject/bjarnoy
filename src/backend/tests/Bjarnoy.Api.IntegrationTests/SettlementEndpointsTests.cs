@@ -923,8 +923,11 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Empty(levelOne.Single(d => d.Type == "lumberjack").Prerequisites);
 
         Assert.Equal(
-            [new BuildingPrerequisiteResponse("fishinghut", 5)],
-            levelOne.Single(d => d.Type == "dockyard").Prerequisites);
+            [new BuildingPrerequisiteResponse("fishinghut", 3)],
+            levelOne.Single(d => d.Type == "harbour").Prerequisites);
+        Assert.Equal(
+            [new BuildingPrerequisiteResponse("harbour", 5)],
+            levelOne.Single(d => d.Type == "shipyard").Prerequisites);
         Assert.Empty(levelOne.Single(d => d.Type == "storagehouse").Prerequisites);
         Assert.Equal(
             [new BuildingPrerequisiteResponse("smithy", 5)],
@@ -939,7 +942,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             "/api/v1/buildings?level=2", SqliteApiFixture.StrictJson, Ct);
 
         Assert.NotNull(levelTwo);
-        Assert.Empty(levelTwo.Single(d => d.Type == "dockyard").Prerequisites);
+        Assert.Empty(levelTwo.Single(d => d.Type == "harbour").Prerequisites);
         Assert.Empty(levelTwo.Single(d => d.Type == "greatstorehouse").Prerequisites);
     }
 

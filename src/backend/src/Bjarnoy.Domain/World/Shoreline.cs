@@ -16,7 +16,7 @@ public static class Shoreline
 {
     /// <summary>
     /// True when <paramref name="coord"/> is itself land and at least one of
-    /// its six neighbours is <see cref="Terrain.Sea"/> — the hex a longship
+    /// its six neighbours is <see cref="Terrain.Sea"/> — the hex a snekkja
     /// can beach a raiding party on. A sea hex is never itself a shoreline,
     /// even one entirely enclosed by land (a lagoon): "shoreline" means land a
     /// fleet can reach, not water a fleet can reach. An

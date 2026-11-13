@@ -34,6 +34,7 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
     requiredLonghouseLevel: 1,
     requiredUnitType: null,
     requiredBuildingType: 'longhouse',
+    fireCraftPerLevel: 0,
     requiredBuildingLevel: 1,
     siegeTargets: [],
     ...overrides,
@@ -77,7 +78,7 @@ describe('unitRequirements', () => {
       requiredBuildingLevel: 10,
       requiredUnitType: 'berserker',
     }),
-    karve: unit({ type: 'karve', class: 'ship', requiredBuildingType: 'dockyard' }),
+    karve: unit({ type: 'karve', class: 'ship', requiredBuildingType: 'harbour' }),
   };
   const ctx = (over: Partial<UnitRequirementContext> = {}): UnitRequirementContext => ({
     longhouseLevel: 20,

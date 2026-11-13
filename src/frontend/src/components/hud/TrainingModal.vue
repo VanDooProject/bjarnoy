@@ -11,7 +11,8 @@ import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
-import { buildingName, unitName } from '../../i18n/catalogueNames';
+import { buildingName, shipGroupName, unitName } from '../../i18n/catalogueNames';
+import { groupByShipGroup } from '../../lib/units/shipGroups';
 import { apiErrorMessage } from '../../i18n/apiErrors';
 import { useWorldStore } from '../../stores/world';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
@@ -193,6 +194,9 @@ function chipText(req: UnitRequirement): string {
       return t('hud.trainingModal.needCoast');
   }
 }
+
+// Ships are listed under a white heading per job (Scouts, Cargo, ...); land units form one block without a heading.
+const rowGroups = computed(() => groupByShipGroup(rows.value, (row) => row.definition.type));
 
 const picks = computed(() => rows.value.filter((r) => !r.locked && r.count > 0));
 const pickedCost = computed(() =>
@@ -442,8 +446,10 @@ async function cancelOrder(id: string) {
         </p>
 
         <div class="roster">
+          <template v-for="block in rowGroups" :key="block.group ?? 'units'">
+          <h3 v-if="block.group" class="group-heading" :data-group="block.group">{{ shipGroupName(block.group) }}</h3>
           <div
-            v-for="row in rows"
+            v-for="row in block.rows"
             :key="row.definition.type"
             class="unit-row"
             :class="{ locked: row.locked }"
@@ -497,6 +503,7 @@ async function cancelOrder(id: string) {
               </button>
             </div>
           </div>
+          </template>
         </div>
       </div>
 
@@ -859,6 +866,14 @@ async function cancelOrder(id: string) {
   gap: 14px;
   padding: 10px 0;
   border-top: 1px solid var(--panel-border);
+}
+.group-heading {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
 }
 .unit-row.locked .unit-name {
   color: var(--muted);

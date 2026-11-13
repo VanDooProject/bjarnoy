@@ -79,7 +79,7 @@ describe('BeachCampView', () => {
     expect(risks).toContain('falls only to an attack that leaves nobody in it while the attacker still has troops left');
     expect(risks).toContain('needs no siege engines');
     expect(risks).toContain('A raid only plunders it');
-    expect(risks).toContain('nothing destroys it: not catapults, rams or fire ships');
+    expect(risks).toContain('nothing destroys it: not catapults, rams or fire craft');
     wrapper.unmount();
   });
 });

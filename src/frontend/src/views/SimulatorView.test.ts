@@ -36,8 +36,8 @@ const fleetResult: SimulatorResponse = {
   defenderLines: [{ unit: 'spearman', lost: 20, survived: 0, volleyLost: 0 }],
   siege: null,
   shipFight: {
-    attackerLines: [{ unit: 'longship', sent: 5, lost: 1, survived: 4, volleyLost: 0 }],
-    defenderLines: [{ unit: 'longship', lost: 1, survived: 0, volleyLost: 0 }],
+    attackerLines: [{ unit: 'snekkja', sent: 5, lost: 1, survived: 4, volleyLost: 0 }],
+    defenderLines: [{ unit: 'snekkja', lost: 1, survived: 0, volleyLost: 0 }],
     attackPower: 450,
     defensePower: 42,
     winner: 'attacker',
@@ -74,8 +74,8 @@ describe('SimulatorView', () => {
   it('sends the fleet as one attack and shows the ship fight before the land fight', async () => {
     const wrapper = await mountView();
 
-    const longship = wrapper.findAll('.stack-section')[0]!.findAll('label').find((l) => l.text() === 'longship')!;
-    await longship.get('input').setValue('5');
+    const snekkja = wrapper.findAll('.stack-section')[0]!.findAll('label').find((l) => l.text() === 'snekkja')!;
+    await snekkja.get('input').setValue('5');
     const axeman = wrapper.findAll('.stack-section')[0]!.findAll('label').find((l) => l.text() === 'axeman')!;
     await axeman.get('input').setValue('80');
     await wrapper.get('form').trigger('submit');
@@ -83,7 +83,7 @@ describe('SimulatorView', () => {
 
     expect(simulate).toHaveBeenCalledOnce();
     expect(simulate.mock.calls[0]![0].attackerStacks).toEqual([
-      { unit: 'longship', count: 5 },
+      { unit: 'snekkja', count: 5 },
       { unit: 'axeman', count: 80 },
     ]);
     const ship = wrapper.get('[data-testid=ship-fight]');

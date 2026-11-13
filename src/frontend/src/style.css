@@ -150,7 +150,7 @@
      ring menu tints each build category and its buildings by category — see
      `Tile Menu 2a`. */
   --shrine: #b391d4;
-  /* The water build category (fishing hut, dockyard) — a blue distinct from
+  /* The water build category (fishing hut, harbour) — a blue distinct from
      the resource palette above, since it isn't one of the four resources. */
   --water: #5aa8c9;
 

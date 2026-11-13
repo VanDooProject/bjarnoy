@@ -50,7 +50,7 @@
       },
       "training": {
         "founding": "Settlers are trained at the Cart Workshop.",
-        "ships": "Ships are trained at the Dockyard.",
+        "ships": "Ships are trained at the Harbour and the Shipyard.",
         "realm": "Buildings outside your realm stop training."
       },
       "founding": {
@@ -173,7 +173,7 @@
       },
       "ships": {
         "title": "Ships and water",
-        "description": "Ships from the dockyard, fleets at sea, and what walls cannot stop."
+        "description": "Ships from the harbour and the shipyard, fleets at sea, and what walls cannot stop."
       },
       "wildlifeCamps": {
         "title": "Wildlife camps",
@@ -204,7 +204,8 @@
     "shrineofullr": "Shrine of Ullr",
     "shrineofnjord": "Shrine of Njörd",
     "archeryrange": "Archery range",
-    "dockyard": "Dockyard",
+    "harbour": "Harbour",
+    "shipyard": "Shipyard",
     "greatstorehouse": "Great storehouse",
     "townsquare": "Town square",
     "cropmill": "Crop mill",
@@ -259,7 +260,7 @@
       "lumberjack": "Fells timber on forested ground — the wood behind every wall and roof.",
       "quarry": "Cuts stone from a mountain ridge — the bones of every keep.",
       "odinstatue": "Odin's statue on grass, at Longhouse 25 behind a level-10 Druid Hut. Wisdom: every build in this settlement takes 2% less time per level (10% at level 5). Ravens: its claim, its towers and its armies see 2 more rings per level (10 at level 5). Counts as the settlement's one shrine.",
-      "palisade": "One hex of the settlement's wall, on grass, forest or sand inside its claim, from Longhouse 7 behind a level-5 Tower (the Palisade and its Gate share one tech-tree card). Walls never branch: no hex may end up with three wall neighbours. Which piece draws, a straight, a bend or an end, follows the neighbouring wall hexes. Every wall hex stops every land army, its owner's included; a lone end of a wall (one wall neighbour) is only half open, any army crosses it, only slower, unless it touches a mountain or a wide river. At the coast the wall ends on a shallow-water hex, the sea end, which stays sea. A won siege that targets a wall hex takes one level off it, however many rams survive (on land only rams damage a wall; at the sea end a Fire Ship does); fire will too, later.",
+      "palisade": "One hex of the settlement's wall, on grass, forest or sand inside its claim, from Longhouse 7 behind a level-5 Tower (the Palisade and its Gate share one tech-tree card). Walls never branch: no hex may end up with three wall neighbours. Which piece draws, a straight, a bend or an end, follows the neighbouring wall hexes. Every wall hex stops every land army, its owner's included; a lone end of a wall (one wall neighbour) is only half open, any army crosses it, only slower, unless it touches a mountain or a wide river. At the coast the wall ends on a shallow-water hex, the sea end, which stays sea. A won siege that targets a wall hex takes one level off it, however many rams survive (on land only rams damage a wall; at the sea end a Fire Hulk does); fire will too, later.",
       "palisadegate": "A wall hex with a gate, only where the wall runs straight between two opposite wall hexes. Its owner's armies and their friends' (the same guild, or a guild at peace with it) pass it as quickly as the ground under it; every other army is stopped like at any wall hex. Same unlock, prerequisite, levels and cost as the Palisade, on one tech-tree card.",
       "bridge": "Opens a wide river to land armies. A causeway first, then a footbridge, the king's bridge, and a guarded bridge with forts that only you and your friends may cross. Attackers burn a guarded bridge down a level at a time.",
       "siegeworkshop": "Trains the siege engines on grass: catapults, once a Barracks-trained berserker line stands, and battering rams. Unlocks at Longhouse 18 behind a level-3 Archery range. Rams are the only engine that breaches walls (they hit towers too); catapults burn towers and every other building.",
@@ -272,9 +273,10 @@
       "shrineofthor": "Raised to Thor on grass, behind a level-5 Smithy — the war god's favour raises the attack of your land units (+10% at level 1, +22% at level 5). A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
       "shrineoffreyja": "Raised to Freyja on grass — its favour boosts Food production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
       "shrineofullr": "Raised to Ullr in the forest — its favour boosts Wood production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
-      "shrineofnjord": "Raised to Njörd on coastal water, behind a level-10 Dockyard — the sea god's favour raises the attack of your ships (+10% at level 1, +22% at level 5). A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
+      "shrineofnjord": "Raised to Njörd on coastal water, behind a level-10 Harbour — the sea god's favour raises the attack of your ships (+10% at level 1, +22% at level 5). A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
       "archeryrange": "Trains the land army's bowmen on grass.",
-      "dockyard": "Trains ships on shallow (coastal) water.",
+      "harbour": "Trains scouts, cargo ships and the Karve on shallow (coastal) water.",
+      "shipyard": "Trains warships and fire craft on shallow (coastal) water.",
       "greatstorehouse": "A late-game storage tier on grass, needing the longhouse at level 15 and a storage house at level 25. Each further one asks for one more storage house at level 25.",
       "barracks": "Trains the land army's core line on grass at the border — thralls, spearmen, axemen and berserkers. Archery Range trains the bowmen and the Siege Workshop the siege engines; they never train the same unit.",
       "sawmill": "Refines timber standing directly on a straight, gentle-bend, or tight-bend river tile — a waterwheel turning with the current, same as Crop Mill's. No Wood of its own: it boosts every Lumberjack within its level's range instead (a wider range and a bigger boost at higher levels).",
@@ -373,7 +375,7 @@
       },
       "inlandLake": {
         "title": "Inland lake",
-        "lore": "Water an island encloses on all sides. It looks like the sea, but no ship can get there. You can build a Fishing Hut on it next to the shore; Dockyards and fleets can't use it.",
+        "lore": "Water an island encloses on all sides. It looks like the sea, but no ship can get there. You can build a Fishing Hut on it next to the shore; Harbours, Shipyards and fleets can't use it.",
         "generation": "Water an island encloses, not connected to the open sea, that the bog did not turn into a bog lake."
       },
       "sand": {
@@ -939,10 +941,10 @@
     },
     "sieges": {
       "heading": "Sieges",
-      "body": "A wall can be breached, one level at a time. Battering rams do it, and so does a Fire Ship at a wall's sea end, but only as part of an attack on the settlement the wall belongs to. Catapults cannot damage a wall; they burn towers and every other building.",
+      "body": "A wall can be breached, one level at a time. Battering rams do it, and so do Fire Hulks and Fire Rafts at a wall's sea end, but only as part of an attack on the settlement the wall belongs to. Catapults cannot damage a wall; they burn towers and every other building.",
       "rules": {
         "who": "Send an attack with rams at the settlement and name the wall hex as the target when you send it. On a rival's wall, the Siege action in the ring menu does this for you (it needs a ram at home). If your army wins the battle, the rams that survived strike that hex. One surviving ram is enough; an army that loses the battle strikes nothing. Rams are trained at the Siege Workshop. On a raid your rams and catapults destroy nothing.",
-        "ships": "Ships do no damage to buildings on land. A Fire Ship sent at a wall's sea end burns up there if your ships win the ship fight, and takes one level off it.",
+        "ships": "Ships do no damage to buildings on land. Fire Hulks (10 per level) and Fire Rafts (50 per level) sent at a wall's sea end burn up there if your ships win the ship fight, and take one level off it.",
         "target": "If you name no target, or the building you named is gone by the time your army arrives, the siege hits a random building of that settlement instead, chosen among the buildings your surviving siege engines can damage. A wall named for catapults alone takes no damage.",
         "level": "A won siege takes exactly one level off a wall hex, the gate included, however many rams survive. Most buildings lose several levels at once to a strong army; a wall is breached a level at a time. A palisade or gate has {levels} levels, so a fully built wall hex takes {levels} won sieges. A damaged wall still stops armies until its last level is gone.",
         "gone": "At level 0 the wall hex is gone: its hex is free ground again and armies walk through it. Any build order still queued for that hex is dropped.",
@@ -1106,7 +1108,7 @@
     },
     "sea": {
       "heading": "Founding by sea",
-      "body": "Add ships from your home garrison to the five settlers and the convoy sails. It leaves from your {dockyard} and lands on the hex you chose: a sand hex next to the sea. On the map, tap a free hex on the coast and choose Land here.",
+      "body": "Add ships from your home garrison to the five settlers and the convoy sails. It leaves from your {harbour} and lands on the hex you chose: a sand hex next to the sea. On the map, tap a free hex on the coast and choose Land here.",
       "slots": "Each settler takes 1 slot aboard, so one Karve carries all five and still has room for escorts. If the troops need more slots than the ships have, the convoy cannot set out. The slots of every unit are on the {ships} page.",
       "speed": "At sea the convoy moves at the speed of its slowest ship. The settlers do not slow it down.",
       "camps": "Land camps never ambush a convoy at sea. The whale road does (see {camps}).",
@@ -1145,7 +1147,7 @@
       "garrison": "Every unit that travelled with the settlers, other than the settlers themselves, stays as its garrison."
     },
     "adminNote": {
-      "sea": "A convoy with a ship in it is a fleet (Army.IsFleet): it leaves from the Dockyard (Army.FleetAnchor), uses the sea route tables for recall and retreat, and moves at its slowest ship (ShipCargo.Pace). The landing hex is a land hex with a sea neighbour (Shoreline.IsShoreline), reached by the route's last hop."
+      "sea": "A convoy with a ship in it is a fleet (Army.IsFleet): it leaves from the Harbour or Shipyard (Army.FleetAnchor), uses the sea route tables for recall and retreat, and moves at its slowest ship (ShipCargo.Pace). The landing hex is a land hex with a sea neighbour (Shoreline.IsShoreline), reached by the route's last hop."
     }
   },
   "beachCamp": {
@@ -1188,7 +1190,7 @@
       "heading": "Dangers",
       "attacked": "A camp can be attacked from land and from sea. When no troops defend it, it can be plundered.",
       "falls": "A camp falls only to an attack that leaves nobody in it while the attacker still has troops left. It needs no siege engines for that. A raid only plunders it.",
-      "guarded": "While troops guard the camp, yours or those of an army supporting it, ships included, nothing destroys it: not catapults, rams or fire ships.",
+      "guarded": "While troops guard the camp, yours or those of an army supporting it, ships included, nothing destroys it: not catapults, rams or fire craft.",
       "destroyed": "Destroying the camp ends it, the same way destroying a Longhouse ends a realm. The camp is gone, and so is everything its piles held, except what the attacker took.",
       "troopsOut": "Troops from the camp that are out when it falls go to your nearest garrison spot they can reach, and that becomes their home. If they can reach none, they stay where they are until their food runs out, and then starve.",
       "onTheWay": "An army on its way to a camp that is destroyed goes on to the camp's hex and stays there.",
@@ -1310,7 +1312,7 @@
     "pace": {
       "heading": "How fast armies move",
       "body": "Speed is counted in hexes per hour on grass. An army marches at the speed of its slowest unit. A fleet moves at the speed of its slowest ship; troops aboard do not slow it.",
-      "start": "Your troops stand at garrison spots: the Longhouse, towers and docks. You can put one army together from several spots. Each group leaves its own spot at once. They meet on the first hex their routes share, or on the hex just before the target if they share none. Whoever arrives first waits there and eats. Then the army moves on together at the pace of its slowest unit. The army's home is the spot nearest the meeting hex. A group that is recalled, gets another order, is split off or loses a fight before the meeting stays behind, and the others go on. To call off the whole army, recall every group. Fleet passengers at a spot without ships walk to one of the fleet's docks and board there.",
+      "start": "Your troops stand at garrison spots: the Longhouse, towers, harbours and shipyards. You can put one army together from several spots. Each group leaves its own spot at once. They meet on the first hex their routes share, or on the hex just before the target if they share none. Whoever arrives first waits there and eats. Then the army moves on together at the pace of its slowest unit. The army's home is the spot nearest the meeting hex. A group that is recalled, gets another order, is split off or loses a fight before the meeting stays behind, and the others go on. To call off the whole army, recall every group. Fleet passengers at a spot without ships walk to one of the fleet's docks and board there.",
       "example": "Example: a {unit} crosses a grass hex in {minutes}.",
       "columns": {
         "unit": "Unit",
@@ -1341,7 +1343,7 @@
     },
     "sendOut": {
       "heading": "Sending an army that is already out",
-      "spots": "Your troops stand in your longhouse, your towers and your docks. Ships wait at docks, and at the longhouse too if it stands on sand by the sea. New units join the nearest place that can hold them, and an army comes back to the place it left from. An army put together from several spots comes back to the spot nearest the hex where its groups met. To send troops to another realm of yours, tap one of its hexes: they join its garrison as support at the spot you tapped, or at its longhouse.",
+      "spots": "Your troops stand in your longhouse, your towers, your harbours and your shipyards. Ships wait there, and at the longhouse too if it stands on sand by the sea. New units join the nearest place that can hold them, and an army comes back to the place it left from. An army put together from several spots comes back to the spot nearest the hex where its groups met. To send troops to another realm of yours, tap one of its hexes: they join its garrison as support at the spot you tapped, or at its longhouse.",
       "orders": "Tap Send army here, Attack or Hunt on a hex and pick the army to send: the garrison of any of your realms, or an army of yours that is already out. Each row names its realm and what its troops would do there: on a hex of your own realm they move there, troops of your other realms support it. A standing army can move, attack, support or hunt. An army still on the march can be redirected with Premium. While you pick, tap another hex to aim at that one instead. Attacking a settlement means attacking a building in its realm: a building with a garrison is defended by it. Supporting a settlement means joining one of its garrisons.",
       "split": "You can send only part of a standing army. The rest keeps standing where it is. An army on the march always goes whole.",
       "reach": "An army only goes if it can get there and still has the food for the way home. The ones that cannot stay in the list, greyed out, with the reason.",
@@ -1380,11 +1382,14 @@
   },
   "ships": {
     "title": "Ships and water",
-    "intro": "Ships from the dockyard, fleets at sea, and what walls cannot stop.",
-    "dockyard": {
-      "heading": "The dockyard",
-      "body": "Ships are trained at the {dockyard}, which needs a {longhouse} of level {level} and a {hut} of level {hutLevel}.",
-      "shore": "It stands on shallow (coastal) water, so only a settlement that holds shoreline can train ships."
+    "intro": "Ships from the harbour and the shipyard, fleets at sea, and what walls cannot stop.",
+    "harbour": {
+      "heading": "Harbour and Shipyard",
+      "body": "The {harbour} trains scouts, cargo ships and the troop transport. It needs a {longhouse} of level {level} and a {hut} of level {hutLevel}.",
+      "shore": "Both stand on shallow (coastal) water, so only a settlement that holds shoreline can train ships. Ships lie at the Harbour or Shipyard they were trained in."
+    },
+    "shipyard": {
+      "body": "The {shipyard} trains warships and fire craft. It needs a {longhouse} of level {level} and a {harbour} of level {harbourLevel}."
     },
     "table": {
       "heading": "The ships",
@@ -1397,6 +1402,7 @@
         "slots": "Troop slots",
         "food": "Food capacity",
         "upkeep": "Upkeep per hour",
+        "fire": "Craft per level burned",
         "cost": "Cost ({resources})",
         "time": "Training time",
         "needs": "Needs"
@@ -1419,7 +1425,7 @@
       "slots": "Ships carry land troops in slots. Each ship has room for a number of slots (see the table above) and every unit takes some (table below).",
       "anyTrip": "A fleet can take troops on any trip: attack, raid, support, founding or hunting. If the troops need more slots than the ships have, the fleet cannot set out.",
       "speed": "A fleet moves at the speed of its slowest ship. The troops aboard do not slow it, and they eat from the fleet's provisions.",
-      "fight": "Troops aboard do not take part in the ship fight. In the land fight that follows, they fight from on board, siege engines included. In an ambush at sea only the ships fight. Troops leave the ships only at a beach camp or at your own Dockyard.",
+      "fight": "Troops aboard do not take part in the ship fight. In the land fight that follows, they fight from on board, siege engines included. In an ambush at sea only the ships fight. Troops leave the ships only at a beach camp or at your own Harbour or Shipyard.",
       "drown": "When ships are lost, the troops the remaining ships cannot carry drown. The biggest units go first. After a ship fight this happens before the land fight.",
       "unit": "Unit",
       "unitSlots": "Slots"
@@ -1427,9 +1433,9 @@
     "battles": {
       "heading": "Battles",
       "same": "Fleets fight by the same rules as armies on land: attack against defence, and a tie goes to the defender.",
-      "shipsOnly": "An attack is two fights: first ships against ships, then land troops against land troops. Ships and land troops never fight each other. Your ships at home defend your Dockyard (or your Longhouse, if it stands on sand at the shore), and allied fleets fight alongside them. If the target has no ships, the ship fight is skipped and counts as won. If you lose the ship fight, there is no land fight.",
-      "shore": "Ships do no damage to buildings on land. Only the Fire Ship damages buildings, and only those in the water: a Dockyard, a Fishing Hut, the Shrine of Njörd and a wall's sea end. It burns up doing so: 10 Fire Ships take one level off, and a building never loses more levels than a won siege allows.",
-      "damage": "Loot needs a won land fight: an attack on a building in the water (a Dockyard, a Fishing Hut, the Shrine of Njörd, a wall's sea end) is a ship fight only and takes no loot, since the troops aboard can't reach it. Buildings on land are damaged only by the siege engines aboard (catapults, rams), in the land fight of an attack. On a raid the siege engines destroy nothing.",
+      "shipsOnly": "An attack is two fights: first ships against ships, then land troops against land troops. Ships and land troops never fight each other. Your ships at home defend the Harbour or Shipyard they lie at (or your Longhouse, if it stands on sand at the shore), and allied fleets fight alongside them. If the target has no ships, the ship fight is skipped and counts as won. If you lose the ship fight, there is no land fight.",
+      "shore": "Ships do no damage to buildings on land. Only the Fire Hulk and the Fire Raft damage buildings, and only those in the water: a Harbour, a Shipyard, a Fishing Hut, the Shrine of Njörd and a wall's sea end. They burn up doing so: 10 Fire Hulks or 50 Fire Rafts take one level off, and a building never loses more levels than a won siege allows.",
+      "damage": "Loot needs a won land fight: an attack on a building in the water (a Harbour, a Shipyard, a Fishing Hut, the Shrine of Njörd, a wall's sea end) is a ship fight only and takes no loot, since the troops aboard can't reach it. Buildings on land are damaged only by the siege engines aboard (catapults, rams), in the land fight of an attack. On a raid the siege engines destroy nothing.",
       "tower": "A defending settlement's {tower} adds {percent}% defence per level.",
       "njord": "The {shrine} raises your ships' attack by {low}% at level 1, up to {high}% at level 5. See {shrines}.",
       "shrinesLink": "Shrines"
@@ -1439,8 +1445,12 @@
     },
     "history": {
       "dockyard": "Warships were kept in boathouses (naust, a word the sources attest) and called up by the levy (leiðangr), in which every coastal district had to build, man and feed a ship. Trade ships used the jetties and quays of harbour towns such as Hedeby, Birka and Kaupang.",
+      "faering": "The faering and the sexæring were small rowing boats with four or six oars, used for fishing, ferrying, landing from a big ship and scouting. The Gokstad burial (Norway, about 900) held three of them.",
+      "byrding": "The byrding (byrðingr) was a coastal and Baltic cargo ship, smaller than the knarr: about 14 m long, a crew of 5 to 8 and 4 to 5 tonnes of cargo. Skuldelev 3 (Danish oak, about 1040) is one, and the Viking Ship Museum in Roskilde sails a replica, Roar Ege.",
+      "knarr": "The knarr (knǫrr) was the broad, deep ocean-going cargo ship that settled the North Atlantic: it sailed almost always, with a few oars for harbour work, and carried stockfish, walrus ivory, timber, livestock and settlers. Skuldelev 1 (western Norway, about 1030) is about 16 m long with 20 or more tonnes of cargo. Erik the Red set out for Greenland with 25 ships, and 14 arrived, according to Landnámabók.",
       "karve": "The karve (karfi) was a chieftain's all-purpose ship for travel, troops, some cargo and coastal war. It was broader and shallower than a pure warship. It is often matched with the Oseberg ship (about 820, about 21.5 m) and the Gokstad ship (about 890, about 23 m), which is an interpretation. A replica of the Gokstad ship crossed the Atlantic to Chicago in 1893.",
-      "longship": "\"Longship\" (langskip) is the umbrella word for every long, narrow, oared warship. The Norse sorted them by size in rooms (rúm), the spaces between the rowing benches. The game's Longship plays the snekkja, the common mid-size raider and levy ship of about 17 m and up, with 13 to 20 pairs of oars. Skuldelev 5 (Danish, about 1030, 13 pairs of oars, repaired with reused timber) is counted as one, and the Viking Ship Museum in Roskilde sails a replica, Helge Ask. The larger skeid and the dragon ship were longships too.",
+      "longship": "\"Longship\" (langskip) is the umbrella word for every long, narrow, oared warship. The Norse sorted them by size in rooms (rúm), the spaces between the rowing benches. The game's Snekkja is the common mid-size raider and levy ship of about 17 m and up, with 13 to 20 pairs of oars. Skuldelev 5 (Danish, about 1030, 13 pairs of oars, repaired with reused timber) is counted as one, and the Viking Ship Museum in Roskilde sails a replica, Helge Ask. The larger skeid and the dragon ship were longships too.",
+      "skeid": "The skeid (skeið) was the largest class of longship, with 30 or more pairs of oars: the ship of kings and great lords, crewed by their household warriors and the levy (leiðangr). Skuldelev 2 (built near Dublin, about 1042, about 30 m) is one, and its replica Havhingsten fra Glendalough sailed from Roskilde to Dublin and back in 2007 and 2008. Roskilde 6 (about 1025, about 37 m) is the longest Viking ship found.",
       "fireShip": "The Norse did not use fire ships as a regular weapon. Fire at sea belongs to the Byzantines, whose Greek fire burned the fleet of the Rus' under Prince Igor off Constantinople in 941. There may be one Viking-age case: Hedeby 1, a warship of about 30 m, was found burned in Hedeby harbour and dated to about 985. One reading, by the Roskilde archaeologists, is that it was filled with fuel, set alight and sent against the harbour's defences during an attack. That rests on a single find and is an interpretation, not a certainty."
     }
   },

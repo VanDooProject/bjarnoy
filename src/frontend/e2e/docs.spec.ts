@@ -926,7 +926,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     const graph = page.getByTestId("unit-graph");
     await expect(graph.locator("svg")).toBeVisible();
     await expect(graph.locator('svg [data-unit="spearman"]')).toBeVisible();
-    await expect(graph.locator('svg [data-unit="longship"]')).toBeVisible();
+    await expect(graph.locator('svg [data-unit="snekkja"]')).toBeVisible();
     // The Ram and the Catapult need the Berserker, across lanes; the Berserker needs no other unit.
     await expect(
       graph.locator('[data-edge="berserker>ram"]'),
@@ -956,13 +956,13 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     expect(overflow).toBeLessThanOrEqual(1);
   });
 
-  test("ships page compares the Karve and the Longship and hides the admin note", async ({
+  test("ships page compares the Karve and the Snekkja and hides the admin note", async ({
     page,
   }) => {
     await page.goto("/docs/ships");
     await expectPlayerPage(page, "Ships and water", "ships-table");
     await expect(page.locator('[data-row="attack"]')).toContainText("60");
-    await expect(page.locator('[data-row="needs"]')).toContainText("Karve");
+    await expect(page.locator('[data-row="needs"]')).toContainText("Shipyard");
     await expect(page.getByText("Under investigation")).toHaveCount(0);
   });
 
@@ -1029,12 +1029,12 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       page.getByTestId("wall-movement-legend").locator("li"),
     ).toHaveCount(11);
 
-    // Sieges are player content now: rams take one level per won siege, three levels per wall hex, and a Fire Ship sent at
+    // Sieges are player content now: rams take one level per won siege, three levels per wall hex, and Fire Hulks and Fire Rafts sent at
     // the sea end of a wall takes a level too.
     const sieges = page.locator("#sieges");
     await expect(sieges.getByRole("heading", { name: "Sieges" })).toBeVisible();
     await expect(sieges.locator("li")).toHaveCount(6);
-    await expect(sieges).toContainText("A Fire Ship sent at a wall's sea end");
+    await expect(sieges).toContainText("Fire Hulks (10 per level) and Fire Rafts (50 per level) sent at a wall's sea end");
     await expect(sieges).toContainText("exactly one level");
     await expect(sieges).toContainText("3 levels");
     // The note on what is still not built (fire) stays admin-only.

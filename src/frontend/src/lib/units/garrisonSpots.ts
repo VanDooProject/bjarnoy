@@ -55,10 +55,20 @@ export function toDispatchFrom(groups: ReadonlyArray<SpotGroup>): { spot: HexPoi
   return groups.map((g) => ({ spot: { q: g.spot.q, r: g.spot.r }, units: g.units.map((u) => ({ unit: u.unit, count: u.count })) }));
 }
 
-/** Whether a tile of a settlement is one of its garrison spots: the centre hex (the longhouse), or a hex carrying a tower or a dockyard. */
+/** The docks: the buildings every ship can lie at (the Harbour and the Shipyard). Mirrors the backend's `BuildingTypeExtensions.IsDock`. */
+export function isDockBuilding(buildingType: string | undefined): boolean {
+  return buildingType === 'harbour' || buildingType === 'shipyard';
+}
+
+/** Whether units stand at a building of this type: a tower (land units) or a dock (ships). Mirrors the backend's `HoldsGarrison`. */
+export function holdsGarrison(buildingType: string | undefined): boolean {
+  return buildingType === 'tower' || isDockBuilding(buildingType);
+}
+
+/** Whether a tile of a settlement is one of its garrison spots: the centre hex (the longhouse), or a hex carrying a tower, a harbour or a shipyard. */
 export function isGarrisonSpotTile(tile: { q: number; r: number; buildingType?: string }, centre: { q: number; r: number } | undefined): boolean {
   if (centre && tile.q === centre.q && tile.r === centre.r) return true;
-  return tile.buildingType === 'tower' || tile.buildingType === 'dockyard';
+  return holdsGarrison(tile.buildingType);
 }
 
 /** The distinct spot kinds one unit type is taken from, in the order of the allocation. */

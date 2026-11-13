@@ -764,7 +764,7 @@ public sealed partial record Army
         // A fleet Attack/Raid is always sent at one building on the target's shore: it sails to that building's
         // hex, the fight happens there, and a won fight damages only that building. The target's Longhouse may be
         // inland. "On the shore" = inside the target's claim and either a shoreline land hex or a sea hex (the
-        // coastal-water buildings: Dockyard, Fishing Hut, Shrine of Njörd). Whether a building actually stands there
+        // coastal-water buildings: Harbour, Shipyard, Fishing Hut, Shrine of Njörd). Whether a building actually stands there
         // is checked at arrival, like for catapults. Land armies are unaffected.
         if (mission is ArmyMission.Attack or ArmyMission.Raid && isFleet)
         {
@@ -1054,8 +1054,8 @@ public sealed partial record Army
 
     /// <summary>
     /// The settlement's harbour spot: where its ships stand. The centre when it harbours ships (sand next to the sea, see
-    /// <see cref="CentreHarbours"/>), otherwise the Dockyard nearest the centre (ties by Q, then R); the centre when there is
-    /// no Dockyard either.
+    /// <see cref="CentreHarbours"/>), otherwise the Harbour or Shipyard nearest the centre (ties by Q, then R); the centre when there is
+    /// neither.
     /// </summary>
     public static HexCoord FleetAnchor(HexCoord centre, IEnumerable<PlacedBuilding> buildings, Func<HexCoord, Terrain> terrainAt)
     {
@@ -1068,7 +1068,7 @@ public sealed partial record Army
         }
 
         return buildings
-            .Where(b => b.Type == BuildingType.Dockyard && b.IsFunctioning)
+            .Where(b => b.Type.IsDock() && b.IsFunctioning)
             .Select(b => b.Coord)
             .OrderBy(c => c.DistanceTo(centre)).ThenBy(c => c.Q).ThenBy(c => c.R)
             .Cast<HexCoord?>()

@@ -76,12 +76,46 @@ public class UnitCatalogueTests
     }
 
     [Fact]
-    public void Longship_requires_karve_to_be_available_first()
+    public void No_ship_needs_another_unit_first()
     {
-        // The Karve is available from longhouse 8 (its Dockyard), but the Longship is an elite unit (longhouse 20).
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.Karve, 8));
-        Assert.False(UnitCatalogue.IsAvailable(UnitType.Longship, 19));
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.Longship, 20));
+        // The building level orders the ships now (docs/design/units-and-ships.md §1): the Karve is no prerequisite any more.
+        foreach (var type in UnitCatalogue.AllTypes.Where(t => UnitCatalogue.Get(t).Class == UnitClass.Ship))
+        {
+            Assert.Null(UnitCatalogue.Get(type).RequiredUnitType);
+        }
+    }
+
+    [Theory]
+    [InlineData(UnitType.Faering, BuildingType.Harbour, 1, 1)]
+    [InlineData(UnitType.Byrding, BuildingType.Harbour, 1, 1)]
+    [InlineData(UnitType.Knarr, BuildingType.Harbour, 3, 1)]
+    [InlineData(UnitType.Karve, BuildingType.Harbour, 5, 1)]
+    [InlineData(UnitType.Snekkja, BuildingType.Shipyard, 1, 1)]
+    [InlineData(UnitType.Skeid, BuildingType.Shipyard, 10, 20)]
+    [InlineData(UnitType.FireRaft, BuildingType.Shipyard, 1, 1)]
+    [InlineData(UnitType.FireHulk, BuildingType.Shipyard, 5, 12)]
+    public void Every_ship_has_its_building_its_building_level_and_its_own_longhouse_gate(
+        UnitType type, BuildingType building, int buildingLevel, int longhouseGate)
+    {
+        var definition = UnitCatalogue.Get(type);
+
+        Assert.Equal(UnitClass.Ship, definition.Class);
+        Assert.Equal(building, definition.RequiredBuildingType);
+        Assert.Equal(buildingLevel, definition.RequiredBuildingLevel);
+        Assert.Equal(longhouseGate, definition.RequiredLonghouseLevel);
+    }
+
+    [Fact]
+    public void A_unit_needs_the_building_level_not_just_a_standing_building()
+    {
+        // Knarr: Harbour 3. A level-2 Harbour does not do, level 3 does, and a Shipyard is the wrong building.
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Knarr, 30, t => t == BuildingType.Harbour ? 2 : 0));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Knarr, 30, t => t == BuildingType.Harbour ? 3 : 0));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Knarr, 30, t => t == BuildingType.Shipyard ? 10 : 0));
+        // Skeid: Shipyard 10 and its own Longhouse 20.
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Skeid, 19, t => t == BuildingType.Shipyard ? 10 : 0));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Skeid, 20, t => t == BuildingType.Shipyard ? 9 : 0));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Skeid, 20, t => t == BuildingType.Shipyard ? 10 : 0));
     }
 
     [Fact]
@@ -124,12 +158,13 @@ public class UnitCatalogueTests
     }
 
     [Fact]
-    public void A_ship_needs_a_dockyard_when_a_building_lookup_is_supplied()
+    public void A_ship_needs_its_harbour_or_shipyard_when_a_building_lookup_is_supplied()
     {
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.Karve, 8));
-        Assert.False(UnitCatalogue.IsAvailable(UnitType.Karve, 8, _ => 0));
-        Assert.True(UnitCatalogue.IsAvailable(
-            UnitType.Karve, 8, t => t == BuildingType.Dockyard ? 1 : 0));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Faering, 5));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Faering, 5, _ => 0));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Faering, 5, t => t == BuildingType.Harbour ? 1 : 0));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Snekkja, 10, t => t == BuildingType.Harbour ? 5 : 0));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Snekkja, 10, t => t == BuildingType.Shipyard ? 1 : 0));
     }
 
     [Fact]
@@ -186,25 +221,29 @@ public class UnitCatalogueTests
     }
 
     [Fact]
-    public void The_thrall_costs_no_iron_and_every_other_unit_costs_iron()
+    public void The_thrall_and_the_faering_cost_no_iron_and_every_other_unit_costs_iron()
     {
-        // docs/design/economy.md section 8: iron is an indirect gate for the army.
+        // docs/design/economy.md section 8: iron is an indirect gate for the army. The Færing (40 / 10 / 10 / 0) is the scout boat.
         Assert.Equal(0, UnitCatalogue.Get(UnitType.Thrall).TrainingCost.Iron);
-        foreach (var type in UnitCatalogue.AllTypes.Where(t => t != UnitType.Thrall))
+        Assert.Equal(0, UnitCatalogue.Get(UnitType.Faering).TrainingCost.Iron);
+        foreach (var type in UnitCatalogue.AllTypes.Where(t => t is not (UnitType.Thrall or UnitType.Faering)))
         {
             Assert.True(UnitCatalogue.Get(type).TrainingCost.Iron > 0, $"{type} costs no iron");
         }
     }
 
     [Fact]
-    public void A_units_longhouse_gate_is_never_below_the_unlock_level_of_the_building_that_trains_it()
+    public void A_units_earliest_longhouse_is_never_below_the_unlock_level_of_the_building_that_trains_it()
     {
-        // A unit with no Longhouse gate of its own (1: the Thrall, the Ram, the Catapult) is gated by its building's unlock alone.
+        // A unit with no Longhouse gate of its own (1: the Thrall, the Ram, the Catapult and the ships that follow their building level) is gated by its building's unlock alone.
         foreach (var type in UnitCatalogue.AllTypes.Where(t => UnitCatalogue.Get(t).RequiredLonghouseLevel > 1))
         {
             var definition = UnitCatalogue.Get(type);
+            var earliest = Math.Max(
+                definition.RequiredLonghouseLevel,
+                BuildingCatalogue.RequiredLonghouseLevelFor(definition.RequiredBuildingType, definition.RequiredBuildingLevel));
             Assert.True(
-                definition.RequiredLonghouseLevel >= BuildingCatalogue.UnlockLevel(definition.RequiredBuildingType),
+                earliest >= BuildingCatalogue.UnlockLevel(definition.RequiredBuildingType),
                 $"{type} (LH {definition.RequiredLonghouseLevel}) unlocks before its {definition.RequiredBuildingType} "
                 + $"(LH {BuildingCatalogue.UnlockLevel(definition.RequiredBuildingType)})");
         }
@@ -214,7 +253,6 @@ public class UnitCatalogueTests
     [InlineData(UnitType.Thrall, 1)]
     [InlineData(UnitType.Spearman, 5)]
     [InlineData(UnitType.Axeman, 6)]
-    [InlineData(UnitType.Karve, 8)]
     [InlineData(UnitType.Bowman, 9)]
     [InlineData(UnitType.Skirmisher, 9)]
     [InlineData(UnitType.Provisioner, 10)]
@@ -222,7 +260,10 @@ public class UnitCatalogueTests
     [InlineData(UnitType.Berserker, 20)]
     [InlineData(UnitType.Catapult, 1)]
     [InlineData(UnitType.Ram, 1)]
-    [InlineData(UnitType.Longship, 20)]
+    [InlineData(UnitType.Skeid, 20)]
+    [InlineData(UnitType.FireHulk, 12)]
+    [InlineData(UnitType.Snekkja, 1)]
+    [InlineData(UnitType.Karve, 1)]
     public void Unit_gates_follow_the_building_ladder(UnitType type, int longhouseLevel)
     {
         Assert.Equal(longhouseLevel, UnitCatalogue.Get(type).RequiredLonghouseLevel);
@@ -237,7 +278,9 @@ public class UnitCatalogueTests
         foreach (var type in UnitCatalogue.AllTypes.Where(t => t is not (UnitType.Thrall or UnitType.Spearman)))
         {
             var definition = UnitCatalogue.Get(type);
-            var earliest = Math.Max(definition.RequiredLonghouseLevel, BuildingCatalogue.UnlockLevel(definition.RequiredBuildingType));
+            var earliest = Math.Max(
+                definition.RequiredLonghouseLevel,
+                BuildingCatalogue.RequiredLonghouseLevelFor(definition.RequiredBuildingType, definition.RequiredBuildingLevel));
             Assert.True(earliest >= bogOre, $"{type} opens before the bog-ore works");
         }
     }
@@ -246,7 +289,7 @@ public class UnitCatalogueTests
     public void The_elite_units_open_where_the_hammerschmiede_does()
     {
         var hammer = BuildingCatalogue.UnlockLevel(BuildingType.Hammerschmiede);
-        foreach (var type in new[] { UnitType.Berserker, UnitType.Longship })
+        foreach (var type in new[] { UnitType.Berserker, UnitType.Skeid })
         {
             Assert.Equal(hammer, UnitCatalogue.Get(type).RequiredLonghouseLevel);
         }
@@ -333,7 +376,7 @@ public class UnitCatalogueTests
     [Fact]
     public void The_fire_ship_has_its_starting_numbers_and_is_a_slotless_hull_without_attack()
     {
-        var fireShip = UnitCatalogue.Get(UnitType.FireShip);
+        var fireShip = UnitCatalogue.Get(UnitType.FireHulk);
 
         Assert.Equal(UnitClass.Ship, fireShip.Class);
         Assert.Equal(0, fireShip.Attack);
@@ -346,17 +389,78 @@ public class UnitCatalogueTests
         Assert.Equal(6, fireShip.VisionRadius);
         Assert.Equal(new ResourceAmounts(Wood: 300, Stone: 60, Food: 40, Iron: 80), fireShip.TrainingCost);
         Assert.Equal(TimeSpan.FromMinutes(40), fireShip.TrainingDuration);
-        Assert.Equal("fireship", UnitType.FireShip.ToWireName());
+        Assert.Equal("firehulk", UnitType.FireHulk.ToWireName());
     }
 
     [Fact]
-    public void The_fire_ship_needs_longhouse_12_a_dockyard_and_the_karve()
+    public void The_fire_hulk_needs_longhouse_12_and_a_level_5_shipyard()
     {
-        Assert.Equal(UnitType.Karve, UnitCatalogue.Get(UnitType.FireShip).RequiredUnitType);
-        Assert.False(UnitCatalogue.IsAvailable(UnitType.FireShip, 11));
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.FireShip, 12));
-        Assert.False(UnitCatalogue.IsAvailable(UnitType.FireShip, 12, _ => 0));
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.FireShip, 12, t => t == BuildingType.Dockyard ? 1 : 0));
+        Assert.Null(UnitCatalogue.Get(UnitType.FireHulk).RequiredUnitType);
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.FireHulk, 11));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.FireHulk, 12));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.FireHulk, 12, _ => 0));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.FireHulk, 12, t => t == BuildingType.Shipyard ? 4 : 0));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.FireHulk, 12, t => t == BuildingType.Shipyard ? 5 : 0));
+    }
+
+    [Fact]
+    public void Fire_damage_is_data_per_craft_and_only_fire_craft_have_it()
+    {
+        Assert.Equal(10, UnitCatalogue.Get(UnitType.FireHulk).FireCraftPerLevel);
+        Assert.Equal(50, UnitCatalogue.Get(UnitType.FireRaft).FireCraftPerLevel);
+        foreach (var type in UnitCatalogue.AllTypes.Where(t => t is not (UnitType.FireHulk or UnitType.FireRaft)))
+        {
+            Assert.Equal(0, UnitCatalogue.Get(type).FireCraftPerLevel);
+        }
+    }
+
+    [Fact]
+    public void The_byrding_and_the_knarr_carry_cargo_but_no_troops_and_the_karve_is_the_troop_transport()
+    {
+        Assert.Equal(0, UnitCatalogue.Get(UnitType.Byrding).ShipSlots);
+        Assert.Equal(0, UnitCatalogue.Get(UnitType.Knarr).ShipSlots);
+        Assert.Equal(160, UnitCatalogue.Get(UnitType.Byrding).CarryCapacity);
+        Assert.Equal(600, UnitCatalogue.Get(UnitType.Knarr).CarryCapacity);
+        Assert.Equal(10, UnitCatalogue.Get(UnitType.Karve).ShipSlots);
+    }
+
+    [Theory]
+    [InlineData(UnitType.Faering, 0, 3, 8, 7, 0, 40, 0.25, 6)]
+    [InlineData(UnitType.Byrding, 0, 10, 6, 5, 160, 150, 0.5, 20)]
+    [InlineData(UnitType.Knarr, 0, 20, 4, 5, 600, 1200, 1, 50)]
+    [InlineData(UnitType.Skeid, 90, 60, 11, 4, 120, 480, 3, 120)]
+    [InlineData(UnitType.FireRaft, 0, 3, 5, 2, 0, 30, 1, 10)]
+    public void The_new_ships_have_the_stats_of_the_units_and_ships_table(
+        UnitType type, int attack, int defense, double speed, int vision, int loot, int provisions, double upkeep, int minutes)
+    {
+        var d = UnitCatalogue.Get(type);
+
+        Assert.Equal(attack, d.Attack);
+        Assert.Equal(defense, d.Defense);
+        Assert.Equal(speed, d.Speed);
+        Assert.Equal(vision, d.VisionRadius);
+        Assert.Equal(loot, d.CarryCapacity);
+        Assert.Equal(provisions, d.FoodCarryCapacity);
+        Assert.Equal(upkeep, d.UpkeepPerHour);
+        Assert.Equal(TimeSpan.FromMinutes(minutes), d.TrainingDuration);
+    }
+
+    [Fact]
+    public void The_renamed_ships_keep_their_stored_numbers_and_the_new_ones_are_appended()
+    {
+        Assert.Equal(8, (int)UnitType.Snekkja);
+        Assert.Equal(11, (int)UnitType.FireHulk);
+        Assert.Equal(14, (int)UnitType.Faering);
+        Assert.Equal(15, (int)UnitType.Byrding);
+        Assert.Equal(16, (int)UnitType.Knarr);
+        Assert.Equal(17, (int)UnitType.Skeid);
+        Assert.Equal(18, (int)UnitType.FireRaft);
+        Assert.Equal(13, (int)BuildingType.Harbour);
+        Assert.Equal(35, (int)BuildingType.Shipyard);
+        Assert.Equal("snekkja", UnitType.Snekkja.ToWireName());
+        Assert.Equal("fireraft", UnitType.FireRaft.ToWireName());
+        Assert.Equal("harbour", BuildingType.Harbour.ToWireName());
+        Assert.Equal("shipyard", BuildingType.Shipyard.ToWireName());
     }
 
     [Fact]

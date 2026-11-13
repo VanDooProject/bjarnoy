@@ -9,15 +9,16 @@ import DocsPageLink from '../components/docs/DocsPageLink.vue';
 import BuildingLink from '../components/docs/BuildingLink.vue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
-import { resourceName, unitName } from '../i18n/catalogueNames';
+import { resourceName, shipGroupName, unitName } from '../i18n/catalogueNames';
+import { groupByShipGroup } from '../lib/units/shipGroups';
 import { prerequisitesOf } from '../lib/techtree/nodes';
 import { favourAt } from '../lib/docs/shrineDocs';
 import { formatMinutes } from '../lib/docs/landMovementDocs';
 import { TOWER_DEFENCE_PERCENT_PER_LEVEL, minutesPerSeaHex } from '../lib/docs/shipDocs';
 import { SETTLERS_PER_FOUNDING } from '../lib/founding';
 
-// The ships page: the dockyard, a table of the ships and the rules for fleets at sea. Ship figures come from the
-// unit catalogue, the dockyard's from the building catalogue; the sea rules are mirrored in shipDocs.ts.
+// The ships page: the harbour and the shipyard, a table of the ships by group and the rules for fleets at sea. Ship figures come
+// from the unit catalogue, the buildings' from the building catalogue; the sea rules are mirrored in shipDocs.ts.
 
 const { n, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const buildings = useBuildingCatalogueStore();
@@ -30,16 +31,23 @@ onMounted(() => {
 
 const RESOURCES = ['wood', 'stone', 'food', 'iron'] as const;
 
-const ships = computed(() => units.definitions.filter((u) => u.class === 'ship'));
+const ships = computed(() => groupByShipGroup(units.definitions.filter((u) => u.class === 'ship'), (u) => u.type).flatMap((g) => g.rows));
+// The column groups of the table: one heading cell per ship group, spanning its ships.
+const shipColumnGroups = computed(() => groupByShipGroup(ships.value, (u) => u.type).filter((g) => g.group !== null));
 // What land units take aboard, smallest first.
 const passengers = computed(() =>
   units.definitions.filter((u) => u.cargoSlots > 0).sort((a, b) => a.cargoSlots - b.cargoSlots),
 );
-const dockyard = computed(() => ({
-  longhouse: buildings.byType.dockyard?.[0]?.requiredLonghouseLevel ?? 0,
-  needs: prerequisitesOf(buildings.byType, 'dockyard'),
+const harbour = computed(() => ({
+  longhouse: buildings.byType.harbour?.[0]?.requiredLonghouseLevel ?? 0,
+  needs: prerequisitesOf(buildings.byType, 'harbour'),
 }));
-const fishingHutLevel = computed(() => dockyard.value.needs.find((p) => p.type === 'fishinghut')?.level ?? 0);
+const shipyard = computed(() => ({
+  longhouse: buildings.byType.shipyard?.[0]?.requiredLonghouseLevel ?? 0,
+  needs: prerequisitesOf(buildings.byType, 'shipyard'),
+}));
+const fishingHutLevel = computed(() => harbour.value.needs.find((p) => p.type === 'fishinghut')?.level ?? 0);
+const harbourLevelForShipyard = computed(() => shipyard.value.needs.find((p) => p.type === 'harbour')?.level ?? 0);
 
 const njord = computed(() => {
   const low = favourAt('shrineofnjord', 1);
@@ -47,23 +55,30 @@ const njord = computed(() => {
   return low?.kind === 'percent' && high?.kind === 'percent' ? { low: low.percent, high: high.percent } : null;
 });
 
-const loaded = computed(() => ships.value.length > 0 && dockyard.value.longhouse > 0);
+const loaded = computed(() => ships.value.length > 0 && harbour.value.longhouse > 0 && shipyard.value.longhouse > 0);
 const loc = computed(() => String(locale.value));
 </script>
 
 <template>
   <DocsPageLayout class="ships" :title="$t('docs.ships.title')" caption="DOCS · SHIPS" :intro="$t('docs.ships.intro')">
     <template v-if="loaded">
-    <section id="dockyard" class="block">
-      <h2>{{ $t('docs.ships.dockyard.heading') }}</h2>
-      <i18n-t v-if="dockyard.longhouse" keypath="docs.ships.dockyard.body" tag="p" class="text" scope="global">
-        <template #dockyard><BuildingLink type="dockyard" /></template>
+    <section id="harbour" class="block">
+      <h2>{{ $t('docs.ships.harbour.heading') }}</h2>
+      <i18n-t keypath="docs.ships.harbour.body" tag="p" class="text" scope="global">
+        <template #harbour><BuildingLink type="harbour" /></template>
         <template #longhouse><BuildingLink type="longhouse" /></template>
-        <template #level>{{ dockyard.longhouse }}</template>
+        <template #level>{{ harbour.longhouse }}</template>
         <template #hut><BuildingLink type="fishinghut" /></template>
         <template #hutLevel>{{ fishingHutLevel }}</template>
       </i18n-t>
-      <p class="text">{{ $t('docs.ships.dockyard.shore') }}</p>
+      <i18n-t keypath="docs.ships.shipyard.body" tag="p" class="text" scope="global">
+        <template #shipyard><BuildingLink type="shipyard" /></template>
+        <template #longhouse><BuildingLink type="longhouse" /></template>
+        <template #level>{{ shipyard.longhouse }}</template>
+        <template #harbour><BuildingLink type="harbour" /></template>
+        <template #harbourLevel>{{ harbourLevelForShipyard }}</template>
+      </i18n-t>
+      <p class="text">{{ $t('docs.ships.harbour.shore') }}</p>
       <DocsHistoryNote><p>{{ $t('docs.ships.history.dockyard') }}</p></DocsHistoryNote>
     </section>
 
@@ -73,6 +88,10 @@ const loc = computed(() => String(locale.value));
       <div v-if="ships.length > 0" class="table-scroll">
         <table data-testid="ships-table">
           <thead>
+            <tr class="group-row">
+              <th />
+              <th v-for="g in shipColumnGroups" :key="g.group!" :colspan="g.rows.length" :data-group="g.group!" scope="colgroup" class="group">{{ shipGroupName(g.group!) }}</th>
+            </tr>
             <tr>
               <th />
               <th v-for="ship in ships" :key="ship.type" :data-ship="ship.type">{{ unitName(ship.type) }}</th>
@@ -119,11 +138,15 @@ const loc = computed(() => String(locale.value));
               <th scope="row" class="name">{{ $t('docs.ships.table.rows.time') }}</th>
               <td v-for="ship in ships" :key="ship.type" class="value">{{ $t('docs.ships.table.minutes', { n: Math.round(ship.trainingSeconds / 60) }) }}</td>
             </tr>
+            <tr data-row="fire">
+              <th scope="row" class="name">{{ $t('docs.ships.table.rows.fire') }}</th>
+              <td v-for="ship in ships" :key="ship.type" class="value">{{ ship.fireCraftPerLevel > 0 ? n(ship.fireCraftPerLevel) : '–' }}</td>
+            </tr>
             <tr data-row="needs">
               <th scope="row" class="name">{{ $t('docs.ships.table.rows.needs') }}</th>
               <td v-for="ship in ships" :key="ship.type">
-                <BuildingLink type="longhouse" /> {{ ship.requiredLonghouseLevel }}
-                <template v-if="ship.requiredUnitType">· {{ unitName(ship.requiredUnitType) }}</template>
+                <BuildingLink :type="ship.requiredBuildingType" /> {{ ship.requiredBuildingLevel }}
+                <template v-if="ship.requiredLonghouseLevel > 1">· <BuildingLink type="longhouse" /> {{ ship.requiredLonghouseLevel }}</template>
               </td>
             </tr>
           </tbody>
@@ -132,8 +155,12 @@ const loc = computed(() => String(locale.value));
     </section>
 
     <DocsHistoryNote class="block">
+      <p>{{ $t('docs.ships.history.faering') }}</p>
+      <p>{{ $t('docs.ships.history.byrding') }}</p>
+      <p>{{ $t('docs.ships.history.knarr') }}</p>
       <p>{{ $t('docs.ships.history.karve') }}</p>
       <p>{{ $t('docs.ships.history.longship') }}</p>
+      <p>{{ $t('docs.ships.history.skeid') }}</p>
       <p>{{ $t('docs.ships.history.fireShip') }}</p>
     </DocsHistoryNote>
 
@@ -241,6 +268,11 @@ const loc = computed(() => String(locale.value));
 }
 .rules li {
   margin-bottom: 6px;
+}
+.group {
+  color: #fff;
+  text-align: center;
+  border-left: 1px solid var(--panel-border);
 }
 .table-scroll {
   overflow-x: auto;

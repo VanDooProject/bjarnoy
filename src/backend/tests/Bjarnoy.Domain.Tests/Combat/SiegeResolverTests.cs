@@ -42,7 +42,7 @@ public class SiegeResolverTests
 
     [Theory]
     [InlineData(UnitType.Spearman)]
-    [InlineData(UnitType.Longship)]
+    [InlineData(UnitType.Snekkja)]
     public void A_beach_camp_with_land_troops_or_ships_left_does_not_fall(UnitType defender)
     {
         Assert.False(SiegeResolver.CampFalls(Camp(), ArmyMission.Attack, Survivors, [new UnitStack(defender, 1)]));
@@ -91,12 +91,53 @@ public class SiegeResolverTests
     }
 
     [Fact]
-    public void Fire_ships_do_not_burn_a_beach_camp()
+    public void Fire_craft_do_not_burn_a_beach_camp()
     {
-        var (outcome, burned) = SiegeResolver.Burn(50, Camp().Buildings, Longhouse, _ => Terrain.Sea);
+        var (outcome, burned) = SiegeResolver.Burn([new(UnitType.FireHulk, 50)], Camp().Buildings, Longhouse, _ => Terrain.Sea);
 
         Assert.False(outcome.Applied);
-        Assert.Equal(0, burned);
+        Assert.Empty(burned);
+    }
+
+    private static readonly HexCoord WaterHex = new(5, 5);
+
+    private static (SiegeOutcome Outcome, IReadOnlyList<UnitStack> Burned) BurnHarbour(int level, params UnitStack[] craft) =>
+        SiegeResolver.Burn(craft, [new PlacedBuilding(WaterHex, BuildingType.Harbour, level)], WaterHex, _ => Terrain.Sea);
+
+    [Theory]
+    [InlineData(UnitType.FireHulk, 10, 1, 10)]
+    [InlineData(UnitType.FireHulk, 25, 2, 20)]
+    [InlineData(UnitType.FireRaft, 49, 0, 0)]
+    [InlineData(UnitType.FireRaft, 50, 1, 50)]
+    [InlineData(UnitType.FireRaft, 120, 2, 100)]
+    public void Each_fire_craft_type_burns_levels_by_its_own_craft_per_level(UnitType type, int count, int levels, int burnedCount)
+    {
+        var (outcome, burned) = BurnHarbour(5, new UnitStack(type, count));
+
+        Assert.Equal(levels, outcome.Applied ? outcome.LevelBefore - outcome.LevelAfter : 0);
+        Assert.Equal(burnedCount, burned.Sum(s => s.Count));
+        Assert.All(burned, s => Assert.Equal(type, s.Type));
+    }
+
+    [Fact]
+    public void A_mixed_fire_fleet_adds_the_levels_of_each_type_and_burns_rafts_first()
+    {
+        var (outcome, burned) = BurnHarbour(5, new UnitStack(UnitType.FireHulk, 10), new UnitStack(UnitType.FireRaft, 50));
+
+        Assert.Equal(2, outcome.LevelBefore - outcome.LevelAfter);
+        Assert.Equal(50, burned.Single(s => s.Type == UnitType.FireRaft).Count);
+        Assert.Equal(10, burned.Single(s => s.Type == UnitType.FireHulk).Count);
+    }
+
+    [Fact]
+    public void Fire_craft_are_only_burned_for_the_levels_actually_taken()
+    {
+        // A level-1 building takes one level however many craft come; the cheap craft pay first.
+        var (outcome, burned) = BurnHarbour(1, new UnitStack(UnitType.FireHulk, 30), new UnitStack(UnitType.FireRaft, 100));
+
+        Assert.Equal(1, outcome.LevelBefore - outcome.LevelAfter);
+        Assert.Equal(50, burned.Sum(s => s.Count));
+        Assert.Equal(UnitType.FireRaft, burned.Single().Type);
     }
 
     [Theory]

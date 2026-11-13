@@ -357,7 +357,8 @@
       "pumpkinfarm": "Pumpkin farm",
       "palisade": "Palisade",
       "palisadegate": "Palisade gate",
-      "dockyard": "Dockyard",
+      "harbour": "Harbour",
+      "shipyard": "Shipyard",
       "shrineofnjord": "Shrine of Njörd"
     },
     "missionAttack": "Attack",
@@ -390,8 +391,8 @@
     "landFight": "Land fight",
     "noLandFight": "No land fight was fought.",
     "drowned": "Drowned",
-    "fireShips": "Fire Ships",
-    "fireShipsBurned": "{n} Fire Ships burned",
+    "fireShips": "Fire craft",
+    "fireShipsBurned": "{n} fire craft burned",
     "summaryDrowned": "{n} drowned"
   },
   "fieldBattleReport": {
@@ -438,7 +439,7 @@
   "garrisonSpots": {
     "longhouse": "Longhouse",
     "tower": "Tower",
-    "dock": "Dock",
+    "dock": "Harbour or Shipyard",
     "beachcamp": "Beach camp",
     "from": "from {spots}"
   },

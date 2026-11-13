@@ -184,7 +184,7 @@ public class VolleyTests
     [Fact]
     public void A_ship_fight_has_no_volley()
     {
-        UnitStack[] attacker = [new(UnitType.Longship, 5)];
+        UnitStack[] attacker = [new(UnitType.Snekkja, 5)];
         UnitStack[] defender = [new(UnitType.Karve, 5)];
 
         var plan = BattleResolver.Resolve(attacker, defender, defenseBonusPercent: 0, Abundant, seed: 1);

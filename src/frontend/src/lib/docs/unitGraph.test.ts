@@ -4,7 +4,7 @@ import unitCatalogue from '../../data/unit-catalogue.json';
 import { GRAPH_COL, GRAPH_X0, GRAPH_NODE_W, edgePath, layoutUnitGraph, unitsByLevel } from './unitGraph';
 
 const definitions = unitCatalogue.data as UnitDefinitionResponse[];
-const unlock = (b: string) => ({ barracks: 5, archeryrange: 9, cartworkshop: 10, siegeworkshop: 18, dockyard: 8 })[b] ?? null;
+const unlock = (b: string) => ({ barracks: 5, archeryrange: 9, cartworkshop: 10, siegeworkshop: 18, harbour: 5, shipyard: 10 })[b] ?? null;
 
 describe('layoutUnitGraph', () => {
   const layout = layoutUnitGraph(definitions, unlock);
@@ -16,7 +16,8 @@ describe('layoutUnitGraph', () => {
       'archeryrange',
       'cartworkshop',
       'siegeworkshop',
-      'dockyard',
+      'harbour',
+      'shipyard',
     ]);
     layout.lanes.slice(1).forEach((lane, i) => {
       const prev = layout.lanes[i]!;

@@ -47,13 +47,13 @@ public class AttackResolverTests
     public void A_land_army_fights_one_land_fight_against_the_land_units_and_the_defenders_ships_stay_out()
     {
         var plan = Attack(
-            [new(UnitType.Axeman, 20)], home: [new(UnitType.Spearman, 10), new(UnitType.Longship, 5)],
-            guests: [new(UnitType.Longship, 2)]);
+            [new(UnitType.Axeman, 20)], home: [new(UnitType.Spearman, 10), new(UnitType.Snekkja, 5)],
+            guests: [new(UnitType.Snekkja, 2)]);
 
         Assert.Null(plan.ShipFight);
         Assert.Equal(10 * 35, plan.LandFight!.DefensePower);
         Assert.Equal(BattleWinner.Attacker, plan.Winner);
-        Assert.DoesNotContain(plan.DefenderHomeLosses, s => s.Type == UnitType.Longship);
+        Assert.DoesNotContain(plan.DefenderHomeLosses, s => s.Type == UnitType.Snekkja);
         Assert.Empty(plan.DefenderGuestLosses);
         Assert.Empty(plan.Drowned);
     }
@@ -86,7 +86,7 @@ public class AttackResolverTests
     [Fact]
     public void Every_defending_ship_home_and_guest_fights_the_attacking_ships_wherever_they_stand()
     {
-        var plan = Attack([new(UnitType.Karve, 5)], home: [new(UnitType.Longship, 1)], guests: [new(UnitType.Longship, 2)]);
+        var plan = Attack([new(UnitType.Karve, 5)], home: [new(UnitType.Snekkja, 1)], guests: [new(UnitType.Snekkja, 2)]);
 
         Assert.Equal(25, plan.ShipFight!.AttackPower);
         Assert.Equal(120, plan.ShipFight.DefensePower);
@@ -97,13 +97,13 @@ public class AttackResolverTests
     public void Fire_ships_take_part_in_the_ship_fight_with_no_attack_and_can_be_sunk()
     {
         var plan = Attack(
-            [new(UnitType.Karve, 40), new(UnitType.FireShip, 30)], home: [new(UnitType.Longship, 3)]);
+            [new(UnitType.Karve, 40), new(UnitType.FireHulk, 30)], home: [new(UnitType.Snekkja, 3)]);
 
         Assert.Equal(200, plan.ShipFight!.AttackPower);
         Assert.Equal(BattleWinner.Attacker, plan.Winner);
-        var sunk = Count(plan.ShipFight.AttackerLosses, UnitType.FireShip);
+        var sunk = Count(plan.ShipFight.AttackerLosses, UnitType.FireHulk);
         Assert.InRange(sunk, 1, 30);
-        Assert.Equal(30 - sunk, Count(plan.ShipFight.AttackerSurvivors, UnitType.FireShip));
+        Assert.Equal(30 - sunk, Count(plan.ShipFight.AttackerSurvivors, UnitType.FireHulk));
     }
 
     // ---- Rule 3: a lost ship fight ends the attack
@@ -111,10 +111,10 @@ public class AttackResolverTests
     [Fact]
     public void A_lost_ship_fight_means_no_land_fight_no_loot_no_siege_no_burn_and_the_passengers_drown()
     {
-        var dockyard = new PlacedBuilding(SeaHex, BuildingType.Dockyard, 3);
+        var harbour = new PlacedBuilding(SeaHex, BuildingType.Harbour, 3);
         var plan = Attack(
-            [new(UnitType.Karve, 5), new(UnitType.Spearman, 10)], home: [new(UnitType.Longship, 100)],
-            buildings: Buildings(dockyard), target: SeaHex);
+            [new(UnitType.Karve, 5), new(UnitType.Spearman, 10)], home: [new(UnitType.Snekkja, 100)],
+            buildings: Buildings(harbour), target: SeaHex);
 
         Assert.Equal(BattleWinner.Defender, plan.ShipFight!.Winner);
         Assert.Null(plan.LandFight);
@@ -129,16 +129,16 @@ public class AttackResolverTests
     [Fact]
     public void A_lost_ship_fight_in_a_raid_returns_the_surviving_fire_ships_and_burns_nothing()
     {
-        var dockyard = new PlacedBuilding(SeaHex, BuildingType.Dockyard, 3);
+        var harbour = new PlacedBuilding(SeaHex, BuildingType.Harbour, 3);
         var plan = Attack(
-            [new(UnitType.Karve, 5), new(UnitType.FireShip, 30)], home: [new(UnitType.Longship, 100)],
-            buildings: Buildings(dockyard), target: SeaHex, raid: true);
+            [new(UnitType.Karve, 5), new(UnitType.FireHulk, 30)], home: [new(UnitType.Snekkja, 100)],
+            buildings: Buildings(harbour), target: SeaHex, raid: true);
 
         Assert.Equal(BattleWinner.Defender, plan.Winner);
         Assert.Equal(0, plan.FireShipsBurned);
         Assert.False(plan.FireSiege.Applied);
         Assert.Equal(3, plan.Buildings.Single(b => b.Coord == SeaHex).Level);
-        Assert.True(Count(plan.AttackerSurvivors, UnitType.FireShip) > 0);
+        Assert.True(Count(plan.AttackerSurvivors, UnitType.FireHulk) > 0);
     }
 
     // ---- Rule 4: the passengers beyond the surviving ships' slots drown before the land fight
@@ -147,10 +147,10 @@ public class AttackResolverTests
     public void Passengers_beyond_the_slots_of_the_surviving_ships_drown_before_the_land_fight()
     {
         // 2 Longships (attack 120) against 2 Longships (defence 80): one ship is lost, its 20 slots go with it.
-        var plan = Attack([new(UnitType.Longship, 2), new(UnitType.Spearman, 40)], home: [new(UnitType.Longship, 2)]);
+        var plan = Attack([new(UnitType.Snekkja, 2), new(UnitType.Spearman, 40)], home: [new(UnitType.Snekkja, 2)]);
 
         Assert.Equal(BattleWinner.Attacker, plan.ShipFight!.Winner);
-        Assert.Equal(1, Count(plan.ShipFight.AttackerLosses, UnitType.Longship));
+        Assert.Equal(1, Count(plan.ShipFight.AttackerLosses, UnitType.Snekkja));
         Assert.Equal(20, Count(plan.Drowned, UnitType.Spearman));
         Assert.Equal(20, Count(plan.LandFight!.AttackerSurvivors, UnitType.Spearman) + Count(plan.LandFight.AttackerLosses, UnitType.Spearman));
         Assert.Equal(20, Count(plan.AttackerLosses, UnitType.Spearman) - Count(plan.LandFight.AttackerLosses, UnitType.Spearman));
@@ -162,8 +162,8 @@ public class AttackResolverTests
     public void The_land_fight_pits_the_passengers_against_the_garrison_and_the_guests_and_splits_the_losses_home_and_guest()
     {
         var plan = Attack(
-            [new(UnitType.Longship, 5), new(UnitType.Axeman, 80)],
-            home: [new(UnitType.Spearman, 10), new(UnitType.Longship, 1)], guests: [new(UnitType.Spearman, 10)]);
+            [new(UnitType.Snekkja, 5), new(UnitType.Axeman, 80)],
+            home: [new(UnitType.Spearman, 10), new(UnitType.Snekkja, 1)], guests: [new(UnitType.Spearman, 10)]);
 
         // The ships win at sea first; then 80 axemen (attack 80 * 40) against 20 spearmen.
         Assert.Equal(BattleWinner.Attacker, plan.ShipFight!.Winner);
@@ -171,7 +171,7 @@ public class AttackResolverTests
         Assert.Equal(BattleWinner.Attacker, plan.Winner);
         Assert.Equal(10, Count(plan.DefenderHomeLosses, UnitType.Spearman));
         Assert.Equal(10, Count(plan.DefenderGuestLosses, UnitType.Spearman));
-        Assert.Equal(1, Count(plan.DefenderHomeLosses, UnitType.Longship));
+        Assert.Equal(1, Count(plan.DefenderHomeLosses, UnitType.Snekkja));
     }
 
     [Fact]
@@ -179,7 +179,7 @@ public class AttackResolverTests
     {
         var farm = new PlacedBuilding(LandHex, BuildingType.Farm, 9);
         var plan = Attack(
-            [new(UnitType.Longship, 1), new(UnitType.Catapult, 1), new(UnitType.Spearman, 5)],
+            [new(UnitType.Snekkja, 1), new(UnitType.Catapult, 1), new(UnitType.Spearman, 5)],
             buildings: Buildings(farm), target: LandHex);
 
         Assert.True(plan.LandSiege.Applied);
@@ -225,7 +225,7 @@ public class AttackResolverTests
     // ---- Rule 6: a target in the water is a ship fight only
 
     [Theory]
-    [InlineData(BuildingType.Dockyard)]
+    [InlineData(BuildingType.Harbour)]
     [InlineData(BuildingType.FishingHut)]
     [InlineData(BuildingType.Palisade)]
     public void A_target_in_the_water_skips_the_land_fight_and_takes_no_loot(BuildingType type)
@@ -267,7 +267,7 @@ public class AttackResolverTests
     [Fact]
     public void Loot_is_zero_when_the_defender_has_nothing_to_take()
     {
-        var plan = Attack([new(UnitType.Longship, 1), new(UnitType.Spearman, 5)], loot: new ResourceAmounts(0, 0, 0, 0));
+        var plan = Attack([new(UnitType.Snekkja, 1), new(UnitType.Spearman, 5)], loot: new ResourceAmounts(0, 0, 0, 0));
 
         Assert.Equal(ResourceAmounts.Zero, plan.Loot);
     }
@@ -281,58 +281,58 @@ public class AttackResolverTests
     [InlineData(45, 3, 30, 0)]
     public void Fire_ships_burn_a_level_per_ten_surviving_ships_clamped_to_the_building(int fireShips, int level, int burned, int levelAfter)
     {
-        var dockyard = new PlacedBuilding(SeaHex, BuildingType.Dockyard, level);
-        var plan = Attack([new(UnitType.FireShip, fireShips)], buildings: Buildings(dockyard), target: SeaHex);
+        var harbour = new PlacedBuilding(SeaHex, BuildingType.Harbour, level);
+        var plan = Attack([new(UnitType.FireHulk, fireShips)], buildings: Buildings(harbour), target: SeaHex);
 
         Assert.Equal(burned, plan.FireShipsBurned);
-        Assert.Equal(fireShips - burned, Count(plan.AttackerSurvivors, UnitType.FireShip));
-        Assert.Equal(burned, Count(plan.AttackerLosses, UnitType.FireShip));
+        Assert.Equal(fireShips - burned, Count(plan.AttackerSurvivors, UnitType.FireHulk));
+        Assert.Equal(burned, Count(plan.AttackerLosses, UnitType.FireHulk));
         Assert.Equal(burned > 0, plan.FireSiege.Applied);
         var standing = plan.Buildings.Where(b => b.Coord == SeaHex).Select(b => b.Level).DefaultIfEmpty(0).Single();
         Assert.Equal(levelAfter, standing);
     }
 
     [Fact]
-    public void Twenty_five_fire_ships_at_a_dockyard_of_level_3_burn_two_levels_and_five_sail_home()
+    public void Twenty_five_fire_ships_at_a_harbour_of_level_3_burn_two_levels_and_five_sail_home()
     {
         var plan = Attack(
-            [new(UnitType.FireShip, 25)], buildings: Buildings(new PlacedBuilding(SeaHex, BuildingType.Dockyard, 3)), target: SeaHex);
+            [new(UnitType.FireHulk, 25)], buildings: Buildings(new PlacedBuilding(SeaHex, BuildingType.Harbour, 3)), target: SeaHex);
 
         Assert.Equal(20, plan.FireShipsBurned);
         Assert.Equal(1, plan.FireSiege.LevelAfter);
-        Assert.Equal(5, Count(plan.AttackerSurvivors, UnitType.FireShip));
+        Assert.Equal(5, Count(plan.AttackerSurvivors, UnitType.FireHulk));
     }
 
     [Fact]
     public void A_wall_at_sea_loses_one_level_to_the_fire_and_ten_ships_burn_whatever_the_fleet_brings()
     {
         var palisade = new PlacedBuilding(SeaHex, BuildingType.Palisade, 3);
-        var plan = Attack([new(UnitType.FireShip, 25)], buildings: Buildings(palisade), target: SeaHex);
+        var plan = Attack([new(UnitType.FireHulk, 25)], buildings: Buildings(palisade), target: SeaHex);
 
         Assert.Equal(10, plan.FireShipsBurned);
         Assert.Equal(2, plan.Buildings.Single(b => b.Coord == SeaHex).Level);
-        Assert.Equal(15, Count(plan.AttackerSurvivors, UnitType.FireShip));
+        Assert.Equal(15, Count(plan.AttackerSurvivors, UnitType.FireHulk));
     }
 
     [Fact]
     public void A_building_on_land_does_not_burn_and_no_fire_ship_is_lost()
     {
         var farm = new PlacedBuilding(LandHex, BuildingType.Farm, 5);
-        var plan = Attack([new(UnitType.FireShip, 30)], buildings: Buildings(farm), target: LandHex);
+        var plan = Attack([new(UnitType.FireHulk, 30)], buildings: Buildings(farm), target: LandHex);
 
         Assert.Equal(0, plan.FireShipsBurned);
         Assert.False(plan.FireSiege.Applied);
         Assert.Equal(5, plan.Buildings.Single(b => b.Coord == LandHex).Level);
-        Assert.Equal(30, Count(plan.AttackerSurvivors, UnitType.FireShip));
+        Assert.Equal(30, Count(plan.AttackerSurvivors, UnitType.FireHulk));
     }
 
     [Fact]
     public void A_target_that_is_gone_burns_nothing()
     {
-        var plan = Attack([new(UnitType.FireShip, 30)], target: SeaHex);
+        var plan = Attack([new(UnitType.FireHulk, 30)], target: SeaHex);
 
         Assert.Equal(0, plan.FireShipsBurned);
-        Assert.Equal(30, Count(plan.AttackerSurvivors, UnitType.FireShip));
+        Assert.Equal(30, Count(plan.AttackerSurvivors, UnitType.FireHulk));
     }
 
     [Fact]
@@ -341,7 +341,7 @@ public class AttackResolverTests
         // A wall's sea end loses one level per attack: the fire takes it, the rams aboard cannot reach a hex in the water.
         var seaEnd = new PlacedBuilding(SeaHex, BuildingType.Palisade, 3);
         var plan = Attack(
-            [new(UnitType.Longship, 4), new(UnitType.FireShip, 25), new(UnitType.Ram, 2)],
+            [new(UnitType.Snekkja, 4), new(UnitType.FireHulk, 25), new(UnitType.Ram, 2)],
             buildings: Buildings(seaEnd), target: SeaHex);
 
         Assert.True(plan.FireSiege.Applied);
@@ -358,8 +358,8 @@ public class AttackResolverTests
     public void The_tower_bonus_applies_to_both_fights()
     {
         var plan = Attack(
-            [new(UnitType.Longship, 5), new(UnitType.Axeman, 40)],
-            home: [new(UnitType.Longship, 1), new(UnitType.Spearman, 10)], defenseBonus: 50);
+            [new(UnitType.Snekkja, 5), new(UnitType.Axeman, 40)],
+            home: [new(UnitType.Snekkja, 1), new(UnitType.Spearman, 10)], defenseBonus: 50);
 
         Assert.Equal(40 * 1.5, plan.ShipFight!.DefensePower);
         Assert.Equal(350 * 1.5, plan.LandFight!.DefensePower);
@@ -368,8 +368,8 @@ public class AttackResolverTests
     [Fact]
     public void Ship_attack_bonus_applies_in_the_ship_fight_only_and_land_attack_bonus_in_the_land_fight_only()
     {
-        UnitStack[] fleet = [new(UnitType.Longship, 5), new(UnitType.Axeman, 10)];
-        UnitStack[] home = [new(UnitType.Longship, 1), new(UnitType.Spearman, 1)];
+        UnitStack[] fleet = [new(UnitType.Snekkja, 5), new(UnitType.Axeman, 10)];
+        UnitStack[] home = [new(UnitType.Snekkja, 1), new(UnitType.Spearman, 1)];
 
         var shipBonus = Attack(fleet, home, shipBonus: 100);
         Assert.Equal(600, shipBonus.ShipFight!.AttackPower);
@@ -384,7 +384,7 @@ public class AttackResolverTests
     public void A_raid_caps_the_losses_in_both_fights()
     {
         // Each side loses at most half: the lost ship fight of a raid leaves survivors, a lost land fight too.
-        var shipRaid = Attack([new(UnitType.Karve, 4)], home: [new(UnitType.Longship, 10)], raid: true);
+        var shipRaid = Attack([new(UnitType.Karve, 4)], home: [new(UnitType.Snekkja, 10)], raid: true);
         Assert.Equal(2, Count(shipRaid.ShipFight!.AttackerSurvivors, UnitType.Karve));
 
         var landRaid = Attack([new(UnitType.Karve, 1), new(UnitType.Spearman, 10)], home: [new(UnitType.Spearman, 100)], raid: true);
@@ -435,13 +435,13 @@ public class AttackResolverTests
     }
 
     [Fact]
-    public void No_loot_means_no_refill_a_lost_fight_a_dockyard_target_or_a_fleet_without_passengers()
+    public void No_loot_means_no_refill_a_lost_fight_a_harbour_target_or_a_fleet_without_passengers()
     {
         Assert.Equal(0, Attack([new(UnitType.Spearman, 1)], home: [new(UnitType.Spearman, 100)], provisions: 0).Refill);
 
-        var dockyard = new PlacedBuilding(SeaHex, BuildingType.Dockyard, 3);
+        var harbour = new PlacedBuilding(SeaHex, BuildingType.Harbour, 3);
         Assert.Equal(
-            0, Attack([new(UnitType.Karve, 1), new(UnitType.Spearman, 10)], buildings: Buildings(dockyard), target: SeaHex, provisions: 0).Refill);
+            0, Attack([new(UnitType.Karve, 1), new(UnitType.Spearman, 10)], buildings: Buildings(harbour), target: SeaHex, provisions: 0).Refill);
 
         Assert.Equal(0, Attack([new(UnitType.Karve, 5)], provisions: 0).Refill);
     }

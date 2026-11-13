@@ -159,13 +159,13 @@ public class BeachCampTests
         Assert.Equal(GarrisonSpotKind.BeachCamp, spot.Kind);
         Assert.Equal(Centre, spot.Coord);
         Assert.True(spot.Holds(UnitType.Spearman));
-        Assert.True(spot.Holds(UnitType.Longship));
+        Assert.True(spot.Holds(UnitType.Snekkja));
     }
 
     [Fact]
     public void A_fleet_finds_the_camp_as_a_spot_where_a_longhouse_away_from_the_sea_has_none()
     {
-        UnitStack[] fleet = [new UnitStack(UnitType.Longship, 2), new UnitStack(UnitType.Spearman, 5)];
+        UnitStack[] fleet = [new UnitStack(UnitType.Snekkja, 2), new UnitStack(UnitType.Spearman, 5)];
 
         Assert.Equal(Centre, FoundCamp().NearestSpotFor(new HexCoord(3, 0), fleet)?.Coord);
         Assert.Null(FoundLonghouse().NearestSpotFor(new HexCoord(3, 0), fleet));

@@ -56,7 +56,7 @@ describe('ShrinesView', () => {
     const wrapper = await mountPage();
 
     const njord = wrapper.get('[data-god=njord]').findAll('td').map((td) => td.text());
-    expect(njord[4]).toBe('Dockyard 10');
+    expect(njord[4]).toBe('Harbour 10');
     expect(njord[5]).toBe('Shallow (coastal) water');
     expect(wrapper.get('[data-god=thor]').findAll('td')[4]!.text()).toBe('Weaponsmith 5');
     expect(wrapper.get('[data-god=thor]').findAll('td')[5]!.text()).toBe('Grassland');
