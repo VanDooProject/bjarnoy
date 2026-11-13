@@ -39,8 +39,9 @@ function army(overrides: Partial<ArmyResponse> = {}): ArmyResponse {
       returnPath: [],
       returnCumulativeHours: [],
       returnEdgeHours: [],
-      turnAroundAt: '2026-01-01T02:00:00Z',
-      returnArrivesAt: '2026-01-01T04:00:00Z',
+      // Standing on its destination and not yet turned home (relative to the real clock), so it can still be recalled.
+      turnAroundAt: new Date(Date.now() + 2 * 3600_000).toISOString(),
+      returnArrivesAt: new Date(Date.now() + 4 * 3600_000).toISOString(),
       isReturning: false,
       isStranded: false,
       isFleeing: false,
