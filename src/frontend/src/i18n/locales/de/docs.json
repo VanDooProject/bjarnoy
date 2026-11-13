@@ -565,7 +565,8 @@
       "bend": "Biegung",
       "bend60": "Enge Biegung",
       "spring": "Quelle"
-    }
+    },
+    "history": "Nach Snorris Gylfaginning ist Naglfar das Schiff aus den ungeschnittenen Nägeln der Toten. Wer mit langen Nägeln stirbt, baut daran mit, darum schneidet man sie, um die Fertigstellung hinauszuzögern. Zu Ragnarök reißt es sich los und trägt die Riesen in die letzte Schlacht, mit dem Riesen Hrym am Steuer. In der Völuspá gehört sein Losreißen zu den Zeichen des Weltendes."
   },
   "wildlifeCamps": {
     "title": "Wildtierlager",
@@ -1049,7 +1050,8 @@
     "adminNote": {
       "time": "Ausbildungszeit pro Einheit = Katalogzeit × (1 − {percent} × Gebäudestufe) ÷ Weltgeschwindigkeit, festgelegt beim Erteilen des Auftrags.",
       "refund": "Verlässt ein Gebäude das Gebiet, wird zerstört oder ist auf Stufe 0 verfallen, bricht es seine Warteschlange ab und erstattet jeden Auftrag voll."
-    }
+    },
+    "history": "Nordische Schlachten begannen auf Distanz, bevor die Reihen aufeinandertrafen: erst Pfeile, Wurfspeere und Steine, dann der Nahkampf oder das Entern. Die Sagas nennen Bogenschützen, etwa Einar Thambarskelfir auf Olaf Tryggvasons Ormen Lange bei Svolder (1000). Die Sagas wurden erst etwa zwei Jahrhunderte später aufgeschrieben; solche Einzelheiten sind Überlieferung, keine Aufzeichnung."
   },
   "founding": {
     "title": "Siedlungen gründen",
@@ -1419,6 +1421,12 @@
     },
     "adminNote": {
       "sea": "Eine Gründung über das Meer folgt der Platzregel oben: Die {settlers} Siedler einer Gründungsgruppe belegen {settlers} Plätze (ShipCargo)."
+    },
+    "history": {
+      "dockyard": "Kriegsschiffe lagen in Bootshäusern (naust, ein belegtes Wort) und wurden über das Leidang (leiðangr) aufgeboten: Jeder Küstenbezirk musste ein Schiff bauen, bemannen und verpflegen. Handelsschiffe nutzten die Stege und Kais der Hafenorte wie Haithabu, Birka und Kaupang.",
+      "karve": "Die Karve (karfi) war das Mehrzweckschiff eines Häuptlings: für Reisen, Truppen, etwas Fracht und den Küstenkrieg. Sie war breiter und flacher als ein reines Kriegsschiff. Oft bringt man sie mit dem Osebergschiff (um 820, etwa 21,5 m) und dem Gokstadschiff (um 890, etwa 23 m) in Verbindung; das ist eine Deutung. Ein Nachbau des Gokstadschiffs überquerte 1893 den Atlantik bis nach Chicago.",
+      "longship": "„Langschiff“ (langskip) ist der Sammelbegriff für alle langen, schmalen Kriegsschiffe mit Riemen. Die Nordleute ordneten sie nach ihrer Größe in „Räumen“ (rúm), den Abständen zwischen den Ruderbänken. Das Langschiff im Spiel entspricht der Snekkja: dem gängigen mittelgroßen Raub- und Aufgebotsschiff von etwa 17 m aufwärts mit 13 bis 20 Riemenpaaren. Skuldelev 5 (dänisch, um 1030, 13 Riemenpaare, mit wiederverwendetem Holz ausgebessert) gilt als eine solche, und das Wikingerschiffsmuseum in Roskilde segelt einen Nachbau, die Helge Ask. Auch die größere Skeid und das Drachenschiff waren Langschiffe.",
+      "fireShip": "Brandschiffe waren bei den Nordleuten keine übliche Waffe. Feuer auf See gehört zu den Byzantinern: Ihr Griechisches Feuer verbrannte 941 vor Konstantinopel die Flotte der Rus unter Fürst Igor. Einen Fall aus der Wikingerzeit gibt es vielleicht doch: Haithabu 1, ein Kriegsschiff von etwa 30 m, wurde verbrannt im Hafen von Haithabu gefunden und auf etwa 985 datiert. Nach einer Lesart der Archäologen in Roskilde wurde es mit Brennstoff gefüllt, angezündet und bei einem Angriff gegen die Hafenanlagen geschickt. Das stützt sich auf einen einzigen Fund und ist eine Deutung, keine Gewissheit."
     }
   },
   "shrines": {
@@ -1490,5 +1498,9 @@
       "„Land!“ Der Nebel hebt sich, und dein Reich beginnt."
     ],
     "watch": "Intro ansehen"
+  },
+  "historyNotes": {
+    "toggle": "Geschichte zeigen",
+    "label": "Geschichte"
   }
 }
