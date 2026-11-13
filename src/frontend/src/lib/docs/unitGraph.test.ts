@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { UnitDefinitionResponse } from '../../api/types';
 import unitCatalogue from '../../data/unit-catalogue.json';
-import { GRAPH_COL, edgePath, layoutUnitGraph, unitsByLevel } from './unitGraph';
+import { GRAPH_COL, GRAPH_X0, GRAPH_NODE_W, edgePath, layoutUnitGraph, unitsByLevel } from './unitGraph';
 
 const definitions = unitCatalogue.data as UnitDefinitionResponse[];
 const unlock = (b: string) => ({ barracks: 5, archeryrange: 9, cartworkshop: 10, siegeworkshop: 18, dockyard: 8 })[b] ?? null;
@@ -28,7 +28,8 @@ describe('layoutUnitGraph', () => {
     for (const d of definitions) {
       const n = node(d.type);
       const lane = layout.lanes.find((l) => l.building === d.requiredBuildingType)!;
-      expect(n.x).toBe(GRAPH_COL * (d.requiredBuildingLevel - 0.5));
+      expect(n.x).toBe(GRAPH_X0 + GRAPH_COL * (d.requiredBuildingLevel - 0.5));
+      expect(n.x - GRAPH_NODE_W / 2).toBeGreaterThanOrEqual(0);
       expect(n.y).toBeGreaterThan(lane.top);
       expect(n.y).toBeLessThan(lane.top + lane.height);
     }

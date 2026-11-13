@@ -4,8 +4,10 @@
 import type { UnitDefinitionResponse } from '../../api/types';
 
 export const GRAPH_MAX_LEVEL = 20;
-export const GRAPH_COL = 40;
 export const GRAPH_NODE_W = 80;
+export const GRAPH_COL = 40;
+/** Room left of the first level column, so the nodes of level 1 are not cut off. */
+export const GRAPH_X0 = GRAPH_NODE_W / 2 + 4;
 export const GRAPH_NODE_H = 22;
 export const GRAPH_TOP = 30;
 const STACK_STEP = 26;
@@ -75,7 +77,7 @@ export function layoutUnitGraph(
         building,
         level: d.requiredBuildingLevel,
         longhouseBadge: unlock !== null && d.requiredLonghouseLevel > unlock ? d.requiredLonghouseLevel : null,
-        x: GRAPH_COL * (d.requiredBuildingLevel - 0.5),
+        x: GRAPH_X0 + GRAPH_COL * (d.requiredBuildingLevel - 0.5),
         y: top + LANE_PAD + k * STACK_STEP,
       });
     }
@@ -92,19 +94,19 @@ export function layoutUnitGraph(
     edges.push({ from: from.type, to: d.type, cross: from.requiredBuildingType !== d.requiredBuildingType });
   }
 
-  return { lanes, nodes, edges, width: GRAPH_COL * GRAPH_MAX_LEVEL + 40, height: top + 6 };
+  return { lanes, nodes, edges, width: GRAPH_X0 + GRAPH_COL * GRAPH_MAX_LEVEL + 90, height: top + 6 };
 }
 
 /** The svg path of one edge between two laid-out nodes (see layoutUnitGraph). */
 export function edgePath(from: GraphNode, to: GraphNode, cross: boolean): string {
   const half = GRAPH_NODE_W / 2;
   const badge = from.longhouseBadge !== null ? 38 : 0;
-  if (cross) {
-    // Down a gutter right of the source's column, then onto the target from above, clear of the nodes in between.
+  if (cross || from.x >= to.x) {
+    // Down a gutter right of the source (also for units that share a level in one lane), then back left onto the right edge of the target: stacked targets each get their own arrow.
     const x1 = from.x + half + badge;
     const gx = x1 + 8;
-    const ty = to.y - GRAPH_NODE_H + 2;
-    return `M${x1} ${from.y} H${gx - 6} Q${gx} ${from.y} ${gx} ${from.y + 6} V${ty - 6} Q${gx} ${ty} ${gx - 6} ${ty} H${to.x + 6} Q${to.x} ${ty} ${to.x} ${ty + 5}`;
+    const x2 = to.x + half + 3;
+    return `M${x1} ${from.y} H${gx - 6} Q${gx} ${from.y} ${gx} ${from.y + 6} V${to.y - 6} Q${gx} ${to.y} ${gx - 6} ${to.y} H${x2}`;
   }
   const x1 = from.x + half + badge;
   const x2 = to.x - half - 2;

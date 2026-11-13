@@ -12,6 +12,7 @@ import { useBuildingCatalogueStore } from '../../stores/buildingCatalogue';
 import BuildingLink from './BuildingLink.vue';
 import {
   GRAPH_COL,
+  GRAPH_X0,
   GRAPH_MAX_LEVEL,
   GRAPH_NODE_H,
   GRAPH_NODE_W,
@@ -31,7 +32,7 @@ const layout = computed(() =>
 const nodeByType = computed(() => Object.fromEntries(layout.value.nodes.map((n) => [n.type, n])));
 const levels = Array.from({ length: GRAPH_MAX_LEVEL }, (_, i) => i + 1);
 // The lane labels sit in a column left of the svg, so the svg itself starts at the first level column.
-const LABEL_W = 132;
+const LABEL_W = 156;
 
 const lists = computed(() =>
   layout.value.lanes.map((lane) => ({
@@ -71,11 +72,11 @@ const lists = computed(() =>
           </defs>
           <g class="scale">
             <template v-for="level in levels" :key="level">
-              <text :x="GRAPH_COL * (level - 0.5)" y="18" text-anchor="middle" class="level-no">{{ level }}</text>
+              <text :x="GRAPH_X0 + GRAPH_COL * (level - 0.5)" y="18" text-anchor="middle" class="level-no">{{ level }}</text>
               <line
-                :x1="GRAPH_COL * (level - 0.5)"
+                :x1="GRAPH_X0 + GRAPH_COL * (level - 0.5)"
                 y1="24"
-                :x2="GRAPH_COL * (level - 0.5)"
+                :x2="GRAPH_X0 + GRAPH_COL * (level - 0.5)"
                 :y2="layout.height - 4"
                 :class="['level-line', { strong: level % 5 === 0 }]"
               />
