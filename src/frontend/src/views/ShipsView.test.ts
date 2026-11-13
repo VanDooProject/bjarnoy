@@ -68,7 +68,7 @@ describe('ShipsView', () => {
       wrapper.findAll('[data-testid=slots-table] tbody tr').map((tr) => [tr.attributes('data-unit'), tr.get('td').text()]),
     );
     expect(slots).toEqual({
-      thrall: '1', spearman: '1', settler: '1', bowman: '2', axeman: '2', provisioner: '2', berserker: '4', catapult: '10', ram: '10', campbuilder: '1',
+      thrall: '1', spearman: '1', settler: '1', bowman: '2', skirmisher: '1', axeman: '2', provisioner: '2', berserker: '3', catapult: '10', ram: '10', campbuilder: '1',
     });
     const text = wrapper.get('#troops').text();
     expect(text).toContain('slowest ship');

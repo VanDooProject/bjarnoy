@@ -18,6 +18,8 @@ const victory = computed(() => isCampReportVictory(props.report));
 const camp = computed(() => campName(props.report.camp.family));
 const title = computed(() => t(`hud.campReport.title.${props.report.kind}`, { camp: camp.value }));
 const hasLoot = computed(() => totalCampLoot(props.report.loot) > 0);
+// A fight without ranged units has no volley: the beast table keeps the single "Lost" column.
+const hasVolley = computed(() => props.report.armyVolleyPower > 0);
 </script>
 
 <template>
@@ -34,6 +36,9 @@ const hasLoot = computed(() => totalCampLoot(props.report.loot) > 0);
     <p class="powers">
       {{ t('hud.campReport.armyPower') }}: {{ Math.round(report.armyPower) }} ·
       {{ t('hud.campReport.campPower') }}: {{ Math.round(report.campPower) }}
+      <template v-if="hasVolley">
+        · <span data-testid="camp-report-volley">{{ t('hud.battleReport.volleyPower') }}: {{ Math.round(report.armyVolleyPower) }}</span>
+      </template>
     </p>
 
     <div class="sides">
@@ -69,14 +74,22 @@ const hasLoot = computed(() => totalCampLoot(props.report.loot) > 0);
               <tr>
                 <th>{{ t('hud.campReport.beast') }}</th>
                 <th>{{ t('hud.campReport.before') }}</th>
-                <th>{{ t('hud.battleReport.lost') }}</th>
+                <template v-if="hasVolley">
+                  <th>{{ t('hud.battleReport.lostVolley') }}</th>
+                  <th>{{ t('hud.battleReport.lostFight') }}</th>
+                </template>
+                <th v-else>{{ t('hud.battleReport.lost') }}</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="row in report.beasts" :key="row.tier" :data-tier="row.tier">
                 <td>{{ beastName(report.camp.family, row.tier) }}</td>
                 <td>{{ row.before }}</td>
-                <td class="lost">{{ row.lost }}</td>
+                <template v-if="hasVolley">
+                  <td class="lost" data-testid="lost-volley">{{ row.volleyLost }}</td>
+                  <td class="lost" data-testid="lost-fight">{{ row.lost - row.volleyLost }}</td>
+                </template>
+                <td v-else class="lost">{{ row.lost }}</td>
               </tr>
             </tbody>
           </table>

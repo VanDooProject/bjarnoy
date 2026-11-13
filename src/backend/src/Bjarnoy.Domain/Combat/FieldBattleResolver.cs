@@ -64,7 +64,20 @@ public sealed record FieldBattlePlan(
     double SideBPower,
     bool SideAWasDefending,
     bool SideBWasDefending,
-    double FoodRefillToWinner = 0);
+    double FoodRefillToWinner = 0)
+{
+    /// <summary>What side A lost in the volley (<see cref="Volley"/>); already part of <see cref="SideALosses"/>.</summary>
+    public IReadOnlyList<UnitStack> SideAVolleyLosses { get; init; } = [];
+
+    /// <summary>What side B lost in the volley; already part of <see cref="SideBLosses"/>.</summary>
+    public IReadOnlyList<UnitStack> SideBVolleyLosses { get; init; } = [];
+
+    /// <summary>Side A's ranged attack in the volley (zero without ranged units).</summary>
+    public double SideAVolleyPower { get; init; }
+
+    /// <summary>Side B's ranged attack in the volley (zero without ranged units).</summary>
+    public double SideBVolleyPower { get; init; }
+}
 
 /// <summary>
 /// Pure combat math for an in-flight, army-vs-army interception (issue #206)
@@ -259,21 +272,29 @@ public static class FieldBattleResolver
         // Exactly one side defending is the only case that gets asymmetric
         // treatment — see the remarks above.
         var asymmetric = sideAClaim.Claims ^ sideBClaim.Claims;
+        var rng = new Random(seed);
+
+        // The volley first, on the armies as they meet: a side that stands on its own claimed ground measures its losses against
+        // its defence with the (halved) bonus the fight itself would give it. The fight is then fought by what is left.
+        var volley = Volley.Exchange(
+            sideAStacks, 0, asymmetric && sideAClaim.Claims ? sideAClaim.DefenseBonusPercent : 0,
+            sideBStacks, 0, asymmetric && sideBClaim.Claims ? sideBClaim.DefenseBonusPercent : 0,
+            rng);
+        var fightersA = volley.SurvivorsA;
+        var fightersB = volley.SurvivorsB;
 
         var sideAPower = asymmetric && sideAClaim.Claims
-            ? DefensePower(sideAStacks, sideAClaim.DefenseBonusPercent)
-            : AttackPower(sideAStacks);
+            ? DefensePower(fightersA, sideAClaim.DefenseBonusPercent)
+            : AttackPower(fightersA);
         var sideBPower = asymmetric && sideBClaim.Claims
-            ? DefensePower(sideBStacks, sideBClaim.DefenseBonusPercent)
-            : AttackPower(sideBStacks);
+            ? DefensePower(fightersB, sideBClaim.DefenseBonusPercent)
+            : AttackPower(fightersB);
 
         var winner = sideAPower > sideBPower
             ? FieldBattleWinner.SideA
             : sideBPower > sideAPower
                 ? FieldBattleWinner.SideB
                 : FieldBattleWinner.Tie;
-
-        var rng = new Random(seed);
 
         IReadOnlyList<UnitStack> sideALosses;
         IReadOnlyList<UnitStack> sideASurvivors;
@@ -283,31 +304,38 @@ public static class FieldBattleResolver
         if (winner == FieldBattleWinner.Tie)
         {
             var tieFraction = BattleResolver.RaidLossFractionInternal(1.0);
-            (sideALosses, sideASurvivors) = BattleResolver.ApplyProportionalLossesInternal(sideAStacks, tieFraction, rng);
-            (sideBLosses, sideBSurvivors) = BattleResolver.ApplyProportionalLossesInternal(sideBStacks, tieFraction, rng);
+            (sideALosses, sideASurvivors) = BattleResolver.ApplyProportionalLossesInternal(fightersA, tieFraction, rng);
+            (sideBLosses, sideBSurvivors) = BattleResolver.ApplyProportionalLossesInternal(fightersB, tieFraction, rng);
         }
         else if (winner == FieldBattleWinner.SideA)
         {
             var loserFraction = BattleResolver.RaidLossFractionInternal(1.0);
-            (sideBLosses, sideBSurvivors) = BattleResolver.ApplyProportionalLossesInternal(sideBStacks, loserFraction, rng);
+            (sideBLosses, sideBSurvivors) = BattleResolver.ApplyProportionalLossesInternal(fightersB, loserFraction, rng);
 
             var winnerFraction = BattleResolver.RaidLossFractionInternal(SafeRatioPow(sideBPower, sideAPower));
-            (sideALosses, sideASurvivors) = BattleResolver.ApplyProportionalLossesInternal(sideAStacks, winnerFraction, rng);
+            (sideALosses, sideASurvivors) = BattleResolver.ApplyProportionalLossesInternal(fightersA, winnerFraction, rng);
         }
         else
         {
             var loserFraction = BattleResolver.RaidLossFractionInternal(1.0);
-            (sideALosses, sideASurvivors) = BattleResolver.ApplyProportionalLossesInternal(sideAStacks, loserFraction, rng);
+            (sideALosses, sideASurvivors) = BattleResolver.ApplyProportionalLossesInternal(fightersA, loserFraction, rng);
 
             var winnerFraction = BattleResolver.RaidLossFractionInternal(SafeRatioPow(sideAPower, sideBPower));
-            (sideBLosses, sideBSurvivors) = BattleResolver.ApplyProportionalLossesInternal(sideBStacks, winnerFraction, rng);
+            (sideBLosses, sideBSurvivors) = BattleResolver.ApplyProportionalLossesInternal(fightersB, winnerFraction, rng);
         }
 
         return new FieldBattlePlan(
-            sideALosses, sideASurvivors, sideBLosses, sideBSurvivors,
+            Volley.TotalLosses(sideAStacks, volley.LossesA, sideALosses), sideASurvivors,
+            Volley.TotalLosses(sideBStacks, volley.LossesB, sideBLosses), sideBSurvivors,
             ResourceAmounts.Zero, winner, sideAPower, sideBPower,
             SideAWasDefending: asymmetric && sideAClaim.Claims,
-            SideBWasDefending: asymmetric && sideBClaim.Claims);
+            SideBWasDefending: asymmetric && sideBClaim.Claims)
+        {
+            SideAVolleyLosses = volley.LossesA,
+            SideBVolleyLosses = volley.LossesB,
+            SideAVolleyPower = volley.PowerA,
+            SideBVolleyPower = volley.PowerB,
+        };
     }
 
     private static double AttackPower(IReadOnlyList<UnitStack> stacks) =>

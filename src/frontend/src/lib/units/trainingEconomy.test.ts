@@ -28,6 +28,7 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
     cargoSlots: 0,
     shipSlots: 0,
     upkeepPerHour: 1,
+    ranged: false,
     trainingCost: { wood: 10, stone: 5, food: 5, iron: 0 },
     trainingSeconds: 60,
     requiredLonghouseLevel: 1,

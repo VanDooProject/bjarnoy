@@ -18,6 +18,8 @@ export const UNIT_GLYPHS: Record<string, UnitGlyph> = {
   axeman: { stroke: '<path d="M3 10.5 8 3"/>', fill: '<path d="M7 2.5c1.8-.6 3 .4 3.3 2.2L8 4.5z"/>' },
   berserker: { stroke: '<path d="M2.5 10.5 8 3"/><path d="M9.5 10.5 4 3"/>', fill: '<path d="M7 2.5c1.8-.6 3 .4 3.3 2.2L8 4.5z"/>' },
   bowman: { stroke: '<path d="M3 1.5c4 1.5 4 7.5 0 9M3 1.5v9M3 6h7M8.5 4.5 10 6 8.5 7.5"/>' },
+  // A thrown spear: the shaft with a leaf head and two speed lines behind it.
+  skirmisher: { stroke: '<path d="M1.5 9.5 8.5 4M2 6.5h2.5M3.5 11h2.5"/>', fill: '<path d="M8 2.4 11 3.6 9.6 6.6 7.2 4.6z"/>' },
   thrall: { stroke: '<path d="M3 10.5 7 4"/>', fill: '<ellipse cx="8" cy="3" rx="2" ry="1.6"/>' },
   provisioner: { stroke: '<path d="M2 5h8l-1 5H3zM4 5a2 2 0 0 1 4 0"/>' },
   catapult: { stroke: '<path d="M1.5 10.5h9M3 10.5 7.5 3M7.5 3 10 4"/><circle cx="3.3" cy="4.2" r="1.2"/>' },

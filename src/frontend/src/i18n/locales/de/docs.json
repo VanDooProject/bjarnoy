@@ -1055,6 +1055,13 @@
       "evenly": "Gleichmäßig: Die Einheiten werden durch die Zahl der Gebäude geteilt. Übrige Einheiten gehen einzeln an die Gebäude mit den höchsten Stufen. Gibt es weniger Einheiten als Gebäude, bekommen nur die Gebäude mit den höchsten Stufen eine.",
       "fastest": "Am schnellsten (Premium-Funktion): Die Einheiten werden so aufgeteilt, dass die Aufträge möglichst früh und gemeinsam fertig werden. Dabei zählen die Stufe jedes Gebäudes und die Aufträge, die dort schon warten."
     },
+    "ranged": {
+      "heading": "Fernkämpfer",
+      "body": "Bogenschützen und Speerwerfer sind Fernkämpfer. In jedem Landkampf schlagen sie zuerst zu: Bevor der eigentliche Kampf beginnt, werfen die Fernkämpfer beider Seiten gleichzeitig einmal ihre Geschosse. Jede Seite verliert dabei einen Teil ihrer Einheiten, von jeder Art aber höchstens ein Drittel. Je stärker der Fernangriff gegenüber der Verteidigung des Gegners ist, desto mehr trifft er.",
+      "after": "Danach läuft der Kampf wie gewohnt mit dem, was übrig ist, und die Fernkämpfer kämpfen darin wie alle anderen mit. Weil sie zuerst zuschlagen, sind sie im eigentlichen Kampf schwach.",
+      "garrison": "Auch die Fernkämpfer einer verteidigenden Besatzung schlagen zuerst zu: Wer angreift, bekommt ihre Salve ab, bevor der Kampf beginnt.",
+      "report": "Der Kampfbericht zeigt, wie viele Einheiten jede Seite durch die Salve und wie viele im Kampf verloren hat."
+    },
     "adminNote": {
       "time": "Ausbildungszeit pro Einheit = Katalogzeit × (1 − {percent} × Gebäudestufe) ÷ Weltgeschwindigkeit, festgelegt beim Erteilen des Auftrags.",
       "refund": "Verlässt ein Gebäude das Gebiet, wird zerstört oder ist auf Stufe 0 verfallen, bricht es seine Warteschlange ab und erstattet jeden Auftrag voll."
