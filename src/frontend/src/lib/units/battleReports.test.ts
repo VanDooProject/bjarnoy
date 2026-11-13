@@ -17,10 +17,10 @@ const baseReport = {
   winner: 'attacker',
   mission: 'attack',
   attackerLines: [
-    { unit: 'spearman', sent: 10, lost: 4, survived: 6 },
-    { unit: 'axeman', sent: 5, lost: 1, survived: 4 },
+    { unit: 'spearman', sent: 10, lost: 4, survived: 6, volleyLost: 0 },
+    { unit: 'axeman', sent: 5, lost: 1, survived: 4, volleyLost: 0 },
   ],
-  defenderLines: [{ unit: 'thrall', lost: 8, survived: 2 }],
+  defenderLines: [{ unit: 'thrall', lost: 8, survived: 2, volleyLost: 0 }],
   lootTaken: { wood: 50, stone: 0, food: 20, iron: 0 },
 };
 
@@ -73,8 +73,8 @@ describe('reportSummaryLine for a fleet', () => {
   const fleet = {
     ...baseReport,
     shipFight: {
-      attackerLines: [{ unit: 'fireship', sent: 30, lost: 4, survived: 26 }],
-      defenderLines: [{ unit: 'longship', lost: 2, survived: 0 }],
+      attackerLines: [{ unit: 'fireship', sent: 30, lost: 4, survived: 26, volleyLost: 0 }],
+      defenderLines: [{ unit: 'longship', lost: 2, survived: 0, volleyLost: 0 }],
     },
     drowned: [{ count: 20 }],
     fireShipsBurned: 10,
