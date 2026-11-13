@@ -916,24 +916,44 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(page.getByText("planned but not in the game")).toHaveCount(0);
   });
 
-  test("training page lists which building trains which units and hides the admin note", async ({
+  test("training page shows the unit dependency graph, a list per building on phones, and hides the admin note", async ({
     page,
   }) => {
     await page.goto("/docs/training");
-    await expectPlayerPage(page, "Training troops", "training-table");
-    await expect(page.locator('[data-building="barracks"]')).toContainText(
-      "Spearman",
-    );
-    await expect(page.locator('[data-building="dockyard"]')).toContainText(
-      "Longship",
-    );
-    // The Longhouse trains nothing, so it is not a row.
-    await expect(page.locator('[data-building="longhouse"]')).toHaveCount(0);
     await expect(
-      page.locator(
-        '[data-building="barracks"] th [data-building-link="link"]',
+      page.getByRole("heading", { level: 1, name: "Training troops" }),
+    ).toBeVisible();
+    const graph = page.getByTestId("unit-graph");
+    await expect(graph.locator("svg")).toBeVisible();
+    await expect(graph.locator('svg [data-unit="spearman"]')).toBeVisible();
+    await expect(graph.locator('svg [data-unit="longship"]')).toBeVisible();
+    // The Ram and the Catapult need the Berserker, across lanes; the Berserker needs no other unit.
+    await expect(
+      graph.locator('[data-edge="berserker>ram"]'),
+    ).toHaveCount(1);
+    await expect(graph.locator('[data-edge$=">berserker"]')).toHaveCount(0);
+    // The Longhouse trains nothing, so it has no lane.
+    await expect(
+      graph.locator('.lane-label[data-building="longhouse"]'),
+    ).toHaveCount(0);
+    await expect(
+      graph.locator(
+        '.lane-label[data-building="barracks"] [data-building-link="link"]',
       ),
     ).toHaveCount(1);
+    await expect(page.getByTestId("admin-note")).toHaveCount(0);
+    await expect(page.getByTestId("docs-admin-toggle")).toHaveCount(0);
+
+    // On a phone the graph gives way to a list per building, ordered by level, without horizontal overflow.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(graph.locator("svg")).toBeHidden();
+    const barracks = page.locator('.phone-building[data-building="barracks"]');
+    await expect(barracks).toBeVisible();
+    await expect(barracks).toContainText("Spearman");
+    const overflow = await page
+      .locator(".docs-page")
+      .evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
   });
 
   test("ships page compares the Karve and the Longship and hides the admin note", async ({

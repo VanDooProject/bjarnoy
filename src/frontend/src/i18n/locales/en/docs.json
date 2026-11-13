@@ -1026,10 +1026,17 @@
     "title": "Training troops",
     "intro": "Which building trains which units, how the queues work, and how to spread an order over several buildings.",
     "buildings": {
-      "heading": "Who trains what",
-      "body": "Every unit is trained in one kind of building. The Longhouse trains nothing.",
-      "building": "Building",
-      "units": "Trains"
+      "heading": "What each building trains",
+      "body": "Every unit is trained in one kind of building, and most need that building at a minimum level. The level counts in the building you order from: a second Barracks that is still level 2 cannot train a Spearman, even when your first one is level 8. The Longhouse trains nothing. An arrow means you need the first unit unlocked before the second."
+    },
+    "graph": {
+      "label": "Which unit opens at which level of which building",
+      "axis": "Building level. Arrows point from the unit you need to the unit it opens.",
+      "opensAt": "Longhouse {level}",
+      "longhouseShort": "LH {level}",
+      "longhouse": "needs Longhouse {level}",
+      "level": "Level {level}",
+      "needsUnit": "needs {unit}"
     },
     "queue": {
       "heading": "Queues and speed",
@@ -1038,7 +1045,8 @@
       "speed": "Training gets {percent}% faster with every building level, {max}% at level {level}. The time is fixed when you place the order; upgrading the building later does not change it.",
       "pay": "You pay for the whole order up front.",
       "cancel": "If a building leaves your {realm} or is destroyed, its orders are cancelled and you get everything back. Orders in your other buildings keep training.",
-      "realmLink": "realm"
+      "realmLink": "realm",
+      "cancelOrder": "You can cancel any order in a building's queue, the running one included. Units that are not trained yet give back half of their cost. Units of the running order that are already trained stay with you."
     },
     "distribute": {
       "heading": "Training in several buildings",

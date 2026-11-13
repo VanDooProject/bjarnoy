@@ -5,7 +5,11 @@ import {
   distributedTrainingSeconds,
   formatCostLine,
   formatTrainingDuration,
-  isUnitAvailable,
+  maxAffordableCount,
+  trainingCancelRefund,
+  unitRequirements,
+  unlockLadder,
+  type UnitRequirementContext,
   totalTrainingCost,
   trainingBonusPercent,
   trainingTimeFactor,
@@ -29,6 +33,7 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
     requiredLonghouseLevel: 1,
     requiredUnitType: null,
     requiredBuildingType: 'longhouse',
+    requiredBuildingLevel: 1,
     siegeTargets: [],
     ...overrides,
   };
@@ -56,61 +61,116 @@ describe('canAfford', () => {
   });
 });
 
-describe('isUnitAvailable', () => {
+describe('unitRequirements', () => {
   const byType: Record<string, UnitDefinitionResponse> = {
-    axeman: unit({ type: 'axeman', requiredLonghouseLevel: 3 }),
-    berserker: unit({ type: 'berserker', requiredLonghouseLevel: 6, requiredUnitType: 'axeman' }),
-  };
-
-  it('is false below the unit\'s own required longhouse level', () => {
-    expect(isUnitAvailable('axeman', 2, byType)).toBe(false);
-  });
-
-  it('is true once the longhouse is high enough with no prerequisite', () => {
-    expect(isUnitAvailable('axeman', 3, byType)).toBe(true);
-  });
-
-  it('recursively requires the prerequisite unit to also be available at that longhouse level', () => {
-    // Berserker's own level (6) is met, but axeman's prerequisite level (3)
-    // is what actually gates it here — both must hold.
-    expect(isUnitAvailable('berserker', 6, byType)).toBe(true);
-  });
-
-  it('is false for an unknown unit type', () => {
-    expect(isUnitAvailable('nonexistent', 99, byType)).toBe(false);
-  });
-
-  it('ignores requiredBuildingType when no buildingLevelOf lookup is given', () => {
-    // The "unknown" escape hatch (mirrors the backend's own null buildingLevelOf
-    // parameter) — callers with no settlement to check against, e.g. the
-    // docs pages, keep working unchanged.
-    const thrall = unit({ type: 'thrall', requiredBuildingType: 'barracks' });
-    expect(isUnitAvailable('thrall', 1, { thrall })).toBe(true);
-  });
-
-  it('is false when the required building has no level in the settlement', () => {
-    const thrall = unit({ type: 'thrall', requiredBuildingType: 'barracks' });
-    expect(isUnitAvailable('thrall', 1, { thrall }, () => 0)).toBe(false);
-  });
-
-  it('is true once the required building stands, even at longhouse-only level', () => {
-    const thrall = unit({ type: 'thrall', requiredBuildingType: 'barracks' });
-    expect(isUnitAvailable('thrall', 1, { thrall }, (type) => (type === 'barracks' ? 1 : 0))).toBe(true);
-  });
-
-  it('checks the required building recursively down a prerequisite chain too', () => {
-    const axeman = unit({ type: 'axeman', requiredLonghouseLevel: 3, requiredBuildingType: 'barracks' });
-    const berserker = unit({
+    axeman: unit({ type: 'axeman', requiredLonghouseLevel: 6, requiredBuildingType: 'barracks', requiredBuildingLevel: 6 }),
+    berserker: unit({
       type: 'berserker',
-      requiredLonghouseLevel: 6,
-      requiredUnitType: 'axeman',
+      requiredLonghouseLevel: 20,
       requiredBuildingType: 'barracks',
-    });
-    const withBerserker = { axeman, berserker };
-    // Berserker's own longhouse level and building are both met, but its
-    // axeman prerequisite is unavailable without the same Barracks.
-    expect(isUnitAvailable('berserker', 6, withBerserker, () => 0)).toBe(false);
-    expect(isUnitAvailable('berserker', 6, withBerserker, (type) => (type === 'barracks' ? 1 : 0))).toBe(true);
+      requiredBuildingLevel: 10,
+    }),
+    ram: unit({
+      type: 'ram',
+      requiredBuildingType: 'siegeworkshop',
+      requiredBuildingLevel: 10,
+      requiredUnitType: 'berserker',
+    }),
+    karve: unit({ type: 'karve', class: 'ship', requiredBuildingType: 'dockyard' }),
+  };
+  const ctx = (over: Partial<UnitRequirementContext> = {}): UnitRequirementContext => ({
+    longhouseLevel: 20,
+    byType,
+    orderingLevel: 10,
+    bestBuildingLevelOf: () => 10,
+    coastal: true,
+    ...over,
+  });
+
+  it('is empty when every requirement holds', () => {
+    expect(unitRequirements('berserker', ctx())).toEqual([]);
+  });
+
+  it('names the ordering building\'s level, not the best of its type', () => {
+    // A second Barracks at 10 exists, but the opened one is level 4.
+    expect(unitRequirements('axeman', ctx({ orderingLevel: 4, bestBuildingLevelOf: () => 10 }))).toEqual([
+      { kind: 'buildingLevel', building: 'barracks', required: 6, current: 4 },
+    ]);
+  });
+
+  it('lists exactly the missing requirements, together', () => {
+    expect(unitRequirements('berserker', ctx({ longhouseLevel: 12, orderingLevel: 6 }))).toEqual([
+      { kind: 'buildingLevel', building: 'barracks', required: 10, current: 6 },
+      { kind: 'longhouse', required: 20, current: 12 },
+    ]);
+  });
+
+  it('asks for a prerequisite unit that is not unlocked in this settlement', () => {
+    const missing = unitRequirements('ram', ctx({ bestBuildingLevelOf: (b) => (b === 'barracks' ? 4 : 10) }));
+    expect(missing).toEqual([{ kind: 'unit', unit: 'berserker' }]);
+  });
+
+  it('is satisfied by the prerequisite unit unlocked in a different building', () => {
+    expect(unitRequirements('ram', ctx())).toEqual([]);
+  });
+
+  it('asks for a coast on ships, only when it is known to be missing', () => {
+    expect(unitRequirements('karve', ctx({ coastal: false }))).toEqual([{ kind: 'coast' }]);
+    expect(unitRequirements('karve', ctx({ coastal: null }))).toEqual([]);
+  });
+
+  it('is empty for an unknown unit type', () => {
+    expect(unitRequirements('nonexistent', ctx())).toEqual([]);
+  });
+});
+
+describe('maxAffordableCount', () => {
+  const spearman = unit({ type: 'spearman', trainingCost: { wood: 80, stone: 40, food: 20, iron: 40 } });
+
+  it('is bounded by the scarcest resource', () => {
+    expect(maxAffordableCount(spearman, { wood: 1000, stone: 1000, food: 1000, iron: 130 })).toBe(3);
+  });
+
+  it('is 0 when one resource is missing', () => {
+    expect(maxAffordableCount(spearman, { wood: 1000, stone: 1000, food: 1000, iron: 0 })).toBe(0);
+  });
+
+  it('ignores resources the unit does not cost', () => {
+    const thrall = unit({ type: 'thrall', trainingCost: { wood: 60, stone: 30, food: 25, iron: 0 } });
+    expect(maxAffordableCount(thrall, { wood: 120, stone: 60, food: 50, iron: 0 })).toBe(2);
+  });
+});
+
+describe('trainingCancelRefund', () => {
+  const spearman = unit({ type: 'spearman', trainingCost: { wood: 80, stone: 40, food: 20, iron: 40 } });
+
+  it('pays back half of the cost of the units not trained yet', () => {
+    expect(trainingCancelRefund(spearman, 4)).toEqual({ wood: 160, stone: 80, food: 40, iron: 80 });
+  });
+
+  it('rounds down per resource', () => {
+    expect(trainingCancelRefund(spearman, 1)).toEqual({ wood: 40, stone: 20, food: 10, iron: 20 });
+    expect(trainingCancelRefund(unit({ type: 'x', trainingCost: { wood: 25, stone: 0, food: 0, iron: 0 } }), 1).wood).toBe(12);
+  });
+
+  it('pays nothing when every unit is trained', () => {
+    expect(trainingCancelRefund(spearman, 0)).toEqual({ wood: 0, stone: 0, food: 0, iron: 0 });
+  });
+});
+
+describe('unlockLadder', () => {
+  it('groups one building\'s units by level, lowest first, and skips other buildings', () => {
+    const defs = [
+      unit({ type: 'berserker', requiredBuildingType: 'barracks', requiredBuildingLevel: 10 }),
+      unit({ type: 'thrall', requiredBuildingType: 'barracks', requiredBuildingLevel: 1 }),
+      unit({ type: 'spearman', requiredBuildingType: 'barracks', requiredBuildingLevel: 3 }),
+      unit({ type: 'bowman', requiredBuildingType: 'archeryrange', requiredBuildingLevel: 1 }),
+    ];
+    expect(unlockLadder(defs, 'barracks')).toEqual([
+      { level: 1, units: ['thrall'] },
+      { level: 3, units: ['spearman'] },
+      { level: 10, units: ['berserker'] },
+    ]);
   });
 });
 

@@ -1026,10 +1026,17 @@
     "title": "Truppen ausbilden",
     "intro": "Welches Gebäude welche Einheiten ausbildet, wie die Warteschlangen funktionieren und wie du einen Auftrag auf mehrere Gebäude verteilst.",
     "buildings": {
-      "heading": "Wer bildet was aus",
-      "body": "Jede Einheit bildest du in einer bestimmten Art von Gebäude aus. Das Langhaus bildet keine Einheiten aus.",
-      "building": "Gebäude",
-      "units": "Bildet aus"
+      "heading": "Was jedes Gebäude ausbildet",
+      "body": "Jede Einheit bildest du in einer bestimmten Art von Gebäude aus, die meisten brauchen dafür eine Mindeststufe. Es zählt die Stufe des Gebäudes, in dem du den Auftrag erteilst: Eine zweite Kaserne auf Stufe 2 bildet keinen Speerträger aus, auch wenn deine erste auf Stufe 8 steht. Das Langhaus bildet nichts aus. Ein Pfeil heißt: Die erste Einheit muss freigeschaltet sein, bevor du die zweite ausbilden kannst."
+    },
+    "graph": {
+      "label": "Welche Einheit auf welcher Stufe welches Gebäudes freigeschaltet wird",
+      "axis": "Gebäudestufe. Die Pfeile führen von der nötigen Einheit zu der Einheit, die sie freischaltet.",
+      "opensAt": "Langhaus {level}",
+      "longhouseShort": "LH {level}",
+      "longhouse": "braucht Langhaus {level}",
+      "level": "Stufe {level}",
+      "needsUnit": "braucht {unit}"
     },
     "queue": {
       "heading": "Warteschlangen und Tempo",
@@ -1038,7 +1045,8 @@
       "speed": "Mit jeder Gebäudestufe geht die Ausbildung {percent} % schneller, auf Stufe {level} sind es {max} %. Die Dauer steht fest, sobald du den Auftrag erteilst. Baust du das Gebäude danach aus, ändert sie sich nicht mehr.",
       "pay": "Den ganzen Auftrag bezahlst du sofort.",
       "cancel": "Verlässt ein Gebäude dein {realm} oder wird es zerstört, werden seine Aufträge abgebrochen und du bekommst alles zurück. Die Aufträge in deinen anderen Gebäuden laufen weiter.",
-      "realmLink": "Gebiet"
+      "realmLink": "Gebiet",
+      "cancelOrder": "Du kannst jeden Auftrag in der Warteschlange eines Gebäudes abbrechen, auch den laufenden. Einheiten, die noch nicht fertig sind, bringen die Hälfte ihrer Kosten zurück. Einheiten des laufenden Auftrags, die schon fertig sind, bleiben bei dir."
     },
     "distribute": {
       "heading": "Ausbilden in mehreren Gebäuden",
