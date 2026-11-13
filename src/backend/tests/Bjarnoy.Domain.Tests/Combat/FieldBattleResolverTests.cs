@@ -224,11 +224,11 @@ public class FieldBattleResolverTests
     [Fact]
     public void Winners_own_already_carried_loot_counts_against_its_remaining_capacity()
     {
-        // A single axeman has carry capacity 30. Load it up with 25 already,
+        // A single axeman has carry capacity 40. Load it up with 35 already,
         // leaving only 5 of capacity for anything looted from the loser.
         var sideA = new[] { new UnitStack(UnitType.Axeman, 1) };
         var sideB = new[] { new UnitStack(UnitType.Spearman, 100) }; // weaker Attack (1500) than... actually make B tiny.
-        var lootA = new ResourceAmounts(Wood: 25, Stone: 0, Food: 0, Iron: 0);
+        var lootA = new ResourceAmounts(Wood: 35, Stone: 0, Food: 0, Iron: 0);
         var lootB = new ResourceAmounts(Wood: 50, Stone: 0, Food: 0, Iron: 0);
 
         // Ensure side A (1 axeman, attack 40) beats side B: use 1 weak spearman instead.

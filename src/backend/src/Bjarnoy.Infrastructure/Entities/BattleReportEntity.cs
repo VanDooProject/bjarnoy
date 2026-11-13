@@ -45,6 +45,12 @@ public class BattleReportEntity
 
     public double DefensePower { get; set; }
 
+    /// <summary>The attacker's ranged attack in the land fight's volley (<see cref="BattleReport.AttackerVolleyPower"/>); zero for older reports.</summary>
+    public double AttackerVolleyPower { get; set; }
+
+    /// <summary>The defender's ranged attack in the land fight's volley; zero for older reports.</summary>
+    public double DefenderVolleyPower { get; set; }
+
     public int Seed { get; set; }
 
     /// <summary>True when this was fought as an <see cref="Domain.Armies.ArmyMission.Raid"/> rather than a plain Attack (issue #40 phase 7).</summary>
@@ -122,6 +128,8 @@ public class BattleReportEntity
             Winner = (int)report.Winner,
             AttackPower = report.AttackPower,
             DefensePower = report.DefensePower,
+            AttackerVolleyPower = report.AttackerVolleyPower,
+            DefenderVolleyPower = report.DefenderVolleyPower,
             Seed = report.Seed,
             WasRaid = report.WasRaid,
             LootWood = report.LootTaken.Wood,
@@ -154,6 +162,7 @@ public class BattleReportEntity
             Sent = l.Sent,
             Lost = l.Lost,
             Survived = l.Survived,
+            VolleyLost = l.VolleyLost,
         };
 
         BattleReportDefenderLineEntity DefenderLine(BattleReportFight fight, BattleReportDefenderLine l) => new()
@@ -163,6 +172,7 @@ public class BattleReportEntity
             UnitType = l.Type,
             Lost = l.Lost,
             Survived = l.Survived,
+            VolleyLost = l.VolleyLost,
         };
 
         entity.AttackerLines =
@@ -191,6 +201,8 @@ public class BattleReportEntity
         Winner = (BattleWinner)Winner,
         AttackPower = AttackPower,
         DefensePower = DefensePower,
+        AttackerVolleyPower = AttackerVolleyPower,
+        DefenderVolleyPower = DefenderVolleyPower,
         Seed = Seed,
         WasRaid = WasRaid,
         LootTaken = new ResourceAmounts(LootWood, LootStone, LootFood, LootIron),
@@ -202,19 +214,19 @@ public class BattleReportEntity
         AttackerLines =
         [
             .. AttackerLines.Where(l => l.Fight == BattleReportFight.Land)
-                .Select(l => new BattleReportAttackerLine(l.UnitType, l.Sent, l.Lost, l.Survived)),
+                .Select(l => new BattleReportAttackerLine(l.UnitType, l.Sent, l.Lost, l.Survived, l.VolleyLost)),
         ],
         DefenderLines =
         [
             .. DefenderLines.Where(l => l.Fight == BattleReportFight.Land)
-                .Select(l => new BattleReportDefenderLine(l.UnitType, l.Lost, l.Survived)),
+                .Select(l => new BattleReportDefenderLine(l.UnitType, l.Lost, l.Survived, l.VolleyLost)),
         ],
         ShipFight = ShipFightWinner is { } shipWinner
             ? new BattleReportShipFight(
                 [.. AttackerLines.Where(l => l.Fight == BattleReportFight.Ship)
-                    .Select(l => new BattleReportAttackerLine(l.UnitType, l.Sent, l.Lost, l.Survived))],
+                    .Select(l => new BattleReportAttackerLine(l.UnitType, l.Sent, l.Lost, l.Survived, l.VolleyLost))],
                 [.. DefenderLines.Where(l => l.Fight == BattleReportFight.Ship)
-                    .Select(l => new BattleReportDefenderLine(l.UnitType, l.Lost, l.Survived))],
+                    .Select(l => new BattleReportDefenderLine(l.UnitType, l.Lost, l.Survived, l.VolleyLost))],
                 ShipFightAttackPower ?? 0,
                 ShipFightDefensePower ?? 0,
                 (BattleWinner)shipWinner)
@@ -263,6 +275,9 @@ public class BattleReportAttackerLineEntity
     public int Lost { get; set; }
 
     public int Survived { get; set; }
+
+    /// <summary>The part of <see cref="Lost"/> the volley took; zero for older reports.</summary>
+    public int VolleyLost { get; set; }
 }
 
 /// <summary>One unit type's lost/survived counts on the defending side of a stored battle.</summary>
@@ -281,4 +296,7 @@ public class BattleReportDefenderLineEntity
     public int Lost { get; set; }
 
     public int Survived { get; set; }
+
+    /// <summary>The part of <see cref="Lost"/> the volley took; zero for older reports.</summary>
+    public int VolleyLost { get; set; }
 }

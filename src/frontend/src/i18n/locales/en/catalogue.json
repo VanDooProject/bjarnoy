@@ -48,7 +48,8 @@
     "longship": "Longship",
     "fireship": "Fire Ship",
     "settler": "Settler",
-    "campbuilder": "Camp builder"
+    "campbuilder": "Camp builder",
+    "skirmisher": "Skirmisher"
   },
   "giants": {
     "giantmountain": "Giant mountain",

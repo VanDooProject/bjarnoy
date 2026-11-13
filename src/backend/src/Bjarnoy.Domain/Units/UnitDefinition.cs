@@ -93,6 +93,12 @@ public sealed record UnitDefinition
     /// </summary>
     public SiegeTargets SiegeTargets { get; init; }
 
+    /// <summary>
+    /// True for the units that strike in the volley before the main fight of a land fight (Bowman, Skirmisher): see
+    /// <see cref="Bjarnoy.Domain.Combat.Volley"/> and <c>docs/design/units-and-ships.md</c> section 4.
+    /// </summary>
+    public bool Ranged { get; init; }
+
     public required ResourceAmounts TrainingCost { get; init; }
 
     /// <summary>Time to train one unit. A batch drips out one at a time — see <see cref="Bjarnoy.Domain.Buildings.TrainingOrder"/>.</summary>

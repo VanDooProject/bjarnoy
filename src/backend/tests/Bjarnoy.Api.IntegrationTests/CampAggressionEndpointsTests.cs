@@ -269,7 +269,7 @@ public sealed class CampAggressionEndpointsTests : IAsyncLifetime
 
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-        db.Armies.Add(army);
+        db.AddArmyRows(army);
         await db.SaveChangesAsync(Ct);
         return army.Id;
     }

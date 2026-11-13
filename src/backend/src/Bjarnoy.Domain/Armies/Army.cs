@@ -113,8 +113,18 @@ public sealed partial record Army
 {
     public required Guid Id { get; init; }
 
-    /// <summary>The settlement this army was dispatched from, and returns to.</summary>
-    public required Guid SettlementId { get; init; }
+    /// <summary>
+    /// The settlement this army was dispatched from, and returns to. <see langword="null"/> for an army without a home (its beach
+    /// camp was destroyed and it could reach no other garrison spot of its owner): it cannot be recalled, still takes field
+    /// orders, and the garrison spot of its owner it folds into becomes its home (<c>docs/design/troop-movement-range.md</c> §2a).
+    /// </summary>
+    public required Guid? SettlementId { get; init; }
+
+    /// <summary>Whether this army has a home settlement to return to (<see cref="SettlementId"/> is set).</summary>
+    public bool HasHome => SettlementId is not null;
+
+    /// <summary>The hex this army returns to: its <see cref="HomeSpot"/>, or <see langword="null"/> for an army without a home.</summary>
+    public HexCoord? Home => HasHome ? HomeSpot : null;
 
     /// <summary>
     /// The garrison spot of <see cref="SettlementId"/> this army leaves from and returns to (and folds into when it arrives):
@@ -236,14 +246,14 @@ public sealed partial record Army
     }
 
     /// <summary>
-    /// True while this army cannot get home and so stands where it is, burning provisions until it starves
-    /// (<c>docs/design/troop-movement-range.md</c> §2a). The single place that decides it.
+    /// True while this army cannot get home and so burns provisions until it starves (<c>docs/design/troop-movement-range.md</c>
+    /// §2a): it has no route home (stranded), or no home at all (<see cref="HasHome"/>). The single place that decides it.
     /// </summary>
-    public bool CannotGetHome => Location is ArmyLocation.InTransit { Movement.IsStranded: true };
+    public bool CannotGetHome => !HasHome || Location is ArmyLocation.InTransit { Movement.IsStranded: true };
 
     /// <summary>
-    /// The instant a stranded army's provisions hit zero and the whole army dies (<see cref="ProvisionsAt"/> reaches 0);
-    /// <see langword="null"/> when the army is not stranded or burns nothing.
+    /// The instant the provisions of an army that cannot get home (<see cref="CannotGetHome"/>) hit zero and the whole army dies
+    /// (<see cref="ProvisionsAt"/> reaches 0); <see langword="null"/> when it can get home, is not on a movement or burns nothing.
     /// </summary>
     public DateTimeOffset? StarvesAt =>
         CannotGetHome && TotalUpkeepPerHour > 0 && Location is ArmyLocation.InTransit { Movement: var movement }
@@ -271,6 +281,19 @@ public sealed partial record Army
             Location = new ArmyLocation.InTransit(((ArmyLocation.InTransit)stranded.Location).Movement with { TurnAroundAt = turnAround }),
         };
     }
+
+    /// <summary>
+    /// <paramref name="at"/>, or the instant this army's current movement was ordered (<see cref="Movement.Movement.DepartedAt"/>,
+    /// <see cref="Movement.Movement.RoutePlannedAt"/>), or a guest reached its host (<see cref="ArmyLocation.Supporting.Since"/>), when that is later: something settled late for an earlier instant (a camp
+    /// that fell before the army was given its order) changes the army from its order on, it does not rewind it.
+    /// </summary>
+    public DateTimeOffset NotBeforeItsOrder(DateTimeOffset at) => Location switch
+    {
+        ArmyLocation.InTransit { Movement: var movement } => new[] { at, movement.DepartedAt, movement.RoutePlannedAt ?? at }.Max(),
+        // A guest from the instant it reached its host.
+        ArmyLocation.Supporting { Since: var since } => since > at ? since : at,
+        _ => at,
+    };
 
     /// <summary>Current hex: <paramref name="home"/> while <see cref="ArmyLocation.AtHome"/>, else the active leg's position.</summary>
     public HexCoord PositionAt(HexCoord home, DateTimeOffset now) => Location switch
@@ -647,7 +670,7 @@ public sealed partial record Army
     private static (DispatchRejection Rejection, HexCoord RouteDestination) ValidateMissionTarget(
         ArmyMission mission,
         IReadOnlyList<UnitStack> units,
-        Guid homeSettlementId,
+        Guid? homeSettlementId,
         Guid? targetSettlementId,
         HexCoord? targetBuildingCoord,
         IReadOnlyList<(HexCoord Centre, int Radius)>? targetClaimDiscs,
@@ -849,7 +872,8 @@ public sealed partial record Army
             || army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit
             || now < inTransit.Movement.ArrivesAt)
         {
-            return new ArmyArrivalResult(army, defenderSettlement, Fought: false, Battle: null, GuestLosses: [], Siege: null, Attack: null);
+            return new ArmyArrivalResult(
+                army, defenderSettlement, Fought: false, Battle: null, GuestLosses: [], Siege: null, Attack: null, defenderSettlement.Garrison);
         }
 
         guestDefenderStacks ??= [];
@@ -941,7 +965,7 @@ public sealed partial record Army
         var survivorCount = plan.AttackerSurvivors.Sum(s => s.Count);
         if (survivorCount == 0)
         {
-            return new ArmyArrivalResult(null, finalDefender, Fought: true, plan, guestLosses, siege, attack);
+            return new ArmyArrivalResult(null, finalDefender, Fought: true, plan, guestLosses, siege, attack, defenderPostBattle.Garrison);
         }
 
         var returning = new Movement.Movement
@@ -967,7 +991,7 @@ public sealed partial record Army
             Loot = plan.LootTaken,
         }).WithProvisionsAt(battleInstant, provisionsAtBattle + attack.Refill);
 
-        return new ArmyArrivalResult(survivorArmy, finalDefender, Fought: true, plan, guestLosses, siege, attack);
+        return new ArmyArrivalResult(survivorArmy, finalDefender, Fought: true, plan, guestLosses, siege, attack, defenderPostBattle.Garrison);
     }
 
     /// <summary>
@@ -1065,7 +1089,7 @@ public sealed partial record Army
     /// what the walk burns). <see langword="null"/> when no route exists.
     /// </summary>
     public static SpotMarch? PlanSpotMarch(
-        Guid armyId, Guid settlementId, HexCoord spot, IReadOnlyList<UnitStack> stacks, HexCoord from, DateTimeOffset now,
+        Guid armyId, Guid? settlementId, HexCoord spot, IReadOnlyList<UnitStack> stacks, HexCoord from, DateTimeOffset now,
         Func<HexCoord, Terrain> terrainAt, double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null,
         Func<HexCoord, bool>? isWideRiver = null, WallRules? walls = null)
     {
@@ -1151,6 +1175,18 @@ public sealed partial record Army
 
     /// <summary>The hours of this army's way home (the whole return leg). Zero for an army that is not on a movement.</summary>
     public double WayHomeHours => Location is ArmyLocation.InTransit { Movement: var m } ? m.ReturnCumulativeHours[^1] : 0;
+
+    /// <summary>
+    /// The way home from <paramref name="from"/>: the route to <paramref name="home"/>, or, for an army without a home
+    /// (<paramref name="home"/> <see langword="null"/>), no walk at all: it stays on <paramref name="from"/>. <see langword="null"/>
+    /// when there is a home but no route to it.
+    /// </summary>
+    private static IReadOnlyList<HexCoord>? RouteHome(
+        HexCoord from, HexCoord? home, Func<HexCoord, Terrain> terrainAt, bool isLandUnit, Func<HexCoord, bool>? isRiver,
+        Func<HexCoord, bool>? isWideRiver, WallRules? walls) =>
+        home is { } target
+            ? HexPathfinder.FindPath(from, target, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost)
+            : [from];
 
     /// <summary>
     /// This army with its way home rebuilt to <paramref name="newHome"/> (its new <see cref="HomeSpot"/>) from where it stands
@@ -1304,7 +1340,7 @@ public sealed partial record Army
 
         var arrived = army with
         {
-            Location = new ArmyLocation.Supporting(army.TargetSettlementId!.Value, army.TargetBuildingCoord!.Value),
+            Location = new ArmyLocation.Supporting(army.TargetSettlementId!.Value, army.TargetBuildingCoord!.Value, movement.ArrivesAt),
             Provisions = provisionsAtArrival,
         };
 
@@ -1444,7 +1480,7 @@ public sealed partial record Army
     /// <see langword="null"/> (the default) treats every river hex as a crossable stream.
     /// </param>
     public static RetargetFoundingResult RetargetFounding(
-        Army army, HexCoord newTarget, DateTimeOffset now, HexCoord home, Func<HexCoord, Terrain> terrainAt,
+        Army army, HexCoord newTarget, DateTimeOffset now, HexCoord? home, Func<HexCoord, Terrain> terrainAt,
         double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null,
         Func<HexCoord, bool>? isWideRiver = null,
         WallRules? walls = null)
@@ -1455,6 +1491,12 @@ public sealed partial record Army
         if (army.Mission != ArmyMission.Found)
         {
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.NotAFoundingMission);
+        }
+
+        // A convoy without a home stopped where it was when it lost it: its founding is over (it still takes field orders).
+        if (!army.HasHome)
+        {
+            return RetargetFoundingResult.Rejected(RetargetFoundingRejection.NothingToRetarget);
         }
 
         HexCoord fromHex;
@@ -1489,7 +1531,7 @@ public sealed partial record Army
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
         }
 
-        var returnPath = router.Find(newTarget, home, isLandUnit).Path;
+        var returnPath = home is { } homeHex ? router.Find(newTarget, homeHex, isLandUnit).Path : [newTarget];
         if (returnPath is null || returnPath.Count == 0)
         {
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
@@ -1540,6 +1582,11 @@ public sealed partial record Army
                 ? new ArmySettleResult(
                     this with { Provisions = 0 }, Changed: true, ArrivedHome: false, [new WalkedLeg(movement, starvesAt)], Starved: true)
                 : new ArmySettleResult(this, Changed: false, ArrivedHome: false);
+        }
+
+        if (!HasHome)
+        {
+            return SettleWithoutHome(movement, now);
         }
 
         if (!movement.IsReturning)
@@ -1596,6 +1643,35 @@ public sealed partial record Army
     }
 
     /// <summary>
+    /// <see cref="SettleTo"/> for an army without a home (<c>docs/design/troop-movement-range.md</c> §2a): it never turns around. It
+    /// walks its leg to the end and stays there (stranded), and starves when its food runs out, on the way or standing. A leg that
+    /// would take it home (a battle's or a flight's way back, built to the hex it stands on) leaves it standing where that leg starts.
+    /// </summary>
+    private ArmySettleResult SettleWithoutHome(Movement.Movement movement, DateTimeOffset now)
+    {
+        if (!movement.IsReturning && StarvesAt is { } starvesAt && starvesAt < movement.ArrivesAt)
+        {
+            return now >= starvesAt
+                ? new ArmySettleResult(this with { Provisions = 0 }, Changed: true, ArrivedHome: false, [new WalkedLeg(movement, starvesAt)], Starved: true)
+                : new ArmySettleResult(this, Changed: false, ArrivedHome: false);
+        }
+
+        // A group of a gathering stands on its meeting hex until the army leaves.
+        if (!movement.IsReturning
+            && (now < movement.ArrivesAt || (GatheringId is not null && GatherDepartAt is { } departAt && now <= departAt)))
+        {
+            return new ArmySettleResult(this, Changed: false, ArrivedHome: false);
+        }
+
+        var stopsAt = movement.IsReturning ? movement.DepartedAt : movement.ArrivesAt;
+        var stopsOn = movement.IsReturning ? movement.Path[0] : movement.Path[^1];
+        var standing = LeaveGathering().Strand(stopsAt, stopsOn);
+        var then = standing.SettleTo(now);
+        IReadOnlyList<WalkedLeg> walked = movement.IsReturning ? [.. then.Walked] : [WalkedLeg.Full(movement), .. then.Walked];
+        return new ArmySettleResult(then.Army, Changed: true, ArrivedHome: false, walked, then.Starved);
+    }
+
+    /// <summary>
     /// Replaces the current movement with a fresh route from wherever this
     /// army has reached back to <paramref name="home"/>, departing
     /// <paramref name="now"/>. Rejected (returns <see langword="null"/>,
@@ -1625,12 +1701,18 @@ public sealed partial record Army
     /// <see langword="null"/> (the default) treats every river hex as a crossable stream.
     /// </param>
     public Army? Recall(
-        DateTimeOffset now, HexCoord home, Func<HexCoord, Terrain> terrainAt, HexCoord? currentHex = null,
+        DateTimeOffset now, HexCoord? home, Func<HexCoord, Terrain> terrainAt, HexCoord? currentHex = null,
         double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null,
         Func<HexCoord, bool>? isWideRiver = null,
         WallRules? walls = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
+
+        // An army without a home has nowhere to be recalled to (docs/design/troop-movement-range.md §2a).
+        if (!HasHome || home is not { } homeHex)
+        {
+            return null;
+        }
 
         HexCoord fromHex;
         switch (Location)
@@ -1651,7 +1733,7 @@ public sealed partial record Army
         // read IsFleet uses, so the route table always matches the fleet it belongs to.
         var isLandUnit = !IsFleet;
 
-        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var path = HexPathfinder.FindPath(fromHex, homeHex, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (path is null || path.Count == 0)
         {
             return null;
@@ -1709,7 +1791,7 @@ public sealed partial record Army
     /// fought (<see cref="Strand"/>) and starves when its food runs out.
     /// </returns>
     public Army ForceFieldRetreat(
-        DateTimeOffset battleInstant, HexCoord fromHex, HexCoord home, Func<HexCoord, Terrain> terrainAt,
+        DateTimeOffset battleInstant, HexCoord fromHex, HexCoord? home, Func<HexCoord, Terrain> terrainAt,
         double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null,
         Func<HexCoord, bool>? isWideRiver = null,
         WallRules? walls = null,
@@ -1721,9 +1803,10 @@ public sealed partial record Army
         var provisionsNow = provisionsAtBattle ?? ProvisionsAt(battleInstant);
         var immuneUntil = battleInstant + Movement.Movement.FleeProtection;
 
-        if (HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost) is not { Count: > 0 } path)
+        if (home is not { } homeHex
+            || HexPathfinder.FindPath(fromHex, homeHex, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost) is not { Count: > 0 } path)
         {
-            // No way home (a wall in the way): it stays where it fought, still protected from further fights, and starves
+            // No home, or no way home (a wall in the way): it stays where it fought, still protected from further fights, and starves
             // when the food runs out (docs/design/troop-movement-range.md §2a).
             return LeaveGathering().WithProvisionsAt(battleInstant, provisionsNow).Strand(battleInstant, fromHex, immuneUntil);
         }
@@ -1770,7 +1853,7 @@ public sealed partial record Army
     /// </remarks>
     /// <returns>The army afterwards, and the hex it stopped on when it found no way past the wall (the "army stuck" report's hex).</returns>
     public WallRerouteResult RerouteAroundWall(
-        WallEncounter encounter, HexCoord home, Func<HexCoord, Terrain> terrainAt, double speedFactor = 1.0,
+        WallEncounter encounter, HexCoord? home, Func<HexCoord, Terrain> terrainAt, double speedFactor = 1.0,
         Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null, WallRules? walls = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
@@ -1789,6 +1872,7 @@ public sealed partial record Army
         IReadOnlyList<HexCoord>? Route(HexCoord a, HexCoord b) =>
             HexPathfinder.FindPath(a, b, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost)
                 is { Count: > 0 } path ? path : null;
+        IReadOnlyList<HexCoord>? WayHomeFrom(HexCoord a) => RouteHome(a, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls) is { Count: > 0 } path ? path : null;
         IReadOnlyList<double> Hours(IReadOnlyList<HexCoord> path) =>
             HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         IReadOnlyList<double> Edges(IReadOnlyList<HexCoord> path) =>
@@ -1798,7 +1882,7 @@ public sealed partial record Army
         if (!movement.IsReturning && !movement.IsStranded)
         {
             var target = movement.Path[^1];
-            if (Route(from, target) is { } onward && Route(target, home) is { } back)
+            if (Route(from, target) is { } onward && WayHomeFrom(target) is { } back)
             {
                 var onwardHours = Hours(onward);
                 var backHours = Hours(back);
@@ -1816,7 +1900,7 @@ public sealed partial record Army
                 }
             }
         }
-        else if (Route(from, home) is { } wayHome)
+        else if (home is { } homeHex && Route(from, homeHex) is { } wayHome)
         {
             var hours = Hours(wayHome);
             var edges = Edges(wayHome);
@@ -1837,7 +1921,7 @@ public sealed partial record Army
             return new WallRerouteResult(this with { Location = new ArmyLocation.InTransit(returning), Provisions = provisionsNow }, null);
         }
 
-        return StopBeforeWall(movement, encounter, at, home, Route, Hours, Edges);
+        return StopBeforeWall(movement, encounter, at, WayHomeFrom, Hours, Edges);
     }
 
     /// <summary>
@@ -1846,8 +1930,8 @@ public sealed partial record Army
     /// home; otherwise (and on the way home) it is stranded there, its stranded movement being that walk.
     /// </summary>
     private WallRerouteResult StopBeforeWall(
-        Movement.Movement movement, WallEncounter encounter, DateTimeOffset at, HexCoord home,
-        Func<HexCoord, HexCoord, IReadOnlyList<HexCoord>?> route,
+        Movement.Movement movement, WallEncounter encounter, DateTimeOffset at,
+        Func<HexCoord, IReadOnlyList<HexCoord>?> wayHomeFrom,
         Func<IReadOnlyList<HexCoord>, IReadOnlyList<double>> hours,
         Func<IReadOnlyList<HexCoord>, IReadOnlyList<double>> edges)
     {
@@ -1861,7 +1945,7 @@ public sealed partial record Army
             ? this
             : this with { Mission = ArmyMission.Move, TargetSettlementId = null, TargetBuildingCoord = null, TargetCampCoord = null };
 
-        if (!movement.IsReturning && !movement.IsStranded && route(stop, home) is { } back)
+        if (!movement.IsReturning && !movement.IsStranded && wayHomeFrom(stop) is { } back)
         {
             // The walk keeps its departure, so the stored provisions stay the leg's baseline. It turns around no earlier than now.
             var backHours = hours(back);
@@ -1998,7 +2082,7 @@ public sealed partial record Army
         Army army,
         IReadOnlyList<HexCoord> waypoints,
         HexCoord destination,
-        HexCoord home,
+        HexCoord? home,
         DateTimeOffset now,
         Func<HexCoord, Terrain> terrainAt,
         bool isPremium,
@@ -2180,10 +2264,17 @@ public sealed partial record Army
             }
         }
 
-        var returnSearch = router.Find(routeDestination, home, isLandUnit);
-        if (returnSearch.Path is not { Count: > 0 } returnPath)
+        // An army without a home has no way back to plan: it stays where the order takes it (docs/design/troop-movement-range.md §2a).
+        IReadOnlyList<HexCoord> returnPath = [routeDestination];
+        if (home is { } homeHex)
         {
-            return FieldOrderResult.Rejected(NoRouteRejection(returnSearch, isLandUnit));
+            var returnSearch = router.Find(routeDestination, homeHex, isLandUnit);
+            if (returnSearch.Path is not { Count: > 0 } found)
+            {
+                return FieldOrderResult.Rejected(NoRouteRejection(returnSearch, isLandUnit));
+            }
+
+            returnPath = found;
         }
 
         var speed = leaving.TotalSpeed;
@@ -2423,7 +2514,7 @@ public sealed partial record Army
     /// <see langword="null"/> (the default) treats every river hex as a crossable stream.
     /// </param>
     public Army? TeleportTo(
-        HexCoord coord, HexCoord home, DateTimeOffset now, Func<HexCoord, Terrain> terrainAt,
+        HexCoord coord, HexCoord? home, DateTimeOffset now, Func<HexCoord, Terrain> terrainAt,
         double? provisions = null, double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null,
         Func<HexCoord, bool>? isWideRiver = null,
         WallRules? walls = null)
@@ -2438,7 +2529,7 @@ public sealed partial record Army
             return null;
         }
 
-        var returnPath = HexPathfinder.FindPath(coord, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnPath = RouteHome(coord, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls);
         if (returnPath is null || returnPath.Count == 0)
         {
             return null;
@@ -2546,9 +2637,15 @@ public sealed record WalkedLeg(Movement.Movement Leg, DateTimeOffset Until)
 /// <see cref="Combat.AttackPlan"/>). <paramref name="Battle"/> is its <see cref="Combat.AttackPlan.Overall"/> summary.
 /// <see langword="null"/> when nothing was fought.
 /// </param>
+/// <param name="DefenderGarrisonAtBattle">
+/// The defender's own garrison right after the fight, at the battle instant: before <paramref name="DefenderSettlement"/> was
+/// settled on to "now", so nothing that starved after the battle is missing from it. What decides whether a beach camp fell
+/// (<see cref="Combat.SiegeResolver.CampFalls"/>). The garrison as given when nothing was fought.
+/// </param>
 public sealed record ArmyArrivalResult(
     Army? Army, Settlement DefenderSettlement, bool Fought, Combat.BattlePlan? Battle,
-    IReadOnlyList<UnitStack> GuestLosses, Combat.SiegeOutcome? Siege, Combat.AttackPlan? Attack);
+    IReadOnlyList<UnitStack> GuestLosses, Combat.SiegeOutcome? Siege, Combat.AttackPlan? Attack,
+    IReadOnlyList<UnitStack> DefenderGarrisonAtBattle);
 
 /// <param name="Arrived">
 /// True when this call actually brought the army to its host — the caller

@@ -565,7 +565,8 @@
       "bend": "Biegung",
       "bend60": "Enge Biegung",
       "spring": "Quelle"
-    }
+    },
+    "history": "Nach Snorris Gylfaginning ist Naglfar das Schiff aus den ungeschnittenen Nägeln der Toten. Wer mit langen Nägeln stirbt, baut daran mit, darum schneidet man sie, um die Fertigstellung hinauszuzögern. Zu Ragnarök reißt es sich los und trägt die Riesen in die letzte Schlacht, mit dem Riesen Hrym am Steuer. In der Völuspá gehört sein Losreißen zu den Zeichen des Weltendes."
   },
   "wildlifeCamps": {
     "title": "Wildtierlager",
@@ -1046,10 +1047,18 @@
       "evenly": "Gleichmäßig: Die Einheiten werden durch die Zahl der Gebäude geteilt. Übrige Einheiten gehen einzeln an die Gebäude mit den höchsten Stufen. Gibt es weniger Einheiten als Gebäude, bekommen nur die Gebäude mit den höchsten Stufen eine.",
       "fastest": "Am schnellsten (Premium-Funktion): Die Einheiten werden so aufgeteilt, dass die Aufträge möglichst früh und gemeinsam fertig werden. Dabei zählen die Stufe jedes Gebäudes und die Aufträge, die dort schon warten."
     },
+    "ranged": {
+      "heading": "Fernkämpfer",
+      "body": "Bogenschützen und Speerwerfer sind Fernkämpfer. In jedem Landkampf schlagen sie zuerst zu: Bevor der eigentliche Kampf beginnt, werfen die Fernkämpfer beider Seiten gleichzeitig einmal ihre Geschosse. Jede Seite verliert dabei einen Teil ihrer Einheiten, von jeder Art aber höchstens ein Drittel. Je stärker der Fernangriff gegenüber der Verteidigung des Gegners ist, desto mehr trifft er.",
+      "after": "Danach läuft der Kampf wie gewohnt mit dem, was übrig ist, und die Fernkämpfer kämpfen darin wie alle anderen mit. Weil sie zuerst zuschlagen, sind sie im eigentlichen Kampf schwach.",
+      "garrison": "Auch die Fernkämpfer einer verteidigenden Besatzung schlagen zuerst zu: Wer angreift, bekommt ihre Salve ab, bevor der Kampf beginnt.",
+      "report": "Der Kampfbericht zeigt, wie viele Einheiten jede Seite durch die Salve und wie viele im Kampf verloren hat."
+    },
     "adminNote": {
       "time": "Ausbildungszeit pro Einheit = Katalogzeit × (1 − {percent} × Gebäudestufe) ÷ Weltgeschwindigkeit, festgelegt beim Erteilen des Auftrags.",
       "refund": "Verlässt ein Gebäude das Gebiet, wird zerstört oder ist auf Stufe 0 verfallen, bricht es seine Warteschlange ab und erstattet jeden Auftrag voll."
-    }
+    },
+    "history": "Nordische Schlachten begannen auf Distanz, bevor die Reihen aufeinandertrafen: erst Pfeile, Wurfspeere und Steine, dann der Nahkampf oder das Entern. Die Sagas nennen Bogenschützen, etwa Einar Thambarskelfir auf Olaf Tryggvasons Ormen Lange bei Svolder (1000). Die Sagas wurden erst etwa zwei Jahrhunderte später aufgeschrieben; solche Einzelheiten sind Überlieferung, keine Aufzeichnung."
   },
   "founding": {
     "title": "Siedlungen gründen",
@@ -1170,7 +1179,12 @@
     "risks": {
       "heading": "Gefahren",
       "attacked": "Ein Lager kann von Land und vom Meer aus angegriffen werden. Verteidigen keine Truppen es, kannst du es plündern.",
-      "empty": "Sind keine Truppen darin, lässt es sich auch ohne Belagerungsgerät zerstören."
+      "falls": "Ein Lager fällt nur, wenn ein Angriff niemanden darin übrig lässt und der Angreifer selbst noch Truppen hat. Belagerungsgerät braucht er dafür nicht. Ein Überfall plündert das Lager nur.",
+      "guarded": "Solange Truppen das Lager bewachen – deine eigenen oder die einer Armee, die es unterstützt, Schiffe eingeschlossen –, lässt es sich nicht zerstören, weder mit Katapulten noch mit Rammböcken oder Brandschiffen.",
+      "destroyed": "Wird das Lager zerstört, ist es weg – so wie ein Reich endet, wenn sein Langhaus fällt. Alles, was es an Vorräten hatte, ist verloren, bis auf die Beute des Angreifers.",
+      "troopsOut": "Sind beim Fall des Lagers Truppen von dort unterwegs, ziehen sie zu deinem nächsten Garnisonsort, den sie erreichen können. Der wird ihr neues Zuhause. Erreichen sie keinen, bleiben sie, wo sie sind, bis ihr Proviant aufgebraucht ist – dann verhungern sie.",
+      "onTheWay": "Ist eine Armee gerade zu einem Lager unterwegs, das zerstört wird, zieht sie trotzdem bis auf sein Feld und bleibt dort stehen.",
+      "withoutHome": "Eine Armee ohne Zuhause nimmt weiter Befehle an: ziehen, angreifen, unterstützen oder zu einem deiner Garnisonsorte. Der Ort, an dem sie einrückt, wird ihr neues Zuhause. Zurückrufen kannst du sie nicht. Du findest sie in der Armeeliste jedes deiner Reiche unter „Ohne Zuhause“."
     }
   },
   "realm": {
@@ -1414,6 +1428,12 @@
     },
     "adminNote": {
       "sea": "Eine Gründung über das Meer folgt der Platzregel oben: Die {settlers} Siedler einer Gründungsgruppe belegen {settlers} Plätze (ShipCargo)."
+    },
+    "history": {
+      "dockyard": "Kriegsschiffe lagen in Bootshäusern (naust, ein belegtes Wort) und wurden über das Leidang (leiðangr) aufgeboten: Jeder Küstenbezirk musste ein Schiff bauen, bemannen und verpflegen. Handelsschiffe nutzten die Stege und Kais der Hafenorte wie Haithabu, Birka und Kaupang.",
+      "karve": "Die Karve (karfi) war das Mehrzweckschiff eines Häuptlings: für Reisen, Truppen, etwas Fracht und den Küstenkrieg. Sie war breiter und flacher als ein reines Kriegsschiff. Oft bringt man sie mit dem Osebergschiff (um 820, etwa 21,5 m) und dem Gokstadschiff (um 890, etwa 23 m) in Verbindung; das ist eine Deutung. Ein Nachbau des Gokstadschiffs überquerte 1893 den Atlantik bis nach Chicago.",
+      "longship": "„Langschiff“ (langskip) ist der Sammelbegriff für alle langen, schmalen Kriegsschiffe mit Riemen. Die Nordleute ordneten sie nach ihrer Größe in „Räumen“ (rúm), den Abständen zwischen den Ruderbänken. Das Langschiff im Spiel entspricht der Snekkja: dem gängigen mittelgroßen Raub- und Aufgebotsschiff von etwa 17 m aufwärts mit 13 bis 20 Riemenpaaren. Skuldelev 5 (dänisch, um 1030, 13 Riemenpaare, mit wiederverwendetem Holz ausgebessert) gilt als eine solche, und das Wikingerschiffsmuseum in Roskilde segelt einen Nachbau, die Helge Ask. Auch die größere Skeid und das Drachenschiff waren Langschiffe.",
+      "fireShip": "Brandschiffe waren bei den Nordleuten keine übliche Waffe. Feuer auf See gehört zu den Byzantinern: Ihr Griechisches Feuer verbrannte 941 vor Konstantinopel die Flotte der Rus unter Fürst Igor. Einen Fall aus der Wikingerzeit gibt es vielleicht doch: Haithabu 1, ein Kriegsschiff von etwa 30 m, wurde verbrannt im Hafen von Haithabu gefunden und auf etwa 985 datiert. Nach einer Lesart der Archäologen in Roskilde wurde es mit Brennstoff gefüllt, angezündet und bei einem Angriff gegen die Hafenanlagen geschickt. Das stützt sich auf einen einzigen Fund und ist eine Deutung, keine Gewissheit."
     }
   },
   "shrines": {
@@ -1485,5 +1505,9 @@
       "„Land!“ Der Nebel hebt sich, und dein Reich beginnt."
     ],
     "watch": "Intro ansehen"
+  },
+  "historyNotes": {
+    "toggle": "Geschichte zeigen",
+    "label": "Geschichte"
   }
 }

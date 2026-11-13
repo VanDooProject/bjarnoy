@@ -122,7 +122,7 @@ its own already-computed live army render positions (`resolveArmyPoint`,
 reused as-is), composited as a `min()` of the troop's own ramps with the
 mask's ramp values — never written into `uMask`/`uMaskPrev`, exactly as designed below. The uniforms are `uArmyVisionSources` (x, y), `uArmyVisionRadii` (one radius in hexes per source), `uArmyVisionCount`,
 `uArmyHexSize` and `uArmyRamp`; the ramp offsets and margins are relative to each source's own radius. Vision is a
-per-unit-type stat (`UnitDefinition.VisionRadius`, in rings): Thrall 3; Spearman, Axeman, Bowman, Berserker,
+per-unit-type stat (`UnitDefinition.VisionRadius`, in rings): Thrall 3; Spearman, Axeman, Bowman, Skirmisher, Berserker,
 Provisioner and Settler 2; Catapult and Ram 1; Karve 6; Longship 4. Faster units see a little more (scouts), stronger
 ones less. An army or fleet sees as far as the highest value among the unit types actually in it (count above zero),
 plus the Ravens' rings of its home settlement (additive). The backend computes this once
@@ -401,7 +401,7 @@ Troops of other players (and camp beasts) marching inside your sight are shown o
 a flag or ship. Sight is your settlements' and towers' visible rings and the vision of your own marching armies. You see
 only a short stretch of their route ahead of them, inside your sight (+1 hex): the marker moves along it, but the route
 itself is not drawn, and you see neither the stretch behind them nor their mission, target or units. Troops standing at
-home or as a guest garrison are not shown.
+home or as a guest garrison are not shown. An army without a home is drawn in its owner's realm colour.
 
 ## 2. Rendering mechanics — inlined (closes the "original plan" gap)
 

@@ -6,11 +6,14 @@ using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Combat;
 
-/// <summary>One unit type's sent/lost/survived counts on the attacking side of a battle.</summary>
-public sealed record BattleReportAttackerLine(UnitType Type, int Sent, int Lost, int Survived);
+/// <summary>
+/// One unit type's sent/lost/survived counts on the attacking side of a battle. <paramref name="Lost"/> is every loss of the fight;
+/// <paramref name="VolleyLost"/> is the part of it the volley took (<see cref="Volley"/>), the rest fell in the main fight.
+/// </summary>
+public sealed record BattleReportAttackerLine(UnitType Type, int Sent, int Lost, int Survived, int VolleyLost = 0);
 
-/// <summary>One unit type's lost/survived counts on the defending side of a battle.</summary>
-public sealed record BattleReportDefenderLine(UnitType Type, int Lost, int Survived);
+/// <summary>One unit type's lost/survived counts on the defending side of a battle; <paramref name="VolleyLost"/> as on <see cref="BattleReportAttackerLine"/>.</summary>
+public sealed record BattleReportDefenderLine(UnitType Type, int Lost, int Survived, int VolleyLost = 0);
 
 /// <summary>
 /// The ship fight of a fleet's attack (<see cref="AttackPlan.ShipFight"/>): the attacking ships against all the defending ships.
@@ -89,6 +92,12 @@ public sealed record BattleReport
 
     /// <summary>The land fight's defence power; zero when no land fight happened.</summary>
     public required double DefensePower { get; init; }
+
+    /// <summary>The attacker's ranged attack in the land fight's volley; zero without ranged units and when no land fight happened.</summary>
+    public double AttackerVolleyPower { get; init; }
+
+    /// <summary>The defender's ranged attack in the land fight's volley; zero without ranged units and when no land fight happened.</summary>
+    public double DefenderVolleyPower { get; init; }
 
     /// <summary>The whole attack's winner: the attacker unless a fight was lost (a fight not fought counts as not lost).</summary>
     public required BattleWinner Winner { get; init; }
@@ -170,6 +179,8 @@ public sealed record BattleReport
             LootTaken = attack.Loot,
             AttackPower = land?.AttackPower ?? 0,
             DefensePower = land?.DefensePower ?? 0,
+            AttackerVolleyPower = land?.AttackerVolleyPower ?? 0,
+            DefenderVolleyPower = land?.DefenderVolleyPower ?? 0,
             Winner = attack.Winner,
             Seed = seed,
             WasRaid = wasRaid,
@@ -185,19 +196,23 @@ public sealed record BattleReport
     {
         var lostByType = fight.AttackerLosses.ToDictionary(s => s.Type, s => s.Count);
         var survivedByType = fight.AttackerSurvivors.ToDictionary(s => s.Type, s => s.Count);
+        var volleyByType = fight.AttackerVolleyLosses.ToDictionary(s => s.Type, s => s.Count);
 
         return [.. sent.Select(unit => new BattleReportAttackerLine(
             unit.Type,
             unit.Count,
             lostByType.GetValueOrDefault(unit.Type),
-            survivedByType.GetValueOrDefault(unit.Type)))];
+            survivedByType.GetValueOrDefault(unit.Type),
+            volleyByType.GetValueOrDefault(unit.Type)))];
     }
 
     private static List<BattleReportDefenderLine> DefenderLinesOf(BattlePlan fight)
     {
         var survivedByType = fight.DefenderSurvivors.ToDictionary(s => s.Type, s => s.Count);
+        var volleyByType = fight.DefenderVolleyLosses.ToDictionary(s => s.Type, s => s.Count);
         return [.. fight.DefenderLosses
-            .Select(lost => new BattleReportDefenderLine(lost.Type, lost.Count, survivedByType.GetValueOrDefault(lost.Type)))
+            .Select(lost => new BattleReportDefenderLine(
+                lost.Type, lost.Count, survivedByType.GetValueOrDefault(lost.Type), volleyByType.GetValueOrDefault(lost.Type)))
             // A defender stack that took no losses at all (winning defence)
             // still belongs in the report — add any survivor-only types the
             // loss list did not already cover.

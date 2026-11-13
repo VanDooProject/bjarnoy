@@ -22,16 +22,17 @@ import {
   useBuildOrders,
   useTrainingOrders,
 } from '../../composables/useQueueOrders';
-import { sortArmyRowsByEta, useArmyRows } from '../../composables/useArmyRows';
+import { groupArmyRowsByHome, sortArmyRowsByEta, useArmyRows } from '../../composables/useArmyRows';
 import { confirmedBuild } from '../../composables/buildFeedback';
 import { motionEnabled } from '../../lib/motion';
 import { peek, pulseHandle, slideDrawer } from '../../lib/hud/queueMotion';
 import axeIconUrl from '../../assets/icons/axe.svg?url';
 import swordIconUrl from '../../assets/icons/sword.svg?url';
 import flagIconUrl from '../../assets/icons/flag.svg?url';
-import { useArmyRowTap } from '../../composables/useArmyRowTap';
 import { useArmyRecall } from '../../composables/useArmyRecall';
 import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
+import ArmyRowItem from './ArmyRowItem.vue';
+import ArmyDetail from './ArmyDetail.vue';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -149,18 +150,26 @@ const reservedTotal = computed(() => {
 // supporting army (no active ETA) sorts last.
 const armyRows = useArmyRows();
 const sortedArmyRows = computed(() => sortArmyRowsByEta(armyRows.value));
+// The player's armies without a home show in every realm's list, under their own heading.
+const armyGroups = computed(() => groupArmyRowsByHome(sortedArmyRows.value, t('hud.armyPanel.withoutHome')));
 const { isRecalling, recall, refusalFor } = useArmyRecall();
 function beginFieldOrder(armyId: string) {
   close();
   world.startFieldOrder(armyId);
 }
-// Row tap behaviour (select / delayed deselect / double tap) is shared with
-// ArmyPanel in useArmyRowTap; a double tap closes the drawer and has the map
-// focus the army.
-const selectArmy = useArmyRowTap((armyId) => {
+// A tap on a row selects the army (its route shows on the map) and opens its detail as the drawer's second level; "Show on
+// map" there closes the drawer and has the map focus the army. The level is the army's id, so an army that is gone (home,
+// dead) drops the drawer back to the list on its own.
+const detailArmyId = ref<string | null>(null);
+const detailRow = computed(() => armyRows.value.find((r) => r.id === detailArmyId.value) ?? null);
+function openDetail(armyId: string) {
+  world.selectArmy(armyId);
+  detailArmyId.value = armyId;
+}
+function showOnMap(armyId: string) {
   close();
   emit('select-army', armyId);
-});
+}
 
 const hasAnything = computed(
   () =>
@@ -189,6 +198,11 @@ function toggle() {
 function close() {
   open.value = false;
 }
+
+// Closed, the drawer opens on the list again.
+watch(open, (isOpen) => {
+  if (!isOpen) detailArmyId.value = null;
+});
 
 // Drag-to-open/close (issue: mobile queue sidebar). Matches the CSS's own
 // dimensions — see the `.queue-drawer`/`.queue-drawer-handle` rules below —
@@ -384,6 +398,19 @@ function onDrawerLeave(el: Element, done: () => void) {
     <div v-if="open" v-phone-hidden="layer.hidden.value" class="queue-drawer-backdrop" @pointerdown.self="close" />
     <div v-phone-hidden="layer.hidden.value" class="queue-drawer" :class="{ 'is-open': open, 'is-dragging': dragPx !== null }" :style="rootStyle">
       <div id="queue-drawer-body" class="queue-drawer-panel" :aria-hidden="!open" :inert="!open">
+        <ArmyDetail
+          v-if="detailRow"
+          :row="detailRow"
+          layout="sheet"
+          :recalling="isRecalling(detailRow.id)"
+          :refusal="refusalFor(detailRow.id)"
+          @back="detailArmyId = null"
+          @show-on-map="showOnMap(detailRow.id)"
+          @field-order="beginFieldOrder(detailRow.id)"
+          @recall="recall(detailRow.id)"
+        />
+
+        <template v-else>
         <div class="queue-drawer-header">
           <span class="status-card-title">{{ t('hud.queueDrawer.title') }}</span>
           <button type="button" class="queue-drawer-close" @click="close">{{ t('hud.queueDrawer.close') }}</button>
@@ -444,41 +471,12 @@ function onDrawerLeave(el: Element, done: () => void) {
               <span class="status-card-title">{{ t('hud.queueDrawer.armies') }}</span>
               <span class="status-card-count">{{ sortedArmyRows.length }}</span>
             </div>
-            <div v-for="row in sortedArmyRows" :key="row.id" class="status-row army-row" :class="{ 'is-selected': row.selected }">
-              <button type="button" class="status-row-click" @click="selectArmy(row.id, $event)">
-                <div class="status-row-top">
-                  <span class="status-row-name">{{ row.composition }}</span>
-                  <span class="status-row-time">{{ row.eta ?? '—' }}</span>
-                </div>
-                <div v-if="row.progress !== null" class="status-progress">
-                  <div class="status-progress-fill" :style="{ width: `${Math.round(row.progress * 100)}%` }" />
-                </div>
-                <div class="status-subtext">
-                  {{ row.status }}<span v-if="row.mission" class="mission-tag"> · {{ row.mission }}</span>
-                </div>
-              </button>
-              <div class="army-row-actions">
-                <button
-                  v-if="row.canFieldOrder"
-                  type="button"
-                  class="cancel-button"
-                  :disabled="row.fieldOrderLocked"
-                  @click.stop="beginFieldOrder(row.id)"
-                >
-                  {{ row.fieldOrderLabel }}
-                </button>
-                <button
-                  v-if="row.canRecall"
-                  type="button"
-                  class="cancel-button recall"
-                  :disabled="isRecalling(row.id)"
-                  @click.stop="recall(row.id)"
-                >
-                  {{ isRecalling(row.id) ? t('hud.armyPanel.recalling') : t('hud.armyPanel.recall') }}
-                </button>
-              </div>
-              <p v-if="refusalFor(row.id)" class="status-subtext error recall-refusal">{{ refusalFor(row.id) }}</p>
+            <template v-for="group in armyGroups" :key="group.key">
+            <div v-if="group.heading" class="army-group-heading" data-testid="army-group-without-home">{{ group.heading }}</div>
+            <div v-for="row in group.rows" :key="row.id" class="army-item" :class="{ 'is-selected': row.selected }" data-testid="army-row">
+              <ArmyRowItem :row="row" touch @click="openDetail(row.id)" />
             </div>
+            </template>
           </template>
 
           <div class="status-card-header" :class="{ 'has-section-above': buildOrders.length || trainingOrders.length || sortedArmyRows.length }">
@@ -500,6 +498,7 @@ function onDrawerLeave(el: Element, done: () => void) {
             <GuestList />
           </template>
         </div>
+        </template>
       </div>
 
       <div v-if="peekOrder" ref="peekEl" class="queue-drawer-peek" role="status" data-testid="queue-peek">
@@ -571,7 +570,7 @@ function onDrawerLeave(el: Element, done: () => void) {
   font: inherit;
   padding: 0;
   cursor: pointer;
-  /* no browser double-tap zoom delay: a double tap is read in selectArmy */
+  /* no browser double-tap zoom delay on a tapped row */
   touch-action: manipulation;
 }
 .status-row-top {
@@ -640,23 +639,11 @@ function onDrawerLeave(el: Element, done: () => void) {
   opacity: 0.5;
   cursor: default;
 }
-.army-row {
-  flex-direction: column;
-  align-items: stretch;
+.army-item {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
-.army-row.is-selected {
+.army-item.is-selected {
   background: rgba(255, 197, 92, 0.08);
-}
-.mission-tag {
-  color: var(--gold);
-}
-.army-row-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 4px;
-}
-.recall {
-  color: #e08a8a;
 }
 .garrison-grid {
   display: flex;

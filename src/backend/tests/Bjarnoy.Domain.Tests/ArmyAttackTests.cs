@@ -140,6 +140,35 @@ public class ArmyAttackTests
     }
 
     [Fact]
+    public void The_defenders_garrison_right_after_the_fight_is_kept_apart_from_what_starves_on_before_now()
+    {
+        var settlement = Found();
+        var decision = DispatchAttack(settlement, Guid.CreateVersion7(), provisions: 100);
+        var army = decision.Army!;
+        var arrivesAt = ((ArmyLocation.InTransit)army.Location).Movement.ArrivesAt;
+
+        // A beach camp with two docked longships (4 food an hour) and only 5 food left when the attack lands, which the winner
+        // takes to refill its provisions: the ships starve right after the fight.
+        var hours = (arrivesAt - T0).TotalHours;
+        var camp = new Settlement
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Camp",
+            Centre = TargetHex,
+            Buildings = [new PlacedBuilding(TargetHex, BuildingType.BeachCamp, 1)],
+            Resources = ResourcePool.Create(
+                new ResourceAmounts(Wood: 1000, Stone: 1000, Food: (4 * hours) + 5, Iron: 1000),
+                ResourceAmounts.Zero, ResourceAmounts.Uniform(2000), T0),
+        }.WithGarrison([new UnitStack(UnitType.Longship, 2)]);
+
+        var arrival = Army.SettleArrival(army, camp, defenderSpeedFactor: 1.0, arrivesAt.AddHours(1), seed: 3, terrainAt: AllGrass());
+
+        Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
+        Assert.Equal([new UnitStack(UnitType.Longship, 2)], arrival.DefenderGarrisonAtBattle);
+        Assert.Empty(arrival.DefenderSettlement.Garrison);
+    }
+
+    [Fact]
     public void A_won_attack_refills_the_provisions_from_the_targets_food_on_top_of_the_loot()
     {
         var settlement = Found();
@@ -151,13 +180,13 @@ public class ArmyAttackTests
 
         var arrival = Army.SettleArrival(army, defender, defenderSpeedFactor: 1.0, movement.ArrivesAt, seed: 7);
 
-        // 20 axemen: food capacity 800, carry 600. They burned some of the 100 on the way; the room is refilled in full.
+        // 20 axemen: food capacity 800, carry 800. They burned some of the 100 on the way; the room is refilled in full.
         var provisionsAtBattle = army.ProvisionsAt(movement.ArrivesAt);
         var refill = 800 - provisionsAtBattle;
         Assert.Equal(800, arrival.Army!.Provisions, 6);
         Assert.Equal(refill, arrival.Attack!.Refill, 6);
         var loot = arrival.Army.Loot;
-        Assert.Equal(600, loot.Wood + loot.Stone + loot.Food + loot.Iron, 6);
+        Assert.Equal(800, loot.Wood + loot.Stone + loot.Food + loot.Iron, 6);
         // The defender lost the loot and the refill, both.
         var stockAfter = arrival.DefenderSettlement.Resources.At(movement.ArrivesAt);
         Assert.Equal(stockBefore.Food - loot.Food - refill, stockAfter.Food, 3);

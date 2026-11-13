@@ -29,9 +29,11 @@ import DispatchTargetBuildingPicker from './DispatchTargetBuildingPicker.vue';
 import SendArmyPicker from './SendArmyPicker.vue';
 import DispatchSlots from './DispatchSlots.vue';
 import { useDispatchUnitPicker } from '../../composables/useDispatchUnitPicker';
-import { useArmyRows } from '../../composables/useArmyRows';
+import { groupArmyRowsByHome, useArmyRows } from '../../composables/useArmyRows';
 import { useArmyRowTap } from '../../composables/useArmyRowTap';
 import { useArmyRecall } from '../../composables/useArmyRecall';
+import ArmyRowItem from './ArmyRowItem.vue';
+import ArmyDetail from './ArmyDetail.vue';
 
 const emit = defineEmits<{ 'focus-army': [armyId: string] }>();
 const world = useWorldStore();
@@ -159,6 +161,8 @@ async function confirm() {
 // derivation itself lives in useArmyRows (issue: mobile army dispatch),
 // shared with QueueDrawer's Armies section.
 const armyRows = useArmyRows();
+// The player's armies without a home show in every realm's list, under their own heading.
+const armyGroups = computed(() => groupArmyRowsByHome(armyRows.value, t('hud.armyPanel.withoutHome')));
 
 // Click selects / deselects the row's army; a double click focuses it on the map.
 const onRowClick = useArmyRowTap((armyId) => emit('focus-army', armyId));
@@ -203,41 +207,28 @@ async function confirmFieldOrderClick() {
 
     <template v-else-if="!draft && !fieldDraft">
       <div v-if="armyRows.length" class="army-list">
+        <template v-for="group in armyGroups" :key="group.key">
+        <div v-if="group.heading" class="army-group-heading" data-testid="army-group-without-home">{{ group.heading }}</div>
         <div
-          v-for="row in armyRows"
+          v-for="row in group.rows"
           :key="row.id"
-          class="status-row army-row"
+          class="army-item"
           :class="{ 'is-selected': row.selected }"
-          @click="onRowClick(row.id, $event)"
+          data-testid="army-row"
         >
-          <div class="status-row-top">
-            <span class="status-row-name">{{ row.composition }}</span>
-            <span class="status-row-time">{{ row.eta ?? '—' }}</span>
-          </div>
-          <div class="status-subtext">
-            {{ row.status }}<span v-if="row.mission" class="mission-tag"> · {{ row.mission }}</span>
-          </div>
-          <div class="army-row-actions">
-            <button
-              v-if="row.canFieldOrder"
-              class="secondary field-order"
-              :disabled="row.fieldOrderLocked"
-              :title="row.fieldOrderLocked ? t('hud.armyPanel.premiumRedirectTitle') : undefined"
-              @click.stop="beginFieldOrder(row.id)"
-            >
-              <span v-if="row.fieldOrderLocked" aria-hidden="true">🔒</span> {{ row.fieldOrderLabel }}
-            </button>
-            <button
-              v-if="row.canRecall"
-              class="recall"
-              :disabled="isRecalling(row.id)"
-              @click.stop="recall(row.id)"
-            >
-              {{ isRecalling(row.id) ? t('hud.armyPanel.recalling') : t('hud.armyPanel.recall') }}
-            </button>
-          </div>
-          <p v-if="refusalFor(row.id)" class="status-subtext error-note recall-refusal">{{ refusalFor(row.id) }}</p>
+          <ArmyRowItem :row="row" @click="onRowClick(row.id, $event)" />
+          <ArmyDetail
+            v-if="row.selected"
+            :row="row"
+            layout="inline"
+            :recalling="isRecalling(row.id)"
+            :refusal="refusalFor(row.id)"
+            @show-on-map="emit('focus-army', row.id)"
+            @field-order="beginFieldOrder(row.id)"
+            @recall="recall(row.id)"
+          />
         </div>
+        </template>
       </div>
       <div v-else class="status-subtext garrison-empty">{{ t('hud.armyPanel.noArmies') }}</div>
 
@@ -502,37 +493,15 @@ async function confirmFieldOrderClick() {
   font-weight: 400;
   color: var(--muted);
 }
-/* The card box and header are shared (style.css `.status-card`); this panel sets its place and size. `.status-row` mirrors
-   TrainingQueuePanel.vue's. */
+/* The card box and header are shared (style.css `.status-card`); this panel sets its place and size. */
 .status-card {
   right: 16px;
   /* --hud-inset-bottom only differs from 0px on a mobile-docked-bottom HUD
      bar (see MapView.vue's own hudInsetBottomPx). */
   bottom: calc(16px + var(--hud-inset-bottom, 0px));
-  width: 260px;
+  width: 300px;
   max-height: 60vh;
   overflow-y: auto;
-}
-.status-row {
-  padding: 8px 0;
-  border-top: 1px solid var(--panel-border);
-}
-.status-row-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-}
-.status-row-name {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-}
-.status-row-time {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--gold);
-  white-space: nowrap;
 }
 .status-subtext {
   margin-top: 4px;
@@ -549,36 +518,15 @@ async function confirmFieldOrderClick() {
   margin-top: 8px;
 }
 
-.army-row {
-  cursor: pointer;
+/* An army of the list: its row, and the detail opened in place under the row of the selected one. */
+.army-item {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
-.army-row.is-selected {
-  background: rgba(255, 197, 92, 0.08);
-}
-.army-row-actions {
-  display: flex;
-  gap: 6px;
-}
-.recall {
-  margin-top: 6px;
-  padding: 5px 10px;
-  background: transparent;
-  border: 1px solid var(--panel-border);
-  border-radius: 6px;
-  color: #e08a8a;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.recall:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.field-order {
-  margin-top: 6px;
-  padding: 5px 10px;
-  font-size: 11px;
-  font-weight: 600;
+.army-item.is-selected {
+  margin: 0 -8px;
+  padding: 0 8px;
+  background: rgba(255, 197, 92, 0.06);
+  box-shadow: inset 2px 0 0 var(--gold);
 }
 
 .dispatch-btn {
@@ -621,9 +569,6 @@ async function confirmFieldOrderClick() {
 }
 .instructions {
   margin-top: 0;
-}
-.mission-tag {
-  color: var(--gold);
 }
 .mission-tabs {
   display: flex;

@@ -20,8 +20,11 @@ public enum CampReportKind
 /// <summary>One unit type's sent/lost counts on the player's side of a camp fight.</summary>
 public sealed record CampReportUnitLine(UnitType Type, int Sent, int Lost);
 
-/// <summary>One beast tier's count before the fight and how many of them died.</summary>
-public sealed record CampReportBeastLine(BeastTier Tier, int Before, int Lost);
+/// <summary>
+/// One beast tier's count before the fight and how many of them died; <paramref name="VolleyLost"/> is the part of
+/// <paramref name="Lost"/> the army's ranged volley killed before the fight (<see cref="Volley"/>).
+/// </summary>
+public sealed record CampReportBeastLine(BeastTier Tier, int Before, int Lost, int VolleyLost = 0);
 
 /// <summary>
 /// The immutable, persisted record of one camp fight (hunt, ambush or tower attack) — see
@@ -57,6 +60,9 @@ public sealed record CampReport
     public required double ArmyPower { get; init; }
 
     public required double CampPower { get; init; }
+
+    /// <summary>The ranged attack of the player side's Bowmen and Skirmishers in the volley before the fight; zero without ranged units. The beasts throw nothing back.</summary>
+    public double ArmyVolleyPower { get; init; }
 
     public required int Seed { get; init; }
 
@@ -101,7 +107,7 @@ public sealed record CampReport
         // A hunt on an empty camp reports no beasts at all; otherwise every tier that stood.
         var beastLines = Enum.GetValues<BeastTier>()
             .Where(t => garrisonBefore[t] > 0)
-            .Select(t => new CampReportBeastLine(t, garrisonBefore[t], plan.BeastLosses[t]))
+            .Select(t => new CampReportBeastLine(t, garrisonBefore[t], plan.BeastLosses[t], plan.BeastVolleyLosses[t]))
             .ToList();
 
         return new CampReport
@@ -118,6 +124,7 @@ public sealed record CampReport
             Winner = plan.Winner,
             ArmyPower = plan.ArmyPower,
             CampPower = plan.CampPower,
+            ArmyVolleyPower = plan.ArmyVolleyPower,
             Seed = seed,
             Loot = plan.Loot,
             CampCleared = !garrisonBefore.IsEmpty && plan.BeastSurvivors.IsEmpty,

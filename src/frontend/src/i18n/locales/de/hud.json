@@ -350,6 +350,9 @@
     "unit": "Einheit",
     "sent": "Entsandt",
     "lost": "Verloren",
+    "volleyPower": "Salvenkraft",
+    "lostVolley": "Verloren (Salve)",
+    "lostFight": "Verloren (Kampf)",
     "survived": "Überlebt",
     "noStacksRecorded": "Keine Truppen erfasst.",
     "lootTaken": "Beute",
@@ -390,11 +393,20 @@
     "supportingNamed": "Unterstützt {name}",
     "supporting": "Unterstützt",
     "returning": "Kehrt zurück",
+    "standingAt": "Steht auf ({q}, {r})",
+    "headsHomeIn": "kehrt in {eta} um",
+    "waitingToGather": "Wartet bei ({q}, {r}) auf die anderen Gruppen",
+    "movesOnIn": "zieht in {eta} weiter",
     "inTransit": "Unterwegs",
     "hunting": "Auf der Jagd",
     "cannotGetHome": "Kein Weg nach Hause",
     "starvesIn": "verhungert in {eta}",
-    "buildingCamp": "Baut das Strandlager, fertig um {time} Uhr"
+    "buildingCamp": "Baut das Strandlager, fertig um {time} Uhr",
+    "arrivesIn": "kommt in {eta} an",
+    "homeIn": "in {eta} zu Hause",
+    "campReadyIn": "Lager fertig in {eta}",
+    "campReady": "Lager fertig",
+    "movingOn": "Zieht weiter"
   },
   "garrisonSpots": {
     "longhouse": "Langhaus",
@@ -406,6 +418,7 @@
   "armyPanel": {
     "title": "Armeen",
     "demoNote": "Die Entsendung von Armeen erfordert das echte Backend und ist im Demo-Modus noch nicht eingerichtet.",
+    "withoutHome": "Ohne Zuhause",
     "noArmies": "Keine Armeen unterwegs.",
     "dispatchArmy": "Armee entsenden",
     "premiumRedirectTitle": "Premium erforderlich, um eine noch reisende Armee umzuleiten",
@@ -455,6 +468,43 @@
     "provisions": "Proviant",
     "dispatching": "Wird entsendet…",
     "confirmDispatch": "Entsendung bestätigen"
+  },
+  "armyDetail": {
+    "showOnMap": "Auf der Karte zeigen",
+    "back": "Zurück zu den Armeen",
+    "foodHeading": "Nahrung",
+    "spare": "Übrig",
+    "wayHome": "Heimweg",
+    "food": "Nahrung",
+    "perHour": "pro Stunde",
+    "events": {
+      "left": "Aufgebrochen",
+      "arrives": "Erreicht ({q}, {r})",
+      "arrived": "Angekommen auf ({q}, {r})",
+      "now": "jetzt",
+      "turnsHome": "Kehrt von selbst um",
+      "turnedHome": "Umgekehrt",
+      "home": "Zu Hause",
+      "starves": "Nahrung aufgebraucht",
+      "movesOn": "Zieht weiter",
+      "campReady": "Lager fertig"
+    },
+    "now": {
+      "marching": "Auf dem Weg",
+      "standing": "Steht und isst die Reserve",
+      "returning": "Auf dem Heimweg",
+      "stranded": "Kein Weg nach Hause",
+      "waiting": "Wartet auf die anderen Gruppen",
+      "camp": "Baut das Lager"
+    },
+    "next": {
+      "arrives": "Ankunft {time}",
+      "turnsHome": "Kehrt um {time}",
+      "home": "Zu Hause {time}",
+      "starves": "Nahrung aus {time}",
+      "movesOn": "Zieht weiter {time}",
+      "campReady": "Lager fertig {time}"
+    }
   },
   "dispatchSheet": {
     "cancel": "Entsendung abbrechen",

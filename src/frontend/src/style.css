@@ -120,6 +120,8 @@
    ("Visual language") so the real app matches the design brainstorms. */
 :root {
   --gold: #ffc55c;
+  /* Blue-grey of the docs history notes (DocsNote kind="history", the "Show history" switch). */
+  --history: #8fb3d0;
   /* Realm colours: own, same guild, guild with a peace treaty (any other realm is --rival). Mirror lib/map/realmColours.ts — keep in sync. */
   --realm-own: #3f7fe8;
   --realm-guild: #4fd17a;
@@ -161,6 +163,20 @@
   --cat-logistics: #e88fb4;
   --cat-religion: #c7aaf0;
   --cat-water: var(--water);
+
+  /* Army time line (ArmyTimelineBar.vue): the legs of an army's trip. Spare food is --food, a stranded army --rival, the "now" tick --gold. */
+  --army-march: #6fb0e0;
+  --army-way-home: #5d7a3a;
+  --army-waiting: rgba(255, 255, 255, 0.28);
+  --army-support: rgba(79, 209, 122, 0.7);
+  --army-support-faint: rgba(79, 209, 122, 0.2);
+  /* The part of the trip that is already behind the army. */
+  --army-past: rgba(10, 20, 27, 0.6);
+  /* Lighter shades of the leg colours for text on the dark panel. */
+  --army-march-text: #9cc8ea;
+  --army-stranded-text: #f0a090;
+  --army-support-text: #6fe09a;
+  --army-home-text: #cbd5dc;
 
   --sans: 'Outfit', system-ui, 'Segoe UI', Roboto, sans-serif;
   color-scheme: dark;
@@ -316,6 +332,15 @@ html[data-hud-motion='reduced'] .floating-art-shadow {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text);
+}
+/* A group heading inside a card's list (the army lists' "Without home"). */
+.army-group-heading {
+  margin: 8px 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 .status-card-count {
   font-size: 12px;

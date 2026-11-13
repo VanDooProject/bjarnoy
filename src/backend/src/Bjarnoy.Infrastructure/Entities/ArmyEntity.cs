@@ -26,9 +26,64 @@ public class ArmyEntity
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();
 
-    public Guid SettlementId { get; set; }
+    /// <summary>
+    /// The settlement this army belongs to and returns to — <see cref="Army.SettlementId"/>. <see langword="null"/> for an army
+    /// without a home (its beach camp was destroyed and it could reach no other garrison spot of its owner):
+    /// <c>docs/design/troop-movement-range.md</c> §2a.
+    /// </summary>
+    public Guid? SettlementId { get; set; }
 
     public SettlementEntity? Settlement { get; set; }
+
+    /// <summary>The world the army is in; its own column, so an army without a home still knows it.</summary>
+    public Guid WorldId { get; set; }
+
+    public WorldEntity? World { get; set; }
+
+    /// <summary>
+    /// The owning player's stable id (<see cref="SettlementEntity.OwnerId"/>); the army's own column, kept when it loses its home. Set
+    /// with <see cref="WorldId"/> and <see cref="UserId"/> when the row is made (<see cref="For"/>, <see cref="Sibling"/>).
+    /// </summary>
+    public string OwnerId { get; set; } = string.Empty;
+
+    /// <summary>The owning account (<see cref="SettlementEntity.UserId"/>); the army's own column, kept when it loses its home.</summary>
+    public Guid UserId { get; set; }
+
+    /// <summary>A new row for <paramref name="army"/> of the player who holds <paramref name="owner"/>, with the army's state applied.</summary>
+    public static ArmyEntity For(Army army, SettlementEntity owner)
+    {
+        ArgumentNullException.ThrowIfNull(army);
+        ArgumentNullException.ThrowIfNull(owner);
+        var entity = new ArmyEntity
+        {
+            Id = army.Id,
+            SettlementId = army.SettlementId,
+            WorldId = owner.WorldId,
+            OwnerId = owner.OwnerId,
+            UserId = owner.UserId,
+        };
+        entity.ApplyDomain(army);
+        return entity;
+    }
+
+    /// <summary>A new row for <paramref name="army"/> of the same player as this one (a split, or units leaving it).</summary>
+    public ArmyEntity Sibling(Army army)
+    {
+        ArgumentNullException.ThrowIfNull(army);
+        var entity = new ArmyEntity
+        {
+            Id = army.Id,
+            SettlementId = army.SettlementId,
+            WorldId = WorldId,
+            OwnerId = OwnerId,
+            UserId = UserId,
+        };
+        entity.ApplyDomain(army);
+        return entity;
+    }
+
+    /// <summary>The key the owner's walls and gates know this army by (<see cref="Services.WorldPalisades.OwnerKeyOf"/>).</summary>
+    public Guid WallOwnerKey => Services.WorldPalisades.OwnerKeyOf(UserId, SettlementId ?? Id);
 
     /// <summary>The hex of the garrison spot of <see cref="SettlementId"/> the army leaves from and returns to — <see cref="Army.HomeSpot"/>.</summary>
     public int HomeSpotQ { get; set; }
@@ -108,7 +163,7 @@ public class ArmyEntity
     /// <summary>True when <c>Location</c> is <c>ArmyLocation.AtHome</c>; the movement columns below are then unused.</summary>
     public bool AtHome { get; set; } = true;
 
-    /// <summary>Game instant, not wall time.</summary>
+    /// <summary>Game instant, not wall time. The active leg's start; for a guest (<see cref="IsSupporting"/>) the instant it reached its host.</summary>
     public DateTimeOffset DepartedAt { get; set; }
 
     public List<HexPoint> Path { get; set; } = [];
@@ -142,7 +197,7 @@ public class ArmyEntity
     public Army ToDomain()
     {
         ArmyLocation location = IsSupporting
-            ? new ArmyLocation.Supporting(TargetSettlementId!.Value, new HexCoord(TargetBuildingQ!.Value, TargetBuildingR!.Value))
+            ? new ArmyLocation.Supporting(TargetSettlementId!.Value, new HexCoord(TargetBuildingQ!.Value, TargetBuildingR!.Value), DepartedAt)
             : AtHome
                 ? new ArmyLocation.AtHome()
                 : new ArmyLocation.InTransit(new Movement
@@ -269,7 +324,8 @@ public class ArmyEntity
                 TargetSettlementId = supporting.HostSettlementId;
                 TargetBuildingQ = supporting.Spot.Q;
                 TargetBuildingR = supporting.Spot.R;
-                DepartedAt = default;
+                // A guest has no movement: the column holds the instant it reached its host (ArmyLocation.Supporting.Since).
+                DepartedAt = supporting.Since;
                 Path = [];
                 CumulativeHours = [];
                 EdgeHours = [];

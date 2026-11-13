@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Combat;
 using Bjarnoy.Domain.Economy;
@@ -29,12 +30,14 @@ public class SiegeResolverTests
         Resources = ResourcePool.Create(ResourceAmounts.Zero, ResourceAmounts.Zero, ResourceAmounts.Uniform(2000), default),
     };
 
+    private static readonly IReadOnlyList<UnitStack> Survivors = [new UnitStack(UnitType.Axeman, 3)];
+
     [Fact]
-    public void An_empty_beach_camp_falls_without_siege_engines()
+    public void An_attack_that_empties_a_beach_camp_and_keeps_troops_destroys_it_without_siege_engines()
     {
-        Assert.True(SiegeResolver.EmptyCampFalls(Camp(), []));
+        Assert.True(SiegeResolver.CampFalls(Camp(), ArmyMission.Attack, Survivors, []));
         // a stack with no one left in it is no defender
-        Assert.True(SiegeResolver.EmptyCampFalls(Camp(), [new UnitStack(UnitType.Spearman, 0)]));
+        Assert.True(SiegeResolver.CampFalls(Camp(), ArmyMission.Attack, Survivors, [new UnitStack(UnitType.Spearman, 0)]));
     }
 
     [Theory]
@@ -42,7 +45,20 @@ public class SiegeResolverTests
     [InlineData(UnitType.Longship)]
     public void A_beach_camp_with_land_troops_or_ships_left_does_not_fall(UnitType defender)
     {
-        Assert.False(SiegeResolver.EmptyCampFalls(Camp(), [new UnitStack(defender, 1)]));
+        Assert.False(SiegeResolver.CampFalls(Camp(), ArmyMission.Attack, Survivors, [new UnitStack(defender, 1)]));
+    }
+
+    [Fact]
+    public void A_mutual_wipe_leaves_the_camp_standing()
+    {
+        Assert.False(SiegeResolver.CampFalls(Camp(), ArmyMission.Attack, [], []));
+        Assert.False(SiegeResolver.CampFalls(Camp(), ArmyMission.Attack, [new UnitStack(UnitType.Axeman, 0)], []));
+    }
+
+    [Fact]
+    public void A_raid_that_leaves_the_camp_empty_only_plunders_it()
+    {
+        Assert.False(SiegeResolver.CampFalls(Camp(), ArmyMission.Raid, Survivors, []));
     }
 
     [Fact]
@@ -57,7 +73,30 @@ public class SiegeResolverTests
             Resources = ResourcePool.Create(ResourceAmounts.Zero, ResourceAmounts.Zero, ResourceAmounts.Uniform(500), default),
         };
 
-        Assert.False(SiegeResolver.EmptyCampFalls(realm, []));
+        Assert.False(SiegeResolver.CampFalls(realm, ArmyMission.Attack, Survivors, []));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Catapults_do_not_damage_a_beach_camp_named_or_picked_at_random(bool named)
+    {
+        var survivors = new[] { new UnitStack(UnitType.Catapult, 20) };
+
+        var outcome = SiegeResolver.Resolve(survivors, Camp().Buildings, named ? Longhouse : null, seed: 1);
+
+        Assert.False(outcome.Applied);
+        Assert.False(SiegeResolver.CanDamage(UnitCatalogue.Get(UnitType.Catapult), BuildingType.BeachCamp));
+        Assert.False(SiegeResolver.CanDamage(UnitCatalogue.Get(UnitType.Ram), BuildingType.BeachCamp));
+    }
+
+    [Fact]
+    public void Fire_ships_do_not_burn_a_beach_camp()
+    {
+        var (outcome, burned) = SiegeResolver.Burn(50, Camp().Buildings, Longhouse, _ => Terrain.Sea);
+
+        Assert.False(outcome.Applied);
+        Assert.Equal(0, burned);
     }
 
     [Theory]

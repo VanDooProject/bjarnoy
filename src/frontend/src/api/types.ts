@@ -173,7 +173,9 @@ export interface CampReportUnitLine {
 export interface CampReportBeastLine {
   tier: BeastTier;
   before: number;
+  /** Every beast of the tier that died; `volleyLost` of them fell to the army's volley before the fight. */
   lost: number;
+  volleyLost: number;
 }
 
 /** Mirrors `CampReportResponse` — a wildlife camp fight (hunt, ambush or tower attack). */
@@ -187,6 +189,8 @@ export interface CampReportResponse {
   winner: 'army' | 'camp';
   armyPower: number;
   campPower: number;
+  /** The ranged attack of the army's Bowmen and Skirmishers before the fight (the beasts throw nothing back); 0 without ranged units. */
+  armyVolleyPower: number;
   units: CampReportUnitLine[];
   beasts: CampReportBeastLine[];
   loot: ResourceLine;
@@ -1199,7 +1203,8 @@ export interface AdminEditArmyRequest {
 export interface AdminArmyResponse {
   army: ArmyResponse;
   worldId: string;
-  settlementName: string;
+  /** Null for an army without a home. */
+  settlementName: string | null;
   ownerName: string;
   /** Loot the army carries home and has not deposited yet. */
   loot: ResourceLine;
@@ -1733,7 +1738,10 @@ export interface ForeignMovementResponse {
  */
 export interface ForeignArmyResponse {
   id: string;
-  settlementId: string;
+  /** Null for an army without a home. */
+  settlementId: string | null;
+  /** How the army's owner stands to the viewer (never the owner's ids): picks its colour, for an army without a home too. */
+  relation: 'mine' | 'guild' | 'treaty' | 'rival';
   isFleet: boolean;
   position: HexPoint;
   movement: ForeignMovementResponse;
@@ -1750,7 +1758,8 @@ export interface ForeignArmyResponse {
  */
 export interface ArmyResponse {
   id: string;
-  settlementId: string;
+  /** The army's home settlement; null for an army without a home (its beach camp was destroyed): it cannot be recalled, it still takes field orders. */
+  settlementId: string | null;
   mission: string;
   targetSettlementId: string | null;
   atHome: boolean;
@@ -1769,7 +1778,7 @@ export interface ArmyResponse {
   gatheringId?: string | null;
   /** The hex the groups of a gathering army meet on. */
   gatherHex?: HexPoint | null;
-  /** When this group leaves its spot for the meeting hex. */
+  /** When the gathering leaves the meeting hex for its target (`Gathering.DepartAt`); a group that has arrived waits there until then. */
   gatherDepartsAt?: string | null;
 }
 
@@ -1781,6 +1790,8 @@ export interface ArmyUnitStackResponse {
 /** An army as it appears in a settlement's army list — lighter than `ArmyResponse`. */
 export interface ArmySummary {
   id: string;
+  /** The army's home settlement; null for an army without a home, which every realm of its owner lists. */
+  settlementId: string | null;
   mission: string;
   atHome: boolean;
   supporting: boolean;
@@ -1797,7 +1808,8 @@ export interface ArmySummary {
  */
 export interface GuestArmySummary {
   armyId: string;
-  ownerSettlementId: string;
+  /** Null for a guest without a home. */
+  ownerSettlementId: string | null;
   totalUpkeepPerHour: number;
   stacks: ArmyUnitStackResponse[];
 }
@@ -1809,14 +1821,18 @@ export interface GuestArmySummary {
 export interface BattleReportAttackerLine {
   unit: string;
   sent: number;
+  /** Every loss of the fight; `volleyLost` of them fell to the volley before the main fight. */
   lost: number;
   survived: number;
+  volleyLost: number;
 }
 
 export interface BattleReportDefenderLine {
   unit: string;
+  /** Every loss of the fight; `volleyLost` of them fell to the volley before the main fight. */
   lost: number;
   survived: number;
+  volleyLost: number;
 }
 
 /**
@@ -1866,6 +1882,9 @@ export interface BattleReportResponse {
   winner: string;
   attackPower: number;
   defensePower: number;
+  /** The ranged attack of each side in the land fight's volley before the main fight; 0 without ranged units. */
+  attackerVolleyPower: number;
+  defenderVolleyPower: number;
   seed: number;
   lootTaken: ResourceLine;
   attackerLines: BattleReportAttackerLine[];
@@ -1892,6 +1911,8 @@ export interface FieldBattleReportLine {
   isLoss: boolean;
   unit: string;
   count: number;
+  /** On a loss line: how many of `count` fell to the volley before the fight. */
+  volleyCount: number;
 }
 
 /** `winner` is `'sidea'`, `'sideb'`, or `'tie'` (see `FieldBattleWinner`). */
@@ -1911,6 +1932,9 @@ export interface FieldBattleReportResponse {
   winner: string;
   sideAPower: number;
   sideBPower: number;
+  /** The ranged attack of each side in the volley before the fight; 0 without ranged units. */
+  sideAVolleyPower: number;
+  sideBVolleyPower: number;
   sideAWasDefending: boolean;
   sideBWasDefending: boolean;
   seed: number;
@@ -1962,6 +1986,8 @@ export interface SimulatorResponse {
   winner: string;
   attackPower: number;
   defensePower: number;
+  attackerVolleyPower: number;
+  defenderVolleyPower: number;
   seed: number;
   lootTaken: ResourceLine;
   attackerLines: BattleReportAttackerLine[];
@@ -1998,6 +2024,8 @@ export interface UnitDefinitionResponse {
   /** Slots this ship offers to land troops (0 for every other unit). */
   shipSlots: number;
   upkeepPerHour: number;
+  /** True for the units that strike in the volley before a land fight (Bowman, Skirmisher). */
+  ranged: boolean;
   trainingCost: ResourceLine;
   trainingSeconds: number;
   requiredLonghouseLevel: number;
