@@ -5,6 +5,7 @@ import TopBar from '../hud/TopBar.vue';
 import HudNav from '../hud/HudNav.vue';
 import MobileHudDrawer from '../hud/MobileHudDrawer.vue';
 import { useDocsAdminNotes } from '../../composables/useDocsAdminNotes';
+import { useDocsHistoryNotes } from '../../composables/useDocsHistoryNotes';
 import { provideFirstMentions } from '../../composables/useFirstMentions';
 import { docsPageByPath } from '../../lib/docs/docsPages';
 import DocsBreadcrumb from './DocsBreadcrumb.vue';
@@ -27,6 +28,7 @@ import DocsPageFooter from './DocsPageFooter.vue';
 // - `breadcrumb=false` for the hub itself, which is what the others link back to; it has no footer either.
 // - Admins get a "Show admin notes" toggle under the lede; it reveals the
 //   `DocsAdminNote` blocks (technical content hidden from players).
+// - The same admins get a second "Show history" toggle next to it for the `DocsHistoryNote` blocks.
 // - `hero` for the hub, which renders its own h1 and lede in the body; the
 //   header then keeps only the admin toggle (the `title` still names the top bar).
 // - Provides the page's first-mention register for BuildingLink.
@@ -48,6 +50,7 @@ withDefaults(
 const route = inject(routeLocationKey, null);
 const entry = computed(() => (route ? docsPageByPath(route.path) : undefined));
 const { canToggle, enabled, setEnabled } = useDocsAdminNotes();
+const history = useDocsHistoryNotes();
 // Only a building's first mention on the page is a link (BuildingLink.vue).
 provideFirstMentions();
 </script>
@@ -69,14 +72,24 @@ provideFirstMentions();
             <h1 v-if="!hero">{{ title }}</h1>
             <p v-if="intro && !hero" class="intro">{{ intro }}</p>
             <slot name="status" />
-            <label v-if="canToggle" class="admin-toggle" data-testid="docs-admin-toggle">
-              <input
-                type="checkbox"
-                :checked="enabled"
-                @change="setEnabled(($event.target as HTMLInputElement).checked)"
-              />
-              {{ $t('docs.adminNotes.toggle') }}
-            </label>
+            <div v-if="canToggle" class="toggles">
+              <label class="admin-toggle" data-testid="docs-admin-toggle">
+                <input
+                  type="checkbox"
+                  :checked="enabled"
+                  @change="setEnabled(($event.target as HTMLInputElement).checked)"
+                />
+                {{ $t('docs.adminNotes.toggle') }}
+              </label>
+              <label class="admin-toggle history-toggle" data-testid="docs-history-toggle">
+                <input
+                  type="checkbox"
+                  :checked="history.enabled.value"
+                  @change="history.setEnabled(($event.target as HTMLInputElement).checked)"
+                />
+                {{ $t('docs.historyNotes.toggle') }}
+              </label>
+            </div>
           </div>
         </div>
       </header>
@@ -137,7 +150,7 @@ provideFirstMentions();
   line-height: 1.6;
 }
 /* The hub's own hero follows; the header holds only the admin toggle. */
-.hero-head .admin-toggle {
+.hero-head .toggles {
   margin-top: 0;
 }
 /* The "coming soon" note a page passes in the `status` slot. */
@@ -147,12 +160,17 @@ provideFirstMentions();
   padding-left: 12px;
   color: var(--muted);
 }
-/* Admin-only switch for the technical notes. */
+/* Admin-only switches for the technical and the history notes. */
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
 .admin-toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-top: 12px;
   padding: 3px 10px;
   border: 1px dashed color-mix(in srgb, var(--gold) 45%, transparent);
   border-radius: 999px;
@@ -162,5 +180,11 @@ provideFirstMentions();
 }
 .admin-toggle:hover {
   color: var(--gold);
+}
+.history-toggle {
+  border-color: color-mix(in srgb, var(--history) 60%, transparent);
+}
+.history-toggle:hover {
+  color: var(--history);
 }
 </style>
