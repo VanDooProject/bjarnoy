@@ -120,6 +120,8 @@
    ("Visual language") so the real app matches the design brainstorms. */
 :root {
   --gold: #ffc55c;
+  /* Blue-grey of the docs history notes (DocsNote kind="history", the "Show history" switch). */
+  --history: #8fb3d0;
   /* Realm colours: own, same guild, guild with a peace treaty (any other realm is --rival). Mirror lib/map/realmColours.ts — keep in sync. */
   --realm-own: #3f7fe8;
   --realm-guild: #4fd17a;

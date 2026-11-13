@@ -182,9 +182,9 @@ provideFirstMentions();
   color: var(--gold);
 }
 .history-toggle {
-  border: 1px dashed rgba(143, 179, 208, 0.6);
+  border-color: color-mix(in srgb, var(--history) 60%, transparent);
 }
 .history-toggle:hover {
-  color: #8fb3d0;
+  color: var(--history);
 }
 </style>
