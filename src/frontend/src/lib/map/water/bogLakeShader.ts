@@ -3,7 +3,9 @@
 // Same portable conventions as waterShader.ts (no `#version` pragma, `in`/`out`, output named `finalColor`) and the same world-space vertex
 // shader. It draws a premultiplied-alpha overlay over the painted lake water: a gust band travelling +x in step with the forests' sway
 // (bogLakeGust.ts). Inside the band the water gets up to three looks, each with its own strength (0 = off): white foam lines across the
-// wind, a soft sheen, and cat's paws (darker matte patches). Between gusts the overlay is empty: calm water. Where the lake is comes from
+// wind, a soft sheen, and cat's paws (darker matte patches). Between gusts the overlay is empty: calm water. Independent of the wind, a
+// near-white band runs along the shore: its inner edge is a level of the blurred lake mask (uShoreMask, BogLakeLayer), wobbled by slowly
+// drifting noise so the band moves a little. Where the lake is comes from
 // the baked wet mask (dryMaskCore.ts `lakeWetMaskHalf`), drawn into a render texture over the lakes' bounding rect by BogLakeLayer.
 import { GUST_WAVELENGTH } from './bogLakeGust';
 
@@ -23,6 +25,8 @@ in vec2 vWorld;
 out vec4 finalColor;
 
 uniform sampler2D uLakeMask;
+// The lake mask blurred (BogLakeLayer), same UVs: falls from 1 in open water to 0 at the bank, so it reads as the distance to the shore.
+uniform sampler2D uShoreMask;
 
 // Seconds on the animation clock (the forests' clock), for the drift inside the band.
 uniform float uTime;
@@ -49,6 +53,10 @@ uniform float uBlops;
 uniform float uBlopDensity;
 // Blop curl size multiplier (1 = ring radius 9 world units).
 uniform float uBlopSize;
+// Shore band: strength, 0 = off; blurred-mask level of the band's inner edge; multiplier on how far that edge wobbles.
+uniform float uShore;
+uniform float uShoreEdge;
+uniform float uShoreWobble;
 
 // bogLakeGust.ts gustPhase, with the time term already in uGustTime: the same wave the forest sway frames are drawn in.
 const float GUST_WAVELENGTH = ${glFloat(GUST_WAVELENGTH)};
@@ -221,6 +229,17 @@ float blops(vec2 w, float t) {
   return curlShape(w - centre, rad, 0.6, 1.5) * life * 0.85;
 }
 
+// The near-white band along the shore: 1 on the bank side of an edge that sits at a level of the blurred lake mask and is pushed in and
+// out by noise drifting slowly over the water, plus a slow breathing, so the band moves a little. Same shape as the river bank band.
+float shoreBand(vec2 w, float t) {
+  float s = texture(uShoreMask, vUV).a;
+  float wobble = (vnoise(w * 0.07 + vec2(t * 0.22, -t * 0.15)) - 0.5) * 0.12 * uShoreWobble;
+  float breath = 0.02 * uShoreWobble * sin(t * 0.7 + vnoise(w * 0.02) * 6.2832);
+  float edge = uShoreEdge + wobble + breath;
+  float band = 1.0 - smoothstep(edge - 0.02, edge + 0.02, s);
+  return band * 0.75;
+}
+
 // Premultiplied colour c at alpha a.
 vec4 over(vec3 c, float a) { return vec4(c * a, a); }
 
@@ -230,13 +249,18 @@ vec4 stack(vec4 a, vec4 b) { return a + b * (1.0 - a.a); }
 void main() {
   float lake = texture(uLakeMask, vUV).a;
   bool gustLooks = uFoam > 0.0 || uSheen > 0.0 || uCatsPaws > 0.0;
-  if (lake < 0.01 || (!gustLooks && uBlops <= 0.0)) {
+  if (lake < 0.01 || (!gustLooks && uBlops <= 0.0 && uShore <= 0.0)) {
     finalColor = vec4(0.0);
     return;
   }
   vec2 w = vWorld;
   float t = uTime;
   vec4 acc = vec4(0.0);
+
+  // The shore band: independent of the wind, bottom of the stack.
+  if (uShore > 0.0) {
+    acc = over(vec3(0.94, 0.97, 0.98), clamp(uShore * shoreBand(w, t), 0.0, 1.0));
+  }
 
   // The wind gust looks, only inside the gust band.
   float env = gustLooks ? gustEnvelope(w) : 0.0;

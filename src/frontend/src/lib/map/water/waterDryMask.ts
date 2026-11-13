@@ -74,8 +74,12 @@ export function maskEntries<C>(
   return out;
 }
 
-/** Which mask atlas a layer draws: the sea hexes' dry masks or the bog lakes' wet masks. */
-export type MaskKind = 'dry' | 'lake';
+/**
+ * Which mask atlas a layer draws: the sea hexes' dry masks, the bog lakes' wet masks, the bog lakes' wet masks without the lily pads
+ * and reed islands cut out (the shore band's water), or the river water masks (river, creek and lake mouth water; the bog lake layer
+ * draws the lake mouths' creek water with it, for the shore band).
+ */
+export type MaskKind = 'dry' | 'lake' | 'lakeShore' | 'river';
 
 interface LoadedMasks {
   data: MaskAtlasData;
@@ -88,8 +92,7 @@ const masksPromises: Partial<Record<MaskKind, Promise<LoadedMasks>>> = {};
 /** Decodes a build-time mask atlas once, lazily — it is not needed until a settlement view draws sea (or lakes). */
 function loadMasks(kind: MaskKind): Promise<LoadedMasks> {
   masksPromises[kind] ??= (async () => {
-    const { default: all } = await import('virtual:water-dry-masks');
-    const data = kind === 'lake' ? all.lake : all;
+    const data = kind === 'river' ? (await import('virtual:river-water-masks')).default : await dryAtlas(kind);
     const blob = await (await fetch(data.url)).blob();
     // 'none': keep the PNG's values as they are; Pixi premultiplies on upload, so the mask lands in the alpha channel (and rgb).
     const bitmap = await createImageBitmap(blob, { premultiplyAlpha: 'none' });
@@ -100,6 +103,11 @@ function loadMasks(kind: MaskKind): Promise<LoadedMasks> {
     delete masksPromises[kind];
   });
   return masksPromises[kind]!;
+}
+
+async function dryAtlas(kind: 'dry' | 'lake' | 'lakeShore'): Promise<MaskAtlasData> {
+  const { default: all } = await import('virtual:water-dry-masks');
+  return kind === 'dry' ? all : all[kind];
 }
 
 function cellTexture(masks: LoadedMasks, name: string, frame: DryMaskFrame): Texture {
