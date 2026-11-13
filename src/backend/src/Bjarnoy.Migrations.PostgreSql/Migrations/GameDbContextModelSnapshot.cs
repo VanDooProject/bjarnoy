@@ -2287,6 +2287,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("Radius")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("RenownFollowsSpeed")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("RunState")
                         .HasColumnType("integer");
 
