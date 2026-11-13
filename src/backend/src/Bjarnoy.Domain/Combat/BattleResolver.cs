@@ -24,7 +24,20 @@ public sealed record BattlePlan(
     ResourceAmounts LootTaken,
     BattleWinner Winner,
     double AttackPower,
-    double DefensePower);
+    double DefensePower)
+{
+    /// <summary>What the attacker lost in the volley (<see cref="Volley"/>); already part of <see cref="AttackerLosses"/>.</summary>
+    public IReadOnlyList<UnitStack> AttackerVolleyLosses { get; init; } = [];
+
+    /// <summary>What the defender lost in the volley; already part of <see cref="DefenderLosses"/>.</summary>
+    public IReadOnlyList<UnitStack> DefenderVolleyLosses { get; init; } = [];
+
+    /// <summary>The attacker's ranged attack in the volley (zero without ranged units).</summary>
+    public double AttackerVolleyPower { get; init; }
+
+    /// <summary>The defender's ranged attack in the volley (zero without ranged units).</summary>
+    public double DefenderVolleyPower { get; init; }
+}
 
 /// <summary>
 /// Pure combat math (issue #40 phase 3): no I/O, no ambient clock, no ambient
@@ -77,6 +90,13 @@ public static class BattleResolver
     /// </param>
     /// <remarks>
     /// <para>
+    /// Before the fight below, the ranged units of both sides volley (<see cref="Volley"/>): each side loses
+    /// <c>min(1/3, the other side's ranged attack ÷ its own total defence)</c> of every unit type (the defender's defence with the
+    /// tower bonus), both taken on the armies as they arrive. Everything below then runs on what is left, and the losses the plan
+    /// reports are the volley's and the fight's together (<see cref="BattlePlan.AttackerVolleyLosses"/> splits them). A fight
+    /// without ranged units has no volley, a ship fight neither (ships are not ranged).
+    /// </para>
+    /// <para>
     /// Attack power is Σ(count × Attack × (1 + bonus/100)), each stack's bonus
     /// being <paramref name="shipAttackBonusPercent"/> for
     /// <see cref="Units.UnitClass.Ship"/> stacks and
@@ -115,19 +135,25 @@ public static class BattleResolver
         ArgumentNullException.ThrowIfNull(attackerStacks);
         ArgumentNullException.ThrowIfNull(defenderGarrison);
 
-        var attackPower = attackerStacks.Sum(s =>
+        var rng = new Random(seed);
+
+        // The volley first, on the armies as they arrive; the fight is then fought by what is left.
+        var volley = Volley.Exchange(
+            attackerStacks, landAttackBonusPercent, 0, defenderGarrison, 0, defenseBonusPercent, rng);
+        var attackers = volley.SurvivorsA;
+        var defenders = volley.SurvivorsB;
+
+        var attackPower = attackers.Sum(s =>
         {
             var definition = UnitCatalogue.Get(s.Type);
             var bonusPercent = definition.Class == UnitClass.Ship ? shipAttackBonusPercent : landAttackBonusPercent;
             return definition.Attack * s.Count * (1 + (bonusPercent / 100.0));
         });
-        var defensePower = defenderGarrison.Sum(s => (double)UnitCatalogue.Get(s.Type).Defense * s.Count)
+        var defensePower = defenders.Sum(s => (double)UnitCatalogue.Get(s.Type).Defense * s.Count)
             * (1 + (defenseBonusPercent / 100.0));
 
         // A tie goes to the defender — see the type-level remarks.
         var winner = attackPower > defensePower ? BattleWinner.Attacker : BattleWinner.Defender;
-
-        var rng = new Random(seed);
 
         IReadOnlyList<UnitStack> attackerLosses;
         IReadOnlyList<UnitStack> attackerSurvivors;
@@ -141,8 +167,8 @@ public static class BattleResolver
             // through the same proportional-loss helper instead of the
             // "everyone dies" shortcut.
             (defenderLosses, defenderSurvivors) = raid
-                ? ApplyProportionalLosses(defenderGarrison, RaidLossFraction(1.0), rng)
-                : (defenderGarrison, []);
+                ? ApplyProportionalLosses(defenders, RaidLossFraction(1.0), rng)
+                : (defenders, []);
 
             var lossFraction = SafeRatioPow(defensePower, attackPower);
             if (raid)
@@ -150,13 +176,13 @@ public static class BattleResolver
                 lossFraction = RaidLossFraction(lossFraction);
             }
 
-            (attackerLosses, attackerSurvivors) = ApplyProportionalLosses(attackerStacks, lossFraction, rng);
+            (attackerLosses, attackerSurvivors) = ApplyProportionalLosses(attackers, lossFraction, rng);
         }
         else
         {
             (attackerLosses, attackerSurvivors) = raid
-                ? ApplyProportionalLosses(attackerStacks, RaidLossFraction(1.0), rng)
-                : (attackerStacks, []);
+                ? ApplyProportionalLosses(attackers, RaidLossFraction(1.0), rng)
+                : (attackers, []);
 
             var lossFraction = SafeRatioPow(attackPower, defensePower);
             if (raid)
@@ -164,7 +190,7 @@ public static class BattleResolver
                 lossFraction = RaidLossFraction(lossFraction);
             }
 
-            (defenderLosses, defenderSurvivors) = ApplyProportionalLosses(defenderGarrison, lossFraction, rng);
+            (defenderLosses, defenderSurvivors) = ApplyProportionalLosses(defenders, lossFraction, rng);
         }
 
         var loot = winner == BattleWinner.Attacker
@@ -172,8 +198,15 @@ public static class BattleResolver
             : ResourceAmounts.Zero;
 
         return new BattlePlan(
-            attackerLosses, attackerSurvivors, defenderLosses, defenderSurvivors,
-            loot, winner, attackPower, defensePower);
+            Volley.TotalLosses(attackerStacks, volley.LossesA, attackerLosses), attackerSurvivors,
+            Volley.TotalLosses(defenderGarrison, volley.LossesB, defenderLosses), defenderSurvivors,
+            loot, winner, attackPower, defensePower)
+        {
+            AttackerVolleyLosses = volley.LossesA,
+            DefenderVolleyLosses = volley.LossesB,
+            AttackerVolleyPower = volley.PowerA,
+            DefenderVolleyPower = volley.PowerB,
+        };
     }
 
     /// <summary>A raid caps any loss fraction at 0.5 — see <see cref="Resolve"/>'s <c>raid</c> remarks.</summary>

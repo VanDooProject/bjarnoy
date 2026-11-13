@@ -1047,6 +1047,13 @@
       "evenly": "Evenly: the units are divided by the number of buildings. Units left over go one each to the highest-level buildings. With fewer units than buildings, only the highest-level ones get a unit.",
       "fastest": "Fastest (a premium feature): the units are split so that the orders finish together, as early as possible. It counts each building's level and how many orders are already waiting in it."
     },
+    "ranged": {
+      "heading": "Ranged units",
+      "body": "Bowmen and Skirmishers are ranged units. In a land fight they strike first: before the main fight, the ranged units of both sides throw once, at the same time. Each side loses part of its units, at most a third of every unit type, and the stronger the ranged attack is against the other side's defence, the more it takes.",
+      "after": "Then the fight runs as usual with what is left, and the ranged units fight in it like everyone else. That first strike is why they are weak fighters.",
+      "garrison": "The ranged units of a defending garrison strike first too: an attacker meets their volley before the fight begins.",
+      "report": "The battle report shows how many units each side lost to the volley and how many in the fight."
+    },
     "adminNote": {
       "time": "Training time per unit = catalogue time × (1 − {percent} × building level) ÷ world speed, fixed when the order is placed.",
       "refund": "A building that leaves the realm, is destroyed or has decayed to level 0 cancels its queue and refunds every order in full."

@@ -518,6 +518,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("UnitType")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("VolleyLost")
+                        .HasColumnType("INTEGER");
+
                     b.HasKey("Id");
 
                     b.HasIndex("BattleReportId");
@@ -543,6 +546,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("UnitType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("VolleyLost")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
@@ -571,6 +577,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("AttackerSettlementId")
                         .HasColumnType("TEXT");
 
+                    b.Property<double>("AttackerVolleyPower")
+                        .HasColumnType("REAL");
+
                     b.Property<string>("DefenderOwnerId")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -578,6 +587,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<Guid>("DefenderSettlementId")
                         .HasColumnType("TEXT");
+
+                    b.Property<double>("DefenderVolleyPower")
+                        .HasColumnType("REAL");
 
                     b.Property<double>("DefensePower")
                         .HasColumnType("REAL");
@@ -730,6 +742,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("Tier")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("VolleyLost")
+                        .HasColumnType("INTEGER");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CampReportId");
@@ -746,6 +761,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<double>("ArmyPower")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("ArmyVolleyPower")
                         .HasColumnType("REAL");
 
                     b.Property<bool>("CampCleared")
@@ -948,6 +966,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("SideASettlementId")
                         .HasColumnType("TEXT");
 
+                    b.Property<double>("SideAVolleyPower")
+                        .HasColumnType("REAL");
+
                     b.Property<bool>("SideAWasDefending")
                         .HasColumnType("INTEGER");
 
@@ -964,6 +985,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<Guid>("SideBSettlementId")
                         .HasColumnType("TEXT");
+
+                    b.Property<double>("SideBVolleyPower")
+                        .HasColumnType("REAL");
 
                     b.Property<bool>("SideBWasDefending")
                         .HasColumnType("INTEGER");
@@ -1005,6 +1029,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("UnitType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("VolleyCount")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
