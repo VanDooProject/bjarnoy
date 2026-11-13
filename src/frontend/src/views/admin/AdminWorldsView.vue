@@ -23,6 +23,7 @@ interface Draft {
   startsAt: string;
   joinsClosed: boolean;
   frozenIslesEnabled: boolean;
+  renownFollowsSpeed: boolean;
   hidden: boolean;
   endbossAt: string;
   /** The run state picked in the dropdown; only applied with the Apply button. */
@@ -41,6 +42,7 @@ function draftFor(world: AdminWorldResponse): Draft {
     startsAt: formatDateTime(world.startsAt, locale.value),
     joinsClosed: world.joinsClosed,
     frozenIslesEnabled: world.frozenIslesEnabled,
+    renownFollowsSpeed: world.renownFollowsSpeed,
     hidden: world.hidden,
     endbossAt: formatDateTime(world.endbossAt, locale.value),
     runState: world.runState,
@@ -73,7 +75,7 @@ const newWorld = reactive({
 });
 
 function editedFields(d: Draft): string {
-  return JSON.stringify([d.speedFactor, d.startsAt, d.joinsClosed, d.frozenIslesEnabled, d.endbossAt, d.graceMinutes]);
+  return JSON.stringify([d.speedFactor, d.startsAt, d.joinsClosed, d.frozenIslesEnabled, d.renownFollowsSpeed, d.endbossAt, d.graceMinutes]);
 }
 
 // A new-world form with a name or seed typed, or a world setting changed but not saved.
@@ -219,6 +221,7 @@ async function saveSettings(world: AdminWorldResponse) {
       startsAt: startsAt.iso,
       joinsClosed: draft.joinsClosed,
       frozenIslesEnabled: draft.frozenIslesEnabled,
+      renownFollowsSpeed: draft.renownFollowsSpeed,
       hidden: draft.hidden,
       endbossAt: endbossAt.iso,
     });
@@ -336,6 +339,7 @@ async function applyRunState(world: AdminWorldResponse) {
           <th>{{ $t('adminWorlds.columns.joinable') }}</th>
           <th>{{ $t('adminWorlds.columns.endboss') }}</th>
           <th>{{ $t('adminWorlds.columns.frozenIsles') }}</th>
+          <th>{{ $t('adminWorlds.columns.renownFollowsSpeed') }}</th>
           <th>{{ $t('adminWorlds.columns.hidden') }}</th>
           <th>{{ $t('adminWorlds.columns.seed') }}</th>
         </tr>
@@ -350,6 +354,7 @@ async function applyRunState(world: AdminWorldResponse) {
           <td>{{ world.joinsClosed ? $t('adminWorlds.joins.closed') : $t('adminWorlds.joins.open') }}</td>
           <td>{{ world.endbossTriggeredAt ? $t('adminWorlds.endbossStatus.triggered') : world.endbossAt ? $t('adminWorlds.endbossStatus.scheduled') : $t('adminWorlds.endbossStatus.none') }}</td>
           <td>{{ world.frozenIslesEnabled ? $t('adminWorlds.frozenIsles.enabled') : $t('adminWorlds.frozenIsles.disabled') }}</td>
+          <td>{{ world.renownFollowsSpeed ? $t('adminWorlds.yes') : $t('adminWorlds.no') }}</td>
           <td>{{ world.hidden ? $t('adminWorlds.yes') : $t('adminWorlds.no') }}</td>
           <td>{{ world.seed }}</td>
         </tr>
@@ -385,6 +390,9 @@ async function applyRunState(world: AdminWorldResponse) {
 
         <label :for="`frozen-${world.id}`">{{ $t('adminWorlds.fields.frozenIslesEnabled') }}</label>
         <input :id="`frozen-${world.id}`" v-model="drafts[world.id].frozenIslesEnabled" type="checkbox" />
+
+        <label :for="`renown-speed-${world.id}`">{{ $t('adminWorlds.fields.renownFollowsSpeed') }}</label>
+        <input :id="`renown-speed-${world.id}`" v-model="drafts[world.id].renownFollowsSpeed" type="checkbox" />
 
         <label :for="`hidden-${world.id}`">{{ $t('adminWorlds.fields.hidden') }}</label>
         <input :id="`hidden-${world.id}`" v-model="drafts[world.id].hidden" type="checkbox" />
