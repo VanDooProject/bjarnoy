@@ -225,7 +225,10 @@ describe('ArmyPanel rows', () => {
     expect(wrapper.findAll('[data-testid="army-row"]')[1].find('[data-testid="army-detail"]').exists()).toBe(true);
     // The opened army has its full bar with clock times and the food numbers next to the thin one of its row.
     expect(wrapper.findAll('[data-testid="army-timeline-bar"]')).toHaveLength(3);
-    expect(details[0].find('[data-testid="army-bar-times"]').exists()).toBe(true);
+    // Only what is still ahead sits under the bar (no clock labels, nothing past), and the names have their own line.
+    const upcoming = details[0].get('[data-testid="army-upcoming"]').text();
+    expect(upcoming).toMatch(/^Turns home \d{2}:\d{2} (AM|PM) · Home \d{2}:\d{2} (AM|PM)$/);
+    expect(details[0].get('[data-testid="army-names"]').text()).toBe('10 Spearman');
     expect(details[0].text()).toContain('Spare');
     expect(details[0].text()).toContain('per hour');
   });

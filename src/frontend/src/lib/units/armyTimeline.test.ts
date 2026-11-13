@@ -75,6 +75,11 @@ describe('buildArmyTimeline', () => {
     expect(t.food).toEqual({ provisions: 412, perHour: 56, spareMs: 3 * H, wayHomeMs: 2 * H });
   });
 
+  it('marching: the spare time is what the army can stand at its destination, not counting the march', () => {
+    expect(kinds(army(), 1).food.spareMs).toBe(6 * H); // arrives at 2h, turns home at 8h
+    expect(kinds(army(), 0).food.spareMs).toBe(6 * H);
+  });
+
   it('returning: the now tick on the way home, no spare time left', () => {
     const t = kinds(army({ movement: { ...army().movement!, isReturning: true } }), 9);
     expect(t.state).toBe('returning');
@@ -140,7 +145,7 @@ describe('buildArmyTimeline', () => {
       ['camp', 2 / 3],
     ]);
     expect(t.nowFraction).toBeCloseTo(0.5);
-    expect(t.events.map((e) => e.kind)).toEqual(['left', 'arrived', 'now', 'campReady']);
+    expect(t.events.map((e) => e.kind)).toEqual(['left', 'arrived', 'now', 'campReady', 'home']);
   });
 
   it('clamps the now tick onto the bar and drops a leg of no length', () => {

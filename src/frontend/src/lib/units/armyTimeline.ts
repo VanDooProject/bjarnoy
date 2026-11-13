@@ -34,7 +34,7 @@ export interface TimelineFood {
   /** Food the army carries now (`ArmyResponse.provisions` as the last response gave it). */
   provisions: number;
   perHour: number;
-  /** Time until the army has to turn home (`turnAroundAt − now`); null once it is heading home and for armies that never turn by themselves. */
+  /** How long the army can stand at its destination (`turnAroundAt − max(now, arrivesAt)`, 0 at least); null once it is heading home and for armies that never turn by themselves. */
   spareMs: number | null;
   /** The trip home (`turnAroundAt` to `returnArrivesAt`); null for armies that do not have one planned. */
   wayHomeMs: number | null;
@@ -178,7 +178,7 @@ export function buildArmyTimeline(army: TimelineArmy, now: number, campReadyAt: 
   });
 
   if (state === 'standing' || state === 'marching') {
-    food.spareMs = Math.max(0, turnAround - now);
+    food.spareMs = Math.max(0, turnAround - Math.max(now, arrives));
   }
   if (state === 'standing' || state === 'marching' || state === 'returning') {
     food.wayHomeMs = Math.max(0, returnArrives - turnAround);
@@ -215,6 +215,7 @@ function buildEvents(
   ];
   if (at.last) {
     events.push({ kind: at.last.kind, at: iso(at.last.at), past: at.last.at <= now });
+    if (state === 'camp') events.push({ kind: 'home', at: iso(at.returnArrives), past: at.returnArrives <= now });
   } else if (state !== 'stranded') {
     events.push({ kind: 'turnsHome', at: iso(at.turnAround), past: at.turnAround <= now });
     events.push({ kind: 'home', at: iso(at.returnArrives), past: at.returnArrives <= now });

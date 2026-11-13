@@ -25,12 +25,15 @@ const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const timeline = computed(() => props.row.timeline);
 const clock = (iso: string) => d(new Date(iso), 'time');
 
-/** The clock times under the bar: where each section begins, and the end of the bar. */
-const barTimes = computed(() => {
-  const tl = timeline.value;
-  if (!tl || tl.startsAt === null) return [];
-  return tl.sections.map((s) => ({ key: `${s.kind}-${s.startsAt}`, fraction: s.fraction, text: clock(s.startsAt!) }));
-});
+/** Desktop: one line under the bar with the events still ahead and their clock times. */
+const upcoming = computed(() =>
+  (timeline.value?.events ?? [])
+    .filter((e) => !e.past && e.kind !== 'now' && e.kind !== 'left')
+    .map((e) => t(`hud.armyDetail.next.${e.kind === 'arrived' ? 'arrives' : e.kind}`, { time: clock(e.at) }))
+    .join(' · '),
+);
+/** The full unit names, as one line under the status. */
+const names = computed(() => props.row.stacks.map((s) => `${s.count} ${unitName(s.unit)}`).join(' · '));
 
 const spare = computed(() =>
   timeline.value?.food.spareMs != null ? formatDurationShort(timeline.value.food.spareMs / 1000) : null,
@@ -89,8 +92,8 @@ const nowKey = computed(() => {
         </svg>
       </button>
       <span class="army-detail-units">
-        <span v-for="stack in row.stacks" :key="stack.unit" class="army-detail-unit">
-          <UnitIcon :unit="stack.unit" :size="18" />{{ stack.count }} {{ unitName(stack.unit) }}
+        <span v-for="stack in row.stacks" :key="stack.unit" class="army-detail-unit" :title="unitName(stack.unit)">
+          <UnitIcon :unit="stack.unit" :size="18" />{{ stack.count }}
         </span>
       </span>
       <button type="button" class="army-detail-link" data-testid="army-show-on-map" @click="emit('show-on-map')">
@@ -101,6 +104,7 @@ const nowKey = computed(() => {
     <div class="army-detail-body">
       <div v-if="layout === 'sheet'" class="army-detail-status">
         <div class="army-detail-where">{{ row.status }}<span v-if="row.mission" class="mission-tag"> · {{ row.mission }}</span></div>
+        <div class="army-detail-names" data-testid="army-names">{{ names }}</div>
         <div class="army-detail-countdown" :class="`tone-${row.tone}`">{{ row.eta ?? row.status }}</div>
       </div>
       <div v-else class="army-detail-where">
@@ -109,6 +113,7 @@ const nowKey = computed(() => {
           {{ t('hud.armyDetail.showOnMap') }}
         </button>
       </div>
+      <div v-if="layout === 'inline'" class="army-detail-names" data-testid="army-names">{{ names }}</div>
 
       <div v-if="timeline" class="army-detail-trip">
         <ArmyTimelineBar :timeline="timeline" size="full" :touch="layout === 'sheet'" />
@@ -119,10 +124,7 @@ const nowKey = computed(() => {
             {{ eventLabel(event) }}
           </li>
         </ul>
-        <div v-else-if="barTimes.length" class="army-bar-times" data-testid="army-bar-times">
-          <span v-for="time in barTimes" :key="time.key" class="army-bar-time" :style="{ flexBasis: `${time.fraction * 100}%` }">{{ time.text }}</span>
-          <span v-if="timeline.endsAt" class="army-bar-time is-end">{{ clock(timeline.endsAt) }}</span>
-        </div>
+        <div v-else-if="upcoming" class="army-upcoming" data-testid="army-upcoming">{{ upcoming }}</div>
       </div>
 
       <div v-if="timeline" class="army-food">
@@ -195,23 +197,14 @@ const nowKey = computed(() => {
   flex-direction: column;
   gap: 5px;
 }
-.army-bar-times {
-  display: flex;
-  font-size: 10px;
+.army-upcoming {
+  font-size: 11px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-.army-bar-time {
-  /* Each time sits under the start of its section; where the sections are short the times give way to each other. */
-  flex-grow: 0;
-  flex-shrink: 1;
-  min-width: 0;
-  overflow: hidden;
-  padding-right: 8px;
-  white-space: nowrap;
-}
-.army-bar-time.is-end {
-  flex: none;
+.army-detail-names {
+  font-size: 12px;
+  color: var(--text);
 }
 .army-food-grid {
   display: grid;
@@ -242,6 +235,7 @@ const nowKey = computed(() => {
   gap: 6px;
 }
 .army-action {
+  white-space: nowrap;
   padding: 5px 10px;
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.22);
@@ -322,6 +316,10 @@ const nowKey = computed(() => {
 }
 .is-sheet .army-detail-where {
   font-size: 13px;
+}
+.is-sheet .army-detail-names {
+  font-size: 13px;
+  color: var(--muted);
 }
 .army-detail-countdown {
   font-size: 24px;
@@ -425,7 +423,7 @@ const nowKey = computed(() => {
 .is-sheet .army-action {
   flex: 1 1 0;
   min-height: 48px;
-  padding: 0 16px;
+  padding: 0 8px;
   font-size: 15px;
 }
 .is-sheet .army-refusal {

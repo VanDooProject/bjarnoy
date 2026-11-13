@@ -491,6 +491,14 @@
       "stranded": "Cannot get home",
       "waiting": "Waiting for the other groups",
       "camp": "Building the camp"
+    },
+    "next": {
+      "arrives": "Arrives {time}",
+      "turnsHome": "Turns home {time}",
+      "home": "Home {time}",
+      "starves": "Food runs out {time}",
+      "movesOn": "Moves on {time}",
+      "campReady": "Camp ready {time}"
     }
   },
   "dispatchSheet": {

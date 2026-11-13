@@ -468,7 +468,7 @@
     "showOnMap": "Auf der Karte zeigen",
     "back": "Zurück zu den Armeen",
     "foodHeading": "Nahrung",
-    "spare": "Reserve",
+    "spare": "Übrig",
     "wayHome": "Heimweg",
     "food": "Nahrung",
     "perHour": "pro Stunde",
@@ -491,6 +491,14 @@
       "stranded": "Kein Weg nach Hause",
       "waiting": "Wartet auf die anderen Gruppen",
       "camp": "Baut das Lager"
+    },
+    "next": {
+      "arrives": "Ankunft {time}",
+      "turnsHome": "Kehrt um {time}",
+      "home": "Zu Hause {time}",
+      "starves": "Nahrung aus {time}",
+      "movesOn": "Zieht weiter {time}",
+      "campReady": "Lager fertig {time}"
     }
   },
   "dispatchSheet": {
