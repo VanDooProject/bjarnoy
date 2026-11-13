@@ -1055,7 +1055,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         <svg v-else viewBox="0 0 12 12"><path d="M3 6h6" /></svg>
       </span><span
         v-if="armed === entry.item.id && !entry.item.disabled" class="arm-badge" data-testid="ring-arm-badge" aria-hidden="true" /><span
-        v-if="holdingId === entry.item.id" class="hold-ring" :style="{ '--hold-pad': `${px(5)}px` }"><HoldProgress :size="px(BUB1) + px(10)" tone="gold" /></span>
+        v-if="holdingId === entry.item.id" class="hold-ring" :style="{ '--hold-pad': `${px(9)}px` }"><HoldProgress :size="px(BUB1) + px(18)" tone="gold" /></span>
     </button>
 
     <button
@@ -1556,7 +1556,7 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .hold-ring {
   position: absolute;
-  inset: calc(var(--hold-pad, 5px) * -1);
+  inset: calc(var(--hold-pad, 9px) * -1);
   pointer-events: none;
   display: block;
 }
