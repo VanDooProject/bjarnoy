@@ -1766,7 +1766,6 @@ useQuickUpgradeInput({
         v-if="selectedTile?.buildingType && trainModalOpen"
         :building="{ type: selectedTile.buildingType, q: selectedTile.q, r: selectedTile.r, level: selectedTile.buildingLevel ?? 0 }"
         @close="closeTrainModal"
-        @trained="closeTrainModal"
       />
     </template>
     <template v-else>

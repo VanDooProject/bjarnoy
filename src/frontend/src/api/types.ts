@@ -2033,6 +2033,8 @@ export interface UnitDefinitionResponse {
   requiredUnitType: string | null;
   /** The building type whose ring trains this unit (`UnitDefinition.RequiredBuildingType`, e.g. `"longhouse"`, `"barracks"`, `"cartworkshop"`) — at least one must stand for the unit to be trainable. */
   requiredBuildingType: string;
+  /** The minimum level of the building the order is placed in (`UnitDefinition.RequiredBuildingLevel`). */
+  requiredBuildingLevel: number;
   /** What this siege engine can damage (`UnitDefinition.SiegeTargets`): `"walls"`, `"towers"`, `"buildings"`; empty for a unit without siege power. */
   siegeTargets: string[];
 }

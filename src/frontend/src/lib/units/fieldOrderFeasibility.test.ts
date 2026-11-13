@@ -21,6 +21,7 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
     requiredLonghouseLevel: 1,
     requiredUnitType: null,
     requiredBuildingType: 'longhouse',
+    requiredBuildingLevel: 1,
     siegeTargets: [],
     ...overrides,
   };

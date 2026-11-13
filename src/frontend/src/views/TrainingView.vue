@@ -4,30 +4,24 @@ import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
 import DocsHistoryNote from '../components/docs/DocsHistoryNote.vue';
 import DocsPageLink from '../components/docs/DocsPageLink.vue';
-import BuildingLink from '../components/docs/BuildingLink.vue';
+import UnitDependencyGraph from '../components/docs/UnitDependencyGraph.vue';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
-import { unitName } from '../i18n/catalogueNames';
+import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { maxLevelFor } from '../lib/map/buildingEconomy';
 import { MAX_TRAINING_ORDERS_PER_BUILDING, TRAINING_TIME_REDUCTION_PER_LEVEL } from '../lib/units/trainingEconomy';
 
-// The training page: which building trains which units, the queue every training building has, how the building's
-// level speeds training up, and how an order is spread over several buildings. The unit-to-building table is read from
-// the unit catalogue (`requiredBuildingType`); the queue size and the speed-up come from lib/units/trainingEconomy.ts,
+// The training page: which building trains which units at which level (a dependency graph), the queue every training
+// building has, how the building's level speeds training up, and how an order is spread over several buildings. The graph
+// is read from the unit catalogue (`requiredBuildingType`, `requiredBuildingLevel`, `requiredUnitType`); the queue size and the speed-up come from lib/units/trainingEconomy.ts,
 // the same numbers the training window uses.
 
 const units = useUnitCatalogueStore();
 onMounted(() => void units.load());
 
-/** The training buildings in catalogue order, each with the units it trains. */
-const rows = computed(() => {
-  const byBuilding = new Map<string, string[]>();
-  for (const unit of units.definitions) {
-    const list = byBuilding.get(unit.requiredBuildingType) ?? [];
-    list.push(unit.type);
-    byBuilding.set(unit.requiredBuildingType, list);
-  }
-  return [...byBuilding].map(([building, types]) => ({ building, units: types.map(unitName).join(', ') }));
-});
+// The graph needs the building catalogue too (what Longhouse level opens each training building).
+const buildings = useBuildingCatalogueStore();
+onMounted(() => void buildings.load());
+const hasUnits = computed(() => units.definitions.length > 0);
 
 const percentPerLevel = Math.round(TRAINING_TIME_REDUCTION_PER_LEVEL * 100);
 const maxLevel = maxLevelFor('barracks');
@@ -36,26 +30,11 @@ const maxPercent = percentPerLevel * maxLevel;
 
 <template>
   <DocsPageLayout class="training" :title="$t('docs.training.title')" caption="DOCS · TRAINING" :intro="$t('docs.training.intro')">
-    <template v-if="rows.length > 0">
+    <template v-if="hasUnits">
       <section id="buildings" class="block">
         <h2>{{ $t('docs.training.buildings.heading') }}</h2>
         <p class="text">{{ $t('docs.training.buildings.body') }}</p>
-        <div class="table-scroll">
-          <table data-testid="training-table">
-            <thead>
-              <tr>
-                <th>{{ $t('docs.training.buildings.building') }}</th>
-                <th>{{ $t('docs.training.buildings.units') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in rows" :key="row.building" :data-building="row.building">
-                <th scope="row" class="name"><BuildingLink :type="row.building" always /></th>
-                <td>{{ row.units }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <UnitDependencyGraph />
       </section>
 
       <section id="queue" class="block">
@@ -65,6 +44,7 @@ const maxPercent = percentPerLevel * maxLevel;
           <li>{{ $t('docs.training.queue.parallel') }}</li>
           <li>{{ $t('docs.training.queue.speed', { percent: percentPerLevel, max: maxPercent, level: maxLevel }) }}</li>
           <li>{{ $t('docs.training.queue.pay') }}</li>
+          <li>{{ $t('docs.training.queue.cancelOrder') }}</li>
           <i18n-t keypath="docs.training.queue.cancel" tag="li" scope="global">
             <template #realm>
               <DocsPageLink to="/docs/realm">{{ $t('docs.training.queue.realmLink') }}</DocsPageLink>
@@ -125,32 +105,5 @@ const maxPercent = percentPerLevel * maxLevel;
 }
 .rules li {
   margin-bottom: 6px;
-}
-.table-scroll {
-  overflow-x: auto;
-  margin: 0 -4px 12px;
-  padding: 0 4px;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-th,
-td {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--panel-border);
-  text-align: left;
-  vertical-align: top;
-}
-thead th {
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.name {
-  font-weight: 600;
 }
 </style>
