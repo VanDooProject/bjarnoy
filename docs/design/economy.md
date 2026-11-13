@@ -18,7 +18,7 @@ formula changes, re-run the lab and check all of them.
 | T3 | 2nd settlement: optimising player ≈ **1 week**, average player ≈ **2 weeks** | simulated (§6, with feasts): active d7.1, 4 check-ins d15.0, 2 check-ins d30.0; without feasts the active player d11.6; with the §9 build-time curves d16.3, d24.5, d34.5 (§6) |
 | T4 | A settlement is "full" (LH 30, producers maxed) after about **4–7 months** (LH 30 needs Great Storehouses, the Longhouse costs ×1.60 per level from level 11) | simulated: active ≈ d138 (about 4.5 months), 4 check-ins ≈ d207 (about 7 months) |
 | T5 | Later levels still pay off, but ever more slowly | producer payback grows ~8% per level (cost ×1.30 vs the level's added output ×1.20) |
-| T6 | Troops come before settling | Cart Workshop (settlers) at LH 10, after Barracks (LH 5) and Dockyard (LH 8) |
+| T6 | Troops come before settling | Cart Workshop (settlers) at LH 10, after Barracks (LH 5) and Harbour (LH 5) |
 | T7 | Territory grows through towers, not the Longhouse | Longhouse claim radius stops growing at LH 3 (§5) |
 
 ### World speed
@@ -106,7 +106,8 @@ whole number, 100–999 to the nearest 10, 1 000–9 999 to the nearest 50,
 | Tower | 140 / 200 / 30 | | 10 min → 12 h (L5) |
 | Barracks | 100 / 78 / 43 | | 15 min → 22 h (L20) |
 | Town Square | 120 / 130 / 44 | | 20 min → 22 h (L20) |
-| Dockyard | 410 / 99 / 33 | | 30 min → 24 h (L20) |
+| Harbour (was Dockyard) | 410 / 99 / 33 | | 30 min → 24 h (L20) |
+| Shipyard | 410 / 99 / 33 | | 30 min → 24 h (L20) |
 | Archery Range | 470 / 200 / 58 | | 45 min → 22 h (L20) |
 | Cart Workshop | 680 / 230 / 75 | | 1 h → 22 h (L20) |
 | Meadery | 860 / 470 / 230, g_c 1.30 | | 1 h → 24 h (L20) |
@@ -161,7 +162,7 @@ has 3–8 stages per building, and each level maps onto a stage
 |---|---|
 | Longhouse | 30 (also drives build slots and claim radius) |
 | Resource producers (incl. the bog-ore works), Storage House | 25 |
-| Military and civic buildings (Barracks, Archery Range, Siege Workshop, Dockyard, Town Square, Cart Workshop, Druid Hut, Weaponsmith, Meadery) | 20 |
+| Military and civic buildings (Barracks, Archery Range, Siege Workshop, Harbour, Shipyard, Town Square, Cart Workshop, Druid Hut, Weaponsmith, Meadery) | 20 |
 | Mills (Sawmill, Crop Mill, Hammer Forge) | 20 |
 | Tower | 5 |
 | Great Storehouse | 10 |
@@ -196,18 +197,19 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 | 3 | Tower, Bog-ore works (iron, §8) | — |
 | 4 | Farm / Pumpkin Farm (one card, by island soil) | Reindeer Herder 3 |
 | 5 | Barracks | Tower 3 |
+| 5 | Harbour (scouts, cargo, transport ships; was the Dockyard) | Fishing Hut 3 |
 | 6 | Town Square (feasts, §6) | — |
 | 7 | Palisade / Palisade Gate (one card, the wall) | Tower 5 |
 | 7 | Bridge (over a wide river) | Town Square 1 |
-| 8 | Dockyard | Fishing Hut 5 |
 | 9 | Archery Range | Barracks 5 |
 | 10 | Cart Workshop (settlers) | Town Square 3 |
+| 10 | Shipyard (warships, fire craft) | Harbour 5 |
 | 11 | Meadery | Farm 5 |
 | 12 | Druid Hut | Town Square 5 |
 | 15 | Weaponsmith, Great Storehouse | Barracks 10 / Storage House 25 (the n-th Great Storehouse: n Storage Houses at 25) |
 | 18 | Siege Workshop (trains the catapult and the battering ram) | Archery Range 3 |
 | 20 | Sawmill, Crop Mill, Hammer Forge | Lumberjack 10 / Farm 10 / Bog-ore works 10 |
-| 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue | Sawmill 5 / Crop Mill 5 / Dockyard 10 / Weaponsmith 5 / **Druid Hut 10** (Odin) |
+| 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue | Sawmill 5 / Crop Mill 5 / Harbour 10 / Weaponsmith 5 / **Druid Hut 10** (Odin) |
 
 The shrines all open at LH 25, but each also needs its own feeder, so in
 practice they still arrive one at a time.
@@ -306,7 +308,7 @@ play.
   days or more than 30. Longhouses never decay: they make the realm.
   When a building leaves the realm, its queued upgrade, the training orders in its queue
   and a foundation still under construction there are cancelled and
-  refunded; a rune slotted in it stays on the hex; a dockyard outside the
+  refunded; a rune slotted in it stays on the hex; a harbour or shipyard outside the
   realm is no fleet home or dock. In faster worlds decay runs on world speed:
   the time to gone is max level × 24 h ÷ world speed, clamped between a
   minimum and a maximum that shrink with world speed on a log scale, from
@@ -445,6 +447,8 @@ named target, or when it is gone, the pick is random (seeded) among the building
 engines can damage; if there are none, no siege happens. Rams and catapults are trained at the Siege Workshop
 (section 8, the iron ladder).
 
+**Volley.** Before every land fight the ranged units of both sides strike once ([units-and-ships.md](units-and-ships.md) §4).
+
 **Fleets.** Ships do no damage to buildings on land; fleet attacks are in [`skirmish/conquest.md`](skirmish/conquest.md).
 
 **Troops on ships.** Ships carry land units in slots (`ShipCargo`); every mission a fleet can take can carry them, and a
@@ -456,27 +460,18 @@ passengers beyond what the surviving ships can carry drown, the units that take 
 | Ship | Slots |
 |---|---|
 | Karve | 10 |
-| Longship | 20 |
-| Fire Ship | 0 |
+| Snekkja (was the Longship) | 20 |
+| Skeid | 30 |
+| Færing, Byrding, Knarr, Fire Raft, Fire Hulk | 0 |
 
-The **Fire Ship** is a ship hull that carries nothing and does not attack. Starting values, to be tuned:
-
-| Fire Ship | |
-|---|---|
-| Cost (wood / stone / food / iron) | 300 / 60 / 40 / 80 |
-| Training time | 40 min |
-| Needs | Longhouse 12, the Karve, a Dockyard |
-| Attack / defence | 0 / 25 |
-| Speed | 8 |
-| Troop slots / loot capacity | 0 / 0 |
-| Food capacity | 200 |
-| Upkeep per hour | 5 |
+Every ship's stats, the fire craft (Fire Raft and Fire Hulk, which replaces the Fire Ship) and where each ship is built:
+[units-and-ships.md](units-and-ships.md).
 
 | Unit | Slots |
 |---|---|
-| Thrall, Spearman, Settler, Camp Builder | 1 |
+| Thrall, Spearman, Skirmisher, Settler, Camp Builder | 1 |
 | Bowman, Axeman, Provisioner | 2 |
-| Berserker | 4 |
+| Berserker | 3 |
 | Catapult, Ram | 10 |
 
 **Not built yet.** Fire takes a level off a wall hex at a time until it is gone; nothing
@@ -538,8 +533,10 @@ shuts the river again.
 
 ### Training troops
 
-- Units are trained in a building: the Barracks, Archery Range, Siege Workshop, Dockyard or
-  Cart Workshop that trains them (table in section 8). The Longhouse trains nothing.
+- Units are trained in a building: the Barracks, Archery Range, Siege Workshop, Harbour, Shipyard or
+  Cart Workshop that trains them ([units-and-ships.md](units-and-ships.md)). The Longhouse trains nothing.
+- A unit also needs a minimum level of the building that trains it (table in [units-and-ships.md](units-and-ships.md)),
+  checked against the building the order goes to; a distributed order only goes to buildings that have that level.
 - Every training building has its own queue of at most 5 orders. It trains them one after
   another: a new order waits behind the orders already in its queue. Different buildings train
   at the same time.
@@ -556,6 +553,8 @@ shuts the river again.
 - The whole order is paid when it is placed.
 - When a building leaves the realm or is gone (destroyed, decayed to level 0), the orders in its
   queue are cancelled and refunded in full. Orders in other buildings keep training.
+- An order can be cancelled at any time. The units not yet trained are refunded at 50 % of their cost; units already
+  trained stay.
 
 ## 6. Settling and renown
 
@@ -568,7 +567,7 @@ A new settlement needs:
    ×2 per settlement.
 
 Ships and land escorts may travel with the settlers, overland and by sea. With a ship in it the convoy is a fleet: it
-sails from the Dockyard and lands on a land hex next to the sea. Every unit but the settlers stays as the new settlement's
+sails from the Harbour or Shipyard and lands on a land hex next to the sea. Every unit but the settlers stays as the new settlement's
 garrison.
 
 **Feasts (Town Square)** are what lets a strong player settle early:
@@ -773,7 +772,7 @@ sources have to line up with the unit unlocks:
 |---|---|---|
 | LH 1–2 | none | Thrall (no iron) |
 | from LH 3 | bog-ore works: bog ground has to be in reach of every start (`bog.md`) | the Barracks' first Spearmen (LH 5), then the main army: Axeman, Bowman, Karve, Settler, Provisioner |
-| LH 20 | Hammer Forge (bog creek) boosts bog ore | elite units: Berserker, Catapult, Longship |
+| LH 20 | Hammer Forge (bog creek) boosts bog ore | elite units: Berserker, Catapult, Ram, Skeid |
 
 So bog ground and the bog-ore works are needed by about LH 3, not as a
 late add-on. The unit costs and unlock levels are reworked together with
@@ -799,6 +798,10 @@ them so the levels match. *Implemented:*
   (Berserker still needs the Axeman, Catapult the Berserker, Longship the
   Karve.) The elite units are gated by the Longhouse level only, not by a
   standing Hammer Forge: not every settlement has a creek.
+
+  *Superseded (2026-11):* units are now also gated by the level of their training building, the same-building unit
+  prerequisites are gone, the Dockyard is split into Harbour and Shipyard, and the Longship (now Snekkja) needs
+  Longhouse 10. The current table is in [units-and-ships.md](units-and-ships.md); costs there replace the ones above.
 
 ### Bog-ore works numbers (Economy lab)
 
@@ -921,7 +924,7 @@ level 6), long late so a casual player can keep up.
 | | Clay Brickworks, Quarry, Farm, Pumpkin Farm, Fishing Hut | 1 min | 8 min | 64 min | 22 h (L25) |
 | | Bog-ore works | 1 min | 8 min | 64 min | 24 h (L25) |
 | | Storage House | 1 min | 8 min | 64 min | 20 h (L25) |
-| Tech, straight line | Tower, Barracks, Town Square, Palisade and Gate, Bridge, Dockyard | 10–30 min | | | 1–24 h |
+| Tech, straight line | Tower, Barracks, Town Square, Palisade and Gate, Bridge, Harbour, Shipyard | 10–30 min | | | 1–24 h |
 | | Archery Range, Cart Workshop, Meadery, Druid Hut, Weaponsmith, Siege Workshop | 45 min–3 h | | | 22–24 h |
 | | Great Storehouse | 2 h | | | 30 h (L10) |
 | | Sawmill, Crop Mill, Hammer Forge | 4 h | | | 24 h |

@@ -9,6 +9,9 @@ flag-marker-vs-ship-marker rendering question.
 
 ## 1. A dock is the existing Dockyard, not a new entity
 
+> Update (2026-11): the Dockyard is split into the **Harbour** and the **Shipyard** ([units-and-ships.md](units-and-ships.md)).
+> Both are docks in the sense of this section: every ship can lie at either one. "Dockyard" below means either building.
+
 There is no new `Dock` building or table. `BuildingType.Dockyard` (coastal-water,
 already required to train `Karve`/`Longship`) *is* the dock. Any settlement with a
 Dockyard is a valid port for that owner's fleets. This removes an entire layer of
