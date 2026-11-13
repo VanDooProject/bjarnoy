@@ -29,6 +29,8 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
     requiredLonghouseLevel: 1,
     requiredUnitType: null,
     requiredBuildingType: 'longhouse',
+    requiredBuildingLevel: 1,
+    fireCraftPerLevel: 0,
     siegeTargets: [],
     ...overrides,
   };
@@ -96,6 +98,12 @@ describe('isUnitAvailable', () => {
   it('is true once the required building stands, even at longhouse-only level', () => {
     const thrall = unit({ type: 'thrall', requiredBuildingType: 'barracks' });
     expect(isUnitAvailable('thrall', 1, { thrall }, (type) => (type === 'barracks' ? 1 : 0))).toBe(true);
+  });
+
+  it('needs the unit\'s own level of the training building, not just any level', () => {
+    const knarr = unit({ type: 'knarr', requiredBuildingType: 'harbour', requiredBuildingLevel: 3 });
+    expect(isUnitAvailable('knarr', 1, { knarr }, () => 2)).toBe(false);
+    expect(isUnitAvailable('knarr', 1, { knarr }, (type) => (type === 'harbour' ? 3 : 0))).toBe(true);
   });
 
   it('checks the required building recursively down a prerequisite chain too', () => {

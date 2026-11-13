@@ -17,14 +17,14 @@ describe('buildSimulatorRequest', () => {
   });
 
   it('sends a fleet and its passengers as one attacking force, with the ship bonus alongside the land one', () => {
-    const request = buildSimulatorRequest({ longship: 5, fireship: 10, axeman: 80 }, { longship: 1 }, {}, 0, 'attack', null, 10, 50);
+    const request = buildSimulatorRequest({ snekkja: 5, firehulk: 10, axeman: 80 }, { snekkja: 1 }, {}, 0, 'attack', null, 10, 50);
     expect(request).toEqual({
       attackerStacks: [
-        { unit: 'longship', count: 5 },
-        { unit: 'fireship', count: 10 },
+        { unit: 'snekkja', count: 5 },
+        { unit: 'firehulk', count: 10 },
         { unit: 'axeman', count: 80 },
       ],
-      defenderStacks: [{ unit: 'longship', count: 1 }],
+      defenderStacks: [{ unit: 'snekkja', count: 1 }],
       landAttackBonusPercent: 10,
       shipAttackBonusPercent: 50,
       mission: 'attack',

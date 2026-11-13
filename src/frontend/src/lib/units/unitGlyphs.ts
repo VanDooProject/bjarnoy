@@ -23,7 +23,13 @@ export const UNIT_GLYPHS: Record<string, UnitGlyph> = {
   catapult: { stroke: '<path d="M1.5 10.5h9M3 10.5 7.5 3M7.5 3 10 4"/><circle cx="3.3" cy="4.2" r="1.2"/>' },
   ram: { stroke: '<path d="M1 8h9M2 8v2.5M9 8v2.5M2 5.5h7"/><path d="M10 6.2v3.6"/>' },
   karve: SHIP,
-  longship: { stroke: '<path d="M.8 7h10.4l-2 3h-6.4zM6 7V1.5M6 2l3.5 3H6"/>' },
+  snekkja: { stroke: '<path d="M.8 7h10.4l-2 3h-6.4zM6 7V1.5M6 2l3.5 3H6"/>' },
+  faering: { stroke: '<path d="M2 8h8l-1 1.8H3zM6 8V3.5l2.2 3H6"/>' },
+  byrding: { stroke: '<path d="M1.5 6.5h9c0 2.2-1.6 3.5-4.5 3.5s-4.5-1.3-4.5-3.5zM6 6.5V2.5"/>' },
+  knarr: { stroke: '<path d="M1 6.5h10c0 2.4-1.8 3.8-5 3.8s-5-1.4-5-3.8zM6 6.5V1.5M3.5 2.5h5v3h-5z"/>' },
+  skeid: { stroke: '<path d="M.5 7.5h11l-2 2.5h-7zM6 7.5V2M6 2.5l3.8 3H6M.5 7.5 1.2 5"/>' },
+  fireraft: { stroke: '<path d="M2 9.5h8M3 9.5v-1.5h6v1.5"/>', fill: '<path d="M6 2c1.8 1.6 2 3 .9 4.5H5.1C4 5 4.4 3.6 6 2z"/>' },
+  firehulk: { stroke: '<path d="M1 8h10l-1.5 2.5h-7z"/>', fill: '<path d="M6 1.5c1.8 1.6 2 3.1.9 4.8H5.1C4 4.6 4.4 3.1 6 1.5z"/>' },
   settler: PERSON,
 };
 

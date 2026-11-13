@@ -3,10 +3,10 @@ import { allocateFromSpots, isGarrisonSpotTile, spotKindsForUnit, spotsNearestFi
 
 describe('isGarrisonSpotTile', () => {
   const centre = { q: 3, r: 3 };
-  it('is the centre hex, a tower and a dockyard, nothing else', () => {
+  it('is the centre hex, a tower and a harbour, nothing else', () => {
     expect(isGarrisonSpotTile({ q: 3, r: 3 }, centre)).toBe(true);
     expect(isGarrisonSpotTile({ q: 4, r: 3, buildingType: 'tower' }, centre)).toBe(true);
-    expect(isGarrisonSpotTile({ q: 5, r: 3, buildingType: 'dockyard' }, centre)).toBe(true);
+    expect(isGarrisonSpotTile({ q: 5, r: 3, buildingType: 'harbour' }, centre)).toBe(true);
     expect(isGarrisonSpotTile({ q: 5, r: 4, buildingType: 'hut' }, centre)).toBe(false);
     expect(isGarrisonSpotTile({ q: 6, r: 4 }, centre)).toBe(false);
   });

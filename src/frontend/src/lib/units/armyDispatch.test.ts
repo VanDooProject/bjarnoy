@@ -56,6 +56,8 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
     requiredLonghouseLevel: 1,
     requiredUnitType: null,
     requiredBuildingType: 'longhouse',
+    requiredBuildingLevel: 1,
+    fireCraftPerLevel: 0,
     siegeTargets: [],
     ...overrides,
   };
@@ -516,7 +518,7 @@ describe('classifyUnitSelection', () => {
     spearman: unit({ type: 'spearman', class: 'infantry' }),
     catapult: unit({ type: 'catapult', class: 'siege' }),
     karve: unit({ type: 'karve', class: 'ship' }),
-    longship: unit({ type: 'longship', class: 'ship' }),
+    snekkja: unit({ type: 'snekkja', class: 'ship' }),
   };
 
   it('reports "none" when nothing is selected', () => {
@@ -529,7 +531,7 @@ describe('classifyUnitSelection', () => {
   });
 
   it('reports "fleet" for a ship-only selection', () => {
-    expect(classifyUnitSelection({ karve: 2, longship: 1 }, byType)).toBe('fleet');
+    expect(classifyUnitSelection({ karve: 2, snekkja: 1 }, byType)).toBe('fleet');
   });
 
   it('reports "fleet" once any ship is selected: the land units become its passengers', () => {
@@ -547,7 +549,7 @@ describe('ship slots', () => {
     bowman: unit({ type: 'bowman', class: 'infantry', cargoSlots: 2 }),
     ram: unit({ type: 'ram', class: 'siege', cargoSlots: 10 }),
     karve: unit({ type: 'karve', class: 'ship', shipSlots: 10, speed: 8 }),
-    longship: unit({ type: 'longship', class: 'ship', shipSlots: 20, speed: 10 }),
+    snekkja: unit({ type: 'snekkja', class: 'ship', shipSlots: 20, speed: 10 }),
   };
 
   it('has no slot usage for a land army', () => {
@@ -556,7 +558,7 @@ describe('ship slots', () => {
   });
 
   it('counts the slots the passengers need against the slots the ships offer', () => {
-    expect(shipSlotUsage({ karve: 1, longship: 1, spearman: 4, bowman: 3 }, byType)).toEqual({ needed: 10, offered: 30 });
+    expect(shipSlotUsage({ karve: 1, snekkja: 1, spearman: 4, bowman: 3 }, byType)).toEqual({ needed: 10, offered: 30 });
     expect(shipSlotUsage({ karve: 1 }, byType)).toEqual({ needed: 0, offered: 10 });
   });
 
@@ -565,12 +567,12 @@ describe('ship slots', () => {
     expect(exceedsShipCapacity({ karve: 1, spearman: 11 }, byType)).toBe(true);
     expect(exceedsShipCapacity({ karve: 1, ram: 1 }, byType)).toBe(false);
     expect(exceedsShipCapacity({ karve: 1, ram: 2 }, byType)).toBe(true);
-    expect(exceedsShipCapacity({ longship: 1, ram: 2 }, byType)).toBe(false);
+    expect(exceedsShipCapacity({ snekkja: 1, ram: 2 }, byType)).toBe(false);
   });
 
   it('moves a fleet at its slowest ship; passengers do not slow it', () => {
     const slow = { ...byType, ram: unit({ type: 'ram', class: 'siege', cargoSlots: 10, speed: 1 }) };
-    expect(totalSpeed({ karve: 1, longship: 1, ram: 1 }, slow)).toBe(8);
+    expect(totalSpeed({ karve: 1, snekkja: 1, ram: 1 }, slow)).toBe(8);
     expect(totalSpeed({ spearman: 2, ram: 1 }, { ...slow, spearman: unit({ type: 'spearman', speed: 4 }) })).toBe(1);
     expect(totalSpeed({}, slow)).toBe(0);
   });
@@ -744,44 +746,44 @@ describe('buildHuntDispatchRequest', () => {
   });
 
   it('only land units may hunt', () => {
-    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), longship: unit({ type: 'longship', class: 'ship' }) };
+    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), snekkja: unit({ type: 'snekkja', class: 'ship' }) };
     expect(isHuntUnit('spearman', byType)).toBe(true);
-    expect(isHuntUnit('longship', byType)).toBe(false);
+    expect(isHuntUnit('snekkja', byType)).toBe(false);
     expect(isHuntUnit('unknown', byType)).toBe(false);
   });
 
   it('a camp at sea (the whale road) is hunted by a fleet: ships, with land units as passengers', () => {
-    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), longship: unit({ type: 'longship', class: 'ship' }) };
-    expect(isHuntUnit('longship', byType, true)).toBe(true);
+    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), snekkja: unit({ type: 'snekkja', class: 'ship' }) };
+    expect(isHuntUnit('snekkja', byType, true)).toBe(true);
     expect(isHuntUnit('spearman', byType, true)).toBe(true);
     expect(isHuntUnit('unknown', byType, true)).toBe(false);
   });
 
   it('a sand camp is hunted by land units that a fleet may carry: ships and land units both selectable', () => {
-    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), longship: unit({ type: 'longship', class: 'ship' }) };
-    expect(isHuntUnit('longship', byType, false, true)).toBe(true);
+    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), snekkja: unit({ type: 'snekkja', class: 'ship' }) };
+    expect(isHuntUnit('snekkja', byType, false, true)).toBe(true);
     expect(isHuntUnit('spearman', byType, false, true)).toBe(true);
     expect(isHuntUnit('unknown', byType, false, true)).toBe(false);
     // The ships take no part in the fight: a sand hunt needs a land unit to lead it, so ships alone cannot.
-    const shipsOnly = [{ unit: 'longship', count: 2 }];
-    const withLand = [{ unit: 'longship', count: 2 }, { unit: 'spearman', count: 1 }];
+    const shipsOnly = [{ unit: 'snekkja', count: 2 }];
+    const withLand = [{ unit: 'snekkja', count: 2 }, { unit: 'spearman', count: 1 }];
     expect(garrisonCanHunt(shipsOnly, byType, false)).toBe(false);
     expect(garrisonCanHunt(withLand, byType, false)).toBe(true);
   });
 
   it('a fleet without land troops aboard lacks what a sand hunt needs', () => {
-    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), longship: unit({ type: 'longship', class: 'ship' }) };
-    expect(fleetLacksLandTroops({ longship: 2 }, byType)).toBe(true);
-    expect(fleetLacksLandTroops({ longship: 2, spearman: 0 }, byType)).toBe(true);
-    expect(fleetLacksLandTroops({ longship: 2, spearman: 1 }, byType)).toBe(false);
+    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), snekkja: unit({ type: 'snekkja', class: 'ship' }) };
+    expect(fleetLacksLandTroops({ snekkja: 2 }, byType)).toBe(true);
+    expect(fleetLacksLandTroops({ snekkja: 2, spearman: 0 }, byType)).toBe(true);
+    expect(fleetLacksLandTroops({ snekkja: 2, spearman: 1 }, byType)).toBe(false);
     expect(fleetLacksLandTroops({ spearman: 4 }, byType)).toBe(false);
     expect(fleetLacksLandTroops({}, byType)).toBe(false);
   });
 
   it('the hunt ring action needs land units at home for a land camp and a ship for a camp at sea', () => {
-    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), longship: unit({ type: 'longship', class: 'ship' }) };
-    const landOnly = [{ unit: 'spearman', count: 4 }, { unit: 'longship', count: 0 }];
-    const shipsOnly = [{ unit: 'spearman', count: 0 }, { unit: 'longship', count: 2 }];
+    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), snekkja: unit({ type: 'snekkja', class: 'ship' }) };
+    const landOnly = [{ unit: 'spearman', count: 4 }, { unit: 'snekkja', count: 0 }];
+    const shipsOnly = [{ unit: 'spearman', count: 0 }, { unit: 'snekkja', count: 2 }];
     expect(garrisonCanHunt(landOnly, byType, false)).toBe(true);
     expect(garrisonCanHunt(landOnly, byType, true)).toBe(false);
     expect(garrisonCanHunt(shipsOnly, byType, false)).toBe(false);
@@ -821,7 +823,7 @@ describe('shoreBuildings', () => {
   it('keeps only buildings on a shoreline hex or a sea hex', () => {
     const farm = { q: 3, r: 0, type: 'farm' };
     const hut = { q: 0, r: 0, type: 'fishing_hut' };
-    const dock = { q: -1, r: 0, type: 'dockyard' };
+    const dock = { q: -1, r: 0, type: 'harbour' };
     expect(shoreBuildings([farm, hut, dock], coast)).toEqual([hut, dock]);
   });
 });

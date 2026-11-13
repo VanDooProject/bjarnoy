@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The ships page: the two-ship table is read off the unit catalogue, the dockyard sentence off the building catalogue, and the fleet-route note stays admin-only.
+// The ships page: the ship table is read off the unit catalogue, the harbour and shipyard sentences off the building catalogue, and the fleet-route note stays admin-only.
 import { beforeEach, describe, expect, it } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
@@ -42,22 +42,35 @@ beforeEach(() => {
 });
 
 describe('ShipsView', () => {
-  it('compares the Karve, the Longship and the Fire Ship from the unit catalogue', async () => {
+  it('compares the eight ships by group from the unit catalogue', async () => {
     const wrapper = await mountPage();
 
-    expect(wrapper.findAll('[data-testid=ships-table] thead th[data-ship]').map((th) => th.text())).toEqual(['Karve', 'Longship', 'Fire Ship']);
+    expect(wrapper.findAll('[data-testid=ships-table] thead th[data-ship]').map((th) => th.text())).toEqual([
+      'Færing', 'Byrding', 'Knarr', 'Karve', 'Snekkja', 'Skeid', 'Fire Raft', 'Fire Hulk',
+    ]);
+    const groups = wrapper.findAll('[data-testid=ships-table] thead th[data-group]');
+    expect(groups.map((th) => [th.attributes('data-group'), th.attributes('colspan')])).toEqual([
+      ['scouts', '1'], ['cargo', '2'], ['transport', '1'], ['warships', '2'], ['fireCraft', '2'],
+    ]);
+    expect(groups.map((th) => th.text())).toEqual(['Scouts', 'Cargo', 'Transport', 'Warships', 'Fire craft']);
     const row = (id: string) => wrapper.get(`[data-row=${id}]`).findAll('td').map((td) => td.text());
-    expect(row('attack')).toEqual(['5', '60', '0']);
-    expect(row('defense')).toEqual(['30', '40', '25']);
-    expect(row('speed')).toEqual(['8', '10', '8']);
-    expect(row('perHex')).toEqual(['7.5 min', '6 min', '7.5 min']);
-    expect(row('loot')).toEqual(['200', '80', '0']);
-    expect(row('slots')).toEqual(['10', '20', '0']);
-    expect(row('food')).toEqual(['600', '320', '200']);
-    expect(row('upkeep')).toEqual(['1.5', '2', '5']);
-    expect(row('cost')).toEqual(['250 / 100 / 40 / 100', '400 / 200 / 60 / 220', '300 / 60 / 40 / 80']);
-    expect(row('time')).toEqual(['45 min', '90 min', '40 min']);
-    expect(row('needs')).toEqual(['Longhouse 8', 'Longhouse 20 · Karve', 'Longhouse 12 · Karve']);
+    expect(row('attack')).toEqual(['0', '0', '0', '5', '60', '90', '0', '0']);
+    expect(row('defense')).toEqual(['3', '10', '20', '30', '40', '60', '3', '25']);
+    expect(row('speed')).toEqual(['8', '6', '4', '8', '10', '11', '5', '8']);
+    expect(row('loot')).toEqual(['0', '160', '600', '200', '80', '120', '0', '0']);
+    expect(row('slots')).toEqual(['0', '0', '0', '10', '20', '30', '0', '0']);
+    expect(row('food')).toEqual(['40', '150', '1,200', '600', '320', '480', '30', '200']);
+    expect(row('upkeep')).toEqual(['0.25', '0.5', '1', '1.5', '2', '3', '1', '5']);
+    expect(row('cost')).toEqual([
+      '40 / 10 / 10 / 0', '120 / 50 / 20 / 20', '300 / 120 / 40 / 135', '250 / 100 / 40 / 100',
+      '400 / 200 / 60 / 220', '550 / 250 / 80 / 300', '50 / 10 / 10 / 10', '300 / 60 / 40 / 80',
+    ]);
+    expect(row('time')).toEqual(['6 min', '20 min', '50 min', '45 min', '90 min', '120 min', '10 min', '40 min']);
+    expect(row('fire')).toEqual(['–', '–', '–', '–', '–', '–', '50', '10']);
+    expect(row('needs')).toEqual([
+      'Harbour 1', 'Harbour 1', 'Harbour 3', 'Harbour 5',
+      'Shipyard 1', 'Shipyard 10 · Longhouse 20', 'Shipyard 1', 'Shipyard 5 · Longhouse 12',
+    ]);
     wrapper.unmount();
   });
 
@@ -68,7 +81,7 @@ describe('ShipsView', () => {
       wrapper.findAll('[data-testid=slots-table] tbody tr').map((tr) => [tr.attributes('data-unit'), tr.get('td').text()]),
     );
     expect(slots).toEqual({
-      thrall: '1', spearman: '1', settler: '1', bowman: '2', axeman: '2', provisioner: '2', berserker: '4', catapult: '10', ram: '10',
+      thrall: '1', spearman: '1', settler: '1', bowman: '2', axeman: '2', provisioner: '2', berserker: '4', catapult: '10', ram: '10', campbuilder: '1',
     });
     const text = wrapper.get('#troops').text();
     expect(text).toContain('slowest ship');
@@ -78,13 +91,16 @@ describe('ShipsView', () => {
     wrapper.unmount();
   });
 
-  it('names what the Dockyard needs from the building catalogue', async () => {
+  it('names what the Harbour and the Shipyard need from the building catalogue', async () => {
     const wrapper = await mountPage();
 
-    const text = wrapper.get('#dockyard').text();
-    expect(text).toContain('Dockyard');
-    expect(text).toContain('Longhouse of level 8');
-    expect(text).toContain('Fishing Hut of level 5');
+    const text = wrapper.get('#harbour').text();
+    expect(text).toContain('Harbour trains scouts, cargo ships and the troop transport');
+    expect(text).toContain('Longhouse of level 5');
+    expect(text).toContain('Fishing Hut of level 3');
+    expect(text).toContain('Shipyard trains warships and fire craft');
+    expect(text).toContain('Longhouse of level 10');
+    expect(text).toContain('Harbour of level 5');
     wrapper.unmount();
   });
 
@@ -104,7 +120,7 @@ describe('ShipsView', () => {
 
     const text = wrapper.get('#battles').text();
     expect(text).toContain('Ships do no damage to buildings on land');
-    expect(text).toContain('10 Fire Ships take one level off');
+    expect(text).toContain('10 Fire Hulks or 50 Fire Rafts take one level off');
     expect(text).toContain('Loot needs a won land fight');
     wrapper.unmount();
   });

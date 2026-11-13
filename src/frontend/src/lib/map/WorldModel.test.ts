@@ -759,7 +759,7 @@ describe('WorldModel.applyServerSnapshot — merged fisher hut', () => {
 });
 
 describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
-  it('places a fishing hut directly on a coastal-water hex, like the fishing hut/dockyard', () => {
+  it('places a fishing hut directly on a coastal-water hex, like the fishing hut/harbour', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
     // A settlement's *founding* spot is guaranteed no sea within two hexes
@@ -2190,7 +2190,7 @@ describe('WorldModel inland lakes', () => {
     expect(lake.every((c) => !model.isSea(c.q, c.r))).toBe(true);
   });
 
-  it('places a Fishing Hut on an inland-lake shore, and refuses a Dockyard and any other building there', () => {
+  it('places a Fishing Hut on an inland-lake shore, and refuses a Harbour and any other building there', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
     settlement.level = 6;
@@ -2201,7 +2201,7 @@ describe('WorldModel inland lakes', () => {
     model.setInlandLakeTiles([shore]);
 
     expect(model.getTile(shore.q, shore.r)).toMatchObject({ terrain: 'inlandlake', isCoastalWater: true });
-    expect(model.placeBuilding(settlement.id, shore, 'dockyard')).toBe(false);
+    expect(model.placeBuilding(settlement.id, shore, 'harbour')).toBe(false);
     expect(model.placeBuilding(settlement.id, shore, 'shrineofnjord')).toBe(false);
     expect(model.placeBuilding(settlement.id, shore, 'farm')).toBe(false);
     expect(model.placeBuilding(settlement.id, shore, 'fishinghut')).toBe(true);

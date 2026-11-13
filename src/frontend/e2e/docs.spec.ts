@@ -924,8 +924,8 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(page.locator('[data-building="barracks"]')).toContainText(
       "Spearman",
     );
-    await expect(page.locator('[data-building="dockyard"]')).toContainText(
-      "Longship",
+    await expect(page.locator('[data-building="harbour"]')).toContainText(
+      "Snekkja",
     );
     // The Longhouse trains nothing, so it is not a row.
     await expect(page.locator('[data-building="longhouse"]')).toHaveCount(0);
@@ -936,7 +936,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     ).toHaveCount(1);
   });
 
-  test("ships page compares the Karve and the Longship and hides the admin note", async ({
+  test("ships page compares the Karve and the Snekkja and hides the admin note", async ({
     page,
   }) => {
     await page.goto("/docs/ships");
@@ -1009,12 +1009,12 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       page.getByTestId("wall-movement-legend").locator("li"),
     ).toHaveCount(11);
 
-    // Sieges are player content now: rams take one level per won siege, three levels per wall hex, and a Fire Ship sent at
+    // Sieges are player content now: rams take one level per won siege, three levels per wall hex, and a Fire Hulk sent at
     // the sea end of a wall takes a level too.
     const sieges = page.locator("#sieges");
     await expect(sieges.getByRole("heading", { name: "Sieges" })).toBeVisible();
     await expect(sieges.locator("li")).toHaveCount(6);
-    await expect(sieges).toContainText("A Fire Ship sent at a wall's sea end");
+    await expect(sieges).toContainText("A Fire Hulk sent at a wall's sea end");
     await expect(sieges).toContainText("exactly one level");
     await expect(sieges).toContainText("3 levels");
     // The note on what is still not built (fire) stays admin-only.

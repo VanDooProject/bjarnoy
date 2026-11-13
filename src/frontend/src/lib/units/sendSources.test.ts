@@ -20,6 +20,8 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
     requiredLonghouseLevel: 1,
     requiredUnitType: null,
     requiredBuildingType: 'longhouse',
+    requiredBuildingLevel: 1,
+    fireCraftPerLevel: 0,
     siegeTargets: [],
     ...overrides,
   };
@@ -27,7 +29,7 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
 
 const byType = {
   spearman: unit({ type: 'spearman' }),
-  longship: unit({ type: 'longship', class: 'ship', speed: 4 }),
+  snekkja: unit({ type: 'snekkja', class: 'ship', speed: 4 }),
 };
 const NOW = Date.parse('2026-11-09T12:00:00Z');
 const env: FeasibilityEnv = {
@@ -175,7 +177,7 @@ describe('evaluateSendSources', () => {
   });
 
   it('a hunt on land needs land units, a hunt at sea ships', () => {
-    const ships = army({ id: 'ships', stacks: [{ unit: 'longship', count: 2 }] });
+    const ships = army({ id: 'ships', stacks: [{ unit: 'snekkja', count: 2 }] });
     const landers = army({ id: 'land' });
     const landHunt: SendTarget = { mission: 'hunt', coord: { q: 4, r: 0 }, campAtSea: false };
     const seaHunt: SendTarget = { mission: 'hunt', coord: { q: 4, r: 0 }, campAtSea: true };

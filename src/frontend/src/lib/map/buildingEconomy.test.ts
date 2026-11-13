@@ -182,7 +182,7 @@ describe('economy curves (mirror BuildingCatalogue.cs, docs/design/economy.md)',
     // The Longhouse grows x1.34 up to level 10 and x1.60 per level from level 11 on.
     expect(buildingUpgradeCost('longhouse', 10).wood).toBe(niceRound(120 * 1.34 ** 9));
     expect(buildingUpgradeCost('longhouse', 12).wood).toBe(niceRound(120 * 1.34 ** 9 * 1.6 ** 2));
-    for (const type of ['tower', 'barracks', 'archeryrange', 'dockyard', 'cartworkshop'] as const) {
+    for (const type of ['tower', 'barracks', 'archeryrange', 'harbour', 'cartworkshop'] as const) {
       expect(buildingUpgradeCost(type, 3).iron).toBe(0);
     }
   });

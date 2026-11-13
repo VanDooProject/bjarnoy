@@ -49,7 +49,7 @@ import { TILE_ART_NATIVE_H, TILE_ART_NATIVE_W, TILE_ART_TOPFACE_Y_FRAC } from '.
  * Empty once the pack ships these split, at which point this whole module goes
  * — see water-shader.md §10's note to link that work back to this one.
  */
-export const LEGACY_TALL_KEYS: ReadonlySet<string> = new Set(['mountain', 'magictower', 'dockyard']);
+export const LEGACY_TALL_KEYS: ReadonlySet<string> = new Set(['mountain', 'magictower', 'harbour']);
 
 /** Native-pixel y the pack cuts a split family's art at — the top of the top face. */
 const SPLIT_Y = Math.round(TILE_ART_NATIVE_W * TILE_ART_TOPFACE_Y_FRAC);

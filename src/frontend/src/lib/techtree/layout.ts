@@ -47,7 +47,7 @@ export type Slot = readonly [col: number, row: number];
  * Brickworks (LH 1), Fishing Hut (LH 2), Tower (LH 3) and Town Square (LH 6). Each row is one chain: a source sits level with what it feeds, so
  * most links are a single horizontal run — Lumberjack -> Sawmill -> Shrine of
  * Ullr, Reindeer Herder -> Farm -> Crop Mill -> Shrine of Freyja, Storage House -> Great
- * Storehouse, Fishing Hut -> Dockyard -> Shrine of Njörd, Tower -> Barracks ->
+ * Storehouse, Fishing Hut -> Harbour -> Shrine of Njörd, Tower -> Barracks ->
  * Archery Range.
  *
  * Every building has at most one feeder now, so every link joins two adjacent
@@ -92,9 +92,10 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   bogoreworks: [2, 3],
   hammerschmiede: [3, 3],
 
-  // Row 4 — Fishing Hut (LH 2) -> Dockyard (LH 8) -> Shrine of Njörd (LH 25).
+  // Row 4 — Fishing Hut (LH 2) -> Harbour (LH 5) -> Shipyard (LH 10), and Harbour -> Shrine of Njörd (LH 25).
   fishinghut: [1, 4],
-  dockyard: [2, 4],
+  harbour: [2, 4],
+  shipyard: [3, 4],
   shrineofnjord: [4, 4],
 
   // Row 5 — Tower (LH 3) -> Barracks (LH 5) -> Archery Range (LH 9) -> Siege Workshop (LH 18, behind a level-3 Archery Range).

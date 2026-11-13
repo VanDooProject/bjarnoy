@@ -15,7 +15,8 @@
     "shrineofnjord": "Shrine of Njörd",
     "greatstorehouse": "Great Storehouse",
     "archeryrange": "Archery Range",
-    "dockyard": "Dockyard",
+    "harbour": "Harbour",
+    "shipyard": "Shipyard",
     "barracks": "Barracks",
     "sawmill": "Sawmill",
     "meadery": "Meadery",
@@ -35,6 +36,13 @@
     "beachcamp": "Beach camp",
     "reindeerherder": "Reindeer Herder"
   },
+  "shipGroups": {
+    "scouts": "Scouts",
+    "cargo": "Cargo",
+    "transport": "Transport",
+    "warships": "Warships",
+    "fireCraft": "Fire craft"
+  },
   "units": {
     "thrall": "Thrall",
     "spearman": "Spearman",
@@ -45,8 +53,13 @@
     "catapult": "Catapult",
     "ram": "Battering ram",
     "karve": "Karve",
-    "longship": "Longship",
-    "fireship": "Fire Ship",
+    "faering": "Færing",
+    "byrding": "Byrding",
+    "knarr": "Knarr",
+    "snekkja": "Snekkja",
+    "skeid": "Skeid",
+    "fireraft": "Fire Raft",
+    "firehulk": "Fire Hulk",
     "settler": "Settler",
     "campbuilder": "Camp builder"
   },

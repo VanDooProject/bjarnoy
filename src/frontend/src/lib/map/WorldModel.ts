@@ -1892,7 +1892,8 @@ export class WorldModel {
       'quarry',
       'storagehouse',
       'archeryrange',
-      'dockyard',
+      'harbour',
+      'shipyard',
       'greatstorehouse',
       'barracks',
       'sawmill',
@@ -2261,7 +2262,7 @@ export class WorldModel {
     // an Utgard wall (rubble included) or a Jötunn watchtower holds the hex against every building — the same rule the ring's
     // Build lock reads (`hexOccupant`; matches BuildRejection.HexOccupiedByCamp / HexOccupiedByEndgameSite).
     if (hexOccupant(tile)) return false;
-    // Every other building needs dry land; the fishing hut, dockyard and
+    // Every other building needs dry land; the fishing hut, harbour and
     // Shrine of Njörd are the exceptions, and *only* stand on the coastal ring of
     // the sea, not open water and not land either (matches
     // BuildingDefinition.RequiresCoastalWater).

@@ -88,7 +88,7 @@ const VILLAGE_BUILDINGS: BuildingType[] = [
   'archeryrange', 'druidhut', 'cartworkshop', 'reindeerherder', 'odinstatue',
 ];
 /** The coast buildings, placed once a tower has widened the border to the shore. */
-const COAST_BUILDINGS: BuildingType[] = ['dockyard', 'fishinghut'];
+const COAST_BUILDINGS: BuildingType[] = ['harbour', 'fishinghut'];
 /**
  * Towers widen the border (a disc of radius = tower level) and the base claim (radius 3) has room for few buildings, so they go up first;
  * each is raised to `TOWER_PLAN_LEVEL`.
@@ -172,7 +172,7 @@ function distanceToBog(bogs: AxialCoord[], c: AxialCoord): number {
 /**
  * How varied the ground within the preview crop of `at` is: distinct terrains,
  * plus rivers, giants and camps (one point each, as a feature kind), plus
- * open sea nearby (needed for the fishing hut and dockyard).
+ * open sea nearby (needed for the fishing hut and harbour).
  */
 function siteVariety(model: WorldModel, at: AxialCoord): number {
   const terrains = new Set<string>();
@@ -539,7 +539,7 @@ export function buildShowcaseVillage(
     }
   };
   if (bogs.length > 0) raiseTower(place(BOG_SIDE_TOWER, byBog(dry())));
-  // Two hexes inland where it can, so the tower leaves the shore hexes themselves to the dockyard and fishing hut.
+  // Two hexes inland where it can, so the tower leaves the shore hexes themselves to the harbour and fishing hut.
   if (seas.length > 0) {
     const inland = dry().filter((c) => distanceToBog(seas, c) >= 2);
     raiseTower(place(BOG_SIDE_TOWER, byDistanceTo(seas)(inland.length > 0 ? inland : dry())));

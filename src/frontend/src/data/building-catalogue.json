@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-11-12T07:48:42.378Z"
+    "generatedAt": "2026-11-13T12:03:22.000Z"
   },
   "data": [
     {
@@ -9535,7 +9535,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 1,
       "cost": {
         "wood": 410,
@@ -9560,14 +9560,14 @@
       "requiresCoastalWater": true,
       "alsoOnCoastalWater": false,
       "alsoOnInlandLakeShore": false,
-      "requiredLonghouseLevel": 8,
+      "requiredLonghouseLevel": 5,
       "slotCost": 1,
       "occupiesMostSlots": false,
       "claimRadius": 0,
       "prerequisites": [
         {
           "type": "fishinghut",
-          "level": 5
+          "level": 3
         }
       ],
       "ringCategory": "water",
@@ -9580,7 +9580,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 2,
       "cost": {
         "wood": 530,
@@ -9605,7 +9605,7 @@
       "requiresCoastalWater": true,
       "alsoOnCoastalWater": false,
       "alsoOnInlandLakeShore": false,
-      "requiredLonghouseLevel": 8,
+      "requiredLonghouseLevel": 5,
       "slotCost": 1,
       "occupiesMostSlots": false,
       "claimRadius": 0,
@@ -9620,7 +9620,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 3,
       "cost": {
         "wood": 690,
@@ -9645,7 +9645,7 @@
       "requiresCoastalWater": true,
       "alsoOnCoastalWater": false,
       "alsoOnInlandLakeShore": false,
-      "requiredLonghouseLevel": 8,
+      "requiredLonghouseLevel": 5,
       "slotCost": 1,
       "occupiesMostSlots": false,
       "claimRadius": 0,
@@ -9660,7 +9660,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 4,
       "cost": {
         "wood": 900,
@@ -9685,7 +9685,7 @@
       "requiresCoastalWater": true,
       "alsoOnCoastalWater": false,
       "alsoOnInlandLakeShore": false,
-      "requiredLonghouseLevel": 8,
+      "requiredLonghouseLevel": 5,
       "slotCost": 1,
       "occupiesMostSlots": false,
       "claimRadius": 0,
@@ -9700,7 +9700,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 5,
       "cost": {
         "wood": 1150,
@@ -9725,7 +9725,7 @@
       "requiresCoastalWater": true,
       "alsoOnCoastalWater": false,
       "alsoOnInlandLakeShore": false,
-      "requiredLonghouseLevel": 8,
+      "requiredLonghouseLevel": 5,
       "slotCost": 1,
       "occupiesMostSlots": false,
       "claimRadius": 0,
@@ -9740,7 +9740,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 6,
       "cost": {
         "wood": 1500,
@@ -9765,7 +9765,7 @@
       "requiresCoastalWater": true,
       "alsoOnCoastalWater": false,
       "alsoOnInlandLakeShore": false,
-      "requiredLonghouseLevel": 8,
+      "requiredLonghouseLevel": 6,
       "slotCost": 1,
       "occupiesMostSlots": false,
       "claimRadius": 0,
@@ -9780,7 +9780,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 7,
       "cost": {
         "wood": 2000,
@@ -9805,7 +9805,7 @@
       "requiresCoastalWater": true,
       "alsoOnCoastalWater": false,
       "alsoOnInlandLakeShore": false,
-      "requiredLonghouseLevel": 8,
+      "requiredLonghouseLevel": 7,
       "slotCost": 1,
       "occupiesMostSlots": false,
       "claimRadius": 0,
@@ -9820,7 +9820,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 8,
       "cost": {
         "wood": 2550,
@@ -9860,7 +9860,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 9,
       "cost": {
         "wood": 3350,
@@ -9900,7 +9900,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 10,
       "cost": {
         "wood": 4350,
@@ -9940,7 +9940,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 11,
       "cost": {
         "wood": 5650,
@@ -9980,7 +9980,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 12,
       "cost": {
         "wood": 7350,
@@ -10020,7 +10020,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 13,
       "cost": {
         "wood": 9550,
@@ -10060,7 +10060,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 14,
       "cost": {
         "wood": 12500,
@@ -10100,7 +10100,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 15,
       "cost": {
         "wood": 16000,
@@ -10140,7 +10140,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 16,
       "cost": {
         "wood": 21000,
@@ -10180,7 +10180,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 17,
       "cost": {
         "wood": 27500,
@@ -10220,7 +10220,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 18,
       "cost": {
         "wood": 35500,
@@ -10260,7 +10260,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 19,
       "cost": {
         "wood": 46000,
@@ -10300,7 +10300,7 @@
       "excludedRiverVariants": []
     },
     {
-      "type": "dockyard",
+      "type": "harbour",
       "level": 20,
       "cost": {
         "wood": 60000,
@@ -12396,12 +12396,12 @@
       "claimRadius": 0,
       "prerequisites": [
         {
-          "type": "dockyard",
+          "type": "harbour",
           "level": 10
         }
       ],
       "ringCategory": "water",
-      "ringOrder": 2,
+      "ringOrder": 3,
       "newPlacementDisabled": false,
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
@@ -12441,7 +12441,7 @@
       "claimRadius": 0,
       "prerequisites": [],
       "ringCategory": "water",
-      "ringOrder": 2,
+      "ringOrder": 3,
       "newPlacementDisabled": false,
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
@@ -12481,7 +12481,7 @@
       "claimRadius": 0,
       "prerequisites": [],
       "ringCategory": "water",
-      "ringOrder": 2,
+      "ringOrder": 3,
       "newPlacementDisabled": false,
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
@@ -12521,7 +12521,7 @@
       "claimRadius": 0,
       "prerequisites": [],
       "ringCategory": "water",
-      "ringOrder": 2,
+      "ringOrder": 3,
       "newPlacementDisabled": false,
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
@@ -12561,7 +12561,7 @@
       "claimRadius": 0,
       "prerequisites": [],
       "ringCategory": "water",
-      "ringOrder": 2,
+      "ringOrder": 3,
       "newPlacementDisabled": false,
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
@@ -23393,6 +23393,811 @@
       "ringCategory": null,
       "ringOrder": 0,
       "newPlacementDisabled": true,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 1,
+      "cost": {
+        "wood": 600,
+        "stone": 150,
+        "food": 50,
+        "iron": 0
+      },
+      "buildSeconds": 3600,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [
+        {
+          "type": "harbour",
+          "level": 5
+        }
+      ],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 2,
+      "cost": {
+        "wood": 780,
+        "stone": 200,
+        "food": 65,
+        "iron": 0
+      },
+      "buildSeconds": 7958,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 3,
+      "cost": {
+        "wood": 1000,
+        "stone": 250,
+        "food": 85,
+        "iron": 0
+      },
+      "buildSeconds": 12316,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 4,
+      "cost": {
+        "wood": 1300,
+        "stone": 330,
+        "food": 110,
+        "iron": 0
+      },
+      "buildSeconds": 16674,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 5,
+      "cost": {
+        "wood": 1700,
+        "stone": 430,
+        "food": 140,
+        "iron": 0
+      },
+      "buildSeconds": 21032,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 6,
+      "cost": {
+        "wood": 2250,
+        "stone": 560,
+        "food": 190,
+        "iron": 0
+      },
+      "buildSeconds": 25389,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 7,
+      "cost": {
+        "wood": 2900,
+        "stone": 720,
+        "food": 240,
+        "iron": 0
+      },
+      "buildSeconds": 29747,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 8,
+      "cost": {
+        "wood": 3750,
+        "stone": 940,
+        "food": 310,
+        "iron": 0
+      },
+      "buildSeconds": 34105,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 9,
+      "cost": {
+        "wood": 4900,
+        "stone": 1200,
+        "food": 410,
+        "iron": 0
+      },
+      "buildSeconds": 38463,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 10,
+      "cost": {
+        "wood": 6350,
+        "stone": 1600,
+        "food": 530,
+        "iron": 0
+      },
+      "buildSeconds": 42821,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 11,
+      "cost": {
+        "wood": 8250,
+        "stone": 2050,
+        "food": 690,
+        "iron": 0
+      },
+      "buildSeconds": 47179,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 11,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 12,
+      "cost": {
+        "wood": 11000,
+        "stone": 2700,
+        "food": 900,
+        "iron": 0
+      },
+      "buildSeconds": 51537,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 12,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 13,
+      "cost": {
+        "wood": 14000,
+        "stone": 3500,
+        "food": 1150,
+        "iron": 0
+      },
+      "buildSeconds": 55895,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 13,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 14,
+      "cost": {
+        "wood": 18000,
+        "stone": 4550,
+        "food": 1500,
+        "iron": 0
+      },
+      "buildSeconds": 60253,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 14,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 15,
+      "cost": {
+        "wood": 23500,
+        "stone": 5900,
+        "food": 1950,
+        "iron": 0
+      },
+      "buildSeconds": 64611,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 15,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 16,
+      "cost": {
+        "wood": 30500,
+        "stone": 7700,
+        "food": 2550,
+        "iron": 0
+      },
+      "buildSeconds": 68968,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 16,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 17,
+      "cost": {
+        "wood": 40000,
+        "stone": 10000,
+        "food": 3350,
+        "iron": 0
+      },
+      "buildSeconds": 73326,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 17,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 18,
+      "cost": {
+        "wood": 52000,
+        "stone": 13000,
+        "food": 4350,
+        "iron": 0
+      },
+      "buildSeconds": 77684,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 18,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 19,
+      "cost": {
+        "wood": 67500,
+        "stone": 17000,
+        "food": 5600,
+        "iron": 0
+      },
+      "buildSeconds": 82042,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 19,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
+      "requiresBogKinds": [],
+      "alsoOnBogKinds": [],
+      "lakeShoreKinds": [],
+      "requiresRiverShapes": [],
+      "excludedRiverVariants": []
+    },
+    {
+      "type": "shipyard",
+      "level": 20,
+      "cost": {
+        "wood": 87500,
+        "stone": 22000,
+        "food": 7300,
+        "iron": 0
+      },
+      "buildSeconds": 86400,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
+      "alsoOnCoastalWater": false,
+      "alsoOnInlandLakeShore": false,
+      "requiredLonghouseLevel": 20,
+      "slotCost": 1,
+      "occupiesMostSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [],
+      "ringCategory": "water",
+      "ringOrder": 2,
+      "newPlacementDisabled": false,
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [],

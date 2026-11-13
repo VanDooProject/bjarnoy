@@ -45,7 +45,7 @@ export function isUnitAvailable(
   const definition = byType[type];
   if (!definition) return false;
   if (longhouseLevel < definition.requiredLonghouseLevel) return false;
-  if (buildingLevelOf && buildingLevelOf(definition.requiredBuildingType) < 1) return false;
+  if (buildingLevelOf && buildingLevelOf(definition.requiredBuildingType) < definition.requiredBuildingLevel) return false;
   return (
     !definition.requiredUnitType || isUnitAvailable(definition.requiredUnitType, longhouseLevel, byType, buildingLevelOf)
   );

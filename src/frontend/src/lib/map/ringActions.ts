@@ -7,7 +7,7 @@ export function primaryActionFirst<T extends { id: string }>(actions: T[]): T[] 
   return [...actions.filter((a) => PRIMARY_IDS.includes(a.id)), ...actions.filter((a) => !PRIMARY_IDS.includes(a.id))];
 }
 
-const TRAINING_BUILDINGS = new Set(['archeryrange', 'siegeworkshop', 'dockyard', 'barracks', 'cartworkshop']);
+const TRAINING_BUILDINGS = new Set(['archeryrange', 'siegeworkshop', 'harbour', 'shipyard', 'barracks', 'cartworkshop']);
 
 /**
  * The building-specific entry a built tile adds to the ring, next to Upgrade and Raze: Train on every building a unit

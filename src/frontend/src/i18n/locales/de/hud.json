@@ -313,6 +313,7 @@
     "requiresCoastal": "erfordert eine Küstensiedlung",
     "requiresLonghouse": "erfordert Langhaus {level}",
     "requiresUnit": "und {unit}",
+    "requiresBuildingLevel": "erfordert {building} {level}",
     "training": "Wird ausgebildet…",
     "train": "Ausbilden",
     "trainingFailed": "Ausbildung fehlgeschlagen."
@@ -330,7 +331,8 @@
       "pumpkinfarm": "Kürbisfarm",
       "palisade": "Palisade",
       "palisadegate": "Palisadentor",
-      "dockyard": "Werft",
+      "harbour": "Hafen",
+      "shipyard": "Werft",
       "shrineofnjord": "Schrein des Njörd"
     },
     "missionAttack": "Angriff",
@@ -403,7 +405,7 @@
   "garrisonSpots": {
     "longhouse": "Langhaus",
     "tower": "Wachturm",
-    "dock": "Werft",
+    "dock": "Hafen oder Werft",
     "beachcamp": "Strandlager",
     "from": "aus: {spots}"
   },

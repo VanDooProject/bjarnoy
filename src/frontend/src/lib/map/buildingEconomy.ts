@@ -135,7 +135,8 @@ export function maxLevelFor(type: BuildingKind): number {
       return 25;
     case 'barracks':
     case 'archeryrange':
-    case 'dockyard':
+    case 'harbour':
+    case 'shipyard':
     case 'townsquare':
     case 'cartworkshop':
     case 'druidhut':
@@ -334,7 +335,8 @@ export function buildingStatsFor(
     // The Siege Workshop trains the battering ram, the other half of the siege roster.
     case 'siegeworkshop':
       return { modifier: { kind: 'trainsLandTroops' } };
-    case 'dockyard':
+    case 'harbour':
+    case 'shipyard':
       return { modifier: { kind: 'trainsShips' } };
     // Trains the land army's core line (Thrall/Spearman/Axeman/Berserker) in
     // place of the Longhouse — the same "trainsLandTroops" shape as Archery
@@ -583,7 +585,8 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   archeryrange: line(470, 200, 58),
   siegeworkshop: line(26500, 13000, 2200),
   beachcamp: line(0, 0, 0),
-  dockyard: line(410, 99, 33),
+  harbour: line(160, 40, 14),
+  shipyard: line(600, 150, 50),
   barracks: line(100, 78, 43),
   sawmill: line(41500, 59500, 5950),
   meadery: line(860, 470, 230),

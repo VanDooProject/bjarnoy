@@ -69,7 +69,7 @@ export function reportSummaryLine(
   const lines: Array<{ lost: number; survived: number }> = attacker
     ? [...report.attackerLines, ...(report.shipFight?.attackerLines ?? [])]
     : [...report.defenderLines, ...(report.shipFight?.defenderLines ?? [])];
-  // A burned Fire Ship survived the ship fight and then burned: it counts as lost, once, not as a survivor as well.
+  // A burned Fire Hulk survived the ship fight and then burned: it counts as lost, once, not as a survivor as well.
   const burned = attacker ? (report.fireShipsBurned ?? 0) : 0;
   const lost = sumLost(lines) + burned;
   const survived = Math.max(0, sumSurvived(lines) - burned);

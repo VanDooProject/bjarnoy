@@ -3,11 +3,11 @@ import { SEA_HEX_COST, TOWER_DEFENCE_PERCENT_PER_LEVEL, minutesPerSeaHex } from 
 import units from '../../data/unit-catalogue.json';
 
 describe('shipDocs', () => {
-  it('prices a sea hex at 1, so a Karve at speed 8 needs 7.5 minutes and a Longship at 10 needs 6', () => {
+  it('prices a sea hex at 1, so a Karve at speed 8 needs 7.5 minutes and a Snekkja at 10 needs 6', () => {
     expect(SEA_HEX_COST).toBe(1);
     const speed = (type: string) => units.data.find((u) => u.type === type)!.speed;
     expect(minutesPerSeaHex(speed('karve'))).toBe(7.5);
-    expect(minutesPerSeaHex(speed('longship'))).toBe(6);
+    expect(minutesPerSeaHex(speed('snekkja'))).toBe(6);
   });
 
   it('adds 5% defence per Watchtower level', () => {

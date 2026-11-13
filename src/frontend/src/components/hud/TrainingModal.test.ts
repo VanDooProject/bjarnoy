@@ -96,6 +96,25 @@ describe('TrainingModal', () => {
     expect(names).not.toContain('karve');
   });
 
+  it('lists the Harbour\'s ships under white job headings and names the missing building level', () => {
+    setup([placed('harbour', 3, -2, 3)]);
+    const wrapper = mountModal(placed('harbour', 3, -2, 3));
+    expect(wrapper.findAll('.group-heading').map((h) => [h.attributes('data-group'), h.text()])).toEqual([
+      ['scouts', 'Scouts'], ['cargo', 'Cargo'], ['transport', 'Transport'],
+    ]);
+    expect(wrapper.findAll('.unit-name').map((n) => n.text())).toEqual(['Færing', 'Byrding', 'Knarr', 'Karve']);
+    const rows = wrapper.findAll('.unit-row');
+    expect(rows.map((r) => r.classes().includes('unavailable'))).toEqual([false, false, false, true]);
+    expect(rows[3]!.text()).toContain('requires Harbour 5');
+  });
+
+  it('lists the Shipyard\'s warships and fire craft in their groups', () => {
+    setup([placed('shipyard', 3, -2, 10)]);
+    const wrapper = mountModal(placed('shipyard', 3, -2, 10));
+    expect(wrapper.findAll('.group-heading').map((h) => h.text())).toEqual(['Warships', 'Fire craft']);
+    expect(wrapper.findAll('.unit-name').map((n) => n.text())).toEqual(['Snekkja', 'Skeid', 'Fire Raft', 'Fire Hulk']);
+  });
+
   it('offers the camp builder next to the settler at the Cart Workshop, as the live catalogue lists it', () => {
     const world = setup([placed('cartworkshop', 3, -2, 5)]);
     const settler = definitions.find((d) => d.type === 'settler')!;

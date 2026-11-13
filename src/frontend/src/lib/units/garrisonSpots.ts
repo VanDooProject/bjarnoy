@@ -55,10 +55,10 @@ export function toDispatchFrom(groups: ReadonlyArray<SpotGroup>): { spot: HexPoi
   return groups.map((g) => ({ spot: { q: g.spot.q, r: g.spot.r }, units: g.units.map((u) => ({ unit: u.unit, count: u.count })) }));
 }
 
-/** Whether a tile of a settlement is one of its garrison spots: the centre hex (the longhouse), or a hex carrying a tower or a dockyard. */
+/** Whether a tile of a settlement is one of its garrison spots: the centre hex (the longhouse), or a hex carrying a tower, a harbour or a shipyard. */
 export function isGarrisonSpotTile(tile: { q: number; r: number; buildingType?: string }, centre: { q: number; r: number } | undefined): boolean {
   if (centre && tile.q === centre.q && tile.r === centre.r) return true;
-  return tile.buildingType === 'tower' || tile.buildingType === 'dockyard';
+  return tile.buildingType === 'tower' || tile.buildingType === 'harbour' || tile.buildingType === 'shipyard';
 }
 
 /** The distinct spot kinds one unit type is taken from, in the order of the allocation. */

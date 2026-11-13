@@ -20,6 +20,8 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
     requiredLonghouseLevel: 1,
     requiredUnitType: null,
     requiredBuildingType: 'longhouse',
+    requiredBuildingLevel: 1,
+    fireCraftPerLevel: 0,
     siegeTargets: [],
     ...overrides,
   };
@@ -28,7 +30,7 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
 const byType = {
   spearman: unit({ type: 'spearman', speed: 2, upkeepPerHour: 1 }),
   ram: unit({ type: 'ram', class: 'siege', speed: 1, upkeepPerHour: 3 }),
-  longship: unit({ type: 'longship', class: 'ship', speed: 4, upkeepPerHour: 2 }),
+  snekkja: unit({ type: 'snekkja', class: 'ship', speed: 4, upkeepPerHour: 2 }),
 };
 
 const HOME: AxialCoord = { q: 0, r: 0 };
@@ -143,7 +145,7 @@ describe('fieldOrderFeasibility', () => {
       },
     });
 
-    const verdict = fieldOrderFeasibility(standing({ stacks: [{ unit: 'longship', count: 2 }] }), { q: 14, r: 0 }, 'move', env);
+    const verdict = fieldOrderFeasibility(standing({ stacks: [{ unit: 'snekkja', count: 2 }] }), { q: 14, r: 0 }, 'move', env);
 
     expect(verdict.ok && verdict.fleet).toBe(true);
     expect(asked.length).toBeGreaterThan(0);

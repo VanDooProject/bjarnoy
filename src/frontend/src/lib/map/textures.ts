@@ -228,7 +228,9 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   towerbog: 'stavetower_bog',
   // The Longhouse on sand: the same hall with the beach kept round it (3D_assets hextile165).
   longhousesand: 'greathall_sand',
-  dockyard: 'dockyard',
+  // The Harbour is the old Dockyard: it keeps the `dockyard` art family. The Shipyard has its own `shipyard` family (art still to come).
+  harbour: 'dockyard',
+  shipyard: 'shipyard',
   // A Sawmill is never actually on grass (the backend requires a river
   // shape to place one — BuildingCatalogue.SawmillRiverShapes) — there is
   // deliberately no plain 'sawmill' entry here for the grass/inland family

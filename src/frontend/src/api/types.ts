@@ -399,7 +399,7 @@ export interface UnitStackResponse {
   count: number;
 }
 
-/** The places a garrison stands: the longhouse, a tower, a dock (a dockyard). */
+/** The places a garrison stands: the longhouse, a tower, a dock (a harbour). */
 export type GarrisonSpotKind = 'longhouse' | 'tower' | 'dock' | 'beachcamp';
 
 /**
@@ -606,7 +606,7 @@ export interface SettlementViewResponse {
 // `HexPoint` there too (used in place of what used to be `HexPointRequest`).
 // `mission` on `DispatchArmyRequest` is `"move" | "attack" | "support" |
 // "raid" | "found"` — `found` requires exactly 5 `settler` in `units`
-// (plus, for a sea convoy, enough Karve/Longship capacity to carry them) and
+// (plus, for a sea convoy, enough Karve/Snekkja capacity to carry them) and
 // no `targetSettlementId`; `destination` is the target hex to colonise.
 
 export interface RetargetFoundingRequest {
@@ -1862,7 +1862,7 @@ export interface BattleReportShipFight {
  * A land army fights one fight, a fleet two: `attackPower`/`defensePower`/`attackerLines`/`defenderLines`/`siege` are the
  * land fight (the only fight of a land army, empty for a fleet that fought none) and `shipFight` the fight at sea (`null` for
  * a land army, a target without ships and reports stored before ships fought separately). `drowned` are the passengers the
- * surviving ships could not carry, `fireShipsBurned` the Fire Ships the fire used up and `fireSiege` the building it burned.
+ * surviving ships could not carry, `fireShipsBurned` the Fire Hulks the fire used up and `fireSiege` the building it burned.
  */
 export interface BattleReportResponse {
   id: string;
@@ -1976,7 +1976,7 @@ export interface SimulatorResponse {
   defenderLines: BattleReportDefenderLine[];
   siege: BattleReportSiege | null;
   /**
-   * A fleet's fight at sea and what followed (the drowned passengers; the Fire Ships burned and their fire damage are always
+   * A fleet's fight at sea and what followed (the drowned passengers; the Fire Hulks burned and their fire damage are always
    * zero/`null` here, a simulated attack names no building). `attackPower`/`defensePower`/the lines are the land fight.
    */
   shipFight: BattleReportShipFight | null;
@@ -2013,6 +2013,10 @@ export interface UnitDefinitionResponse {
   requiredUnitType: string | null;
   /** The building type whose ring trains this unit (`UnitDefinition.RequiredBuildingType`, e.g. `"longhouse"`, `"barracks"`, `"cartworkshop"`) — at least one must stand for the unit to be trainable. */
   requiredBuildingType: string;
+  /** The level of that building this unit needs (`UnitDefinition.RequiredBuildingLevel`). */
+  requiredBuildingLevel: number;
+  /** For a fire craft: how many take one building level off a building in the water (`UnitDefinition.FireCraftPerLevel`); 0 for every other unit. */
+  fireCraftPerLevel: number;
   /** What this siege engine can damage (`UnitDefinition.SiegeTargets`): `"walls"`, `"towers"`, `"buildings"`; empty for a unit without siege power. */
   siegeTargets: string[];
 }

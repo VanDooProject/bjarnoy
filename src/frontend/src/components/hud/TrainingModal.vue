@@ -9,7 +9,8 @@ import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
-import { buildingName, unitName } from '../../i18n/catalogueNames';
+import { buildingName, shipGroupName, unitName } from '../../i18n/catalogueNames';
+import { groupByShipGroup } from '../../lib/units/shipGroups';
 import { apiErrorMessage } from '../../i18n/apiErrors';
 import { useWorldStore } from '../../stores/world';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
@@ -76,7 +77,7 @@ const ordersHere = computed(
 const fullHere = computed(() => split.value === 'here' && ordersHere.value >= MAX_TRAINING_ORDERS_PER_BUILDING);
 
 // Issue #40 phase 6 §4: whether this settlement's own claimed territory
-// touches the sea — Ship-class units (Karve, Longship) need it, mirroring
+// touches the sea — Ship-class units (Karve, Snekkja) need it, mirroring
 // `Settlement.PlanTrain`'s `hasShoreline` gate (`TrainRejection.SettlementNotCoastal`).
 // Computed client-side from the same deterministic terrain the map already
 // renders (see `lib/map/shoreline.ts`'s own comment on why that's safe)
@@ -120,6 +121,7 @@ const rows = computed(() =>
     const count = quantityFor(definition.type);
     const cost = totalTrainingCost(definition, count);
     const meetsLevel = longhouseLevel.value >= definition.requiredLonghouseLevel;
+    const meetsBuildingLevel = buildingLevelOf(definition.requiredBuildingType) >= definition.requiredBuildingLevel;
     const meetsPrerequisites = isUnitAvailable(definition.type, longhouseLevel.value, catalogue.byType, buildingLevelOf);
     const needsCoast = definition.class === 'ship';
     const coastal = isCoastal.value !== false; // unknown (null) treated as coastal, see isCoastal's comment
@@ -149,10 +151,11 @@ const rows = computed(() =>
       ),
       available,
       meetsLevel,
+      meetsBuildingLevel,
       // Only true once the *other* requirements are already met — no point
       // telling the player "also, no shoreline" on a unit whose longhouse
       // level they haven't reached yet either.
-      needsCoastReason: meetsLevel && needsCoast && !coastal,
+      needsCoastReason: meetsLevel && meetsBuildingLevel && needsCoast && !coastal,
       affordable,
       // Training only works against the live backend; demo mode has no
       // TrainingOrder/garrison concept in the local WorldModel yet.
@@ -160,6 +163,9 @@ const rows = computed(() =>
     };
   }),
 );
+
+// Ships are listed under a white heading per job (Scouts, Cargo, ...); land units form one block without heading.
+const rowGroups = computed(() => groupByShipGroup(rows.value, (row) => row.definition.type));
 
 const training = ref<string | null>(null);
 const errorText = ref<string | null>(null);
@@ -265,8 +271,10 @@ async function train(type: string, count: number) {
       </p>
 
       <div class="roster">
+        <template v-for="block in rowGroups" :key="block.group ?? 'units'">
+        <h3 v-if="block.group" class="group-heading" :data-group="block.group">{{ shipGroupName(block.group) }}</h3>
         <div
-          v-for="row in rows"
+          v-for="row in block.rows"
           :key="row.definition.type"
           class="unit-row"
           :class="{ unavailable: !row.available }"
@@ -277,6 +285,7 @@ async function train(type: string, count: number) {
               {{ t('hud.trainingModal.attackDefense', { attack: row.definition.attack, defense: row.definition.defense }) }}
               <span v-if="row.needsCoastReason"> · {{ t('hud.trainingModal.requiresCoastal') }}</span>
               <span v-else-if="!row.meetsLevel"> · {{ t('hud.trainingModal.requiresLonghouse', { level: row.definition.requiredLonghouseLevel }) }}<template v-if="row.definition.requiredUnitType"> {{ t('hud.trainingModal.requiresUnit', { unit: unitName(row.definition.requiredUnitType) }) }}</template></span>
+              <span v-else-if="!row.meetsBuildingLevel"> · {{ t('hud.trainingModal.requiresBuildingLevel', { building: buildingName(row.definition.requiredBuildingType), level: row.definition.requiredBuildingLevel }) }}</span>
             </div>
             <div class="unit-cost" :class="{ unaffordable: row.available && !row.affordable }">
               {{ row.costText }} · {{ row.durationText }}
@@ -300,6 +309,7 @@ async function train(type: string, count: number) {
             </button>
           </div>
         </div>
+        </template>
       </div>
     </div>
   </div>
@@ -438,6 +448,14 @@ async function train(type: string, count: number) {
   gap: 14px;
   padding: 10px 0;
   border-top: 1px solid var(--panel-border);
+}
+.group-heading {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
 }
 .unit-row.unavailable {
   opacity: 0.55;
