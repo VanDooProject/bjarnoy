@@ -92,18 +92,20 @@ describe('useDispatchTargetBuilding', () => {
   it('shows a beach camp as out of the engines\' reach for a land attack with catapults', () => {
     const { picker } = setup({ catapult: 3 }, [{ q: 0, r: 0, type: 'beachcamp', level: 1 }]);
 
-    expect(picker.rows.value).toMatchObject([{ q: 0, r: 0, damageable: false, pickable: false }]);
+    expect(picker.rows.value).toMatchObject([{ q: 0, r: 0, damageable: false, pickable: false, outOfReach: true }]);
   });
 
   it('still lets a fleet carrying catapults be sent at a beach camp, which its engines cannot damage', () => {
     const { world, picker } = setup({ longship: 2, catapult: 3 }, [{ q: 0, r: 0, type: 'beachcamp', level: 1 }]);
 
     expect(picker.isRequired.value).toBe(true);
-    expect(picker.rows.value).toMatchObject([{ q: 0, r: 0, damageable: false, pickable: true }]);
+    // A fleet's pick is where it fights, so the row is not shown as out of reach and picking it warns about nothing.
+    expect(picker.rows.value).toMatchObject([{ q: 0, r: 0, damageable: false, pickable: true, outOfReach: false }]);
 
     picker.pick(0, 0);
     expect(world.dispatchDraft!.targetBuildingCoord).toEqual({ q: 0, r: 0 });
     expect(picker.isMissingRequiredPick.value).toBe(false);
+    expect(picker.selectedUnreachable.value).toBe(false);
   });
 
   it('shows no picker for a plain land attack', () => {

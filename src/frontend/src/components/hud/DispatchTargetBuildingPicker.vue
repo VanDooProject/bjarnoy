@@ -37,14 +37,14 @@ const picker = useDispatchTargetBuilding(computed(() => props.hasTarget));
           :key="`${b.q},${b.r}`"
           type="button"
           class="target-row"
-          :class="{ 'out-of-reach': !b.damageable }"
+          :class="{ 'out-of-reach': b.outOfReach }"
           :disabled="!b.pickable"
-          :title="b.damageable ? undefined : t('hud.armyPanel.cannotDamage')"
+          :title="b.outOfReach ? t('hud.armyPanel.cannotDamage') : undefined"
           data-testid="building-target"
           @click="picker.pick(b.q, b.r)"
         >
           <span class="target-name">{{ b.label }}</span>
-          <span class="target-owner">{{ b.damageable ? t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) : t('hud.armyPanel.cannotDamage') }}</span>
+          <span class="target-owner">{{ b.outOfReach ? t('hud.armyPanel.cannotDamage') : t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) }}</span>
         </button>
       </div>
       <p v-else class="status-subtext">{{ t(picker.isRequired.value ? 'hud.armyPanel.fleetNoShoreBuilding' : 'hud.armyPanel.noPreference') }}</p>
