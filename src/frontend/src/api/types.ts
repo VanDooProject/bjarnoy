@@ -793,6 +793,8 @@ export interface AdminWorldResponse {
   startsAt: string | null;
   joinsClosed: boolean;
   frozenIslesEnabled: boolean;
+  /** Whether the renown buildings earn follows the world speed factor. */
+  renownFollowsSpeed: boolean;
   /** Left out of every public world list for non-admins. */
   hidden: boolean;
   endbossAt: string | null;
@@ -882,6 +884,7 @@ export interface UpdateWorldSettingsRequest {
   startsAt?: string | null;
   joinsClosed?: boolean;
   frozenIslesEnabled?: boolean;
+  renownFollowsSpeed?: boolean;
   hidden?: boolean;
   endbossAt?: string | null;
 }

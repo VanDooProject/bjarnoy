@@ -2282,6 +2282,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("Radius")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("RenownFollowsSpeed")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("RunState")
                         .HasColumnType("INTEGER");
 
