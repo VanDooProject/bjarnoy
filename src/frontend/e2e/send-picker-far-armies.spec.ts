@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
-import { longestTask, observeLongTasks, putFleetsFarAtSea, refreshArmies } from './helpers';
+import { putFleetsFarAtSea, refreshArmies } from './helpers';
+import { longestTask, observeLongTasks } from './support/render';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 import { readFileSync } from 'node:fs';

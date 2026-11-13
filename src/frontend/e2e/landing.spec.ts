@@ -2,7 +2,8 @@ import type { Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { RING_TIP_GAP_PX } from '../src/lib/map/guidanceArrowGeometry';
-import { bubbleNearestPointerTip, waitForMapReady } from './helpers';
+import { bubbleNearestPointerTip } from './helpers';
+import { waitForMapReady } from './support/render';
 import { SettlementPage } from './pages';
 
 test('landing page is the village view, not a marketing page in front of it', { tag: '@g3' }, async ({ page }) => {

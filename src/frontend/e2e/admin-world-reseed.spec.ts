@@ -1,6 +1,6 @@
 import type { Route } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { waitForMapReady } from './helpers';
+import { waitForMapReady } from './support/render';
 
 /**
  * Issue #133: an admin picks a candidate seed, sees the map it produces
