@@ -822,32 +822,37 @@ describe('textureKeyFor inland lakes', () => {
   });
 });
 
-describe('a building on an inland lake with no base art of its own', () => {
-  it('falls back to the sea base, like the lake is drawn without a building', () => {
-    const base = (name: string) => Object.fromEntries(TILE_ORIENTATIONS.map((o) => [o, name]));
-    const textures = {
-      base: { sea: base('sea-base') },
-      baseIndexed: {},
-      top: {},
-      animTop: {},
-      coastalBase: {},
-      coastalTop: {},
-      wastedCoastalBase: {},
-      wastedCoastalTop: {},
-    } as unknown as TileTextures;
-    const hut: Tile = {
-      q: 0,
-      r: 0,
-      terrain: 'inlandlake',
-      isCoastalWater: true,
-      orientation: 'NW',
-      variant: 0,
-      buildingType: 'fishinghut',
-      buildingLevel: 7,
-    };
+describe('a building whose own atlas family is not loaded yet', () => {
+  const perRotation = <T>(value: T) => Object.fromEntries(TILE_ORIENTATIONS.map((o) => [o, value]));
+  const textures = {
+    base: { sea: perRotation('sea-base'), wasteland: perRotation('wasteland-base'), grass: perRotation('grass-base') },
+    baseIndexed: { bog: perRotation(['bog-base']) },
+    top: {},
+    animTop: {},
+    coastalBase: perRotation(['coastal-base']),
+    coastalTop: perRotation(['coastal-top']),
+    wastedCoastalBase: perRotation(['wasted-coastal-base']),
+    wastedCoastalTop: perRotation(['wasted-coastal-top']),
+  } as unknown as TileTextures;
+  const tile = (extra: Partial<Tile>): Tile => ({ q: 0, r: 0, terrain: 'grass', variant: 0, orientation: 'NW', ...extra });
 
+  it('draws a Fishing Hut on a coastal inland lake hex with the coastal water base', () => {
+    const hut = tile({ terrain: 'inlandlake', isCoastalWater: true, buildingType: 'fishinghut' });
+    expect(baseTextureFor(textures, hut)).toBe('coastal-base');
+  });
+
+  it('draws a Fishing Hut on an open inland lake hex with the sea base', () => {
+    const hut = tile({ terrain: 'inlandlake', buildingType: 'fishinghut' });
     expect(baseTextureFor(textures, hut)).toBe('sea-base');
-    expect(baseTextureFor(textures, { ...hut, terrain: 'sea' })).toBe('sea-base');
+  });
+
+  it('draws a bog building on the bog moss base, not a missing terrain base', () => {
+    const tower = tile({ buildingType: 'tower', bog: { kind: 'bog' } as Tile['bog'] });
+    expect(baseTextureFor(textures, tower)).toBe('bog-base');
+  });
+
+  it('draws a building on wasted ground with the wasted base', () => {
+    expect(baseTextureFor(textures, tile({ wasted: true, buildingType: 'lumberjack' }))).toBe('wasteland-base');
   });
 });
 
