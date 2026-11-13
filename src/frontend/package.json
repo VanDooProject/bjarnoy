@@ -11,6 +11,8 @@
     "lint": "eslint \"src/**/*.vue\"",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
+    "test:visual": "bash scripts/visual.sh",
+    "test:visual:update": "bash scripts/visual.sh --update-snapshots=changed",
     "worldgen-preview": "tsx ../../scripts/worldgen-preview/cli.ts",
     "worldgen-pathing": "tsx ../../scripts/worldgen-preview/pathing.ts"
   },

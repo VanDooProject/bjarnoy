@@ -10,6 +10,8 @@ export { ADMIN_USER, AdminAuthFixture, type SessionUser } from './AdminAuthFixtu
 export { AdminActivityPage, type ActivityBucket, type ActivityUser } from './AdminActivityPage';
 export { AdminSettlementsPage } from './AdminSettlementsPage';
 export { AdminTablePage } from './AdminTablePage';
+export { DocsPage } from './DocsPage';
+export { LandingPage } from './LandingPage';
 export { BuildingHudComponent, type OwnedBuilding } from './BuildingHudComponent';
 export { RingMenuComponent } from './RingMenuComponent';
 export { ScrollableView } from './ScrollableView';

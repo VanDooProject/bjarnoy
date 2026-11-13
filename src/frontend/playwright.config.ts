@@ -1,5 +1,26 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// Visual baselines come from one pinned image only (e2e/visual/image.json); anywhere else fonts and rasterising differ.
+// Outside that image the visual projects do not exist, so a plain `playwright test` runs only the e2e suite.
+const inVisualImage = !!process.env.BJARNOY_VISUAL_IMAGE;
+if (!inVisualImage && process.argv.some((arg) => arg.includes('visual-'))) {
+  throw new Error('visual tests run only inside the pinned Playwright image: use npm run test:visual / test:visual:update');
+}
+const visualProjects = [
+  {
+    name: 'visual-desktop',
+    testDir: './e2e/visual',
+    testMatch: '*.visual.spec.ts',
+    use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
+  },
+  {
+    name: 'visual-phone',
+    testDir: './e2e/visual',
+    testMatch: '*.visual.spec.ts',
+    use: { ...devices['Pixel 7'] },
+  },
+];
+
 export default defineConfig({
   testDir: './e2e',
   // 45s: generous enough for real camera drift/animation and a handful of
@@ -46,7 +67,15 @@ export default defineConfig({
     // app code on being under test.
     contextOptions: { reducedMotion: 'reduce' },
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  snapshotPathTemplate: '{testDir}/__screenshots__/{projectName}/{testFilePath}/{arg}{ext}',
+  updateSnapshots: 'none',
+  expect: {
+    toHaveScreenshot: { threshold: 0, maxDiffPixels: 0, animations: 'disabled', caret: 'hide', scale: 'device' },
+  },
+  projects: [
+    { name: 'chromium', testIgnore: 'visual/**', use: { ...devices['Desktop Chrome'] } },
+    ...(inVisualImage ? visualProjects : []),
+  ],
   webServer: {
     // Against the production build, not the dev server — closer to what
     // ships, and avoids HMR/dev-only behaviour leaking into the tests.

@@ -1,0 +1,4 @@
+/* The Pixi map canvas is hidden so the HUD panels are shown over the plain shell; the map has its own pixel specs. */
+.map-container > canvas {
+  visibility: hidden !important;
+}
