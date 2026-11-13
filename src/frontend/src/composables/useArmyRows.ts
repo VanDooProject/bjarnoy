@@ -15,6 +15,7 @@ import {
   formatEta,
   isArmyHeadingHome,
   isArmyStanding,
+  isArmyWaitingToGather,
   isFieldOrderMidMarch,
 } from '../lib/units/armyDispatch';
 import type { MessageSchema } from '../i18n/schema';
@@ -73,10 +74,14 @@ export function useArmyRows() {
       // A standing army has arrived: its countdown runs to the moment it heads home, not to its arrival.
       const headingHome = isArmyHeadingHome(army, now);
       const standing = campReadyAt === null && isArmyStanding(army, now);
+      // A group waiting at the meeting hex counts down to the gathering leaving, not to its own arrival or turn-around.
+      const waiting = campReadyAt === null && isArmyWaitingToGather(army, now);
       const etaIso = campReadyAt !== null
         ? new Date(campReadyAt).toISOString()
         : army.movement
-          ? headingHome
+          ? waiting
+            ? army.gatherDepartsAt!
+            : headingHome
             ? army.movement.returnArrivesAt
             : standing
               ? army.movement.turnAroundAt
@@ -86,9 +91,11 @@ export function useArmyRows() {
       const eta = army.starvesAt
         ? t('hud.armyStatus.starvesIn', { eta: formatEta(army.starvesAt, now) })
         : etaIso
-          ? standing
-            ? t('hud.armyStatus.headsHomeIn', { eta: formatEta(etaIso, now) })
-            : formatEta(etaIso, now)
+          ? waiting
+            ? t('hud.armyStatus.movesOnIn', { eta: formatEta(etaIso, now) })
+            : standing
+              ? t('hud.armyStatus.headsHomeIn', { eta: formatEta(etaIso, now) })
+              : formatEta(etaIso, now)
           : null;
       const etaMs = army.starvesAt ? Date.parse(army.starvesAt) : etaIso ? Date.parse(etaIso) : null;
       // Nor any way home to recall it on, nor a home at all.

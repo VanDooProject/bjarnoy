@@ -234,6 +234,63 @@ describe('useArmyRows', () => {
     expect(r.etaMs).toBe(Date.parse('2026-01-01T03:00:00Z'));
   });
 
+  describe('a group of a gathering army', () => {
+    const group = (moveFields: Partial<ArmyResponse['movement'] & object>, gatherDepartsAt = '2026-01-01T03:00:00Z') =>
+      army({
+        position: { q: 2, r: 2 },
+        gatheringId: 'g1',
+        gatherHex: { q: 2, r: 2 },
+        gatherDepartsAt,
+        movement: { ...army().movement!, ...moveFields },
+      });
+
+    it('waits at the meeting hex, counting down to when the gathering moves on, and can be recalled', () => {
+      const world = useWorldStore();
+      world.armies = [group({ arrivesAt: '2026-01-01T00:30:00Z', turnAroundAt: '2026-01-01T06:00:00Z' })];
+
+      const r = mountArmyRows().value[0];
+
+      expect(r.status).toBe('Waiting at (2, 2) for the other groups');
+      expect(r.eta).toBe('moves on in 2h 0m');
+      expect(r.etaMs).toBe(Date.parse('2026-01-01T03:00:00Z'));
+      expect(r.canRecall).toBe(true);
+    });
+
+    it('keeps waiting past its own turn-around instead of reading as returning', () => {
+      const world = useWorldStore();
+      world.armies = [group({ arrivesAt: '2026-01-01T00:20:00Z', turnAroundAt: '2026-01-01T00:40:00Z' })];
+
+      const r = mountArmyRows().value[0];
+
+      expect(r.status).toBe('Waiting at (2, 2) for the other groups');
+      expect(r.eta).toBe('moves on in 2h 0m');
+      expect(r.canRecall).toBe(true);
+    });
+
+    it('follows the normal rules once the gathering has left', () => {
+      const world = useWorldStore();
+      world.armies = [
+        group({ arrivesAt: '2026-01-01T00:20:00Z', turnAroundAt: '2026-01-01T03:00:00Z' }, '2026-01-01T00:30:00Z'),
+      ];
+
+      const r = mountArmyRows().value[0];
+
+      expect(r.status).toBe('Standing at (2, 2)');
+      expect(r.eta).toBe('heads home in 2h 0m');
+    });
+
+    it('is in transit while still marching to the meeting hex', () => {
+      const world = useWorldStore();
+      world.armies = [group({ arrivesAt: '2026-01-01T02:00:00Z', turnAroundAt: '2026-01-01T06:00:00Z' })];
+
+      const r = mountArmyRows().value[0];
+
+      expect(r.status).toBe('In transit');
+      expect(r.eta).toBe('1h 0m');
+      expect(r.etaMs).toBe(Date.parse('2026-01-01T02:00:00Z'));
+    });
+  });
+
   it('counts an army past its turn-around down to its return home before the next refresh reports it returning', () => {
     const world = useWorldStore();
     const base = army();

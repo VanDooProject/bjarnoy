@@ -392,6 +392,8 @@
     "returning": "Returning",
     "standingAt": "Standing at ({q}, {r})",
     "headsHomeIn": "heads home in {eta}",
+    "waitingToGather": "Waiting at ({q}, {r}) for the other groups",
+    "movesOnIn": "moves on in {eta}",
     "inTransit": "In transit",
     "hunting": "Hunting",
     "cannotGetHome": "Cannot get home",

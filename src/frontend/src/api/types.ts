@@ -1774,7 +1774,7 @@ export interface ArmyResponse {
   gatheringId?: string | null;
   /** The hex the groups of a gathering army meet on. */
   gatherHex?: HexPoint | null;
-  /** When this group leaves its spot for the meeting hex. */
+  /** When the gathering leaves the meeting hex for its target (`Gathering.DepartAt`); a group that has arrived waits there until then. */
   gatherDepartsAt?: string | null;
 }
 

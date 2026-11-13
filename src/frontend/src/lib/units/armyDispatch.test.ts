@@ -4,6 +4,7 @@ import {
   armyStatusLabel,
   isArmyHeadingHome,
   isArmyStanding,
+  isArmyWaitingToGather,
   buildAttackDispatchRequest,
   buildFieldOrderRequest,
   buildHuntDispatchRequest,
@@ -394,7 +395,7 @@ describe('armyStatusLabel', () => {
     turnAroundAt: '2026-01-01T06:00:00Z',
     ...fields,
   });
-  const army = (fields: Partial<{ atHome: boolean; supporting: boolean; mission: string; movement: ReturnType<typeof movement> | null }> = {}) => ({
+  const army = (fields: Partial<{ atHome: boolean; supporting: boolean; mission: string; movement: ReturnType<typeof movement> | null; gatheringId: string | null; gatherDepartsAt: string | null }> = {}) => ({
     atHome: false,
     supporting: false,
     mission: 'move',
@@ -443,6 +444,31 @@ describe('armyStatusLabel', () => {
 
   it('does not call a stranded army standing', () => {
     expect(armyStatusLabel(army({ movement: movement({ isStranded: true, arrivesAt: '2026-01-01T02:00:00Z' }) }), now)).toBe('Cannot get home');
+  });
+
+  describe('a group of a gathering army', () => {
+    const arrived = { arrivesAt: '2026-01-01T02:00:00Z', turnAroundAt: '2026-01-01T06:00:00Z' };
+    const group = (gatherDepartsAt: string, moveFields: Parameters<typeof movement>[0] = arrived) =>
+      army({ gatheringId: 'g1', gatherDepartsAt, movement: movement(moveFields) });
+
+    it('waits at the meeting hex before its own turn-around, not standing', () => {
+      expect(armyStatusLabel(group('2026-01-01T05:00:00Z'), now)).toBe('Waiting at (4, -2) for the other groups');
+    });
+
+    it('still waits past its own turn-around until the gathering leaves, not returning', () => {
+      const pastTurn = { arrivesAt: '2026-01-01T01:00:00Z', turnAroundAt: '2026-01-01T02:00:00Z' };
+      expect(armyStatusLabel(group('2026-01-01T05:00:00Z', pastTurn), now)).toBe('Waiting at (4, -2) for the other groups');
+    });
+
+    it('follows the normal rules once the gathering has left', () => {
+      expect(armyStatusLabel(group('2026-01-01T02:30:00Z'), now)).toBe('Standing at (4, -2)');
+      const pastTurn = { arrivesAt: '2026-01-01T01:00:00Z', turnAroundAt: '2026-01-01T02:00:00Z' };
+      expect(armyStatusLabel(group('2026-01-01T02:30:00Z', pastTurn), now)).toBe('Returning');
+    });
+
+    it('is in transit while still marching to the meeting hex', () => {
+      expect(armyStatusLabel(group('2026-01-01T05:00:00Z', { arrivesAt: '2026-01-01T04:00:00Z' }), now)).toBe('In transit');
+    });
   });
 
   it('keeps the hunting label for a hunt army, marching or arrived', () => {
@@ -888,5 +914,27 @@ describe('dispatchTargetCoord', () => {
       dispatchTargetCoord({ ...base, mission: 'support', targetSettlementId: 'host', targetBuildingCoord: { q: 12, r: 1 } }, centreOf),
     ).toEqual({ q: 12, r: 1 });
     expect(dispatchTargetCoord({ ...base, mission: 'attack' }, centreOf)).toBeNull();
+  });
+});
+
+describe('isArmyWaitingToGather', () => {
+  const now = Date.parse('2026-01-01T03:00:00Z');
+  const movement = { isReturning: false, isStranded: false, arrivesAt: '2026-01-01T02:00:00Z', turnAroundAt: '2026-01-01T06:00:00Z' };
+  const group = { gatheringId: 'g1', gatherDepartsAt: '2026-01-01T05:00:00Z', movement };
+
+  it('is true for an arrived group whose gathering has not left, also past its own turn-around', () => {
+    expect(isArmyWaitingToGather(group, now)).toBe(true);
+    expect(isArmyWaitingToGather({ ...group, movement: { ...movement, turnAroundAt: '2026-01-01T02:30:00Z' } }, now)).toBe(true);
+    expect(isArmyHeadingHome({ ...group, movement: { ...movement, turnAroundAt: '2026-01-01T02:30:00Z' } }, now)).toBe(false);
+    expect(isArmyStanding({ ...group, mission: 'move' }, now)).toBe(false);
+  });
+
+  it('is false still in transit, after the gathering left, returning, stranded or outside a gathering', () => {
+    expect(isArmyWaitingToGather({ ...group, movement: { ...movement, arrivesAt: '2026-01-01T04:00:00Z' } }, now)).toBe(false);
+    expect(isArmyWaitingToGather({ ...group, gatherDepartsAt: '2026-01-01T02:30:00Z' }, now)).toBe(false);
+    expect(isArmyWaitingToGather({ ...group, movement: { ...movement, isReturning: true } }, now)).toBe(false);
+    expect(isArmyWaitingToGather({ ...group, movement: { ...movement, isStranded: true } }, now)).toBe(false);
+    expect(isArmyWaitingToGather({ movement }, now)).toBe(false);
+    expect(isArmyWaitingToGather({ movement: null, gatheringId: 'g1', gatherDepartsAt: group.gatherDepartsAt }, now)).toBe(false);
   });
 });
