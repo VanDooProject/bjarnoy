@@ -92,6 +92,14 @@ public static class SettlementEndpoints
             .AddEndpointFilter<UserActivityEndpointFilter>()
             .WithConcurrencyRetry();
 
+        settlements.MapPost("/{settlementId:guid}/units/{orderId:guid}/cancel", CancelTraining)
+            .WithName("CancelTraining")
+            .WithSummary("Cancels an order of a building's training queue; the units not trained yet are refunded at 50 %.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .RequireSettlementOwner()
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
+
         settlements.MapPost("/{settlementId:guid}/units", TrainUnits)
             .WithName("TrainUnits")
             .WithSummary("Queues training a batch of units, charging their cost immediately.")
@@ -512,6 +520,22 @@ public static class SettlementEndpoints
         // OrderNotFound is CancelBuildRejection's only other value — either
         // the order was never there, or it already completed and left the
         // queue (SettleTo ran first — see CancelBuildAsync).
+        return result.Accepted ? TypedResults.NoContent() : TypedResults.NotFound();
+    }
+
+    private static async Task<Results<NoContent, NotFound, Conflict<ProblemDetails>>> CancelTraining(
+        Guid settlementId,
+        Guid orderId,
+        SettlementService settlements,
+        CancellationToken cancellationToken)
+    {
+        var result = await settlements.CancelTrainingAsync(settlementId, orderId, cancellationToken);
+
+        if (result.WorldPaused)
+        {
+            return TypedResults.Conflict(WorldPausedProblem());
+        }
+
         return result.Accepted ? TypedResults.NoContent() : TypedResults.NotFound();
     }
 
@@ -972,6 +996,7 @@ public static class SettlementEndpoints
             "The building that trains this unit stands outside your realm and has no function until your realm reaches it again.",
         TrainRejection.WrongBuilding => "There is no building that trains this unit on that hex.",
         TrainRejection.PremiumRequired => "Splitting an order for the fastest finish needs premium.",
+        TrainRejection.BuildingLevelTooLow => "This building is too low a level to train that unit.",
         _ => "Refused.",
     };
 

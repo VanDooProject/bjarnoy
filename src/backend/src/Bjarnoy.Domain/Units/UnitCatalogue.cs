@@ -66,6 +66,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 80, Stone: 40, Food: 20, Iron: 40),
             TrainingDuration = TimeSpan.FromMinutes(15),
             RequiredLonghouseLevel = 5,
+            RequiredBuildingLevel = 3,
             RequiredBuildingType = BuildingType.Barracks,
         },
         [UnitType.Axeman] = new UnitDefinition
@@ -83,6 +84,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 100, Stone: 30, Food: 20, Iron: 60),
             TrainingDuration = TimeSpan.FromMinutes(20),
             RequiredLonghouseLevel = 6,
+            RequiredBuildingLevel = 6,
             RequiredBuildingType = BuildingType.Barracks,
         },
         [UnitType.Bowman] = new UnitDefinition
@@ -117,7 +119,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 150, Stone: 60, Food: 30, Iron: 120),
             TrainingDuration = TimeSpan.FromMinutes(35),
             RequiredLonghouseLevel = 20,
-            RequiredUnitType = UnitType.Axeman,
+            RequiredBuildingLevel = 10,
             RequiredBuildingType = BuildingType.Barracks,
         },
         [UnitType.Provisioner] = new UnitDefinition
@@ -160,6 +162,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 120, Stone: 90, Food: 60, Iron: 60),
             TrainingDuration = TimeSpan.FromMinutes(24),
             RequiredLonghouseLevel = 10,
+            RequiredBuildingLevel = 5,
             RequiredBuildingType = BuildingType.CartWorkshop,
         },
         [UnitType.CampBuilder] = new UnitDefinition
@@ -178,6 +181,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 80, Stone: 40, Food: 40, Iron: 20),
             TrainingDuration = TimeSpan.FromMinutes(12),
             RequiredLonghouseLevel = 10,
+            RequiredBuildingLevel = 10,
             RequiredBuildingType = BuildingType.CartWorkshop,
         },
         [UnitType.Catapult] = new UnitDefinition
@@ -202,8 +206,9 @@ public static class UnitCatalogue
             SiegeTargets = SiegeTargets.Towers | SiegeTargets.Buildings,
             TrainingCost = new ResourceAmounts(Wood: 300, Stone: 200, Food: 40, Iron: 250),
             TrainingDuration = TimeSpan.FromHours(1),
-            RequiredLonghouseLevel = 20,
+            RequiredLonghouseLevel = 1,
             RequiredUnitType = UnitType.Berserker,
+            RequiredBuildingLevel = 10,
             RequiredBuildingType = BuildingType.SiegeWorkshop,
         },
         [UnitType.Ram] = new UnitDefinition
@@ -224,8 +229,9 @@ public static class UnitCatalogue
             SiegeTargets = SiegeTargets.Walls | SiegeTargets.Towers,
             TrainingCost = new ResourceAmounts(Wood: 400, Stone: 100, Food: 40, Iron: 150),
             TrainingDuration = TimeSpan.FromHours(1),
-            RequiredLonghouseLevel = 20,
+            RequiredLonghouseLevel = 1,
             RequiredUnitType = UnitType.Berserker,
+            RequiredBuildingLevel = 10,
             RequiredBuildingType = BuildingType.SiegeWorkshop,
         },
         [UnitType.Karve] = new UnitDefinition
@@ -306,23 +312,24 @@ public static class UnitCatalogue
     /// <summary>
     /// Whether <paramref name="type"/> is trainable at <paramref name="longhouseLevel"/>:
     /// the longhouse is high enough, its training building (see
-    /// <see cref="UnitDefinition.RequiredBuildingType"/>) stands if
+    /// <see cref="UnitDefinition.RequiredBuildingType"/>) stands at <see cref="UnitDefinition.RequiredBuildingLevel"/> if
     /// <paramref name="buildingLevelOf"/> is supplied, and (recursively) any
     /// prerequisite unit is itself available under the same conditions.
     /// </summary>
     /// <param name="buildingLevelOf">
-    /// Looks up a settlement's level of a given building type (0 if it has
-    /// none). <see langword="null"/> skips the training-building check
-    /// entirely — the old longhouse-only behavior — so existing callers that
-    /// have no settlement to check against keep working unchanged.
+    /// Looks up the level of a settlement's best building of a given type (0 if it has
+    /// none). <see langword="null"/> skips the training-building check entirely.
+    /// </param>
+    /// <param name="checkOwnBuildingLevel">
+    /// <see langword="false"/> only asks that the training building stands (level 1); the caller then checks the level of the
+    /// building the order goes to itself. Prerequisite units are always checked in full.
     /// </param>
     /// <remarks>
-    /// "Available" means "unlockable here", not "one stands in the garrison" —
-    /// Berserker only needs Axeman to be a buildable option, not an owned unit.
-    /// The roster has no cycles, so plain recursion terminates; a cycle would
-    /// be a data bug, not something this needs to guard against defensively.
+    /// "Available" means "unlockable here", not "one stands in the garrison". The roster has no cycles, so plain recursion
+    /// terminates.
     /// </remarks>
-    public static bool IsAvailable(UnitType type, int longhouseLevel, Func<BuildingType, int>? buildingLevelOf = null)
+    public static bool IsAvailable(
+        UnitType type, int longhouseLevel, Func<BuildingType, int>? buildingLevelOf = null, bool checkOwnBuildingLevel = true)
     {
         var definition = Get(type);
         if (longhouseLevel < definition.RequiredLonghouseLevel)
@@ -330,7 +337,8 @@ public static class UnitCatalogue
             return false;
         }
 
-        if (buildingLevelOf is not null && buildingLevelOf(definition.RequiredBuildingType) < 1)
+        if (buildingLevelOf is not null
+            && buildingLevelOf(definition.RequiredBuildingType) < (checkOwnBuildingLevel ? definition.RequiredBuildingLevel : 1))
         {
             return false;
         }

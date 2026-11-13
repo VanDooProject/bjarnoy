@@ -59,6 +59,11 @@ public sealed record BuildResult(
     public bool Accepted => Rejection == BuildRejection.None && Order is not null;
 }
 
+public sealed record CancelTrainingServiceResult(CancelTrainingRejection Rejection, bool WorldPaused = false)
+{
+    public bool Accepted => Rejection == CancelTrainingRejection.None && !WorldPaused;
+}
+
 public sealed record CancelBuildResult(CancelBuildRejection Rejection, bool WorldPaused = false)
 {
     public bool Accepted => Rejection == CancelBuildRejection.None && !WorldPaused;
@@ -1328,6 +1333,46 @@ public sealed class SettlementService(
         session.Apply(settlementId, settled.BurnTower(coord, now, session.SpeedFactor, session.GuestStacksOf(settlementId), session.TerrainAt));
         await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         return true;
+    }
+
+    /// <summary>
+    /// Cancels an order of a building's training queue, refunding 50 % of the cost of the units not yet trained
+    /// (see <see cref="Settlement.CancelTraining"/>).
+    /// </summary>
+    public async Task<CancelTrainingServiceResult> CancelTrainingAsync(
+        Guid settlementId,
+        Guid orderId,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
+        {
+            return new CancelTrainingServiceResult(CancelTrainingRejection.OrderNotFound);
+        }
+
+        if (!session.Clock.AllowsCommands)
+        {
+            return new CancelTrainingServiceResult(CancelTrainingRejection.None, WorldPaused: true);
+        }
+
+        var owner = session.Store.MemberOwningTrainingOrder(orderId) is { } found && session.Store.ComponentOf(settlementId).Contains(found)
+            ? found
+            : settlementId;
+
+        var decision = session.View(owner).CancelTraining(orderId, session.Now);
+        if (!decision.Accepted)
+        {
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
+            return new CancelTrainingServiceResult(decision.Rejection);
+        }
+
+        session.Apply(owner, decision.Settlement!);
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Settlement {Id} cancelled training order {OrderId}.", settlementId, orderId);
+
+        return new CancelTrainingServiceResult(CancelTrainingRejection.None);
     }
 
     /// <summary>

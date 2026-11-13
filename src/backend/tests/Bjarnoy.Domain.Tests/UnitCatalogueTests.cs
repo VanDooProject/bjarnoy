@@ -56,22 +56,21 @@ public class UnitCatalogueTests
     [Fact]
     public void A_unit_with_a_prerequisite_needs_both_its_own_and_the_prerequisites_longhouse_level()
     {
-        // Berserker itself needs longhouse 20, and Axeman (its prerequisite)
-        // needs longhouse 6 — both must be satisfied, so a high-enough
-        // longhouse alone is not tested here, only the composed rule.
-        Assert.False(UnitCatalogue.IsAvailable(UnitType.Berserker, 19));
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.Berserker, 20));
+        // The Ram needs the Berserker to be unlocked and has no Longhouse gate of its own: the Berserker's 20 carries it.
+        Assert.Equal(1, UnitCatalogue.Get(UnitType.Ram).RequiredLonghouseLevel);
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Ram, 19));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Ram, 20));
     }
 
     [Fact]
     public void A_chained_prerequisite_recurses_through_every_link()
     {
-        // Catapult requires Berserker, which requires Axeman. At longhouse 20
-        // every link in the chain is satisfied.
+        // Catapult requires Berserker, which stands on its own (the building level, not the Axeman, orders the Barracks'
+        // units). At longhouse 20 every link in the chain is satisfied.
         Assert.True(UnitCatalogue.IsAvailable(UnitType.Catapult, 20));
 
         // Below 20 Berserker is not available, so neither is Catapult, even
-        // though Axeman (the chain's first link, longhouse 6) is.
+        // though the Axeman (longhouse 6) is.
         Assert.True(UnitCatalogue.IsAvailable(UnitType.Axeman, 19));
         Assert.False(UnitCatalogue.IsAvailable(UnitType.Catapult, 19));
     }
@@ -117,7 +116,11 @@ public class UnitCatalogueTests
         // the longhouse is high enough.
         Assert.False(UnitCatalogue.IsAvailable(UnitType.Spearman, 5, _ => 0));
         Assert.True(UnitCatalogue.IsAvailable(
-            UnitType.Spearman, 5, t => t == BuildingType.Barracks ? 1 : 0));
+            UnitType.Spearman, 5, t => t == BuildingType.Barracks ? 3 : 0));
+
+        // The unit also needs the Barracks level (3), not just any Barracks.
+        Assert.False(UnitCatalogue.IsAvailable(
+            UnitType.Spearman, 5, t => t == BuildingType.Barracks ? 2 : 0));
     }
 
     [Fact]
@@ -196,8 +199,8 @@ public class UnitCatalogueTests
     [Fact]
     public void A_units_longhouse_gate_is_never_below_the_unlock_level_of_the_building_that_trains_it()
     {
-        // The Thrall is the one exception: it has no Longhouse gate of its own (1), its Barracks (LH 5) is the gate.
-        foreach (var type in UnitCatalogue.AllTypes.Where(t => t != UnitType.Thrall))
+        // A unit with no Longhouse gate of its own (1: the Thrall, the Ram, the Catapult) is gated by its building's unlock alone.
+        foreach (var type in UnitCatalogue.AllTypes.Where(t => UnitCatalogue.Get(t).RequiredLonghouseLevel > 1))
         {
             var definition = UnitCatalogue.Get(type);
             Assert.True(
@@ -216,8 +219,8 @@ public class UnitCatalogueTests
     [InlineData(UnitType.Provisioner, 10)]
     [InlineData(UnitType.Settler, 10)]
     [InlineData(UnitType.Berserker, 20)]
-    [InlineData(UnitType.Catapult, 20)]
-    [InlineData(UnitType.Ram, 20)]
+    [InlineData(UnitType.Catapult, 1)]
+    [InlineData(UnitType.Ram, 1)]
     [InlineData(UnitType.Longship, 20)]
     public void Unit_gates_follow_the_building_ladder(UnitType type, int longhouseLevel)
     {
@@ -232,7 +235,9 @@ public class UnitCatalogueTests
         var bogOre = BuildingCatalogue.UnlockLevel(BuildingType.BogOreWorks);
         foreach (var type in UnitCatalogue.AllTypes.Where(t => t is not (UnitType.Thrall or UnitType.Spearman)))
         {
-            Assert.True(UnitCatalogue.Get(type).RequiredLonghouseLevel >= bogOre, $"{type} opens before the bog-ore works");
+            var definition = UnitCatalogue.Get(type);
+            var earliest = Math.Max(definition.RequiredLonghouseLevel, BuildingCatalogue.UnlockLevel(definition.RequiredBuildingType));
+            Assert.True(earliest >= bogOre, $"{type} opens before the bog-ore works");
         }
     }
 
@@ -240,21 +245,31 @@ public class UnitCatalogueTests
     public void The_elite_units_open_where_the_hammerschmiede_does()
     {
         var hammer = BuildingCatalogue.UnlockLevel(BuildingType.Hammerschmiede);
-        foreach (var type in new[] { UnitType.Berserker, UnitType.Catapult, UnitType.Ram, UnitType.Longship })
+        foreach (var type in new[] { UnitType.Berserker, UnitType.Longship })
         {
             Assert.Equal(hammer, UnitCatalogue.Get(type).RequiredLonghouseLevel);
+        }
+
+        // The siege engines have no gate of their own: they open with the Berserker they need.
+        foreach (var type in new[] { UnitType.Catapult, UnitType.Ram })
+        {
+            Assert.False(UnitCatalogue.IsAvailable(type, hammer - 1, _ => 20));
+            Assert.True(UnitCatalogue.IsAvailable(type, hammer, _ => 20));
         }
     }
 
     [Fact]
     public void A_unit_never_opens_before_its_prerequisite_unit()
     {
-        foreach (var type in UnitCatalogue.AllTypes)
+        // With every building at its top level, the Longhouse alone decides: a unit is never available where its prerequisite is not.
+        foreach (var longhouse in Enumerable.Range(1, 20))
         {
-            var definition = UnitCatalogue.Get(type);
-            if (definition.RequiredUnitType is { } prerequisite)
+            foreach (var type in UnitCatalogue.AllTypes)
             {
-                Assert.True(definition.RequiredLonghouseLevel >= UnitCatalogue.Get(prerequisite).RequiredLonghouseLevel);
+                if (UnitCatalogue.Get(type).RequiredUnitType is { } prerequisite && UnitCatalogue.IsAvailable(type, longhouse, _ => 20))
+                {
+                    Assert.True(UnitCatalogue.IsAvailable(prerequisite, longhouse, _ => 20), $"{type} opens before {prerequisite}");
+                }
             }
         }
     }
@@ -285,7 +300,7 @@ public class UnitCatalogueTests
     {
         // The ram needs a Siege Workshop standing (its Berserker prerequisite a Barracks); an Archery Range, which keeps
         // the bowman and the catapult, is not enough.
-        int Standing(BuildingType trains, BuildingType t) => t == trains || t == BuildingType.Barracks ? 1 : 0;
+        int Standing(BuildingType trains, BuildingType t) => t == trains || t == BuildingType.Barracks ? 10 : 0;
 
         Assert.False(UnitCatalogue.IsAvailable(UnitType.Ram, 20, t => Standing(BuildingType.ArcheryRange, t)));
         Assert.True(UnitCatalogue.IsAvailable(UnitType.Ram, 20, t => Standing(BuildingType.SiegeWorkshop, t)));

@@ -707,6 +707,7 @@ public sealed record UnitDefinitionResponse(
     int RequiredLonghouseLevel,
     string? RequiredUnitType,
     string RequiredBuildingType,
+    int RequiredBuildingLevel,
     IReadOnlyList<string> SiegeTargets)
 {
     public static UnitDefinitionResponse From(UnitDefinition definition)
@@ -730,6 +731,7 @@ public sealed record UnitDefinitionResponse(
             definition.RequiredLonghouseLevel,
             definition.RequiredUnitType?.ToWireName(),
             definition.RequiredBuildingType.ToWireName(),
+            definition.RequiredBuildingLevel,
             SiegeTargetNames(definition.SiegeTargets));
     }
 
