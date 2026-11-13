@@ -137,42 +137,4 @@ describe('HexTooltip has no workers line', () => {
     expect(text).toContain('Food/h');
     expect(text).not.toContain('Workers');
   });
-
-  describe('quick upgrade line', () => {
-    const withUpgrade = (upgrade: Record<string, unknown>) =>
-      mount(HexTooltip, {
-        props: { info: grass(300, 200), upgrade },
-        global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] },
-      });
-
-    it('is absent unless the host hands one in', () => {
-      const wrapper = mount(HexTooltip, {
-        props: { info: grass(300, 200) },
-        global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] },
-      });
-      expect(wrapper.find('[data-testid="tooltip-upgrade"]').exists()).toBe(false);
-    });
-
-    it('shows the title with the cost and time of the next level', () => {
-      const wrapper = withUpgrade({ title: 'Shift+click: upgrade to level 3', cost: { wood: 120.2, iron: 5 }, time: '4:00' });
-      const line = wrapper.get('[data-testid="tooltip-upgrade"]');
-      expect(line.text()).toContain('Shift+click: upgrade to level 3');
-      expect(line.text()).toContain('121');
-      expect(line.text()).toContain('5');
-      expect(line.text()).toContain('4:00');
-      expect(wrapper.find('[data-testid="tooltip-upgrade-blocked"]').exists()).toBe(false);
-    });
-
-    it('says why a click would be refused', () => {
-      const wrapper = withUpgrade({ title: 'Upgrade to level 2', cost: { wood: 50 }, blocked: 'Not enough: 50 wood' });
-      expect(wrapper.get('[data-testid="tooltip-upgrade-blocked"]').text()).toBe('Not enough: 50 wood');
-    });
-
-    it('a free account only gets the locked premium line', () => {
-      const wrapper = withUpgrade({ locked: 'Premium: Shift+click upgrades' });
-      const line = wrapper.get('[data-testid="tooltip-upgrade"]');
-      expect(line.classes()).toContain('locked');
-      expect(line.text()).toBe('Premium: Shift+click upgrades');
-    });
-  });
 });

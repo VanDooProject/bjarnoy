@@ -5,7 +5,7 @@ Premium only. Upgrades a building's next level without going through the ring me
 ## Desktop: Shift+click
 - While Shift is held, a click on one of your own buildings orders its next level. A click without Shift opens the ring as before.
 - While Shift is held, the building markers show the upgrade state (gold ⇈: can be ordered now, clock: has to wait) and the
-  hover tooltip shows the next level's cost and build time.
+  hovered building's marker box shows the next level's cost and build time.
 
 ## Quick upgrade mode
 - On: hold the Upgrade bubble in a building's ring menu. A gold ring fills around it; when it closes, that building's upgrade

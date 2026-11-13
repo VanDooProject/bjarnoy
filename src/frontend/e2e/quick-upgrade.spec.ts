@@ -48,24 +48,26 @@ test.describe('quick upgrade with Shift on desktop', { tag: '@g2' }, () => {
     expect(await settlement.longhouseBuildingLevel()).toBe(before);
   });
 
-  test('while Shift is held the tooltip over an own building shows what a click would upgrade to', async ({ page, adminAuth }) => {
+  test('while Shift is held the hovered building\'s marker box shows what a click would upgrade to', async ({ page, adminAuth }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await foundAs(page, adminAuth, true);
     const centre = await settlement.centreHex();
     const box = await settlement.canvasBox();
     await page.mouse.move(box.x + centre.screen.x, box.y + centre.screen.y, { steps: 3 });
-    await expect(settlement.tooltip).toBeVisible();
-    await expect(settlement.tooltip.getByTestId('tooltip-upgrade')).toHaveCount(0);
+    const markerBox = settlement.hud.box(centre.hex);
+    await expect(markerBox).toBeVisible();
+    await expect(markerBox.getByTestId('hud-quick-upgrade')).toHaveCount(0);
 
     await page.keyboard.down('Shift');
-    await expect(settlement.tooltip.getByTestId('tooltip-upgrade')).toContainText('Shift+click: upgrade to level 2');
+    await expect(markerBox.getByTestId('hud-quick-upgrade')).toContainText('Shift+click: upgrade to level 2');
+    await expect(markerBox.getByTestId('hud-quick-upgrade-cost')).toBeVisible();
     await page.keyboard.up('Shift');
-    await expect(settlement.tooltip.getByTestId('tooltip-upgrade')).toHaveCount(0);
+    await expect(markerBox.getByTestId('hud-quick-upgrade')).toHaveCount(0);
   });
 });
 
 test.describe('quick upgrade for a free account', { tag: '@g2' }, () => {
-  test('Shift+click opens the ring like a plain click, and the tooltip says it is premium', async ({ page, adminAuth }) => {
+  test('Shift+click opens the ring like a plain click, and the marker box says it is premium', async ({ page, adminAuth }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await foundAs(page, adminAuth, false);
     const centre = await settlement.centreHex();
@@ -73,8 +75,9 @@ test.describe('quick upgrade for a free account', { tag: '@g2' }, () => {
     const before = await settlement.longhouseBuildingLevel();
 
     await page.mouse.move(box.x + centre.screen.x, box.y + centre.screen.y, { steps: 3 });
+    await expect(settlement.hud.box(centre.hex)).toBeVisible();
     await page.keyboard.down('Shift');
-    await expect(settlement.tooltip.getByTestId('tooltip-upgrade')).toHaveText('Premium: Shift+click upgrades');
+    await expect(settlement.hud.box(centre.hex).getByTestId('hud-quick-upgrade')).toHaveText('Premium: Shift+click upgrades');
 
     await settlement.clickHex(centre);
     await page.keyboard.up('Shift');

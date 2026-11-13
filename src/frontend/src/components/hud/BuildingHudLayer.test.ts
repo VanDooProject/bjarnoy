@@ -606,7 +606,7 @@ describe('BuildingHudLayer', () => {
       await flushPromises();
       expect(wrapper.findAll('.hud-marker')).toHaveLength(4);
       // The barracks can be upgraded now: the double chevron, and no level number.
-      const barracks = wrapper.get('[data-coord="3,0"]');
+      const barracks = wrapper!.get('[data-coord="3,0"]');
       expect(barracks.find('.hud-dial__glyph--up').exists()).toBe(true);
       expect(barracks.find('text').exists()).toBe(false);
       // The tower stands at its maximum: it keeps its level.
@@ -627,6 +627,68 @@ describe('BuildingHudLayer', () => {
       await flushPromises();
       expect(wrapper.find('[data-coord="3,0"] .hud-dial__glyph--wait').exists()).toBe(true);
       expect(wrapper.find('[data-coord="3,0"] .hud-dial__glyph--up').exists()).toBe(false);
+    });
+
+    describe('the hovered marker\'s box', () => {
+      async function hover(key: string) {
+        const renderer = fakeRenderer({ dialMapScale: 1.4 });
+        wrapper = mountLayer(renderer);
+        renderer.hoveredHexKey = key;
+        runFrame();
+        await flushPromises();
+        return renderer;
+      }
+      const line = (key: string) => wrapper!.get(`[data-coord="${key}"]`).find('[data-testid="hud-quick-upgrade"]');
+
+      it('shows the next level\'s cost and the Shift hint while Shift is held and the upgrade is ready', async () => {
+        premium(true);
+        const world = seedBuildings();
+        world.hud.available = { ...rich };
+        world.hud.storageCap = { ...rich };
+        useQuickUpgradeStore().setShift(true);
+        await hover('3,0');
+        expect(line('3,0').text()).toBe('Shift+click: upgrade to level 3');
+        expect(wrapper!.get('[data-coord="3,0"]').find('[data-testid="hud-quick-upgrade-cost"] .resource-icon').exists()).toBe(true);
+        // Only the hovered marker's box: the longhouse's stays as it was.
+        expect(line('1,0').exists()).toBe(false);
+      });
+
+      it('says Upgrade in the mode', async () => {
+        premium(true);
+        const world = seedBuildings();
+        world.hud.available = { ...rich };
+        world.hud.storageCap = { ...rich };
+        useQuickUpgradeStore().start();
+        await hover('3,0');
+        expect(line('3,0').text()).toBe('Upgrade');
+        expect(wrapper!.get('[data-coord="3,0"]').find('[data-testid="hud-quick-upgrade-cost"]').exists()).toBe(true);
+      });
+
+      it('adds nothing to a blocked upgrade and nothing without hover', async () => {
+        premium(true);
+        const world = seedBuildings();
+        world.hud.available = { wood: 0, stone: 0, food: 0, iron: 0 };
+        useQuickUpgradeStore().setShift(true);
+        await hover('3,0');
+        expect(line('3,0').exists()).toBe(false);
+        expect(wrapper!.get('[data-coord="3,0"]').find('.hud-marker__box .hud-chip--short, .hud-marker__box .hud-chip--blocked').exists()).toBe(true);
+      });
+
+      it('gives a free account holding Shift the locked premium line', async () => {
+        premium(false);
+        seedBuildings();
+        useQuickUpgradeStore().setShift(true);
+        await hover('3,0');
+        expect(line('3,0').text()).toBe('Premium: Shift+click upgrades');
+        expect(line('1,0').exists()).toBe(false);
+      });
+
+      it('shows nothing extra to a free account without Shift', async () => {
+        premium(false);
+        seedBuildings();
+        await hover('3,0');
+        expect(line('3,0').exists()).toBe(false);
+      });
     });
 
     it('a free account keeps the levels: Shift and the mode change nothing', async () => {

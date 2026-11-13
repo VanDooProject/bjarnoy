@@ -21,7 +21,7 @@ import HudPanelDock from '../components/hud/HudPanelDock.vue';
 import QuestTray from '../components/onboarding/QuestTray.vue';
 import QueueDrawer from '../components/hud/QueueDrawer.vue';
 import ArmyPanel from '../components/hud/ArmyPanel.vue';
-import HexTooltip, { type HexTooltipUpgrade } from '../components/hud/HexTooltip.vue';
+import HexTooltip from '../components/hud/HexTooltip.vue';
 import HoldProgress from '../components/hud/HoldProgress.vue';
 import QuickUpgradeChip from '../components/hud/QuickUpgradeChip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
@@ -1650,25 +1650,6 @@ useQuickUpgradeInput({
   inSettlement: () => mode.value === 'settlement',
   settlementId: () => world.selectedSettlementId,
 });
-
-// While the quick upgrade applies the tooltip over an own building says what a click would order; a free account sees, while Shift
-// is held, that it is a premium feature (docs/design/premium-gating-ux.md: visible, disabled, explained).
-const tooltipUpgrade = computed<HexTooltipUpgrade | undefined>(() => {
-  const info = hoverInfo.value;
-  if (mode.value !== 'settlement' || info?.subject.kind !== 'building') return undefined;
-  const tile = world.model.getTile(info.coord.q, info.coord.r);
-  if (!tile || !isQuickTarget(tile)) return undefined;
-  if (!quickUpgrade.available) return quickUpgrade.shiftHeld ? { locked: t('hud.quickUpgrade.premiumShift') } : undefined;
-  if (!quickUpgrade.applies) return undefined;
-  const action = upgradeActionFor(tile);
-  const level = nextUpgradeLevel(tile.buildingLevel ?? 1, world.hud.queue, info.coord);
-  return {
-    title: quickUpgrade.shiftHeld ? t('hud.quickUpgrade.shiftHint', { level }) : (action.card?.title ?? action.label),
-    cost: action.card?.cost,
-    time: action.card?.time,
-    blocked: action.disabled ? action.hint : undefined,
-  };
-});
 </script>
 
 <template>
@@ -1748,7 +1729,7 @@ const tooltipUpgrade = computed<HexTooltipUpgrade | undefined>(() => {
         <HudPanelDock v-phone-hidden="hudHidden" @select="onQueueSelect" @focus-army="onArmySelect" />
       </template>
       <QuestTray v-if="isMobile && !hasActiveDraft" />
-      <HexTooltip v-if="hoverInfo && !hudHovering" v-phone-hidden="hudHidden" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" :upgrade="tooltipUpgrade" />
+      <HexTooltip v-if="hoverInfo && !hudHovering" v-phone-hidden="hudHidden" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
       <QuickUpgradeChip :shown="quickUpgrade.active" @stop="quickUpgrade.stop()" />
       <div v-if="mapHold" class="map-hold" :style="{ left: mapHold.x + 'px', top: mapHold.y + 'px' }"><HoldProgress :size="64" tone="white" /></div>
       <RingMenuHost @retracted="clearRingFootprint">

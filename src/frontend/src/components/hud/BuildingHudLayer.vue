@@ -186,6 +186,7 @@ const baseMarkers = computed<Marker[]>(() => {
         rates: hud.rates,
         construction: hud.construction,
         worldSpeedFactor: world.worldSpeedFactor,
+        wisdomFactor: world.model.wisdomFactor(world.selectedSettlementId!),
         matchingNeighbours: boost.matchingNeighbours,
         onLake: boost.onLake,
         feast,
@@ -278,20 +279,36 @@ const placeables = computed<Placeable[]>(() => [
   ...dialOnly.value,
 ]);
 
+/** The marker the mouse or a tap is on right now (set by the placement loop only when it changes). */
+const hoveredKey = ref<string | null>(null);
+
+type QuickMode = 'premium' | 'locked' | undefined;
+/**
+ * What the hovered marker's box adds for quick upgrade: while it applies, the next level's cost and time; a free account holding
+ * Shift gets the premium line instead (docs/design/premium-gating-ux.md: visible, disabled, explained).
+ */
+function quickModeOf(key: string): QuickMode {
+  if (hoveredKey.value !== key) return undefined;
+  if (quick.applies) return 'premium';
+  return !quick.available && quick.shiftHeld ? 'locked' : undefined;
+}
+
 /** Each marker's rows, worked out again only when its view model, its tier or the premium flag is not what the last ones were made from. */
-const rowMemo = new Map<string, { vm: BuildingHudViewModel; tier: HudTier; premium: boolean; rows: HudRow[] }>();
+const rowMemo = new Map<string, { vm: BuildingHudViewModel; tier: HudTier; premium: boolean; quick: QuickMode; shift: boolean; rows: HudRow[] }>();
 const rowsByKey = computed<Record<string, HudRow[]>>(() => {
   const out: Record<string, HudRow[]> = {};
   const premium = auth.isPremium;
+  const shift = quick.shiftHeld;
   for (const m of markers.value) {
     const tier = tierOf(m.key);
+    const mode = quickModeOf(m.key);
     const hit = rowMemo.get(m.key);
-    if (hit && hit.vm === m.vm && hit.tier === tier && hit.premium === premium) {
+    if (hit && hit.vm === m.vm && hit.tier === tier && hit.premium === premium && hit.quick === mode && hit.shift === shift) {
       out[m.key] = hit.rows;
       continue;
     }
-    const rows = rowsFor(m.vm, tier, { premium });
-    rowMemo.set(m.key, { vm: m.vm, tier, premium, rows });
+    const rows = rowsFor(m.vm, tier, { premium, quick: mode, shift });
+    rowMemo.set(m.key, { vm: m.vm, tier, premium, quick: mode, shift, rows });
     out[m.key] = rows;
   }
   for (const key of rowMemo.keys()) if (!(key in out)) rowMemo.delete(key);
@@ -518,6 +535,7 @@ function tick() {
   const height = rootSize?.h ?? window.innerHeight;
   const circle = renderer.markerOcclusionCircle;
   const placed: { key: string; x: number; hovered: boolean }[] = [];
+  let hoveredNow: string | null = null;
   const mouse = renderer.mousePoint;
   // A marker the mouse is directly on wins over the hex under it for every marker.
   const direct = directHit(
@@ -566,6 +584,7 @@ function tick() {
     const byMouse = !occluded && (direct !== null ? direct === marker.key : renderer.hoveredHexKey === marker.hexKey);
     if (byMouse) mouseHovering = true;
     const hovered = byMouse || (!occluded && tapKey === marker.hexKey);
+    if (hovered) hoveredNow = marker.key;
     const t = dialHoverStep(hoverT.get(marker.key) ?? 0, hovered, dtMs, prefersReducedMotion());
     if (t > 0) hoverT.set(marker.key, t);
     else hoverT.delete(marker.key);
@@ -596,6 +615,7 @@ function tick() {
     placed.push({ key: marker.key, x, hovered: t > 0 });
   }
   if (tiersChanged) tiers.value = nextTiers;
+  if (hoveredNow !== hoveredKey.value) hoveredKey.value = hoveredNow;
   setMouseHovering(mouseHovering);
   // Right-most on top, the hovered / tapped one above all.
   stackOrder(placed).forEach((p, i) => {
