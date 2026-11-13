@@ -13,7 +13,7 @@ import {
   type RingResourceKey,
   type RingStock,
 } from '../map/ringAvailability';
-import { isWallBuilding } from '../map/ringCatalogue';
+import { isWallBuilding, scaledBuildSeconds } from '../map/ringCatalogue';
 import { MAX_TRAINING_ORDERS_PER_BUILDING } from '../units/trainingEconomy';
 import { upgradeVerdict } from './upgradeRules';
 
@@ -125,6 +125,10 @@ export interface BuildingHudViewModel {
     /** Longhouse requirement first, then prerequisite buildings (states 'longhouse' and 'prereq'). */
     requirements?: HudRequirement[];
     targetLevel?: number;
+    /** What the next level costs (the quick upgrade line of the hovered marker's box). */
+    cost?: Readonly<Record<RingResourceKey, number>>;
+    /** The next level's build time in seconds as this settlement runs it (`scaledBuildSeconds`); undefined without a catalogue entry. */
+    buildSeconds?: number;
     /** Only a maxed Longhouse wears the crown. */
     crown: boolean;
   };
@@ -158,6 +162,8 @@ export interface BuildingHudInput {
   rates: RingStock;
   construction: RingConstruction;
   worldSpeedFactor: number;
+  /** Odin's Wisdom: the settlement's build time factor (`WorldModel.wisdomFactor`); 1 when omitted. */
+  wisdomFactor?: number;
   /** For `buildingStatsFor`. */
   matchingNeighbours?: number;
   onLake?: boolean;
@@ -373,7 +379,12 @@ function standingViewModel(input: BuildingHudInput): BuildingHudViewModel {
     locked: requirements.length > 0,
     hexBusy,
   });
-  const base = { targetLevel: verdict.nextLevel, crown };
+  const base = {
+    targetLevel: verdict.nextLevel,
+    crown,
+    cost,
+    buildSeconds: definition ? scaledBuildSeconds(definition.buildSeconds, input.wisdomFactor ?? 1, input.worldSpeedFactor) : undefined,
+  };
 
   if (requirements.length > 0) {
     vm.upgrade = { ...base, state: blockers.longhouse !== undefined ? 'longhouse' : 'prereq', requirements };
@@ -419,6 +430,11 @@ export type HudRow =
       affordableInSeconds?: number | null;
       /** Free account short of resources: the dimmed premium marker instead of a time. */
       premiumHint: boolean;
+      /**
+       * The quick upgrade line of the hovered marker (`rowsFor`'s `quick`): `premium` + a ready upgrade shows the next level's
+       * `cost` and `buildSeconds`; `locked` (a free account holding Shift) shows the premium line instead.
+       */
+      quick?: { mode: 'premium' | 'locked'; /** Shift is held: the title reads "Shift+click: upgrade to level n". */ shift: boolean; cost?: Readonly<Record<RingResourceKey, number>>; buildSeconds?: number };
     }
   | { kind: 'production'; production: { resource: RingResourceKey; perHour: number }[] }
   | { kind: 'storage'; capacity: number }
@@ -445,7 +461,7 @@ function listRequirements(all: readonly HudRequirement[], tier: 'near' | 'mid'):
   return { shown: all.slice(0, 1), more: all.length - 1 };
 }
 
-function upgradeRow(vm: BuildingHudViewModel, tier: 'near' | 'mid', premium: boolean): HudRow {
+function upgradeRow(vm: BuildingHudViewModel, tier: 'near' | 'mid', premium: boolean, quick: 'premium' | 'locked' | undefined, shift: boolean): HudRow {
   const u = vm.upgrade;
   const { shown, more } = listRequirements(u.requirements ?? [], tier);
   return {
@@ -458,13 +474,22 @@ function upgradeRow(vm: BuildingHudViewModel, tier: 'near' | 'mid', premium: boo
     missing: u.missing,
     affordableInSeconds: u.state === 'short' && premium ? (u.affordableInSeconds ?? null) : undefined,
     premiumHint: u.state === 'short' && !premium,
+    quick:
+      quick === 'locked'
+        ? { mode: 'locked', shift: true }
+        : quick === 'premium' && u.state === 'ready'
+          ? { mode: 'premium', shift, cost: u.cost, buildSeconds: u.buildSeconds }
+          : undefined,
   };
 }
 
-/** The rows a marker shows at `tier` (none without a box: far and dial). Near takes up to three rows, mid two. */
-export function rowsFor(vm: BuildingHudViewModel, tier: HudTier, opts: { premium: boolean }): HudRow[] {
+/**
+ * The rows a marker shows at `tier` (none without a box: far and dial). Near takes up to three rows, mid two. `quick` is set
+ * on the hovered marker while quick upgrade applies (`premium`), or while a free account holds Shift (`locked`).
+ */
+export function rowsFor(vm: BuildingHudViewModel, tier: HudTier, opts: { premium: boolean; quick?: 'premium' | 'locked'; shift?: boolean }): HudRow[] {
   if (tier === 'far' || tier === 'dial') return [];
-  const upgrade = upgradeRow(vm, tier, opts.premium);
+  const upgrade = upgradeRow(vm, tier, opts.premium, opts.quick, opts.shift ?? false);
   // The Longhouse with a garrison shows the garrison instead of its production.
   const showProduction = !vm.garrison;
 
@@ -510,6 +535,11 @@ export function hudMarkerKeys(buildings: readonly { q: number; r: number; type: 
 
 // ---- structure of a marker's box ---------------------------------------------------------------------------------------
 
+function quickSignature(quick: Extract<HudRow, { kind: 'upgrade' }>['quick']): string {
+  if (!quick) return '-';
+  return quick.mode === 'locked' ? 'locked' : `premium:${quick.shift ? 1 : 0}:${RING_RESOURCE_KEYS.filter((k) => quick.cost?.[k]).join('+')}:${quick.buildSeconds === undefined ? 0 : 1}`;
+}
+
 /**
  * What a box is made of, without the text that ticks: the same string = the same layout, so no resize. A countdown or a
  * resource amount changing is not a change; another row, another state chip, a training order starting is.
@@ -518,7 +548,7 @@ export function rowsSignature(tier: HudTier, rows: readonly HudRow[]): string {
   const part = (row: HudRow): string => {
     switch (row.kind) {
       case 'upgrade':
-        return `upgrade:${row.state}:${row.crown ? 1 : 0}:${row.requirements.length}:${row.moreCount}:${row.premiumHint ? 1 : 0}`;
+        return `upgrade:${row.state}:${row.crown ? 1 : 0}:${row.requirements.length}:${row.moreCount}:${row.premiumHint ? 1 : 0}:${quickSignature(row.quick)}`;
       case 'production':
         return `production:${row.production.map((p) => p.resource).join('+')}`;
       case 'storage':

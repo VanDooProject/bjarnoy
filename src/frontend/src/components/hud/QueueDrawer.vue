@@ -394,7 +394,7 @@ function onDrawerLeave(el: Element, done: () => void) {
 
 <template>
   <Transition :css="false" @enter="onDrawerEnter" @leave="onDrawerLeave">
-  <div v-if="hasAnything">
+  <div v-if="hasAnything" data-quick-upgrade-keep>
     <div v-if="open" v-phone-hidden="layer.hidden.value" class="queue-drawer-backdrop" @pointerdown.self="close" />
     <div v-phone-hidden="layer.hidden.value" class="queue-drawer" :class="{ 'is-open': open, 'is-dragging': dragPx !== null }" :style="rootStyle">
       <div id="queue-drawer-body" class="queue-drawer-panel" :aria-hidden="!open" :inert="!open">

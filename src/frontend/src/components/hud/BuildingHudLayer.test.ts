@@ -6,11 +6,14 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import BuildingHudDial from './BuildingHudDial.vue';
 import BuildingHudLayer, { type BuildingHudRenderer } from './BuildingHudLayer.vue';
 import { useWorldStore } from '../../stores/world';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
+import { useAuthStore } from '../../stores/auth';
+import { useQuickUpgradeStore } from '../../stores/quickUpgrade';
 import { installFakeAnimate, type FakeAnimate } from '../../test/fakeAnimate';
-import { DIAL_REJECT_MS, constructionDialsFromQueue, rejectDialAt, type ConstructionDial } from '../../lib/map/constructionDial';
+import { DIAL_REJECT_MS, constructionDialsFromQueue, rejectDialAt, type BlockedMarker, type ConstructionDial } from '../../lib/map/constructionDial';
 import { markerScale } from '../../lib/hud/buildingHud';
 import { makePendingOrder } from '../../lib/hud/pendingBuild';
 import { createTestI18n } from '../../test/i18n';
@@ -65,6 +68,8 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
     markerOcclusionCircle: null as { x: number; y: number; r: number } | null,
     // The renderer's construction dials; a test replaces the array to change them, like the renderer does.
     constructionDialList: [] as ConstructionDial[],
+    // The markers playing the blocked-upgrade animation; a test replaces the array, like the renderer does.
+    blockedMarkerList: [] as BlockedMarker[],
     ...overrides,
   };
   return renderer as BuildingHudRenderer & {
@@ -76,6 +81,7 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
     tapObserver: ((screen: { x: number; y: number }) => void) | null;
     frameObserver: (() => void) | null;
     constructionDialList: ConstructionDial[];
+    blockedMarkerList: BlockedMarker[];
   };
 }
 
@@ -583,6 +589,146 @@ describe('BuildingHudLayer', () => {
     expect(localStorage.getItem('bjarnoy.hudBuildingInfo')).toBe('off');
     await toggle.trigger('click');
     expect(wrapper.findAll('.hud-marker')).toHaveLength(4);
+  });
+
+  describe('the quick upgrade look', () => {
+    function premium(on: boolean) {
+      useAuthStore().user = { id: 'u1', userName: 'p', role: 'player', preferredLocale: null, isPremium: on } as never;
+    }
+    const rich = { wood: 1e6, stone: 1e6, food: 1e6, iron: 1e6 };
+
+    it('shows the markers with glyphs in place of levels while Shift is held, even with building info off', async () => {
+      localStorage.setItem('bjarnoy.hudBuildingInfo', 'off');
+      premium(true);
+      const world = seedBuildings();
+      world.hud.available = { ...rich };
+      world.hud.storageCap = { ...rich };
+      wrapper = mountLayer(fakeRenderer());
+      expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
+
+      useQuickUpgradeStore().setShift(true);
+      await flushPromises();
+      expect(wrapper.findAll('.hud-marker')).toHaveLength(4);
+      // The barracks can be upgraded now: the double chevron, and no level number.
+      const barracks = wrapper!.get('[data-coord="3,0"]');
+      expect(barracks.find('.hud-dial__glyph--up').exists()).toBe(true);
+      expect(barracks.find('text').exists()).toBe(false);
+      // The tower stands at its maximum: it keeps its level.
+      expect(wrapper.get('[data-coord="2,0"] text').text()).toBe('10');
+      expect(wrapper.find('[data-coord="2,0"] .hud-dial__glyph').exists()).toBe(false);
+
+      useQuickUpgradeStore().setShift(false);
+      await flushPromises();
+      expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
+    });
+
+    it('draws a clock for an upgrade that cannot be ordered yet', async () => {
+      premium(true);
+      const world = seedBuildings();
+      world.hud.available = { wood: 0, stone: 0, food: 0, iron: 0 };
+      wrapper = mountLayer(fakeRenderer());
+      useQuickUpgradeStore().start();
+      await flushPromises();
+      expect(wrapper.find('[data-coord="3,0"] .hud-dial__glyph--wait').exists()).toBe(true);
+      expect(wrapper.find('[data-coord="3,0"] .hud-dial__glyph--up').exists()).toBe(false);
+    });
+
+    describe('the hovered marker\'s box', () => {
+      async function hover(key: string) {
+        const renderer = fakeRenderer({ dialMapScale: 1.4 });
+        wrapper = mountLayer(renderer);
+        renderer.hoveredHexKey = key;
+        runFrame();
+        await flushPromises();
+        return renderer;
+      }
+      const line = (key: string) => wrapper!.get(`[data-coord="${key}"]`).find('[data-testid="hud-quick-upgrade"]');
+
+      it('shows the next level\'s cost and the Shift hint while Shift is held and the upgrade is ready', async () => {
+        premium(true);
+        const world = seedBuildings();
+        world.hud.available = { ...rich };
+        world.hud.storageCap = { ...rich };
+        useQuickUpgradeStore().setShift(true);
+        await hover('3,0');
+        expect(line('3,0').text()).toBe('Shift+click: upgrade to level 3');
+        expect(wrapper!.get('[data-coord="3,0"]').find('[data-testid="hud-quick-upgrade-cost"] .resource-icon').exists()).toBe(true);
+        // Only the hovered marker's box: the longhouse's stays as it was.
+        expect(line('1,0').exists()).toBe(false);
+      });
+
+      it('says Upgrade in the mode', async () => {
+        premium(true);
+        const world = seedBuildings();
+        world.hud.available = { ...rich };
+        world.hud.storageCap = { ...rich };
+        useQuickUpgradeStore().start();
+        await hover('3,0');
+        expect(line('3,0').text()).toBe('Upgrade');
+        expect(wrapper!.get('[data-coord="3,0"]').find('[data-testid="hud-quick-upgrade-cost"]').exists()).toBe(true);
+      });
+
+      it('adds nothing to a blocked upgrade and nothing without hover', async () => {
+        premium(true);
+        const world = seedBuildings();
+        world.hud.available = { wood: 0, stone: 0, food: 0, iron: 0 };
+        useQuickUpgradeStore().setShift(true);
+        await hover('3,0');
+        expect(line('3,0').exists()).toBe(false);
+        expect(wrapper!.get('[data-coord="3,0"]').find('.hud-marker__box .hud-chip--short, .hud-marker__box .hud-chip--blocked').exists()).toBe(true);
+      });
+
+      it('gives a free account holding Shift the locked premium line', async () => {
+        premium(false);
+        seedBuildings();
+        useQuickUpgradeStore().setShift(true);
+        await hover('3,0');
+        expect(line('3,0').text()).toBe('Premium: Shift+click upgrades');
+        expect(line('1,0').exists()).toBe(false);
+      });
+
+      it('shows nothing extra to a free account without Shift', async () => {
+        premium(false);
+        seedBuildings();
+        await hover('3,0');
+        expect(line('3,0').exists()).toBe(false);
+      });
+    });
+
+    it('hands the time a quick upgrade hit a blocked building to that marker\'s dial, and to no other', async () => {
+      premium(true);
+      const world = seedBuildings();
+      world.hud.available = { wood: 0, stone: 0, food: 0, iron: 0 };
+      const renderer = fakeRenderer();
+      wrapper = mountLayer(renderer);
+      useQuickUpgradeStore().start();
+      await flushPromises();
+      const dialOf = (key: string) => wrapper!.findAllComponents(BuildingHudDial).find((d) => d.element.closest(`[data-coord="${key}"]`));
+      expect(dialOf('3,0')!.props('blockedAtMs')).toBeUndefined();
+
+      const atMs = Date.now();
+      renderer.blockedMarkerList = [{ key: '3,0', atMs }];
+      runFrame();
+      await flushPromises();
+      expect(dialOf('3,0')!.props('blockedAtMs')).toBe(atMs);
+      expect(dialOf('1,0')!.props('blockedAtMs')).toBeUndefined();
+      // The dial plays it over the plain state: the clock stays, nothing is drawn as a refused order's dial.
+      expect(wrapper.get('[data-coord="3,0"] .hud-dial').attributes('data-refused')).toBeDefined();
+      expect(wrapper.find('[data-coord="3,0"] .hud-dial__glyph--wait').exists()).toBe(true);
+      expect(wrapper.find('[data-coord="3,0"] .hud-dial__burst').exists()).toBe(false);
+    });
+
+    it('a free account keeps the levels: Shift and the mode change nothing', async () => {
+      premium(false);
+      seedBuildings();
+      wrapper = mountLayer(fakeRenderer());
+      const quick = useQuickUpgradeStore();
+      quick.setShift(true);
+      quick.start();
+      await flushPromises();
+      expect(wrapper.find('.hud-dial__glyph').exists()).toBe(false);
+      expect(wrapper.get('[data-coord="3,0"] text').text()).toBe('2');
+    });
   });
 
   it('starts hidden when the player turned it off before', () => {
