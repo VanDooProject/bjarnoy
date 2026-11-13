@@ -186,6 +186,12 @@ Consequences:
   `RetargetFoundingRejection.TargetNotReachable`) and the message "No land route: mountains
   and wide rivers can't be crossed."; the client maps the same codes to `apiErrors.rejections`
   in every locale and shows the text in the dispatch draft.
+- **The found route is straightened.** After the search, stretches of the route are replaced by
+  the straight hex line between their ends wherever every hex on that line is passable and the
+  line costs no more than the stretch (same half-and-half step pricing, so travel time and
+  provisions never get worse). On open sea this turns the two-leg shape (one diagonal, one
+  axis-straight leg) into one straight line. `HexPathfinder.Smooth` and `smooth` in `hexPath.ts`
+  do the same, on the same `HexCoord.Line` / `hexLine` hex line, so both sides return identical routes.
 - **The search is capped.** `HexPathfinder` expands at most 250,000 nodes per search (the TS
   twin `MAX_EXPANDED_NODES` in `hexPath.ts` matches); a long sea route that detours around land
   can need ~100,000 (a 534-hex fleet route against a 345-hex straight distance took 93,000,
