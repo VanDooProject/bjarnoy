@@ -408,7 +408,7 @@ export interface Tile {
    * of its own (it isn't a `buildingType`).
    */
   giant?: {
-    family: 'giantmountain' | 'giantshrine' | 'giantvolcano' | 'giantutgard';
+    family: 'giantmountain' | 'giantshrine' | 'giantvolcano' | 'giantutgard' | 'giantnaglfar';
     anchor: { q: number; r: number };
     part: import('./giantTiles').GiantPart;
     orientation: TileOrientation;

@@ -4,9 +4,12 @@ import { isoGridPosition, isoTopPoints, type Point } from '../hex/geometry';
 import {
   classifyGiantClips,
   classifyGiantFrames,
+  giantCampLevel,
   giantCoverage,
   giantCrop,
   giantFootprintOutline,
+  giantFrameLevels,
+  giantStageKey,
   GIANT_NEIGHBOR_PARTS,
   giantTop,
   parseGiantFrameName,
@@ -84,7 +87,7 @@ describe('parseGiantFrameName', () => {
     ['giantmountain_E_level000_partNE', 'E', 'NE'],
     ['giantmountain_NW_level000_partS', 'NW', 'S'],
   ] as const)('parses %s into orientation %s / part %s', (name, orientation, part) => {
-    expect(parseGiantFrameName(name)).toEqual({ orientation, part });
+    expect(parseGiantFrameName(name)).toEqual({ orientation, level: 0, part });
   });
 
   it('returns null for a name with no giant part suffix', () => {
@@ -363,5 +366,45 @@ describe('giantCrop', () => {
     expect(giantCrop(450)).toEqual({ nativeY: -150, nativeH: 450 });
     expect(giantCrop(300)).toEqual({ nativeY: 0, nativeH: 300 });
     expect(giantCrop(600)).toEqual({ nativeY: -300, nativeH: 600 });
+  });
+});
+
+describe('giant art levels (Naglfar: crewed level001, beaten level000)', () => {
+  const frames: GiantFamilyFrame<string>[] = [
+    'giantnaglfar_SE_level000_partC',
+    'giantnaglfar_SE_level000_partNE',
+    'giantnaglfar_SE_level001_partC',
+    'giantnaglfar_SE_level001_partNE',
+  ].map((name) => ({ name, value: name }));
+
+  it('parses the level out of a frame name', () => {
+    expect(parseGiantFrameName('giantnaglfar_SE_level001_partNE')).toEqual({ orientation: 'SE', level: 1, part: 'NE' });
+    expect(parseGiantFrameName('giantutgard_NE_level000_partC')).toEqual({ orientation: 'NE', level: 0, part: 'C' });
+  });
+
+  it('lists the levels a family carries and keeps each level in its own map', () => {
+    expect(giantFrameLevels(frames)).toEqual([0, 1]);
+    const crewed = classifyGiantFrames(frames, 1);
+    const beaten = classifyGiantFrames(frames);
+    expect(crewed.SE.C).toBe('giantnaglfar_SE_level001_partC');
+    expect(beaten.SE.C).toBe('giantnaglfar_SE_level000_partC');
+    expect(beaten.SE.NE).toBe('giantnaglfar_SE_level000_partNE');
+  });
+
+  it('stores level000 under the family and a higher level under a stage key', () => {
+    expect(giantStageKey('giantnaglfar', 0)).toBe('giantnaglfar');
+    expect(giantStageKey('giantnaglfar', 1)).toBe('giantnaglfar#1');
+    const giants = {
+      [giantStageKey('giantnaglfar', 0)]: classifyGiantFrames(frames),
+      [giantStageKey('giantnaglfar', 1)]: classifyGiantFrames(frames, 1),
+    };
+    expect(giantTop(giants, giantStageKey('giantnaglfar', 1), 'SE', 'C')).toBe('giantnaglfar_SE_level001_partC');
+    expect(giantTop(giants, giantStageKey('giantnaglfar', 0), 'SE', 'C')).toBe('giantnaglfar_SE_level000_partC');
+  });
+
+  it('picks level001 while the camp has crew (or has no live state yet) and level000 once its garrison is empty', () => {
+    expect(giantCampLevel({})).toBe(1);
+    expect(giantCampLevel({ empty: false })).toBe(1);
+    expect(giantCampLevel({ empty: true })).toBe(0);
   });
 });

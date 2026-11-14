@@ -16,7 +16,7 @@ import { hash2 } from './worldGenerator';
 import type { Terrain } from './types';
 
 /** The tile-art family a giant placement uses. Widened to match `Tile.giant.family` — see that field's own doc comment. */
-export type GiantFamily = 'giantmountain' | 'giantshrine' | 'giantvolcano' | 'giantutgard';
+export type GiantFamily = 'giantmountain' | 'giantshrine' | 'giantvolcano' | 'giantutgard' | 'giantnaglfar';
 
 /**
  * No island start position may fall within this many hex-distance steps

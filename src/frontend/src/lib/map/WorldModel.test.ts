@@ -3281,3 +3281,61 @@ describe('WorldModel.hexTakesBuilding — the onboarding pointer target', () => 
     expect(nextGuidedType(guidedTypesStarted(placed, queue))).toBeNull();
   });
 });
+
+describe('WorldModel: Naglfar, a camp drawn as a 7-hex giant tile', () => {
+  const anchor = { q: 40, r: 40 };
+  const camp = { family: 'naglfar', coord: anchor, level: 1, orientation: 'SE' as const };
+  const stateOf = (empty: boolean) => ({
+    q: anchor.q,
+    r: anchor.r,
+    family: 'naglfar',
+    orientation: 'SE',
+    level: 1,
+    effectiveLevel: 1,
+    strong: true,
+    guardRange: 8,
+    garrison: empty ? { young: 0, adult: 0, alpha: 0 } : { young: 0, adult: 100, alpha: 1 },
+    fullGarrison: { young: 0, adult: 100, alpha: 1 },
+    empty,
+    calmUntil: null,
+    aggressive: !empty,
+    clears: 0,
+    removed: false,
+    leftover: { wood: 0, stone: 0, food: 0, iron: 0 },
+  });
+
+  it('tags all 7 footprint hexes as a giantnaglfar giant of the anchor and resolves each to the one camp', () => {
+    const model = new WorldModel(20260824);
+    model.setCamps([camp]);
+    for (const { coord, part } of giantCoverage(anchor)) {
+      const tile = model.getTile(coord.q, coord.r);
+      expect(tile.giant).toMatchObject({ family: 'giantnaglfar', anchor, part, orientation: 'SE' });
+      expect(model.campAt(coord)?.family).toBe('naglfar');
+      expect(model.campAnchorAt(coord)).toEqual(anchor);
+      expect(model.campTileOf(tile).camp?.family).toBe('naglfar');
+    }
+    expect(model.camps()).toHaveLength(1);
+    expect(model.campAt({ q: anchor.q + 2, r: anchor.r })).toBeUndefined();
+  });
+
+  it('shows the crewed art level while it has crew and the beaten one once its garrison is empty', () => {
+    const model = new WorldModel(20260824);
+    model.setCamps([camp]);
+    const outer = giantCoverage(anchor)[3].coord;
+    expect(model.giantArtLevelAt(model.getTile(outer.q, outer.r))).toBe(1);
+    model.setCampStates([stateOf(false)]);
+    expect(model.giantArtLevelAt(model.getTile(outer.q, outer.r))).toBe(1);
+    expect(model.setCampStates([stateOf(true)])).toBe(true);
+    expect(model.giantArtLevelAt(model.getTile(outer.q, outer.r))).toBe(0);
+    expect(model.giantArtLevelAt(model.getTile(anchor.q, anchor.r))).toBe(0);
+  });
+
+  it('guards 8 hexes from the anchor, and a plain giant keeps art level 0', () => {
+    const model = new WorldModel(20260824);
+    model.setCamps([camp]);
+    expect(model.getTile(anchor.q, anchor.r).camp?.guardRange).toBe(8);
+    model.setGiants([{ family: 'giantmountain', anchor: { q: 60, r: 60 }, orientation: 'SE' }]);
+    expect(model.giantArtLevelAt(model.getTile(60, 60))).toBe(0);
+    expect(model.campAt({ q: 60, r: 60 })).toBeUndefined();
+  });
+});
