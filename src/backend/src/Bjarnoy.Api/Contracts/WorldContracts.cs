@@ -652,7 +652,7 @@ public sealed record CampStateResponse(
             camp.Strong,
             camp.GuardRange,
             CampGarrisonResponse.From(garrison),
-            CampGarrisonResponse.From(CampGarrison.Full(camp.Strong ? CampStrength.Strong : CampStrength.Weak, effectiveLevel)),
+            CampGarrisonResponse.From(CampGarrison.Full(camp, effectiveLevel)),
             garrison.IsEmpty,
             state.IsCalmAt(now) ? state.CalmUntil : null,
             state.IsAggressiveAt(camp, now, inside),

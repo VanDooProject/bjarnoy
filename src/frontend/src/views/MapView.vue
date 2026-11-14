@@ -968,7 +968,13 @@ function sendArmyAction(tile: Tile): RingAction {
 
 /** Whether the ring offers Hunt on this tile (huntActions): a wildlife camp still on the map, live mode only. */
 function isHuntableCamp(tile: Tile): boolean {
-  return !DEMO_MODE && !!tile.camp && !tile.camp.removed && !tile.buildingType;
+  const campTile = world.model.campTileOf(tile);
+  return !DEMO_MODE && !!campTile.camp && !campTile.camp.removed && !campTile.buildingType;
+}
+
+/** The hex a hunt order targets: any hex of a 7-hex camp (Naglfar) hunts its anchor, a one-hex camp its own hex. */
+function huntTargetAt(coord: AxialCoord): AxialCoord {
+  return world.model.campAnchorAt(coord) ?? coord;
 }
 
 /**
@@ -980,6 +986,7 @@ function retargetSendPicker(coord: AxialCoord, tile: Tile) {
   const picker = world.sendPicker;
   if (!picker) return;
   const hunting = picker.mission === 'hunt' && isHuntableCamp(tile);
+  if (hunting) coord = huntTargetAt(coord);
   const options: SendPickerTarget = hunting ? { mission: 'hunt' } : sendPickerTargetAt(tile, coord);
   const mission = options.mission ?? 'move';
   const selected = picker.selectedId;
@@ -1459,7 +1466,7 @@ async function onRingSelect(id: string) {
       closeRing();
       return;
     case 'hunt':
-      if (selectedCoord.value) world.openSendPicker(selectedCoord.value, { mission: 'hunt' });
+      if (selectedCoord.value) world.openSendPicker(huntTargetAt(selectedCoord.value), { mission: 'hunt' });
       closeRing();
       return;
     case 'siege':

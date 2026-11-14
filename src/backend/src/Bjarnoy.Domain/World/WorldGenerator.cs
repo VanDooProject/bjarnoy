@@ -120,7 +120,13 @@ public sealed class WorldGenerator
                         tiles, land, _sampler, _options, index, riverTiles.Select(t => t.Coord).ToHashSet(), wasted: true);
                     camps = CampGenerator.Generate(tiles, land, _sampler, _options, index, riverTiles, giants, wasted: true);
                     // Utgard's wall rings and the Jötun watchtowers, after giants and camps (they keep clear of both).
-                    (utgardWalls, jotunTowers) = EndgameGenerator.Generate(tiles, land, _sampler, _options, index, riverTiles, giants, camps);
+                    // Naglfar, the giants' ship, anchors off the island and is stored with the other camps (hidden with the island).
+                    (utgardWalls, jotunTowers, var naglfar) = EndgameGenerator.Generate(tiles, land, _sampler, _options, index, riverTiles, giants, camps);
+                    if (naglfar is { } ship)
+                    {
+                        camps = [.. camps, ship];
+                    }
+
                     startPositions = [];
                     inlandLakes = EnclosedWater.Tiles(
                         tiles, c => _sampler.TerrainAt(c).IsLand() || _sampler.WastedTerrainAt(c).IsLand());

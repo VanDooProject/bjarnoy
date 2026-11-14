@@ -84,7 +84,8 @@
     "harewarren": "Hare warren",
     "deerglade": "Deer glade",
     "otterslide": "Otter slide",
-    "whaleroad": "Whale road"
+    "whaleroad": "Whale road",
+    "naglfar": "Naglfar"
   },
   "terrain": {
     "sea": "Open water",
@@ -227,6 +228,11 @@
       "young": "Whale calf",
       "adult": "Humpback",
       "alpha": "Old bull"
+    },
+    "naglfar": {
+      "young": "Crew",
+      "adult": "Rime ship",
+      "alpha": "Naglfar"
     }
   },
   "endgame": {

@@ -31,17 +31,19 @@ public class WhaleRoadTests
     // ---- family row ---------------------------------------------------------------------------------------------
 
     [Fact]
-    public void The_whale_road_is_the_last_family_a_strong_cubic_one_on_the_sea()
+    public void The_whale_road_is_the_first_water_family_a_strong_cubic_one_on_the_sea_after_every_land_family()
     {
-        var last = CampFamilies.All[^1];
+        // Naglfar, the endgame water camp, comes after it.
+        var last = CampFamilies.All[^2];
         Assert.Equal(CampFamilies.Whaleroad, last.Family);
+        Assert.Equal(CampFamilies.Naglfar, CampFamilies.All[^1].Family);
         Assert.Equal(CampGround.Sea, last.Ground);
         Assert.Equal(CampStrength.Strong, last.Strength);
         Assert.Equal(CampLevelSkew.Cubic, last.LevelSkew);
         Assert.Equal(CampGround.Sea, Enum.GetValues<CampGround>().Max());
         Assert.True(CampFamilies.IsWater(CampFamilies.Whaleroad));
         Assert.False(CampFamilies.IsWater(CampFamilies.Wolfden));
-        Assert.All(CampFamilies.All.Take(CampFamilies.All.Count - 1), f => Assert.NotEqual(CampGround.Sea, f.Ground));
+        Assert.All(CampFamilies.All.Take(CampFamilies.All.Count - 2), f => Assert.NotEqual(CampGround.Sea, f.Ground));
     }
 
     [Fact]
@@ -289,7 +291,8 @@ public class WhaleRoadTests
             var sampler = new TerrainSampler(world.Options);
             foreach (var island in world.Islands)
             {
-                var roads = island.Camps.Where(c => c.IsWater).ToList();
+                // Naglfar is a water camp too, but an endgame one on a wasted island: not a whale road.
+                var roads = island.Camps.Where(c => c.IsWater && !c.IsEndgame).ToList();
                 if (island.IsWasted || island.TileCount < CampGenerator.MinCampIslandTiles)
                 {
                     Assert.Empty(roads);

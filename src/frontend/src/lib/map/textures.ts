@@ -45,7 +45,10 @@ import {
 import type { CampFamily } from './campPlacement';
 import {
   classifyGiantClips,
+  giantClipLevel,
   classifyGiantFrames,
+  giantFrameLevels,
+  giantStageKey,
   giantTop as giantTopLookup,
   type GiantFamilyClip,
   type GiantPart,
@@ -425,6 +428,7 @@ const GIANT_FAMILIES: readonly string[] = [
   'giantshrine',
   'giantvolcano',
   'giantutgard',
+  'naglfar',
   'giantvolcano_wasted',
 ];
 
@@ -1195,7 +1199,8 @@ function buildStaticTileTextures(atlases: LoadedAtlas[], sparse: boolean): TileT
   const giants: TileTextures['giants'] = {};
   for (const family of GIANT_FAMILIES) {
     const frames = framesOf(family);
-    if (frames.length > 0) giants[family] = classifyGiantFrames(frames);
+    // One map per art level, each under its own stage key (Naglfar's crewed level001 next to its beaten level000).
+    for (const level of giantFrameLevels(frames)) giants[giantStageKey(family, level)] = classifyGiantFrames(frames, level);
   }
 
   return {
@@ -1253,25 +1258,29 @@ function withAnimClips(statics: TileTextures, animAtlas: LoadedAtlas): TileTextu
 
 
   const giantAnims: TileTextures['giantAnims'] = {};
+  // One map per art level, under the same stage key as the static frames (`giantStageKey`): Naglfar's crewed level001 animates,
+  // its beaten level000 does not.
   for (const family of GIANT_FAMILIES) {
-    const familyClips: GiantFamilyClip[] = clips.filter((clip) => clip.family === family);
-    if (familyClips.length === 0) continue;
-    const clipMap = classifyGiantClips(familyClips, (name) => animAtlas.textures[name]);
-    const anims = mapOrientations(clipMap, (_o, parts) =>
-      Object.fromEntries(
-        (
-          Object.entries(parts) as [
-            GiantPart,
-            { textures: Texture[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: Texture },
-          ][]
-        ).map(([part, clip]) => [
-          part,
-          { textures: clip.textures, fps: clip.fps, playback: clip.playback, pause: clip.pause, rest: clip.rest },
-        ]),
-      ) as Partial<Record<GiantPart, TileAnimClip>>,
-    );
-    const hasAny = TILE_ORIENTATIONS.some((o) => Object.keys(anims[o]).length > 0);
-    if (hasAny) giantAnims[family] = anims;
+    const allClips: GiantFamilyClip[] = clips.filter((clip) => clip.family === family);
+    for (const level of [...new Set(allClips.map(giantClipLevel))]) {
+      const familyClips = allClips.filter((clip) => giantClipLevel(clip) === level);
+      const clipMap = classifyGiantClips(familyClips, (name) => animAtlas.textures[name]);
+      const anims = mapOrientations(clipMap, (_o, parts) =>
+        Object.fromEntries(
+          (
+            Object.entries(parts) as [
+              GiantPart,
+              { textures: Texture[]; fps: number; playback: 'loop' | 'pingpong'; pause: number; rest?: Texture },
+            ][]
+          ).map(([part, clip]) => [
+            part,
+            { textures: clip.textures, fps: clip.fps, playback: clip.playback, pause: clip.pause, rest: clip.rest },
+          ]),
+        ) as Partial<Record<GiantPart, TileAnimClip>>,
+      );
+      const hasAny = TILE_ORIENTATIONS.some((o) => Object.keys(anims[o]).length > 0);
+      if (hasAny) giantAnims[giantStageKey(family, level)] = anims;
+    }
   }
 
   return { ...statics, animTop, giantAnims };

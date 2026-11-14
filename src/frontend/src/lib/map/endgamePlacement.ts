@@ -7,6 +7,7 @@
 // Wall pieces are never chosen here: the walls are collected as a wall set and every hex resolves through `palisadeTiles.ts`
 // (`tileOfWallHex`, the twin of `PalisadeRules`), the same code path player palisades use.
 import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
+import { enclosedWaterTiles } from './enclosedWater';
 import { hash2 } from './worldGenerator';
 import { canPlacePalisade, isRefusal, tileOfWallHex, type PalisadePiece, type WallSet } from './palisadeTiles';
 import { UtgardFamily } from './giantPlacement';
@@ -26,6 +27,10 @@ export const MinTowers = 3;
 export const MaxTowers = 6;
 /** Minimum hex distance between two towers, and between a tower and any Utgard footprint hex. */
 export const MinTowerSpacing = 5;
+/** Naglfar's footprint lies at least this many hexes off the island's coast (`EndgameRules.NaglfarMinCoastDistance`). */
+export const NaglfarMinCoastDistance = 2;
+/** ... and at most this many (`EndgameRules.NaglfarMaxCoastDistance`). */
+export const NaglfarMaxCoastDistance = 4;
 /** The owner key of every Utgard wall in the movement rules; belongs to no account and no guild, so a jötnar gate is never friendly. */
 export const JOTNAR_OWNER_KEY = '6a6f746e-6172-4a6f-8f74-6e6172776c6c';
 
@@ -44,6 +49,8 @@ export interface EndgameSites {
   walls: UtgardWallPlacement[];
   /** Tower hexes in placement order (orientation is the tile's own, attached by the caller). */
   towers: AxialCoord[];
+  /** Naglfar's anchor (the 7-hex giants' ship off the island), or null when no open sea fits. */
+  naglfar: AxialCoord | null;
 }
 
 export function ringLevel(ring: UtgardRing): number {
@@ -94,7 +101,8 @@ function wallNeighbourCount(c: AxialCoord, walls: ReadonlySet<string>): number {
 
 /**
  * The placement core — bit-exact mirror of `EndgameGenerator.PlaceCore`. `terrainOf` returns `sea` for any hex that is not the
- * island's land. `giants` are the island's giants (family and anchor); an island without an Utgard gets nothing.
+ * island's land. `giants` are the island's giants (family and anchor); an island without an Utgard gets nothing. `isLand` says
+ * whether a hex of the whole world is land (green or wasted, any island): Naglfar needs open sea.
  */
 export function placeEndgame(
   islandTiles: AxialCoord[],
@@ -102,11 +110,12 @@ export function placeEndgame(
   isRiver: (c: AxialCoord) => boolean,
   giants: { anchor: AxialCoord; family: string }[],
   campHexes: ReadonlySet<string>,
+  isLand: (c: AxialCoord) => boolean,
   worldSeed: number,
   islandIndex: number,
 ): EndgameSites {
   const utgard = giants.find((g) => g.family === UtgardFamily);
-  if (!utgard) return { walls: [], towers: [] };
+  if (!utgard) return { walls: [], towers: [], naglfar: null };
   const anchor = utgard.anchor;
 
   // Large prime spacing, like the other generators, so this draws from its own noise field.
@@ -119,7 +128,58 @@ export function placeEndgame(
   const wallHexes = new Set(walls.map((w) => coordKey(w.coord)));
   const insideOuter = outerLoop ? insideLoop(anchor, outerLoop) : new Set<string>();
   const towers = placeTowers(islandTiles, anchor, terrainOf, isRiver, giantHexes, campHexes, wallHexes, insideOuter, seed);
-  return { walls, towers };
+  return { walls, towers, naglfar: placeNaglfar(islandTiles, anchor, isLand) };
+}
+
+/**
+ * Naglfar's anchor — mirror of `EndgameGenerator.PlaceNaglfar`: of the hexes whose whole 7-hex footprint is open sea (no land of any
+ * island, no enclosed water) and lies 2 to 4 hexes off the island's land, the one closest to Utgard's anchor; ties go to the lower
+ * q, then the lower r. The footprint's smallest coast distance is the anchor's minus one, so the anchor lies 3 to 5 hexes off.
+ */
+export function placeNaglfar(
+  islandTiles: readonly AxialCoord[],
+  utgard: AxialCoord,
+  isLand: (c: AxialCoord) => boolean,
+): AxialCoord | null {
+  const own = new Set(islandTiles.map(coordKey));
+  const shore = new Map<string, { hex: AxialCoord; distance: number }>();
+  let frontier: AxialCoord[] = [];
+  for (const tile of islandTiles) {
+    for (const n of neighbors(tile)) {
+      const key = coordKey(n);
+      if (!own.has(key) && !shore.has(key)) {
+        shore.set(key, { hex: n, distance: 1 });
+        frontier.push(n);
+      }
+    }
+  }
+  const maxAnchor = NaglfarMaxCoastDistance + 1;
+  for (let d = 2; d <= maxAnchor; d++) {
+    const next: AxialCoord[] = [];
+    for (const hex of frontier) {
+      for (const n of neighbors(hex)) {
+        const key = coordKey(n);
+        if (!own.has(key) && !shore.has(key)) {
+          shore.set(key, { hex: n, distance: d });
+          next.push(n);
+        }
+      }
+    }
+    frontier = next;
+  }
+
+  const enclosed = new Set(enclosedWaterTiles(islandTiles, isLand).map(coordKey));
+  let best: AxialCoord | null = null;
+  let bestDistance = Number.MAX_SAFE_INTEGER;
+  for (const { hex, distance } of shore.values()) {
+    if (distance < NaglfarMinCoastDistance + 1 || distance > maxAnchor) continue;
+    const fromUtgard = hexDistance(hex, utgard);
+    if (fromUtgard > bestDistance || (fromUtgard === bestDistance && best !== null && !isLowerQr(hex, best))) continue;
+    if (footprint(hex).some((f) => isLand(f) || enclosed.has(coordKey(f)))) continue;
+    best = hex;
+    bestDistance = fromUtgard;
+  }
+  return best;
 }
 
 function placeWalls(

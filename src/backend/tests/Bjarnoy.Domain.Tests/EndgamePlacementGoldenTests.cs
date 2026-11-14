@@ -28,12 +28,14 @@ public class EndgamePlacementGoldenTests
             land[tiles[i]] = ParseTerrain(scenario.Tiles[i][2].GetString()!);
         }
 
+        var otherLand = scenario.OtherLand.Select(h => new HexCoord(h[0], h[1])).ToHashSet();
         var actual = EndgameGenerator.PlaceCore(
             tiles,
             land,
             scenario.Rivers.Select(r => new HexCoord(r[0], r[1])).ToHashSet(),
             [.. scenario.Giants.Select(g => new GiantGenerator.Placement(new HexCoord(g.Q, g.R), g.Family))],
             scenario.Camps.Select(c => new HexCoord(c[0], c[1])).ToHashSet(),
+            c => land.ContainsKey(c) || otherLand.Contains(c),
             scenario.WorldSeed,
             scenario.IslandIndex);
 
@@ -53,6 +55,10 @@ public class EndgamePlacementGoldenTests
         Assert.Equal(
             scenario.Towers.Select(t => (t[0], t[1])),
             actual.Towers.Select(t => (t.Q, t.R)));
+
+        Assert.Equal(
+            scenario.Naglfar is { } n ? new HexCoord(n.Q, n.R) : (HexCoord?)null,
+            actual.Naglfar);
     }
 
     [Fact]
@@ -63,6 +69,7 @@ public class EndgamePlacementGoldenTests
         Assert.Contains(Scenarios, s => s.Walls.Any(w => w.Gate));
         Assert.Contains(Scenarios, s => s.Walls.Any(w => w.Piece == "end_coast"));
         Assert.Contains(Scenarios, s => s.Towers.Count == EndgameRules.MaxTowers);
+        Assert.Contains(Scenarios, s => s.Naglfar is not null);
     }
 
     private static Terrain ParseTerrain(string wireName) => wireName switch
@@ -120,11 +127,22 @@ public class EndgamePlacementGoldenTests
 
         public List<int[]> Camps { get; set; } = [];
 
+        public List<int[]> OtherLand { get; set; } = [];
+
+        public NaglfarDto? Naglfar { get; set; }
+
         public List<WallDto> Walls { get; set; } = [];
 
         public List<int[]> Towers { get; set; } = [];
 
         public override string ToString() => Name;
+    }
+
+    public sealed class NaglfarDto
+    {
+        public int Q { get; set; }
+
+        public int R { get; set; }
     }
 
     public sealed class GiantDto

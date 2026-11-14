@@ -134,6 +134,7 @@ export function buildUtgardExampleTiles(): Tile[] {
     (c) => riverKeys.has(coordKey(c)),
     giants,
     new Set(island.camps.map(([q, r]) => coordKey({ q, r }))),
+    (c) => terrainOf(c) !== 'sea',
     island.worldSeed,
     island.islandIndex,
   );

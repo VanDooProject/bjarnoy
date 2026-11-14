@@ -71,6 +71,12 @@ public static class CampFamilies
     /// <summary>The whale road (3D_assets hextile134): the first water camp, a humpback cow and calf on open sea.</summary>
     public const string Whaleroad = "whaleroad";
 
+    /// <summary>
+    /// Naglfar, the giants' ship (<c>docs/design/endgame.md</c>, "Naglfar"): an endgame water camp with a 7-hex footprint anchored off
+    /// a wasted island with Utgard. Placed by <see cref="EndgameGenerator"/>, never by the camp generator.
+    /// </summary>
+    public const string Naglfar = "naglfar";
+
     public static IReadOnlyList<CampFamilyInfo> All { get; } =
     [
         new(Wolfden, CampGround.Grass, CampStrength.Strong, CampLevelSkew.Cubic),
@@ -91,6 +97,8 @@ public static class CampFamilies
         // The first water camp, last so no land family's candidate hash moves (it is placed by its own
         // sea pass, CampGenerator.PlaceWhaleRoads, never by PlaceCore).
         new(Whaleroad, CampGround.Sea, CampStrength.Strong, CampLevelSkew.Cubic),
+        // The endgame sea garrison off Utgard's island, placed by EndgameGenerator, last for the same reason.
+        new(Naglfar, CampGround.Sea, CampStrength.Strong, CampLevelSkew.Cubic),
     ];
 
     public static CampFamilyInfo? Find(string family) => All.FirstOrDefault(f => f.Family == family);
@@ -100,6 +108,12 @@ public static class CampFamilies
 
     /// <summary>True for a water camp (a family on <see cref="CampGround.Sea"/>). An unknown family is not.</summary>
     public static bool IsWater(string family) => Find(family)?.Ground == CampGround.Sea;
+
+    /// <summary>
+    /// True for an endgame camp (<see cref="Naglfar"/> today): jötnar that fight full battles, regrow after a short grace and are
+    /// calm for <see cref="EndgameRules.EndgameCalm"/>. An unknown family is not.
+    /// </summary>
+    public static bool IsEndgame(string family) => family == Naglfar;
 
     /// <summary>True for a sand camp (a haul-out, a family on <see cref="CampGround.Sand"/>). An unknown family is not.</summary>
     public static bool IsSand(string family) => Find(family)?.Ground == CampGround.Sand;
@@ -126,9 +140,15 @@ public readonly record struct Camp(HexCoord Coord, string Family, int Level, Til
     /// <summary>True for a sand camp (a seal or walrus haul-out): a fleet's land troops fight it from the ships.</summary>
     public bool IsSand => CampFamilies.IsSand(Family);
 
+    /// <summary>True for an endgame camp (<see cref="CampFamilies.IsEndgame"/>).</summary>
+    public bool IsEndgame => CampFamilies.IsEndgame(Family);
+
     /// <summary>
     /// How many hexes around the camp it guards — see <see cref="CampGenerator.GuardRange(int, CampStrength)"/>.
-    /// A water camp holds no land and locks no towers: its range is 0, which for a fleet's route means "the camp's own hex".
+    /// A water camp holds no land and locks no towers: its range is 0, which for a fleet's route means "the camp's own hex";
+    /// Naglfar's is <see cref="EndgameRules.NaglfarGuardRange"/>, measured from its anchor.
     /// </summary>
-    public int GuardRange => IsWater ? 0 : CampGenerator.GuardRange(Level, Strong ? CampStrength.Strong : CampStrength.Weak);
+    public int GuardRange => Family == CampFamilies.Naglfar
+        ? EndgameRules.NaglfarGuardRange
+        : IsWater ? 0 : CampGenerator.GuardRange(Level, Strong ? CampStrength.Strong : CampStrength.Weak);
 }

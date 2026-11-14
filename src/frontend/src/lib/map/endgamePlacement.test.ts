@@ -9,6 +9,7 @@ import {
   naturalLoop,
   withoutChords,
   placeEndgame,
+  placeNaglfar,
   ring,
   towerCountFor,
   insideLoop,
@@ -154,17 +155,20 @@ describe('naturalLoop', () => {
   });
 });
 
+// Whether a hex is land, from a terrain lookup (a lone island: no other land in the world).
+const landOf = (terrainOf: (c: AxialCoord) => Terrain) => (c: AxialCoord) => terrainOf(c) !== 'sea';
+
 describe('placeEndgame', () => {
   it('builds nothing for an island without Utgard', () => {
     const { tiles, terrainOf } = disc(12);
-    const sites = placeEndgame(tiles, terrainOf, none, [{ anchor: ORIGIN, family: 'giantvolcano' }], new Set(), 1, 1);
-    expect(sites).toEqual({ walls: [], towers: [] });
+    const sites = placeEndgame(tiles, terrainOf, none, [{ anchor: ORIGIN, family: 'giantvolcano' }], new Set(), landOf(terrainOf), 1, 1);
+    expect(sites).toEqual({ walls: [], towers: [], naglfar: null });
   });
 
   it('closes both rings all the way round on open ground: inner level 2, outer level 1, two gates each on straights', () => {
     for (const seed of [7, 11, 23]) {
       const { tiles, terrainOf } = disc(16);
-      const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), seed, 3);
+      const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), landOf(terrainOf), seed, 3);
       const { inner, outer } = loops(terrainOf, seed + 3 * 400_009);
 
       const innerWalls = walls.filter((w) => w.ring === 'inner');
@@ -187,7 +191,7 @@ describe('placeEndgame', () => {
 
   it('puts the two gates of a ring as far apart along the loop as its straights allow', () => {
     const { tiles, terrainOf } = disc(16);
-    const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 11, 5);
+    const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), landOf(terrainOf), 11, 5);
     const order = loops(terrainOf, 11 + 5 * 400_009);
     for (const kind of ['inner', 'outer'] as const) {
       const hexes = order[kind];
@@ -207,14 +211,14 @@ describe('placeEndgame', () => {
     const override: Record<string, Terrain> = {};
     for (let d = RingBands.outer[0]; d <= RingBands.outer[1]; d++) for (const h of ring(ORIGIN, d)) override[coordKey(h)] = 'sea';
     const { tiles, terrainOf } = disc(14, override);
-    const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 2, 2);
+    const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), landOf(terrainOf), 2, 2);
 
     expect(new Set(walls.map((w) => w.ring))).toEqual(new Set(['inner']));
   });
 
   it('still builds a ring along the coast of a small island whose band is mostly sea', () => {
     const { tiles, terrainOf } = disc(5);
-    const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 4, 4);
+    const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), landOf(terrainOf), 4, 4);
     const inner = walls.filter((w) => w.ring === 'inner');
 
     expect(inner.length).toBeGreaterThan(0);
@@ -227,7 +231,7 @@ describe('placeEndgame', () => {
     const centre = flat[Math.floor(flat.length / 3)]!;
     const cluster = [centre, ...neighbors(centre)];
     const { tiles, terrainOf } = disc(16, Object.fromEntries(cluster.map((h) => [coordKey(h), 'mountain' as Terrain])));
-    const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 11, 0);
+    const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), landOf(terrainOf), 11, 0);
 
     expect(walls.some((w) => w.ring === 'inner')).toBe(true);
     expect(walls.some((w) => terrainOf(w.coord) === 'mountain')).toBe(false);
@@ -238,7 +242,7 @@ describe('placeEndgame', () => {
     const { inner } = loops(terrainOf, 4 + 4 * 400_009);
     const river = inner[3]!;
     const camp = inner[10]!;
-    const sites = placeEndgame(tiles, terrainOf, (c) => c.q === river.q && c.r === river.r, UTGARD, new Set([coordKey(camp)]), 4, 4);
+    const sites = placeEndgame(tiles, terrainOf, (c) => c.q === river.q && c.r === river.r, UTGARD, new Set([coordKey(camp)]), landOf(terrainOf), 4, 4);
     const keys = new Set(sites.walls.map((w) => coordKey(w.coord)));
     expect(keys.has(coordKey(river))).toBe(false);
     expect(keys.has(coordKey(camp))).toBe(false);
@@ -247,7 +251,7 @@ describe('placeEndgame', () => {
 
   it('resolves every piece through the palisade rules on the final wall', () => {
     const { tiles, terrainOf } = disc(14, { '6,-3': 'mountain', '-3,0': 'mountain' });
-    const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 9, 9);
+    const { walls } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), landOf(terrainOf), 9, 9);
     const set = { walls: new Set(walls.map((w) => coordKey(w.coord))), gates: new Set(walls.filter((w) => w.isGate).map((w) => coordKey(w.coord))) };
 
     expect(walls.length).toBeGreaterThan(0);
@@ -259,15 +263,15 @@ describe('placeEndgame', () => {
 
   it('is deterministic', () => {
     const { tiles, terrainOf } = disc(16);
-    const a = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 5, 8);
-    expect(placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 5, 8)).toEqual(a);
+    const a = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), landOf(terrainOf), 5, 8);
+    expect(placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), landOf(terrainOf), 5, 8)).toEqual(a);
   });
 
   it('spreads the towers over land outside the inner band, off walls and their neighbours, MinTowerSpacing apart, off camps, and deterministically', () => {
     const { tiles, terrainOf } = disc(24);
     const camp = coordKey({ q: 16, r: -4 });
-    const a = placeEndgame(tiles, terrainOf, none, UTGARD, new Set([camp]), 5, 8);
-    const b = placeEndgame(tiles, terrainOf, none, UTGARD, new Set([camp]), 5, 8);
+    const a = placeEndgame(tiles, terrainOf, none, UTGARD, new Set([camp]), landOf(terrainOf), 5, 8);
+    const b = placeEndgame(tiles, terrainOf, none, UTGARD, new Set([camp]), landOf(terrainOf), 5, 8);
 
     const wallKeys = new Set(a.walls.map((w) => coordKey(w.coord)));
     expect(a).toEqual(b);
@@ -285,7 +289,7 @@ describe('placeEndgame', () => {
 
   it('may put a tower between the two wall lines when a small island leaves room there', () => {
     const { tiles, terrainOf } = disc(BETWEEN.radius);
-    const { walls, towers } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), BETWEEN.seed, BETWEEN.islandIndex);
+    const { walls, towers } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), landOf(terrainOf), BETWEEN.seed, BETWEEN.islandIndex);
     const nearestOuterWall = Math.min(...walls.filter((w) => w.ring === 'outer').map((w) => hexDistance(w.coord, ORIGIN)));
 
     expect(walls.some((w) => w.ring === 'outer')).toBe(true);
@@ -294,7 +298,7 @@ describe('placeEndgame', () => {
 
   it('puts the first tower between the two lines when there is room there, and keeps the old order when there is none', () => {
     const wide = disc(24);
-    const withRoom = placeEndgame(wide.tiles, wide.terrainOf, none, UTGARD, new Set(), 5, 8);
+    const withRoom = placeEndgame(wide.tiles, wide.terrainOf, none, UTGARD, new Set(), landOf(wide.terrainOf), 5, 8);
     // On open ground the outer line is all wall, so its wall hexes alone fence in the ground between the lines.
     const outerWalls = withRoom.walls.filter((w) => w.ring === 'outer').map((w) => w.coord);
     expect(insideLoop(ORIGIN, outerWalls).has(coordKey(withRoom.towers[0]!))).toBe(true);
@@ -302,13 +306,51 @@ describe('placeEndgame', () => {
     // Sand carries no tower: with the band between the lines made of it, the first tower goes by the plain rule (highest hash).
     const sandBand = Object.fromEntries(wide.tiles.filter((t) => hexDistance(t, ORIGIN) <= RingBands.outer[1]).map((t) => [coordKey(t), 'sand' as Terrain]));
     const noRoom = disc(24, sandBand);
-    const sites = placeEndgame(noRoom.tiles, noRoom.terrainOf, none, UTGARD, new Set(), 5, 8);
+    const sites = placeEndgame(noRoom.tiles, noRoom.terrainOf, none, UTGARD, new Set(), landOf(noRoom.terrainOf), 5, 8);
     expect(sites.towers.length).toBeGreaterThan(0);
     for (const t of sites.towers) expect(hexDistance(t, ORIGIN)).toBeGreaterThan(RingBands.outer[1]);
   });
 
   it('places no tower when the island ends inside the tower distance', () => {
     const { tiles, terrainOf } = disc(RingBands.inner[1] + 1);
-    expect(placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 5, 8).towers).toEqual([]);
+    expect(placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), landOf(terrainOf), 5, 8).towers).toEqual([]);
+  });
+});
+
+describe('placeNaglfar', () => {
+  const origin: AxialCoord = { q: 0, r: 0 };
+  const isLandOf = (radius: number, ...extra: AxialCoord[]) => (c: AxialCoord) =>
+    hexDistance(c, origin) <= radius || extra.some((e) => e.q === c.q && e.r === c.r);
+  const tilesOf = (radius: number) => ring_tiles(radius);
+  function ring_tiles(radius: number): AxialCoord[] {
+    const out: AxialCoord[] = [];
+    for (let q = -radius; q <= radius; q++) {
+      for (let r = Math.max(-radius, -q - radius); r <= Math.min(radius, -q + radius); r++) out.push({ q, r });
+    }
+    return out;
+  }
+
+  it('anchors three hexes off a round island, at the lowest q then r among the nearest', () => {
+    expect(placeNaglfar(tilesOf(10), origin, isLandOf(10))).toEqual({ q: -13, r: 0 });
+  });
+
+  it('keeps all seven footprint hexes on open sea two to four hexes off the coast', () => {
+    for (const radius of [4, 7, 10]) {
+      const anchor = placeNaglfar(tilesOf(radius), origin, isLandOf(radius))!;
+      const footprint = [anchor, ...neighbors(anchor)];
+      expect(footprint.every((h) => hexDistance(h, origin) > radius)).toBe(true);
+      const nearest = Math.min(...footprint.map((h) => hexDistance(h, origin) - radius));
+      expect(nearest).toBeGreaterThanOrEqual(2);
+      expect(nearest).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it("moves for another island's land in the footprint and is null with land everywhere", () => {
+    const free = placeNaglfar(tilesOf(10), origin, isLandOf(10))!;
+    const spoiler = { q: free.q + 1, r: free.r };
+    const moved = placeNaglfar(tilesOf(10), origin, isLandOf(10, spoiler))!;
+    expect(moved).not.toEqual(free);
+    expect([moved, ...neighbors(moved)].some((h) => h.q === spoiler.q && h.r === spoiler.r)).toBe(false);
+    expect(placeNaglfar(tilesOf(10), origin, (c) => hexDistance(c, origin) <= 40)).toBeNull();
   });
 });

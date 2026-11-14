@@ -39,6 +39,21 @@ public static class CampRules
     /// <summary>Loot grows with <c>level^LootLevelExponent</c>, slower than the garrison.</summary>
     public const double LootLevelExponent = 0.7;
 
+    /// <summary>
+    /// The beast's attack and defense in <paramref name="camp"/>: the endgame table for Naglfar (young none, rime ship, Naglfar), else
+    /// <see cref="BeastStats(CampStrength, BeastTier)"/>. Every garrison power goes through here.
+    /// </summary>
+    public static (int Attack, int Defense) BeastStats(Camp camp, BeastTier tier) =>
+        camp.Family == CampFamilies.Naglfar
+            ? tier switch
+            {
+                BeastTier.Young => (0, 0),
+                BeastTier.Adult => (EndgameRules.RimeShipPower, EndgameRules.RimeShipPower),
+                BeastTier.Alpha => (EndgameRules.NaglfarPower, EndgameRules.NaglfarPower),
+                _ => throw new ArgumentOutOfRangeException(nameof(tier), tier, null),
+            }
+            : BeastStats(camp.Strong ? CampStrength.Strong : CampStrength.Weak, tier);
+
     /// <summary>The beast's attack and defense by camp strength and tier.</summary>
     public static (int Attack, int Defense) BeastStats(CampStrength strength, BeastTier tier) => (strength, tier) switch
     {
@@ -59,6 +74,15 @@ public static class CampRules
     public static TimeSpan RegrowDuration(CampStrength strength) =>
         strength == CampStrength.Strong ? RegrowStrong : RegrowWeak;
 
+    /// <summary>Time a damaged <paramref name="camp"/> needs to regrow fully (48 h for Naglfar).</summary>
+    public static TimeSpan RegrowDuration(Camp camp) =>
+        camp.Family == CampFamilies.Naglfar
+            ? EndgameRules.NaglfarRegrow
+            : RegrowDuration(camp.Strong ? CampStrength.Strong : CampStrength.Weak);
+
+    /// <summary>How long a camp is calm after a fight: <see cref="EndgameRules.EndgameCalm"/> for an endgame camp, else <see cref="CalmDuration"/>.</summary>
+    public static TimeSpan CalmFor(Camp camp) => camp.IsEndgame ? EndgameRules.EndgameCalm : CalmDuration;
+
     /// <summary>
     /// The loot pool of a camp at <paramref name="effectiveLevel"/>: <c>base × L^0.7</c> split over the
     /// family's <see cref="LootKinds"/> by weight, each share rounded down to a whole number.
@@ -66,7 +90,9 @@ public static class CampRules
     public static ResourceAmounts LootPool(Camp camp, int effectiveLevel)
     {
         var level = Math.Max(1, effectiveLevel);
-        var pool = (camp.Strong ? StrongLootBase : WeakLootBase) * Math.Pow(level, LootLevelExponent);
+        var pool = camp.Family == CampFamilies.Naglfar
+            ? EndgameRules.NaglfarLootPool
+            : (camp.Strong ? StrongLootBase : WeakLootBase) * Math.Pow(level, LootLevelExponent);
         var kinds = LootKinds(camp.Family);
         var totalWeight = kinds.Sum(k => k.Weight);
 
@@ -97,6 +123,12 @@ public static class CampRules
         if (family == CampFamilies.Whaleroad)
         {
             return [new CampLootKind("food", 1)];
+        }
+
+        if (family == CampFamilies.Naglfar)
+        {
+            // Naglfar carries no food: iron 2 : wood 1 : brick (the stone field) 1 of its fixed pool.
+            return [new CampLootKind("stone", 1), new CampLootKind("wood", 1), new CampLootKind("iron", 2)];
         }
 
         var weights = new Dictionary<string, int> { ["food"] = 1 };

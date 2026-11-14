@@ -13,13 +13,16 @@ namespace Bjarnoy.Domain.World;
 /// </remarks>
 internal static class EndgameGenerator
 {
-    /// <summary>The pure result: walls (ring by ring, in ring order) and tower hexes (placement order), orientation not attached.</summary>
-    public readonly record struct Sites(IReadOnlyList<UtgardWall> Walls, IReadOnlyList<HexCoord> Towers)
+    /// <summary>
+    /// The pure result: walls (ring by ring, in ring order), tower hexes (placement order, orientation not attached) and
+    /// Naglfar's anchor (null when the island has none).
+    /// </summary>
+    public readonly record struct Sites(IReadOnlyList<UtgardWall> Walls, IReadOnlyList<HexCoord> Towers, HexCoord? Naglfar = null)
     {
         public static Sites None { get; } = new([], []);
     }
 
-    public static (IReadOnlyList<UtgardWall> Walls, IReadOnlyList<JotunTower> Towers) Generate(
+    public static (IReadOnlyList<UtgardWall> Walls, IReadOnlyList<JotunTower> Towers, Camp? Naglfar) Generate(
         IReadOnlyList<HexCoord> islandTiles,
         IReadOnlyDictionary<HexCoord, Terrain> land,
         TerrainSampler sampler,
@@ -35,15 +38,18 @@ internal static class EndgameGenerator
             riverTiles.Select(t => t.Coord).ToHashSet(),
             [.. giants.Select(g => new GiantGenerator.Placement(g.Anchor, g.Family))],
             camps.Select(c => c.Coord).ToHashSet(),
+            c => sampler.TerrainAt(c).IsLand() || sampler.WastedTerrainAt(c).IsLand(),
             options.Seed,
             islandIndex);
 
-        return (sites.Walls, [.. sites.Towers.Select(t => new JotunTower(t, sampler.OrientationAt(t)))]);
+        Camp? naglfar = sites.Naglfar is { } at ? new Camp(at, CampFamilies.Naglfar, 1, sampler.OrientationAt(at)) : null;
+        return (sites.Walls, [.. sites.Towers.Select(t => new JotunTower(t, sampler.OrientationAt(t)))], naglfar);
     }
 
     /// <summary>
     /// The placement core. <paramref name="land"/> holds the island's land terrain; any hex missing from it is sea.
-    /// Returns <see cref="Sites.None"/> for an island without an Utgard giant.
+    /// Returns <see cref="Sites.None"/> for an island without an Utgard giant. <paramref name="isLand"/> says whether a hex of the
+    /// whole world is land (green or wasted, any island): Naglfar needs open sea.
     /// </summary>
     public static Sites PlaceCore(
         IReadOnlyList<HexCoord> islandTiles,
@@ -51,6 +57,7 @@ internal static class EndgameGenerator
         IReadOnlySet<HexCoord> riverTiles,
         IReadOnlyList<GiantGenerator.Placement> giants,
         IReadOnlySet<HexCoord> campHexes,
+        Func<HexCoord, bool> isLand,
         int worldSeed,
         int islandIndex)
     {
@@ -73,7 +80,80 @@ internal static class EndgameGenerator
         var wallHexes = walls.Select(w => w.Coord).ToHashSet();
         var insideOuter = outerLoop is null ? [] : InsideLoop(anchor, outerLoop);
         var towers = PlaceTowers(islandTiles, anchor, land, riverTiles, giantHexes, campHexes, wallHexes, insideOuter, seed);
-        return new Sites(walls, towers);
+        return new Sites(walls, towers, PlaceNaglfar(islandTiles, anchor, isLand));
+    }
+
+    /// <summary>
+    /// Naglfar's anchor (<c>docs/design/endgame.md</c>, "Naglfar"): of the hexes whose whole 7-hex footprint (<see cref="Giant.Footprint"/>)
+    /// is open sea (no land of any island, no enclosed water) and lies <see cref="EndgameRules.NaglfarMinCoastDistance"/> to
+    /// <see cref="EndgameRules.NaglfarMaxCoastDistance"/> hexes off the island's land, the one closest to Utgard's anchor; ties go to
+    /// the lower q, then the lower r. Deterministic, no RNG. Mirrors <c>placeNaglfar</c> in <c>endgamePlacement.ts</c>.
+    /// </summary>
+    /// <remarks>
+    /// The footprint's smallest coast distance is the anchor's minus one (some neighbour is always one step nearer), so the anchor
+    /// itself lies 3 to 5 hexes off the land.
+    /// </remarks>
+    internal static HexCoord? PlaceNaglfar(IReadOnlyList<HexCoord> islandTiles, HexCoord utgard, Func<HexCoord, bool> isLand)
+    {
+        var own = new HashSet<HexCoord>(islandTiles);
+        var shore = new Dictionary<HexCoord, int>();
+        var frontier = new List<HexCoord>();
+        foreach (var tile in islandTiles)
+        {
+            foreach (var n in tile.Neighbours())
+            {
+                if (!own.Contains(n) && shore.TryAdd(n, 1))
+                {
+                    frontier.Add(n);
+                }
+            }
+        }
+
+        var maxAnchor = EndgameRules.NaglfarMaxCoastDistance + 1;
+        for (var d = 2; d <= maxAnchor; d++)
+        {
+            var next = new List<HexCoord>();
+            foreach (var hex in frontier)
+            {
+                foreach (var n in hex.Neighbours())
+                {
+                    if (!own.Contains(n) && shore.TryAdd(n, d))
+                    {
+                        next.Add(n);
+                    }
+                }
+            }
+
+            frontier = next;
+        }
+
+        var enclosed = EnclosedWater.Tiles(islandTiles, isLand).ToHashSet();
+        HexCoord? best = null;
+        var bestDistance = int.MaxValue;
+        foreach (var (hex, distance) in shore)
+        {
+            if (distance < EndgameRules.NaglfarMinCoastDistance + 1 || distance > maxAnchor)
+            {
+                continue;
+            }
+
+            var fromUtgard = hex.DistanceTo(utgard);
+            if (fromUtgard > bestDistance
+                || (fromUtgard == bestDistance && best is { } b && (hex.Q > b.Q || (hex.Q == b.Q && hex.R > b.R))))
+            {
+                continue;
+            }
+
+            if (Giant.Footprint(hex).Any(f => isLand(f) || enclosed.Contains(f)))
+            {
+                continue;
+            }
+
+            best = hex;
+            bestDistance = fromUtgard;
+        }
+
+        return best;
     }
 
     private static Terrain TerrainOf(IReadOnlyDictionary<HexCoord, Terrain> land, HexCoord c) =>
