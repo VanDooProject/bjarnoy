@@ -231,7 +231,7 @@ describe('hoverSubjectFor', () => {
 
   it('names Naglfar as a camp even though its footprint is a giant tile', () => {
     const camp = { family: 'naglfar', level: 1, orientation: 'SE' as const, strong: true, guardRange: 8 };
-    const naglfarGiant = { family: 'giantnaglfar' as const, anchor: { q: 0, r: 0 }, part: 'C' as const, orientation: 'SE' as const };
+    const naglfarGiant = { family: 'naglfar' as const, anchor: { q: 0, r: 0 }, part: 'C' as const, orientation: 'SE' as const };
     expect(hoverSubjectFor({ ...tileOf('sea'), camp, giant: naglfarGiant }, undefined)).toEqual({
       kind: 'camp',
       family: 'naglfar',

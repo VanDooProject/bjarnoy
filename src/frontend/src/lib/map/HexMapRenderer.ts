@@ -1654,6 +1654,7 @@ const WORLD_GIANT_OUTLINE: Partial<Record<GiantFamily, number>> = {
   giantvolcano: 0xe8702a,
   giantshrine: 0x6fe3e0,
   giantutgard: 0x6fe3e0,
+  naglfar: 0x6fe3e0,
 };
 
 /** The world-map outline colour around a giant's footprint, or `undefined` for a giant drawn without one. */

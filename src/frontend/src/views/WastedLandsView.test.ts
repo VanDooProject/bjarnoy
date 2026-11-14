@@ -66,7 +66,7 @@ describe('WastedLandsView: Naglfar', () => {
     const wrapper = await mountPage();
 
     const text = wrapper.get('#naglfar').text();
-    expect(text).not.toContain('giantnaglfar');
+    expect(text).not.toContain('naglfar');
     expect(text).not.toContain('lower q');
     expect(text).not.toContain('Gylfaginning');
     wrapper.unmount();
@@ -79,7 +79,7 @@ describe('WastedLandsView: Naglfar', () => {
 
     const text = wrapper.get('#naglfar').text();
     expect(text).toContain('closest to Utgard\'s anchor');
-    expect(text).toContain('giantnaglfar');
+    expect(text).toContain('naglfar');
     wrapper.unmount();
   });
 });

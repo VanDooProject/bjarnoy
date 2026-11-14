@@ -147,6 +147,14 @@ export interface GiantFamilyClip {
   overlay?: boolean;
   /** See `AtlasClip.rest` — only meaningful when `overlay` is true. */
   rest?: string;
+  /** See `AtlasClip.source_level` — the art level the clip animates (`level001`); absent or unreadable counts as level 0. */
+  source_level?: string | null;
+}
+
+/** The art level a giant clip animates, from its `source_level` (`level001` → 1); level 0 when absent or unreadable. */
+export function giantClipLevel(clip: Pick<GiantFamilyClip, 'source_level'>): number {
+  const match = /^level(\d+)/.exec(clip.source_level ?? '');
+  return match ? Number(match[1]) : 0;
 }
 
 /**

@@ -6,7 +6,7 @@ import { giantCoverage, type GiantCoverage } from './giantTiles';
 import type { GiantFamily } from './giantPlacement';
 
 const CAMP_GIANT_FAMILY: Readonly<Record<string, GiantFamily>> = {
-  naglfar: 'giantnaglfar',
+  naglfar: 'naglfar',
 };
 
 /** The giant art family a camp family is drawn with, or `undefined` for a one-hex camp. */

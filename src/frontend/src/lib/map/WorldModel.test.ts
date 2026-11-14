@@ -3304,12 +3304,12 @@ describe('WorldModel: Naglfar, a camp drawn as a 7-hex giant tile', () => {
     leftover: { wood: 0, stone: 0, food: 0, iron: 0 },
   });
 
-  it('tags all 7 footprint hexes as a giantnaglfar giant of the anchor and resolves each to the one camp', () => {
+  it('tags all 7 footprint hexes as a naglfar giant of the anchor and resolves each to the one camp', () => {
     const model = new WorldModel(20260824);
     model.setCamps([camp]);
     for (const { coord, part } of giantCoverage(anchor)) {
       const tile = model.getTile(coord.q, coord.r);
-      expect(tile.giant).toMatchObject({ family: 'giantnaglfar', anchor, part, orientation: 'SE' });
+      expect(tile.giant).toMatchObject({ family: 'naglfar', anchor, part, orientation: 'SE' });
       expect(model.campAt(coord)?.family).toBe('naglfar');
       expect(model.campAnchorAt(coord)).toEqual(anchor);
       expect(model.campTileOf(tile).camp?.family).toBe('naglfar');

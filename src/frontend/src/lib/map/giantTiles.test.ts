@@ -10,6 +10,7 @@ import {
   giantFootprintOutline,
   giantFrameLevels,
   giantStageKey,
+  giantClipLevel,
   GIANT_NEIGHBOR_PARTS,
   giantTop,
   parseGiantFrameName,
@@ -371,14 +372,14 @@ describe('giantCrop', () => {
 
 describe('giant art levels (Naglfar: crewed level001, beaten level000)', () => {
   const frames: GiantFamilyFrame<string>[] = [
-    'giantnaglfar_SE_level000_partC',
-    'giantnaglfar_SE_level000_partNE',
-    'giantnaglfar_SE_level001_partC',
-    'giantnaglfar_SE_level001_partNE',
+    'naglfar_SE_level000_partC',
+    'naglfar_SE_level000_partNE',
+    'naglfar_SE_level001_partC',
+    'naglfar_SE_level001_partNE',
   ].map((name) => ({ name, value: name }));
 
   it('parses the level out of a frame name', () => {
-    expect(parseGiantFrameName('giantnaglfar_SE_level001_partNE')).toEqual({ orientation: 'SE', level: 1, part: 'NE' });
+    expect(parseGiantFrameName('naglfar_SE_level001_partNE')).toEqual({ orientation: 'SE', level: 1, part: 'NE' });
     expect(parseGiantFrameName('giantutgard_NE_level000_partC')).toEqual({ orientation: 'NE', level: 0, part: 'C' });
   });
 
@@ -386,20 +387,28 @@ describe('giant art levels (Naglfar: crewed level001, beaten level000)', () => {
     expect(giantFrameLevels(frames)).toEqual([0, 1]);
     const crewed = classifyGiantFrames(frames, 1);
     const beaten = classifyGiantFrames(frames);
-    expect(crewed.SE.C).toBe('giantnaglfar_SE_level001_partC');
-    expect(beaten.SE.C).toBe('giantnaglfar_SE_level000_partC');
-    expect(beaten.SE.NE).toBe('giantnaglfar_SE_level000_partNE');
+    expect(crewed.SE.C).toBe('naglfar_SE_level001_partC');
+    expect(beaten.SE.C).toBe('naglfar_SE_level000_partC');
+    expect(beaten.SE.NE).toBe('naglfar_SE_level000_partNE');
+  });
+
+  it('reads the art level a clip animates from its source_level, so crewed and beaten clips land under their own stage keys', () => {
+    expect(giantClipLevel({ source_level: 'level001' })).toBe(1);
+    expect(giantClipLevel({ source_level: 'level000' })).toBe(0);
+    expect(giantStageKey('naglfar', giantClipLevel({ source_level: 'level001' }))).toBe('naglfar#1');
+    expect(giantClipLevel({ source_level: null })).toBe(0);
+    expect(giantClipLevel({})).toBe(0);
   });
 
   it('stores level000 under the family and a higher level under a stage key', () => {
-    expect(giantStageKey('giantnaglfar', 0)).toBe('giantnaglfar');
-    expect(giantStageKey('giantnaglfar', 1)).toBe('giantnaglfar#1');
+    expect(giantStageKey('naglfar', 0)).toBe('naglfar');
+    expect(giantStageKey('naglfar', 1)).toBe('naglfar#1');
     const giants = {
-      [giantStageKey('giantnaglfar', 0)]: classifyGiantFrames(frames),
-      [giantStageKey('giantnaglfar', 1)]: classifyGiantFrames(frames, 1),
+      [giantStageKey('naglfar', 0)]: classifyGiantFrames(frames),
+      [giantStageKey('naglfar', 1)]: classifyGiantFrames(frames, 1),
     };
-    expect(giantTop(giants, giantStageKey('giantnaglfar', 1), 'SE', 'C')).toBe('giantnaglfar_SE_level001_partC');
-    expect(giantTop(giants, giantStageKey('giantnaglfar', 0), 'SE', 'C')).toBe('giantnaglfar_SE_level000_partC');
+    expect(giantTop(giants, giantStageKey('naglfar', 1), 'SE', 'C')).toBe('naglfar_SE_level001_partC');
+    expect(giantTop(giants, giantStageKey('naglfar', 0), 'SE', 'C')).toBe('naglfar_SE_level000_partC');
   });
 
   it('picks level001 while the camp has crew (or has no live state yet) and level000 once its garrison is empty', () => {
