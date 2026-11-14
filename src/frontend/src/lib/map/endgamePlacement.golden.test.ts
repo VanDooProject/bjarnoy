@@ -1,7 +1,7 @@
 // The endgame map's cross-language anti-drift guard (frontend half) — `src/shared/endgame-placement-golden.json` is read by this
 // suite and by `Bjarnoy.Domain.Tests.EndgamePlacementGoldenTests` (backend): each side computes against the same real wasted island
 // (tiles/terrain, river tiles, giants, camp hexes, world seed, island index) with its OWN production implementation
-// (`placeEndgame` here, `EndgameGenerator.PlaceCore` there), then asserts the fixture's frozen, ORDER-SENSITIVE wall and tower lists.
+// (`placeEndgame` here, `EndgameGenerator.PlaceCore` there), then asserts the fixture's frozen, ORDER-SENSITIVE wall and tower lists and Naglfar's anchor.
 import { describe, expect, it } from 'vitest';
 import goldenFixtureJson from '../../../../shared/endgame-placement-golden.json';
 import { coordKey, type AxialCoord } from '../hex/coords';
@@ -16,6 +16,8 @@ interface Scenario {
   rivers: [number, number][];
   giants: { q: number; r: number; family: string }[];
   camps: [number, number][];
+  otherLand: [number, number][];
+  naglfar: { q: number; r: number } | null;
   walls: { q: number; r: number; ring: 'inner' | 'outer'; piece: string; dir: TileOrientation; gate: boolean; level: number }[];
   towers: [number, number][];
 }
@@ -26,12 +28,14 @@ function run(scenario: Scenario) {
   const tiles: AxialCoord[] = scenario.tiles.map(([q, r]) => ({ q, r }));
   const terrainByHex = new Map<string, Terrain>(scenario.tiles.map(([q, r, terrain]) => [coordKey({ q, r }), terrain]));
   const rivers = new Set(scenario.rivers.map(([q, r]) => coordKey({ q, r })));
+  const otherLand = new Set(scenario.otherLand.map(([q, r]) => coordKey({ q, r })));
   return placeEndgame(
     tiles,
     (c) => terrainByHex.get(coordKey(c)) ?? 'sea',
     (c) => rivers.has(coordKey(c)),
     scenario.giants.map((g) => ({ anchor: { q: g.q, r: g.r }, family: g.family })),
     new Set(scenario.camps.map(([q, r]) => coordKey({ q, r }))),
+    (c) => terrainByHex.has(coordKey(c)) || otherLand.has(coordKey(c)),
     scenario.worldSeed,
     scenario.islandIndex,
   );
@@ -45,6 +49,7 @@ describe('endgame-placement golden fixture (Utgard walls and Jötun watchtowers 
       actual.walls.map((w) => ({ q: w.coord.q, r: w.coord.r, ring: w.ring, piece: w.piece, dir: w.dir, gate: w.isGate, level: w.level })),
     ).toEqual(scenario.walls);
     expect(actual.towers.map((t) => [t.q, t.r])).toEqual(scenario.towers);
+    expect(actual.naglfar).toEqual(scenario.naglfar);
   });
 
   it('covers the shapes the rules care about', () => {
@@ -54,5 +59,6 @@ describe('endgame-placement golden fixture (Utgard walls and Jötun watchtowers 
     expect(fixture.scenarios.some((s) => s.walls.some((w) => w.gate))).toBe(true);
     expect(fixture.scenarios.some((s) => s.walls.some((w) => w.piece === 'end_coast'))).toBe(true);
     expect(fixture.scenarios.some((s) => s.towers.length === 6)).toBe(true);
+    expect(fixture.scenarios.some((s) => s.naglfar !== null)).toBe(true);
   });
 });

@@ -2572,9 +2572,16 @@ export class WorldModel {
         isRiver,
         placements.map((p) => ({ anchor: p.anchor, family: p.family })),
         new Set(campPlacements.map((p) => coordKey(p.coord))),
+        (c) => terrainAt(c.q, c.r, world) !== 'sea' || wastedTerrainAt(c.q, c.r, world) !== 'sea',
         worldSeed,
         islandIndex,
       );
+      // Naglfar, the giants' ship, is stored with the island's other camps like the server does (`WorldGenerator`).
+      if (sites.naglfar) {
+        this.setCamps([
+          { family: 'naglfar', coord: sites.naglfar, level: 1, orientation: this.getTile(sites.naglfar.q, sites.naglfar.r).orientation ?? 'SE' },
+        ]);
+      }
       this.setUtgardWalls(
         sites.walls.map((w) => ({ coord: w.coord, ring: w.ring, piece: w.piece, dir: w.dir, isGate: w.isGate, level: w.level })),
       );

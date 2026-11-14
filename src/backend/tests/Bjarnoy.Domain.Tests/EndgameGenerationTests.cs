@@ -272,15 +272,20 @@ public class EndgameGenerationTests
             (IReadOnlyDictionary<HexCoord, Terrain>)land,
             (IReadOnlySet<HexCoord>)island.RiverTiles.Select(r => r.Coord).ToHashSet(),
             (IReadOnlyList<GiantGenerator.Placement>)[.. island.Giants.Select(g => new GiantGenerator.Placement(g.Anchor, g.Family))],
-            (IReadOnlySet<HexCoord>)island.Camps.Select(c => c.Coord).ToHashSet());
+            (IReadOnlySet<HexCoord>)island.Camps.Where(c => c.Family != CampFamilies.Naglfar).Select(c => c.Coord).ToHashSet());
+        bool IsLand(HexCoord c) => sampler.TerrainAt(c).IsLand() || sampler.WastedTerrainAt(c).IsLand();
 
-        var a = EndgameGenerator.PlaceCore(args.Tiles, args.Item2, args.Item3, args.Item4, args.Item5, seed, island.Index);
-        var b = EndgameGenerator.PlaceCore(args.Tiles, args.Item2, args.Item3, args.Item4, args.Item5, seed, island.Index);
+        var a = EndgameGenerator.PlaceCore(args.Tiles, args.Item2, args.Item3, args.Item4, args.Item5, IsLand, seed, island.Index);
+        var b = EndgameGenerator.PlaceCore(args.Tiles, args.Item2, args.Item3, args.Item4, args.Item5, IsLand, seed, island.Index);
 
         Assert.Equal(a.Walls, b.Walls);
         Assert.Equal(a.Towers, b.Towers);
         Assert.Equal(island.UtgardWalls, a.Walls);
         Assert.Equal(island.JotunTowers.Select(t => t.Coord), a.Towers);
+        Assert.Equal(a.Naglfar, b.Naglfar);
+        Assert.Equal(
+            island.Camps.Where(c => c.Family == CampFamilies.Naglfar).Select(c => (HexCoord?)c.Coord).FirstOrDefault(),
+            a.Naglfar);
     }
 
     [Fact]
@@ -289,10 +294,124 @@ public class EndgameGenerationTests
         var island = TestWorlds.Default(6).Islands.First(i => !i.IsWasted);
         var land = island.Tiles.ToDictionary(t => t, _ => Terrain.Grass);
 
-        var sites = EndgameGenerator.PlaceCore(island.Tiles, land, new HashSet<HexCoord>(), [], new HashSet<HexCoord>(), 6, island.Index);
+        var sites = EndgameGenerator.PlaceCore(island.Tiles, land, new HashSet<HexCoord>(), [], new HashSet<HexCoord>(), _ => false, 6, island.Index);
 
         Assert.Empty(sites.Walls);
         Assert.Empty(sites.Towers);
+    }
+
+
+    // ---- Naglfar ---------------------------------------------------------------------------------------------------------------
+
+    private static Func<HexCoord, bool> LandOf(IReadOnlyDictionary<HexCoord, Terrain> land, params HexCoord[] foreign) =>
+        c => (land.TryGetValue(c, out var t) && t != Terrain.Sea) || foreign.Contains(c);
+
+    private static HexCoord? NaglfarOf(IReadOnlyDictionary<HexCoord, Terrain> land, Func<HexCoord, bool> isLand, IReadOnlySet<HexCoord>? rivers = null)
+    {
+        var tiles = land.Where(kv => kv.Value != Terrain.Sea).Select(kv => kv.Key).ToList();
+        return EndgameGenerator.PlaceCore(
+            tiles, land, rivers ?? new HashSet<HexCoord>(), [new GiantGenerator.Placement(Origin, GiantGenerator.UtgardFamily)],
+            new HashSet<HexCoord>(), isLand, 11, 0).Naglfar;
+    }
+
+    [Fact]
+    public void Naglfar_anchors_three_hexes_off_a_round_island_at_the_lowest_q_then_r()
+    {
+        var land = Disc(10);
+
+        // Closest to Utgard = the nearest ring that leaves the footprint 2 hexes off the coast (anchor 13 from the origin); of its hexes
+        // the lowest q, then the lowest r.
+        Assert.Equal(new HexCoord(-13, 0), NaglfarOf(land, LandOf(land)));
+    }
+
+    [Fact]
+    public void Naglfars_footprint_is_open_sea_two_to_four_hexes_off_the_coast()
+    {
+        foreach (var radius in new[] { 4, 7, 10 })
+        {
+            var land = Disc(radius);
+            var anchor = NaglfarOf(land, LandOf(land));
+
+            Assert.NotNull(anchor);
+            var footprint = Giant.Footprint(anchor.Value);
+            Assert.Equal(7, footprint.Count);
+            Assert.All(footprint, h => Assert.True(h.DistanceTo(Origin) > radius, "a footprint hex stands on land"));
+            // Distance to the nearest land hex of a disc is the distance to the centre minus its radius.
+            var nearest = footprint.Min(h => h.DistanceTo(Origin) - radius);
+            Assert.InRange(nearest, EndgameRules.NaglfarMinCoastDistance, EndgameRules.NaglfarMaxCoastDistance);
+        }
+    }
+
+    [Fact]
+    public void Another_islands_land_in_the_footprint_moves_naglfar_and_land_everywhere_leaves_none()
+    {
+        var land = Disc(10);
+        var free = NaglfarOf(land, LandOf(land))!.Value;
+
+        // Land beside the free anchor spoils its footprint, so another one is chosen.
+        var blocked = NaglfarOf(land, LandOf(land, free + HexCoord.Directions[0]));
+        Assert.NotNull(blocked);
+        Assert.NotEqual(free, blocked);
+        Assert.DoesNotContain(free + HexCoord.Directions[0], Giant.Footprint(blocked.Value));
+
+        // No open sea within reach: no Naglfar.
+        Assert.Null(NaglfarOf(land, c => c.DistanceTo(Origin) <= 40));
+    }
+
+    [Fact]
+    public void Enclosed_water_never_holds_naglfar()
+    {
+        // An O-shaped island: a ring of land with a big lake inside (the lake is 3+ hexes from the coast on the inside, as the outer sea is).
+        var land = Disc(14);
+        foreach (var hex in Origin.WithinRadius(8))
+        {
+            land[hex] = Terrain.Sea; // the lake, enclosed by a land ring of width 6
+        }
+
+        land[Origin] = Terrain.Grass; // Utgard on a speck of land in the middle keeps the lake an island's own water
+        foreach (var n in Origin.Neighbours())
+        {
+            land[n] = Terrain.Grass;
+        }
+
+        var anchor = NaglfarOf(land, LandOf(land));
+
+        Assert.NotNull(anchor);
+        Assert.True(anchor.Value.DistanceTo(Origin) > 14, "Naglfar anchored in the lake");
+    }
+
+    [Fact]
+    public void Every_generated_wasted_island_with_utgard_stores_at_most_one_naglfar_camp_on_open_sea_off_its_coast()
+    {
+        var anyNaglfar = false;
+        foreach (var (seed, island) in All)
+        {
+            var sampler = new TerrainSampler(TestWorlds.Options(seed));
+            var ships = island.Camps.Where(c => c.Family == CampFamilies.Naglfar).ToList();
+            Assert.True(ships.Count <= 1);
+            if (ships.Count == 0)
+            {
+                continue;
+            }
+
+            anyNaglfar = true;
+            var ship = ships[0];
+            Assert.Equal(1, ship.Level);
+            Assert.All(Giant.Footprint(ship.Coord), h => Assert.False(sampler.TerrainAt(h).IsLand() || sampler.WastedTerrainAt(h).IsLand()));
+            var coast = Giant.Footprint(ship.Coord).Min(h => island.Tiles.Min(t => t.DistanceTo(h)));
+            Assert.InRange(coast, EndgameRules.NaglfarMinCoastDistance, EndgameRules.NaglfarMaxCoastDistance);
+        }
+
+        Assert.True(anyNaglfar, "none of the sampled islands got a Naglfar");
+
+        // Green islands and wasted islands without Utgard have none.
+        foreach (var seed in Seeds)
+        {
+            foreach (var island in TestWorlds.Default(seed).Islands.Where(i => !i.IsWasted || !i.Giants.Any(g => g.Family == GiantGenerator.UtgardFamily)))
+            {
+                Assert.DoesNotContain(island.Camps, c => c.Family == CampFamilies.Naglfar);
+            }
+        }
     }
 
     /// <summary>The two ring loops exactly as <c>PlaceWalls</c> computes them (the outer one keeps clear of the inner one).</summary>
@@ -315,7 +434,7 @@ public class EndgameGenerationTests
         var tiles = land.Where(kv => kv.Value != Terrain.Sea).Select(kv => kv.Key).ToList();
         return EndgameGenerator.PlaceCore(
             tiles, land, rivers ?? new HashSet<HexCoord>(), [new GiantGenerator.Placement(Origin, GiantGenerator.UtgardFamily)],
-            new HashSet<HexCoord>(), seed, islandIndex);
+            new HashSet<HexCoord>(), c => land.TryGetValue(c, out var t) && t != Terrain.Sea, seed, islandIndex);
     }
 
     /// <summary>True when the hexes form one simple cycle: each adjacent to the next (cyclically), no two others adjacent or equal.</summary>
