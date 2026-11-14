@@ -29,12 +29,12 @@ public class CampGenerationTests
         island.IsWasted ? sampler.WastedTerrainAt(coord) : sampler.TerrainAt(coord);
 
     [Fact]
-    public void The_family_table_has_the_fourteen_families_with_the_owner_decided_strengths()
+    public void The_family_table_has_the_fifteen_families_with_the_owner_decided_strengths()
     {
         var strong = CampFamilies.All.Where(f => f.Strength == CampStrength.Strong).Select(f => f.Family).Order();
         var weak = CampFamilies.All.Where(f => f.Strength == CampStrength.Weak).Select(f => f.Family).Order();
 
-        Assert.Equal(["bearrapids", "boarwallow", "eagleeyrie", "fenrirbrood", "moosemire", "walrushaulout", "whaleroad", "wolfden"], strong);
+        Assert.Equal(["bearrapids", "boarwallow", "eagleeyrie", "fenrirbrood", "moosemire", "naglfar", "walrushaulout", "whaleroad", "wolfden"], strong);
         Assert.Equal(["beaverlodge", "cranedance", "deerglade", "harewarren", "otterslide", "sealhaulout"], weak);
         Assert.All(CampFamilies.All.Where(f => f.Strength == CampStrength.Strong), f => Assert.Equal(CampLevelSkew.Cubic, f.LevelSkew));
         Assert.All(CampFamilies.All.Where(f => f.Strength == CampStrength.Weak), f => Assert.Equal(CampLevelSkew.Quadratic, f.LevelSkew));

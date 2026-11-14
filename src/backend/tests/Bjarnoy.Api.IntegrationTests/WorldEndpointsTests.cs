@@ -194,7 +194,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
             actual.OrderBy(e => e.Index).ThenBy(e => e.Response.Q).ThenBy(e => e.Response.R));
         Assert.All(camps, c => Assert.Equal(
             c.Strong,
-            c.Family is "wolfden" or "boarwallow" or "bearrapids" or "fenrirbrood" or "walrushaulout" or "eagleeyrie" or "moosemire" or "whaleroad"));
+            c.Family is "wolfden" or "boarwallow" or "bearrapids" or "fenrirbrood" or "walrushaulout" or "eagleeyrie" or "moosemire" or "whaleroad" or "naglfar"));
     }
 
     [Fact]
