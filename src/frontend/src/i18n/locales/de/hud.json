@@ -321,6 +321,7 @@
     "minus": "−",
     "plus": "+",
     "max": "Max",
+    "countOfMax": "/ {max}",
     "trainOrders": "{count} Auftrag ausbilden | {count} Aufträge ausbilden",
     "pickUnits": "Wähle Einheiten zum Ausbilden",
     "footerOrders": "{count} Auftrag · {free} von {max} Plätzen frei | {count} Aufträge · {free} von {max} Plätzen frei",

@@ -217,6 +217,19 @@ describe('TrainingModal', () => {
     expect((row.get('.qty').element as HTMLInputElement).value).toBe('2');
   });
 
+  it('shows the count next to the largest affordable count and lowers it when another row claims stock', async () => {
+    const world = setup(twoBarracks);
+    world.hud.available = { wood: 130, stone: 99999, food: 99999, iron: 99999 };
+    const wrapper = mountModal();
+    const rows = wrapper.findAll('.unit-row');
+    const first = rows[0]!;
+    expect((first.get('.qty').element as HTMLInputElement).value).toBe('0');
+    expect(first.get('[data-testid="qty-max"]').text()).toBe('/ 2');
+    // Spearman costs 80 wood: one pick leaves 50, too little for a Thrall (60).
+    await rows[1]!.findAll('.step-btn')[1]!.trigger('click');
+    expect(first.get('[data-testid="qty-max"]').text()).toBe('/ 0');
+  });
+
   it('places one order per picked type with one button and stays open', async () => {
     setup(twoBarracks);
     const wrapper = mountModal();

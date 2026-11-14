@@ -486,13 +486,16 @@ async function cancelOrder(id: string) {
                 >
                   {{ t('hud.trainingModal.minus') }}
                 </button>
-                <input
-                  type="number"
-                  min="0"
-                  class="qty"
-                  :value="row.count"
-                  @input="onQuantityInput(row.definition.type, $event)"
-                />
+                <label class="qty-field">
+                  <input
+                    type="number"
+                    min="0"
+                    class="qty"
+                    :value="row.count"
+                    @input="onQuantityInput(row.definition.type, $event)"
+                  />
+                  <span class="qty-max" data-testid="qty-max">{{ t('hud.trainingModal.countOfMax', { max: row.max }) }}</span>
+                </label>
                 <button
                   type="button"
                   class="step-btn"
@@ -964,19 +967,44 @@ async function cancelOrder(id: string) {
   opacity: 0.5;
   cursor: default;
 }
-.qty {
-  width: 48px;
+.qty-field {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
   height: 100%;
-  padding: 0 4px;
-  background: transparent;
-  border: none;
+  padding: 0 10px;
   border-left: 1px solid var(--panel-border);
   border-right: 1px solid var(--panel-border);
+  font-variant-numeric: tabular-nums;
+  cursor: text;
+}
+.qty {
+  /* fits three digits; right-aligned so the count's end stays put while the max follows it */
+  width: 3ch;
+  align-self: center;
+  padding: 0;
+  background: transparent;
+  border: none;
   color: var(--text);
   font: inherit;
-  text-align: center;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
   -moz-appearance: textfield;
   appearance: textfield;
+}
+.qty:focus-visible {
+  outline: none;
+}
+.qty-field:focus-within {
+  box-shadow: inset 0 0 0 1px var(--gold);
+}
+.qty-max {
+  /* "/ " plus three digits, fixed so the stepper doesn't change width as the max moves */
+  min-width: 5ch;
+  align-self: center;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
 }
 .qty::-webkit-outer-spin-button,
 .qty::-webkit-inner-spin-button {
