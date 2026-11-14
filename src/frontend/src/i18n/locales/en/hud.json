@@ -321,6 +321,7 @@
     "minus": "−",
     "plus": "+",
     "max": "Max",
+    "countOfMax": "/ {max}",
     "trainOrders": "Train {count} order | Train {count} orders",
     "pickUnits": "Pick units to train",
     "footerOrders": "{count} order · {free} of {max} slots free | {count} orders · {free} of {max} slots free",
