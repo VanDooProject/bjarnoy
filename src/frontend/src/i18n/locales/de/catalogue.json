@@ -84,7 +84,8 @@
     "harewarren": "Hasenbau",
     "deerglade": "Hirschlichtung",
     "otterslide": "Otterrutsche",
-    "whaleroad": "Walweg"
+    "whaleroad": "Walweg",
+    "naglfar": "Naglfar"
   },
   "terrain": {
     "sea": "Offenes Wasser",
@@ -227,6 +228,11 @@
       "young": "Walkalb",
       "adult": "Buckelwal",
       "alpha": "Alter Bulle"
+    },
+    "naglfar": {
+      "young": "Besatzung",
+      "adult": "Reifschiff",
+      "alpha": "Naglfar"
     }
   },
   "endgame": {
