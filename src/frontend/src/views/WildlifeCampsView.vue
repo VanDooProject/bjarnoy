@@ -12,7 +12,7 @@ import { findAtlasClip, findAtlasFrame, type AtlasFrameRect } from '../lib/map/a
 import { KEY_FAMILY, type TextureKey } from '../lib/map/textures';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
 import { lootKindsOf, lootPoolByKind, type LootShare } from '../lib/map/campRules';
-import { CAMP_FAMILIES, MaxCampLevel, guardRange, type CampGround, type CampStrength } from '../lib/map/campPlacement';
+import { CAMP_FAMILIES, MaxCampLevel, guardRange, isEndgameCampFamily, type CampGround, type CampStrength } from '../lib/map/campPlacement';
 
 const { t, te } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -35,8 +35,8 @@ interface CampEntry {
   strength: CampStrength;
 }
 
-// A family only gets a card once its art is in the atlas.
-const CAMPS: CampEntry[] = CAMP_FAMILIES.map((f) => ({ id: f.family, ground: f.ground, strength: f.strength })).filter(
+// A family only gets a card once its art is in the atlas. The endgame's camps (Naglfar) are documented on the Wasted Lands page.
+const CAMPS: CampEntry[] = CAMP_FAMILIES.filter((f) => !isEndgameCampFamily(f.family)).map((f) => ({ id: f.family, ground: f.ground, strength: f.strength })).filter(
   (c) => TILE_ORIENTATIONS.some((cam) => frameFor(c.id, cam, false)),
 );
 

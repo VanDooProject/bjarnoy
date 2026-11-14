@@ -17,7 +17,8 @@ import { buildingAllowedOnHex, cropAllowedHere, hexOccupant, newPlacementDisable
 import { canPlacePalisade, type PalisadeRefusal, type WallSet } from './palisadeTiles';
 import type { PalisadeWalls } from './palisadeMovement';
 import type { StandingBridges } from './bridgeMovement';
-import { giantCoverage, type GiantPart } from './giantTiles';
+import { campFootprint, campGiantFamily } from './campFootprint';
+import { giantCampLevel, giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
 import { campGuardRange, isStrongCampFamily, placeCamps, placeWhaleRoads, StartPositionMargin } from './campPlacement';
 import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
@@ -689,9 +690,29 @@ export class WorldModel {
     return false;
   }
 
-  /** The wildlife camp standing on `coord`, or `undefined`. */
+  /** The wildlife camp standing on `coord`, or `undefined`. A hex of a 7-hex camp (Naglfar) resolves to that camp. */
   campAt(coord: AxialCoord) {
-    return this.campByHex.get(coordKey(coord));
+    return this.campByHex.get(coordKey(this.campAnchorAt(coord) ?? coord));
+  }
+
+  /** The anchor of the 7-hex camp (`campFootprint`) covering `coord`, or `null` when none does. The anchor hex itself returns itself. */
+  campAnchorAt(coord: AxialCoord): AxialCoord | null {
+    const anchor = this.giantAnchorByHex.get(coordKey(coord));
+    if (!anchor) return null;
+    const camp = this.campByHex.get(coordKey(anchor));
+    return camp && campGiantFamily(camp.family) ? anchor : null;
+  }
+
+  /** The tile that holds the camp `tile` belongs to: the anchor's tile for a hex of a 7-hex camp, else `tile` itself. */
+  campTileOf(tile: Tile): Tile {
+    const anchor = this.campAnchorAt(tile);
+    return anchor ? this.getTile(anchor.q, anchor.r) : tile;
+  }
+
+  /** The art level of the giant on `tile` (`giantTiles.ts`): 0 for a plain giant, the camp's crewed/beaten level for a 7-hex camp. */
+  giantArtLevelAt(tile: Tile): number {
+    const camp = this.campAt(tile);
+    return camp && campGiantFamily(camp.family) ? giantCampLevel(camp) : 0;
   }
 
   /**
@@ -2572,9 +2593,16 @@ export class WorldModel {
         isRiver,
         placements.map((p) => ({ anchor: p.anchor, family: p.family })),
         new Set(campPlacements.map((p) => coordKey(p.coord))),
+        (c) => terrainAt(c.q, c.r, world) !== 'sea' || wastedTerrainAt(c.q, c.r, world) !== 'sea',
         worldSeed,
         islandIndex,
       );
+      // Naglfar, the giants' ship, is stored with the island's other camps like the server does (`WorldGenerator`).
+      if (sites.naglfar) {
+        this.setCamps([
+          { family: 'naglfar', coord: sites.naglfar, level: 1, orientation: this.getTile(sites.naglfar.q, sites.naglfar.r).orientation ?? 'SE' },
+        ]);
+      }
       this.setUtgardWalls(
         sites.walls.map((w) => ({ coord: w.coord, ring: w.ring, piece: w.piece, dir: w.dir, isGate: w.isGate, level: w.level })),
       );
@@ -2640,6 +2668,13 @@ export class WorldModel {
         guardRange: campGuardRange(camp.family, camp.level),
       };
       this.campByHex.set(coordKey(camp.coord), { ...tile.camp, q: camp.coord.q, r: camp.coord.r });
+      // A camp that fills 7 hexes (Naglfar) is a giant tile: tag its footprint like a giant, so it draws through the giant path.
+      const giantFamily = campGiantFamily(camp.family);
+      if (giantFamily) {
+        for (const { coord, part } of campFootprint(camp.family, camp.coord)) {
+          if (!this.getTile(coord.q, coord.r).giant) this.tagGiantHex(coord, camp.coord, giantFamily, camp.orientation, part);
+        }
+      }
     }
     return added;
   }

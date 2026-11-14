@@ -568,7 +568,29 @@
       "bend60": "Enge Biegung",
       "spring": "Quelle"
     },
-    "history": "Nach Snorris Gylfaginning ist Naglfar das Schiff aus den ungeschnittenen Nägeln der Toten. Wer mit langen Nägeln stirbt, baut daran mit, darum schneidet man sie, um die Fertigstellung hinauszuzögern. Zu Ragnarök reißt es sich los und trägt die Riesen in die letzte Schlacht, mit dem Riesen Hrym am Steuer. In der Völuspá gehört sein Losreißen zu den Zeichen des Weltendes."
+    "history": "Nach Snorris Gylfaginning ist Naglfar das Schiff aus den ungeschnittenen Nägeln der Toten. Wer mit langen Nägeln stirbt, baut daran mit, darum schneidet man sie, um die Fertigstellung hinauszuzögern. Zu Ragnarök reißt es sich los und trägt die Riesen in die letzte Schlacht, mit dem Riesen Hrym am Steuer. In der Völuspá gehört sein Losreißen zu den Zeichen des Weltendes.",
+    "naglfar": {
+      "heading": "Naglfar",
+      "body": "Wenn der Endboss erwacht, liegt vor jeder verwüsteten Insel mit Utgard Naglfar vor Anker: das Schiff der Riesen, gebaut aus den Nägeln der Toten, mit dem Riesen Hrym am Steuer. Es treibt auf offener See, {min} bis {max} Felder vor der Küste, so nah an Utgard, wie das Wasser es zulässt. Es ist ein Lager auf See: Nur Flotten können es bekämpfen, Landeinheiten nicht.",
+      "crew": {
+        "heading": "Besatzung",
+        "ship": "Schiff",
+        "count": "Anzahl",
+        "attack": "Angriff",
+        "defense": "Verteidigung",
+        "total": "Zusammen sind das {attack} Angriff und {defense} Verteidigung, etwa so viel wie {snekkjas} Snekkjas."
+      },
+      "rules": {
+        "guard": "Segelt deine Flotte näher als {range} Felder an Naglfar heran, überfällt es sie in einer vollen Schlacht. Verliert deine Flotte, ist sie verloren.",
+        "calm": "Nach einem Kampf ist Naglfar {n} Stunde lang ruhig und überfällt bis dahin niemanden.",
+        "beaten": "Naglfar ist besiegt, wenn seine ganze Besatzung gefallen ist. Danach bleibt es {grace} Stunde leer, bevor die Besatzung über {regrow} Stunden nachwächst.",
+        "noGate": "Du musst es nicht besiegen: Flotten können auf Utgards Insel landen, ob Naglfar besiegt ist oder nicht.",
+        "loot": "Die Flotte, die Naglfar besiegt, erbeutet {pool} Rohstoffe: {iron} Eisen, {wood} Holz und {brick} Stein. Sie nimmt mit, was ihre überlebenden Schiffe tragen können, der Rest geht verloren. Außer dieser Beute bringt dir der Sieg nichts ein."
+      },
+      "placementNote": "Lage: sieben Felder offene See (der Ankerpunkt und seine sechs Nachbarn), keines davon in umschlossenem Wasser oder auf dem Land irgendeiner Insel, jedes {min} bis {max} Felder vom Land dieser Insel entfernt. Von allen solchen Stellen gewinnt die, die Utgards Ankerpunkt am nächsten liegt; bei Gleichstand das kleinere q, dann das kleinere r. Hat die Insel keine solche Stelle, gibt es dort kein Naglfar. Es entsteht mit der Welt, nach den Wachtürmen, und bleibt mit der Insel verborgen, bis der Endboss erwacht. Kämpfe und Wachreichweite werden vom Ankerfeld aus gemessen.",
+      "artNote": "Als siebenteilige Riesenkachel gezeichnet (Art-Familie giantnaglfar): level001, solange die Besatzung steht, level000, sobald die Besatzung leer ist.",
+      "history": "Nach nordischem Glauben wurde Naglfar aus den Finger- und Zehennägeln der Toten gebaut. Deshalb schnitt man Sterbenden die Nägel: Jeder ungeschnittene Nagel brachte das Schiff der Riesen seiner Fertigstellung ein Stück näher. In Snorris Gylfaginning liegt es vertäut, bis zum Ragnarök die See steigt und es sich losreißt."
+    }
   },
   "wildlifeCamps": {
     "title": "Wildtierlager",

@@ -20,6 +20,7 @@ import {
   placeWhaleRoads,
   whaleCountFor,
   campGuardRange,
+  isEndgameCampFamily,
   isWaterCampFamily,
   MinWhaleSpacing,
   WhaleMinShoreDistance,
@@ -43,7 +44,7 @@ describe('camp family table', () => {
   it('has the owner-decided strengths', () => {
     const strong = CAMP_FAMILIES.filter((f) => f.strength === 'strong').map((f) => f.family).sort();
     const weak = CAMP_FAMILIES.filter((f) => f.strength === 'weak').map((f) => f.family).sort();
-    expect(strong).toEqual(['bearrapids', 'boarwallow', 'eagleeyrie', 'fenrirbrood', 'moosemire', 'walrushaulout', 'whaleroad', 'wolfden']);
+    expect(strong).toEqual(['bearrapids', 'boarwallow', 'eagleeyrie', 'fenrirbrood', 'moosemire', 'naglfar', 'walrushaulout', 'whaleroad', 'wolfden']);
     expect(weak).toEqual(['beaverlodge', 'cranedance', 'deerglade', 'harewarren', 'otterslide', 'sealhaulout']);
     expect(isStrongCampFamily('wolfden')).toBe(true);
     expect(isStrongCampFamily('sealhaulout')).toBe(false);
@@ -219,9 +220,8 @@ describe('whale road (the first water camp)', () => {
   };
   const nearest = (tiles: AxialCoord[], c: AxialCoord) => Math.min(...tiles.map((t) => hexDistance(t, c)));
 
-  it('is the last family: strong, cubic, on the sea, with no guard range', () => {
-    const last = CAMP_FAMILIES[CAMP_FAMILIES.length - 1]!;
-    expect(last).toEqual({ family: 'whaleroad', ground: 'sea', strength: 'strong', levelSkew: 'cubic' });
+  it('is the first water family, after the land ones: strong, cubic, on the sea, with no guard range', () => {
+    expect(CAMP_FAMILIES[CAMP_FAMILIES.length - 2]).toEqual({ family: 'whaleroad', ground: 'sea', strength: 'strong', levelSkew: 'cubic' });
     expect(isWaterCampFamily('whaleroad')).toBe(true);
     expect(isWaterCampFamily('wolfden')).toBe(false);
     for (let level = 1; level <= MaxCampLevel; level++) {
@@ -229,6 +229,14 @@ describe('whale road (the first water camp)', () => {
       expect(campGuardRange('wolfden', level)).toBe(guardRange(level, 'strong'));
       expect(campGuardRange('harewarren', level)).toBe(guardRange(level, 'weak'));
     }
+  });
+
+  it('has Naglfar last: an endgame water camp with guard range 8 whatever its level', () => {
+    expect(CAMP_FAMILIES[CAMP_FAMILIES.length - 1]).toEqual({ family: 'naglfar', ground: 'sea', strength: 'strong', levelSkew: 'cubic' });
+    expect(isEndgameCampFamily('naglfar')).toBe(true);
+    expect(isEndgameCampFamily('whaleroad')).toBe(false);
+    expect(isWaterCampFamily('naglfar')).toBe(true);
+    for (let level = 1; level <= MaxCampLevel; level++) expect(campGuardRange('naglfar', level)).toBe(8);
   });
 
   it('never places a whale road on land', () => {

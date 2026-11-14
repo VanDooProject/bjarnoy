@@ -263,6 +263,7 @@ public class GoldenRegenerationTests
             sb.Append($"      \"name\": \"{name}\",\n      \"worldSeed\": {pick.Seed},\n      \"islandIndex\": {island.Index},\n");
             sb.Append("      \"tiles\": [\n");
             sb.Append(string.Join(",\n", island.Tiles.Select(t => $"        [{t.Q}, {t.R}]")));
+            var otherLandSet = otherLand.ToHashSet();
             sb.Append("\n      ],\n      \"otherLand\": [\n");
             sb.Append(string.Join(",\n", otherLand.Select(t => $"        [{t.Q}, {t.R}]")));
             sb.Append("\n      ],\n      \"camps\": [\n");
@@ -356,7 +357,7 @@ public class GoldenRegenerationTests
         var options = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
         var sb = new StringBuilder();
         sb.Append("{\n  \"_comment\": ").Append(JsonSerializer.Serialize(
-            "Cross-language parity fixture for the endgame map (EndgameGenerator.PlaceCore backend / placeEndgame frontend): given a real wasted island's tiles (with terrain), its river (lava) tiles, its giants (anchor and family), its camp hexes, a world seed and an island index, both sides must place the same Utgard wall hexes (the natural wall loops through each ring band: ring, piece, camera file, gate flag, level) and the same Jotun watchtowers, in the same order. Covers: the island the docs Utgard example shows (docs_utgard_example: both wall lines, a tower between them, a lava stream), an island with two rings, shore ends and two gates per ring, one with a single ring, a big island with the maximum six towers (the two-ring island with the fewest open ends), and the island whose rings are cut into the most runs (land ends and shore ends). Every scenario is a real wasted island of a real WorldGenerator.Generate() run at radius 1000 (the smallest of seeds 1-40 with the wanted feature). Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). EndgamePlacementGoldenTests.cs (backend) and endgamePlacement.golden.test.ts (frontend) each compute against this fixture with their own production implementation, then assert the frozen `walls` and `towers` lists (order matters: walls by ring then ring order, towers in placement order).",
+            "Cross-language parity fixture for the endgame map (EndgameGenerator.PlaceCore backend / placeEndgame frontend): given a real wasted island's tiles (with terrain), its river (lava) tiles, its giants (anchor and family), its camp hexes, a world seed and an island index, both sides must place the same Utgard wall hexes (the natural wall loops through each ring band: ring, piece, camera file, gate flag, level) and the same Jotun watchtowers, in the same order, and the same Naglfar anchor (or none) given `otherLand`, the land hexes of the neighbouring islands within 6 hexes of this island (Naglfar needs open sea). Covers: the island the docs Utgard example shows (docs_utgard_example: both wall lines, a tower between them, a lava stream), an island with two rings, shore ends and two gates per ring, one with a single ring, a big island with the maximum six towers (the two-ring island with the fewest open ends), and the island whose rings are cut into the most runs (land ends and shore ends). Every scenario is a real wasted island of a real WorldGenerator.Generate() run at radius 1000 (the smallest of seeds 1-40 with the wanted feature). Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). EndgamePlacementGoldenTests.cs (backend) and endgamePlacement.golden.test.ts (frontend) each compute against this fixture with their own production implementation, then assert the frozen `walls`, `towers` and `naglfar` (order matters: walls by ring then ring order, towers in placement order).",
             options)).Append(",\n  \"scenarios\": [\n");
 
         for (var s = 0; s < scenarios.Length; s++)
@@ -373,7 +374,18 @@ public class GoldenRegenerationTests
             sb.Append("\n      ],\n      \"giants\": [\n");
             sb.Append(string.Join(",\n", island.Giants.Select(g => $"        {{\"q\": {g.Anchor.Q}, \"r\": {g.Anchor.R}, \"family\": \"{g.Family}\"}}")));
             sb.Append("\n      ],\n      \"camps\": [\n");
-            sb.Append(string.Join(",\n", island.Camps.Select(c => $"        [{c.Coord.Q}, {c.Coord.R}]")));
+            sb.Append(string.Join(",\n", island.Camps.Where(c => c.Family != CampFamilies.Naglfar).Select(c => $"        [{c.Coord.Q}, {c.Coord.R}]")));
+            // Land of every other island near this one: Naglfar needs open sea, so both sides see the world's land through this list.
+            var own = island.Tiles.ToHashSet();
+            var otherLand = island.Tiles
+                .SelectMany(t => t.WithinRadius(EndgameRules.NaglfarMaxCoastDistance + 2))
+                .Distinct()
+                .Where(h => !own.Contains(h) && (terrain.TerrainAt(h).IsLand() || terrain.WastedTerrainAt(h).IsLand()))
+                .OrderBy(h => h.Q).ThenBy(h => h.R)
+                .ToList();
+            var otherLandSet = otherLand.ToHashSet();
+            sb.Append("\n      ],\n      \"otherLand\": [\n");
+            sb.Append(string.Join(",\n", otherLand.Select(h => $"        [{h.Q}, {h.R}]")));
             sb.Append("\n      ],\n      \"walls\": [\n");
 
             // The frozen expectation is the placement core's own output.
@@ -382,7 +394,8 @@ public class GoldenRegenerationTests
                 island.Tiles.ToDictionary(t => t, terrain.WastedTerrainAt),
                 island.RiverTiles.Select(t => t.Coord).ToHashSet(),
                 [.. island.Giants.Select(g => new GiantGenerator.Placement(g.Anchor, g.Family))],
-                island.Camps.Select(c => c.Coord).ToHashSet(),
+                island.Camps.Where(c => c.Family != CampFamilies.Naglfar).Select(c => c.Coord).ToHashSet(),
+                c => own.Contains(c) || otherLandSet.Contains(c),
                 pick.Seed,
                 island.Index);
             sb.Append(string.Join(",\n", sites.Walls.Select(w =>
@@ -391,7 +404,8 @@ public class GoldenRegenerationTests
                 + "\", \"gate\": " + (w.IsGate ? "true" : "false") + ", \"level\": " + w.Level + "}")));
             sb.Append("\n      ],\n      \"towers\": [\n");
             sb.Append(string.Join(",\n", sites.Towers.Select(t => $"        [{t.Q}, {t.R}]")));
-            sb.Append("\n      ]\n    }").Append(s < scenarios.Length - 1 ? ",\n" : "\n");
+            sb.Append("\n      ],\n      \"naglfar\": ").Append(sites.Naglfar is { } n ? $"{{\"q\": {n.Q}, \"r\": {n.R}}}" : "null");
+            sb.Append("\n    }").Append(s < scenarios.Length - 1 ? ",\n" : "\n");
         }
 
         sb.Append("  ]\n}\n");

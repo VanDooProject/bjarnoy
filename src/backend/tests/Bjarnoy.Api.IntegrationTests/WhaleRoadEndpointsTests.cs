@@ -18,7 +18,7 @@ namespace Bjarnoy.Api.IntegrationTests;
 /// and brings food home, a fleet sailing through its hex is ambushed, and land units and fleets are refused each
 /// other's camps — through HTTP, the EF model and a real database, with the clock under the test's control.
 /// </summary>
-public sealed class WhaleRoadEndpointsTests : IAsyncLifetime
+public sealed partial class WhaleRoadEndpointsTests : IAsyncLifetime
 {
     private const string OwnerId = "ulf-player";
 
@@ -139,11 +139,11 @@ public sealed class WhaleRoadEndpointsTests : IAsyncLifetime
             .OrderBy(h => h.Q).ThenBy(h => h.R),
     ];
 
-    private async Task PlantCampAsync(Setup setup, HexCoord hex, string family, int level = 1)
+    private async Task PlantCampAsync(Setup setup, HexCoord hex, string family, int level = 1, Guid? islandId = null)
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-        var island = await db.Islands.SingleAsync(i => i.Id == setup.IslandId, Ct);
+        var island = await db.Islands.SingleAsync(i => i.Id == (islandId ?? setup.IslandId), Ct);
         island.Camps = [.. island.Camps, new CampRecord(hex.Q, hex.R, family, level, 0)];
         await db.SaveChangesAsync(Ct);
     }

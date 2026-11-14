@@ -71,15 +71,29 @@ function isGiantPart(value: string): value is GiantPart {
 /** One giant's frames, resolved per orientation + part. Generic over the resolved value for the same reason `ClassifiedFamily` is (see `textures.test.ts`) — unit-testable with plain strings, no Pixi dependency. */
 export type GiantTextureMap<T> = Record<TileOrientation, Partial<Record<GiantPart, T>>>;
 
-const GIANT_FRAME_RE = /_(NE|NW|SW|SE|E|W)_level\d{3}_part(C|N|NE|SE|S|SW|NW)$/;
+const GIANT_FRAME_RE = /_(NE|NW|SW|SE|E|W)_level(\d{3})_part(C|N|NE|SE|S|SW|NW)$/;
 
-/** Parses a giant frame name's orientation + part, or `null` if it doesn't match the `..._<CAM>_level<NNN>_part<DIR>` shape at all. */
-export function parseGiantFrameName(name: string): { orientation: TileOrientation; part: GiantPart } | null {
+/** Parses a giant frame name's orientation, art level and part, or `null` if it doesn't match the `..._<CAM>_level<NNN>_part<DIR>` shape at all. */
+export function parseGiantFrameName(name: string): { orientation: TileOrientation; level: number; part: GiantPart } | null {
   const match = GIANT_FRAME_RE.exec(name);
   if (!match) return null;
-  const [, cam, dir] = match;
+  const [, cam, level, dir] = match;
   if (!isGiantPart(dir)) return null;
-  return { orientation: cam as TileOrientation, part: dir };
+  return { orientation: cam as TileOrientation, level: Number(level), part: dir };
+}
+
+/**
+ * The key one art level of a giant family is stored under in `TileTextures.giants`: the family itself for `level000` (the only
+ * level every giant has), `<family>#<level>` for a higher one (Naglfar's crewed `level001`). Lets the lookup stay a plain
+ * (key, orientation, part) one.
+ */
+export function giantStageKey(family: string, level: number): string {
+  return level === 0 ? family : `${family}#${level}`;
+}
+
+/** The art level a giant that stands for a camp shows: `level001` while the camp has crew, `level000` once its garrison is empty. A camp without live state (demo mode) counts as crewed. */
+export function giantCampLevel(camp: { empty?: boolean }): number {
+  return camp.empty ? 0 : 1;
 }
 
 /**
@@ -93,15 +107,25 @@ export function parseGiantFrameName(name: string): { orientation: TileOrientatio
  * for a family that only ever renders giants, but cheap to be defensive
  * about) is silently skipped rather than thrown on.
  */
-export function classifyGiantFrames<T>(frames: GiantFamilyFrame<T>[]): GiantTextureMap<T> {
+export function classifyGiantFrames<T>(frames: GiantFamilyFrame<T>[], level = 0): GiantTextureMap<T> {
   const result = {} as GiantTextureMap<T>;
   for (const orientation of TILE_ORIENTATIONS) result[orientation] = {};
   for (const { name, value } of frames) {
     const parsed = parseGiantFrameName(name);
-    if (!parsed) continue;
+    if (!parsed || parsed.level !== level) continue;
     result[parsed.orientation][parsed.part] = value;
   }
   return result;
+}
+
+/** The art levels a family's frames carry, ascending — `buildTileTextures` classifies each into its own `giantStageKey`. */
+export function giantFrameLevels<T>(frames: GiantFamilyFrame<T>[]): number[] {
+  const levels = new Set<number>();
+  for (const { name } of frames) {
+    const parsed = parseGiantFrameName(name);
+    if (parsed) levels.add(parsed.level);
+  }
+  return [...levels].sort((a, b) => a - b);
 }
 
 /**

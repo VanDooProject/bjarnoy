@@ -227,8 +227,17 @@ describe('hoverSubjectFor', () => {
       level: 4,
       strong: false,
     });
-    // A giant still wins over a camp (a camp is never on a giant footprint; the precedence is defensive).
-    expect(hoverSubjectFor({ ...tileOf('grass'), camp, giant }, undefined)).toEqual({ kind: 'giant', family: 'giantmountain' });
+  });
+
+  it('names Naglfar as a camp even though its footprint is a giant tile', () => {
+    const camp = { family: 'naglfar', level: 1, orientation: 'SE' as const, strong: true, guardRange: 8 };
+    const naglfarGiant = { family: 'giantnaglfar' as const, anchor: { q: 0, r: 0 }, part: 'C' as const, orientation: 'SE' as const };
+    expect(hoverSubjectFor({ ...tileOf('sea'), camp, giant: naglfarGiant }, undefined)).toEqual({
+      kind: 'camp',
+      family: 'naglfar',
+      level: 1,
+      strong: true,
+    });
   });
 
   it('names an Utgard wall piece and a watchtower with their level, a gate apart from a plain wall', () => {

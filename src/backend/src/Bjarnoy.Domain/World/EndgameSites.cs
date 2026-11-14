@@ -59,6 +59,36 @@ public static class EndgameRules
     /// </summary>
     public static readonly Guid JotnarOwnerKey = new("6a6f746e-6172-4a6f-8f74-6e6172776c6c");
 
+    /// <summary>Naglfar's guard range in hexes, measured from its anchor: a fleet whose route enters it is ambushed.</summary>
+    public const int NaglfarGuardRange = 8;
+
+    /// <summary>An endgame camp that was cleared stays empty this long before its crew starts to regrow.</summary>
+    public static readonly TimeSpan TakenGrace = TimeSpan.FromHours(1);
+
+    /// <summary>After a fight an endgame camp is calm (does not attack) for this long; replaces <see cref="CampRules.CalmDuration"/>.</summary>
+    public static readonly TimeSpan EndgameCalm = TimeSpan.FromHours(1);
+
+    /// <summary>Naglfar's crew regrows linearly to full over this long.</summary>
+    public static readonly TimeSpan NaglfarRegrow = TimeSpan.FromHours(48);
+
+    /// <summary>The fixed full crew of Naglfar: no young, 100 rime ships, one Naglfar (<c>CampGarrison.Full</c>).</summary>
+    public static CampGarrison NaglfarCrew { get; } = new(0, 100, 1);
+
+    /// <summary>Rime ship (adult) attack and defense.</summary>
+    public const int RimeShipPower = 300;
+
+    /// <summary>Naglfar's own (alpha) attack and defense.</summary>
+    public const int NaglfarPower = 30_000;
+
+    /// <summary>The fixed loot a fleet that beats Naglfar takes (up to its carry capacity), split iron 2 : wood 1 : brick 1.</summary>
+    public const double NaglfarLootPool = 6000;
+
+    /// <summary>Naglfar's footprint lies this many hexes (smallest, inclusive) off the island's coast.</summary>
+    public const int NaglfarMinCoastDistance = 2;
+
+    /// <summary>Naglfar's footprint lies at most this many hexes (inclusive) off the island's coast.</summary>
+    public const int NaglfarMaxCoastDistance = 4;
+
     public static int RingLevel(UtgardRing ring) => ring == UtgardRing.Inner ? InnerRingLevel : OuterRingLevel;
 
     /// <summary>How many watchtowers an island of this many land tiles gets. <c>floor(x + 0.5)</c>, not banker's rounding, so TS can mirror it.</summary>

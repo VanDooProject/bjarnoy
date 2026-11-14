@@ -24,18 +24,25 @@ public sealed class CampService(GameDbContext dbContext)
     /// <summary>
     /// Every camp of <paramref name="worldId"/> (optionally one island's), joined with its state row.
     /// <paramref name="now"/> only dates the pristine state of a camp without a row; <paramref name="includeWasted"/>
-    /// false leaves out the camps of wasted islands.
+    /// false leaves out the camps of wasted islands. Left null, the wasted islands count only once the world's endboss has
+    /// triggered (they are hidden before, and so are their camps: none acts, none can be hunted).
     /// </summary>
     public async Task<IReadOnlyList<WorldCamp>> LoadCampsAsync(
         Guid worldId,
         DateTimeOffset now,
         Guid? islandId = null,
-        bool includeWasted = true,
+        bool? includeWasted = null,
         CancellationToken cancellationToken = default)
     {
+        var withWasted = includeWasted ?? await _dbContext.Worlds
+            .AsNoTracking()
+            .Where(w => w.Id == worldId)
+            .Select(w => w.EndbossTriggeredAt != null)
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+
         var islands = await _dbContext.Islands
             .AsNoTracking()
-            .Where(i => i.WorldId == worldId && (islandId == null || i.Id == islandId) && (includeWasted || !i.IsWasted))
+            .Where(i => i.WorldId == worldId && (islandId == null || i.Id == islandId) && (withWasted || !i.IsWasted))
             .Select(i => new { i.Id, i.Camps })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 

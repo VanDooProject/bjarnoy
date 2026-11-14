@@ -37,7 +37,8 @@ export type CampFamily =
   | 'harewarren'
   | 'deerglade'
   | 'otterslide'
-  | 'whaleroad';
+  | 'whaleroad'
+  | 'naglfar';
 
 export interface CampFamilyInfo {
   family: CampFamily;
@@ -67,6 +68,8 @@ export const CAMP_FAMILIES: readonly CampFamilyInfo[] = [
   // The first water camp (3D_assets hextile134), last so no land family's candidate hash moves; it is placed
   // by its own sea pass (`placeWhaleRoads`), never by `placeCamps`.
   { family: 'whaleroad', ground: 'sea', strength: 'strong', levelSkew: 'cubic' },
+  // The endgame sea garrison off Utgard's island (`EndgameGenerator`, never `placeCamps`), last for the same reason.
+  { family: 'naglfar', ground: 'sea', strength: 'strong', levelSkew: 'cubic' },
 ];
 
 export function campFamilyInfo(family: string): CampFamilyInfo | undefined {
@@ -80,6 +83,14 @@ export function isStrongCampFamily(family: string): boolean {
 /** True for a water camp (a family on open sea) — mirrors `CampFamilies.IsWater`. */
 export function isWaterCampFamily(family: string): boolean {
   return campFamilyInfo(family)?.ground === 'sea';
+}
+
+/**
+ * True for an endgame camp (`naglfar` today) — mirrors `CampFamilies.IsEndgame`: jötnar that fight full battles, regrow after a
+ * short grace and are calm for an hour.
+ */
+export function isEndgameCampFamily(family: string): boolean {
+  return family === 'naglfar';
 }
 
 /** True for a sand camp (a seal or walrus haul-out) — mirrors `CampFamilies.IsSand`. A fleet's land troops hunt it from the ships. */
@@ -122,11 +133,15 @@ export function guardRange(level: number, strength: CampStrength): number {
   return strength === 'strong' ? 2 + level : 1 + Math.floor(level / 2);
 }
 
+/** Naglfar's guard range in hexes, measured from its anchor — mirrors `EndgameRules.NaglfarGuardRange`. */
+export const NaglfarGuardRange = 8;
+
 /**
  * A camp's guard range by family — mirrors `Camp.GuardRange`: a water camp holds no land and locks no towers, so
- * its range is 0 (for a fleet's route that means "the camp's own hex").
+ * its range is 0 (for a fleet's route that means "the camp's own hex"); Naglfar's is `NaglfarGuardRange`.
  */
 export function campGuardRange(family: string, level: number): number {
+  if (family === 'naglfar') return NaglfarGuardRange;
   if (isWaterCampFamily(family)) return 0;
   return guardRange(level, isStrongCampFamily(family) ? 'strong' : 'weak');
 }

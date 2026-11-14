@@ -23,16 +23,15 @@ public sealed record CampState(
 {
     /// <summary>An untouched camp: full garrison at its rolled level, no clears, never calm.</summary>
     public static CampState Pristine(Camp camp, DateTimeOffset at) =>
-        new(CampGarrison.Full(Strength(camp), camp.Level), at, null, null, 0);
-
-    private static CampStrength Strength(Camp camp) => camp.Strong ? CampStrength.Strong : CampStrength.Weak;
+        new(CampGarrison.Full(camp, camp.Level), at, null, null, 0);
 
     public int EffectiveLevel(Camp camp) => CampRules.EffectiveLevel(camp, Clears);
 
     /// <summary>
     /// The garrison at <paramref name="t"/>. An empty camp that was cleared stays empty inside a realm
     /// (except Fenrir's brood, which always regrows); otherwise each tier regrows linearly from the
-    /// snapshot to its full count over <see cref="CampRules.RegrowDuration"/>.
+    /// snapshot to its full count over <see cref="CampRules.RegrowDuration(Camp)"/>; an endgame camp starts only after
+    /// <see cref="EndgameRules.TakenGrace"/> once cleared.
     /// </summary>
     public CampGarrison GarrisonAt(Camp camp, DateTimeOffset t, bool insideRealm)
     {
@@ -48,9 +47,18 @@ public sealed record CampState(
             return Snapshot;
         }
 
-        var strength = Strength(camp);
-        var full = CampGarrison.Full(strength, EffectiveLevel(camp));
-        var progress = Math.Min(1.0, (t - SnapshotAt) / CampRules.RegrowDuration(strength));
+        var full = CampGarrison.Full(camp, EffectiveLevel(camp));
+
+        // An endgame camp that was cleared stays empty for the grace period, then regrows from that moment.
+        var regrowFrom = camp.IsEndgame && Snapshot.IsEmpty && ClearedAt is not null
+            ? SnapshotAt + EndgameRules.TakenGrace
+            : SnapshotAt;
+        if (t <= regrowFrom)
+        {
+            return Snapshot;
+        }
+
+        var progress = Math.Min(1.0, (t - regrowFrom) / CampRules.RegrowDuration(camp));
 
         int Regrown(int snap, int fullCount) =>
             Math.Min(fullCount, snap + (int)Math.Floor(fullCount * progress));
@@ -86,6 +94,12 @@ public sealed record CampState(
             return next;
         }
 
+        if (camp.IsEndgame)
+        {
+            // The fleet that beats an endgame camp takes what it can carry; the rest is lost, nothing stays behind.
+            return next with { Leftover = ResourceAmounts.Zero };
+        }
+
         var pool = CampRules.LootPool(camp, next.EffectiveLevel(camp));
         var rest = (plan.LootAvailable - plan.Taken).ClampToZero();
         return next with { Leftover = rest.ClampTo(pool) };
@@ -109,14 +123,14 @@ public sealed record CampState(
 
     /// <summary>
     /// The state after a fight at <paramref name="at"/> left <paramref name="survivors"/>: a new snapshot,
-    /// calm for <see cref="CampRules.CalmDuration"/>; if no beast survived the camp is cleared
+    /// calm for <see cref="CampRules.CalmFor"/>; if no beast survived the camp is cleared
     /// (<see cref="ClearedAt"/> set, <see cref="Clears"/> + 1), otherwise <see cref="ClearedAt"/> is reset.
     /// </summary>
     public CampState AfterFight(Camp camp, DateTimeOffset at, CampGarrison survivors) => this with
     {
         Snapshot = survivors,
         SnapshotAt = at,
-        CalmUntil = at + CampRules.CalmDuration,
+        CalmUntil = at + CampRules.CalmFor(camp),
         ClearedAt = survivors.IsEmpty ? at : null,
         Clears = survivors.IsEmpty ? Clears + 1 : Clears,
     };

@@ -4,7 +4,6 @@
 // The numbers are an estimate: the server fights the battle (terrain, bonuses, regrowth up to the
 // arrival instant), so this only guides the player.
 import type { BeastCounts, ResourceLine, UnitDefinitionResponse } from '../../api/types';
-import { isStrongCampFamily } from '../map/campPlacement';
 import { BEAST_TIERS, defensePower, estimatedLoot, fullGarrison, type BeastTier } from '../map/campRules';
 import type { Tile } from '../map/types';
 
@@ -27,9 +26,8 @@ type Camp = NonNullable<Tile['camp']>;
 
 /** The camp summary for the hunt target — a camp without live state counts as pristine (full garrison, aggressive-capable). */
 export function huntSummaryFor(camp: Camp, now: number): HuntSummary {
-  const strength = isStrongCampFamily(camp.family) ? 'strong' : 'weak';
   const level = camp.effectiveLevel ?? camp.level;
-  const full: BeastCounts = camp.fullGarrison ?? fullGarrison(level, strength);
+  const full: BeastCounts = camp.fullGarrison ?? fullGarrison(camp.family, level);
   const garrison: BeastCounts = camp.garrison ?? full;
   const calm = camp.calmUntil ? Date.parse(camp.calmUntil) > now : false;
   const status: CampStatus = camp.empty
@@ -46,7 +44,7 @@ export function huntSummaryFor(camp: Camp, now: number): HuntSummary {
     status,
     calmUntil: calm ? (camp.calmUntil ?? null) : null,
     tiers: BEAST_TIERS.map((tier) => ({ tier, count: garrison[tier], full: full[tier] })),
-    campDefense: defensePower(garrison, strength),
+    campDefense: defensePower(garrison, camp.family),
     loot: estimatedLoot(
       camp.family,
       level,

@@ -121,14 +121,13 @@ public static class CampBattleResolver
         double landAttackBonusPercent,
         ResourceAmounts leftover)
     {
-        var strength = camp.Strong ? CampStrength.Strong : CampStrength.Weak;
         var available = LootAvailable(leftover, camp, effectiveLevel, garrison);
 
         if (garrison.IsEmpty)
         {
             var emptyArmyPower = army.Sum(s => UnitCatalogue.Get(s.Type).Attack * s.Count * (1 + (landAttackBonusPercent / 100.0)));
             return new CampFightPlan([], [.. army], CampGarrison.Empty, CampGarrison.Empty,
-                CampFightWinner.Army, emptyArmyPower, garrison.DefensePower(strength), ResourceAmounts.Zero, available);
+                CampFightWinner.Army, emptyArmyPower, garrison.DefensePower(camp), ResourceAmounts.Zero, available);
         }
 
         var rng = new Random(seed);
@@ -137,10 +136,10 @@ public static class CampBattleResolver
         // the camp. The loot on offer stays that of the whole garrison: the beasts the volley killed count as cleared.
         var volleyPower = Volley.Power(army, landAttackBonusPercent);
         var (volleyLosses, standing) = BeastLosses(
-            garrison, Volley.LossFraction(volleyPower, garrison.DefensePower(strength)), rng);
+            garrison, Volley.LossFraction(volleyPower, garrison.DefensePower(camp)), rng);
 
         var armyPower = army.Sum(s => UnitCatalogue.Get(s.Type).Attack * s.Count * (1 + (landAttackBonusPercent / 100.0)));
-        var campPower = standing.DefensePower(strength);
+        var campPower = standing.DefensePower(camp);
 
         if (armyPower > campPower)
         {
@@ -170,6 +169,12 @@ public static class CampBattleResolver
     /// </summary>
     internal static ResourceAmounts LootAvailable(ResourceAmounts leftover, Camp camp, int effectiveLevel, CampGarrison garrison)
     {
+        if (camp.IsEndgame)
+        {
+            // The fleet that beats an endgame camp takes the whole fixed pool, not scaled by the crew left; nothing is left over.
+            return garrison.IsEmpty ? ResourceAmounts.Zero : CampRules.LootPool(camp, effectiveLevel).Floor();
+        }
+
         var strength = camp.Strong ? CampStrength.Strong : CampStrength.Weak;
         var fullPower = CampGarrison.Full(strength, effectiveLevel).DefensePower(strength);
         var fraction = fullPower <= 0 ? 0 : Math.Clamp(garrison.DefensePower(strength) / fullPower, 0, 1);
@@ -179,7 +184,8 @@ public static class CampBattleResolver
     /// <summary>
     /// The camp attacks: beast <em>attack</em> against the defenders' <em>defense</em>; a tie goes to the
     /// defenders. Raid-capped like <see cref="BattleResolver"/>'s raid: both loss fractions are at most
-    /// 0.5, so a camp is never cleared by its own attack. No loot either way. Empty defenders: a costless camp win.
+    /// 0.5, so a camp is never cleared by its own attack. An endgame camp (<see cref="CampFamilies.IsEndgame"/>) fights a full
+    /// battle instead: the loser loses everything, the winner <c>(loser/winner)^1.5</c>, no cap. No loot either way. Empty defenders: a costless camp win.
     /// <see cref="CampFightPlan.ArmyPower"/> is the defenders' defense, <see cref="CampFightPlan.CampPower"/> the beasts' attack.
     /// </summary>
     public static CampFightPlan CampAttack(
@@ -190,30 +196,32 @@ public static class CampBattleResolver
     {
         ArgumentNullException.ThrowIfNull(defenders);
 
-        var strength = camp.Strong ? CampStrength.Strong : CampStrength.Weak;
         var defensePower = defenders.Sum(s => (double)UnitCatalogue.Get(s.Type).Defense * s.Count);
 
         if (defenders.Count == 0 || defenders.All(s => s.Count <= 0))
         {
             return new CampFightPlan([], [], CampGarrison.Empty, garrison,
-                CampFightWinner.Camp, defensePower, garrison.AttackPower(strength), ResourceAmounts.Zero);
+                CampFightWinner.Camp, defensePower, garrison.AttackPower(camp), ResourceAmounts.Zero);
         }
 
         var rng = new Random(seed);
 
+        // Raid caps keep a camp from being cleared by its own attack; an endgame camp fights a full battle without them.
+        Func<double, double> loss = camp.IsEndgame ? f => f : BattleResolver.RaidLossFractionInternal;
+
         // The defenders' ranged units volley first (the beasts throw nothing back); the camp then attacks with what is left.
         var volleyPower = Volley.Power(defenders);
         var (volleyLosses, standing) = BeastLosses(
-            garrison, Volley.LossFraction(volleyPower, garrison.DefensePower(strength)), rng);
-        var campPower = standing.AttackPower(strength);
+            garrison, Volley.LossFraction(volleyPower, garrison.DefensePower(camp)), rng);
+        var campPower = standing.AttackPower(camp);
 
         if (campPower > defensePower)
         {
             var (losses, survivors) = BattleResolver.ApplyProportionalLossesInternal(
-                defenders, BattleResolver.RaidLossFractionInternal(1.0), rng);
+                defenders, loss(1.0), rng);
             var (fightLosses, beastSurvivors) = BeastLosses(
                 standing,
-                BattleResolver.RaidLossFractionInternal(BattleResolver.SafeRatioPowInternal(defensePower, campPower)),
+                loss(BattleResolver.SafeRatioPowInternal(defensePower, campPower)),
                 rng);
             return new CampFightPlan(losses, survivors, Add(volleyLosses, fightLosses), beastSurvivors,
                 CampFightWinner.Camp, defensePower, campPower, ResourceAmounts.Zero)
@@ -225,10 +233,10 @@ public static class CampBattleResolver
         else
         {
             var (fightLosses, beastSurvivors) = BeastLosses(
-                standing, BattleResolver.RaidLossFractionInternal(1.0), rng);
+                standing, loss(1.0), rng);
             var (losses, survivors) = BattleResolver.ApplyProportionalLossesInternal(
                 defenders,
-                BattleResolver.RaidLossFractionInternal(BattleResolver.SafeRatioPowInternal(campPower, defensePower)),
+                loss(BattleResolver.SafeRatioPowInternal(campPower, defensePower)),
                 rng);
             return new CampFightPlan(losses, survivors, Add(volleyLosses, fightLosses), beastSurvivors,
                 CampFightWinner.Army, defensePower, campPower, ResourceAmounts.Zero)

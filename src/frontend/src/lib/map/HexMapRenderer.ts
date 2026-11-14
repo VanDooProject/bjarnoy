@@ -106,7 +106,7 @@ import {
   type TileAnimClip,
   type TileTextures,
 } from './textures';
-import { GIANT_MAX_RISE_NATIVE, giantCrop, giantFootprintOutline } from './giantTiles';
+import { GIANT_MAX_RISE_NATIVE, giantCrop, giantFootprintOutline, giantStageKey } from './giantTiles';
 import type { GiantFamily } from './giantPlacement';
 import { bogEdgeShapes, bogEdgesOf, isBogGround, type BogEdgeShape } from './bogEdge';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
@@ -847,7 +847,8 @@ export function terrainTitleFor(
  * Pixi renderer, the same reason `terrainTitleFor` itself is extracted.
  */
 export function hoverSubjectFor(tile: Tile, river: RiverTile | undefined): HoverSubject {
-  if (tile.giant) return { kind: 'giant', family: tile.giant.family };
+  // A camp drawn as a giant tile (Naglfar) is a camp first: the caller passes the camp's own (anchor) tile for any hex of it.
+  if (tile.giant && !tile.camp) return { kind: 'giant', family: tile.giant.family };
   if (tile.camp && !tile.camp.removed) {
     const camp = tile.camp;
     return {
@@ -3691,7 +3692,7 @@ export class HexMapRenderer {
     const mine = owner?.ownerId === this.options.playerId;
     const ownerInfo = owner ? { settlementName: owner.name, ownerName: owner.ownerName, mine, ownerId: owner.ownerId } : undefined;
 
-    const subject = hoverSubjectFor(tile, river);
+    const subject = hoverSubjectFor(this.options.worldModel.campTileOf(tile), river);
     if (subject.kind === 'building') {
       // Stats are only for the viewer's own buildings — scouting a rival's
       // tile shows the building and its level, but the stats themselves are
@@ -4868,11 +4869,14 @@ export class HexMapRenderer {
         // family when the wasted variant's frames haven't loaded, the same
         // graceful-degradation contract giantTopTextureFor itself already
         // has for a family with no art at all.
-        const giantFamily = giantArtFamilyFor(tile.giant!.family, tile.wasted ?? false);
+        // A giant that stands for a camp (Naglfar) draws the art level its camp state decides: crewed level001, beaten level000.
+        const giantLevel = worldModel.giantArtLevelAt(tile);
+        const giantFamily = giantStageKey(giantArtFamilyFor(tile.giant!.family, tile.wasted ?? false), giantLevel);
+        const plainFamily = giantStageKey(tile.giant!.family, giantLevel);
         const giantAnim =
           giantTopAnimFor(textures, giantFamily, tile.giant!.orientation, tile.giant!.part) ??
-          (giantFamily !== tile.giant!.family
-            ? giantTopAnimFor(textures, tile.giant!.family, tile.giant!.orientation, tile.giant!.part)
+          (giantFamily !== plainFamily
+            ? giantTopAnimFor(textures, plainFamily, tile.giant!.orientation, tile.giant!.part)
             : undefined);
         // A giant part with an animated clip but no static frame of its own
         // (shouldn't normally happen — every part ships both — but cheap to
@@ -4881,8 +4885,8 @@ export class HexMapRenderer {
         // static frame would have.
         const giantTexture =
           giantTopTextureFor(textures, giantFamily, tile.giant!.orientation, tile.giant!.part) ??
-          (giantFamily !== tile.giant!.family
-            ? giantTopTextureFor(textures, tile.giant!.family, tile.giant!.orientation, tile.giant!.part)
+          (giantFamily !== plainFamily
+            ? giantTopTextureFor(textures, plainFamily, tile.giant!.orientation, tile.giant!.part)
             : undefined) ??
           giantAnim?.textures[0];
         if (giantTexture) {

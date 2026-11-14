@@ -46,6 +46,8 @@ import type { CampFamily } from './campPlacement';
 import {
   classifyGiantClips,
   classifyGiantFrames,
+  giantFrameLevels,
+  giantStageKey,
   giantTop as giantTopLookup,
   type GiantFamilyClip,
   type GiantPart,
@@ -425,6 +427,7 @@ const GIANT_FAMILIES: readonly string[] = [
   'giantshrine',
   'giantvolcano',
   'giantutgard',
+  'giantnaglfar',
   'giantvolcano_wasted',
 ];
 
@@ -1195,7 +1198,8 @@ function buildStaticTileTextures(atlases: LoadedAtlas[], sparse: boolean): TileT
   const giants: TileTextures['giants'] = {};
   for (const family of GIANT_FAMILIES) {
     const frames = framesOf(family);
-    if (frames.length > 0) giants[family] = classifyGiantFrames(frames);
+    // One map per art level, each under its own stage key (Naglfar's crewed level001 next to its beaten level000).
+    for (const level of giantFrameLevels(frames)) giants[giantStageKey(family, level)] = classifyGiantFrames(frames, level);
   }
 
   return {

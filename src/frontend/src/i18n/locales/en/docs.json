@@ -568,7 +568,29 @@
       "bend60": "Sharp bend",
       "spring": "Spring"
     },
-    "history": "Naglfar is the ship built from the uncut nails of the dead, according to Snorri's Gylfaginning. A man who dies with untrimmed nails adds to it, so people trim theirs to delay its completion. At Ragnarök it breaks loose and carries the giants to the last battle, with the giant Hrym as its helmsman. In the Völuspá its loosening is one of the signs of the end."
+    "history": "Naglfar is the ship built from the uncut nails of the dead, according to Snorri's Gylfaginning. A man who dies with untrimmed nails adds to it, so people trim theirs to delay its completion. At Ragnarök it breaks loose and carries the giants to the last battle, with the giant Hrym as its helmsman. In the Völuspá its loosening is one of the signs of the end.",
+    "naglfar": {
+      "heading": "Naglfar",
+      "body": "When the endboss rises, Naglfar lies anchored off every wasted island that holds Utgard: the giants' ship, built from the nails of the dead, with the giant Hrym at its helm. It floats on open sea, {min} to {max} hexes off the coast, as close to Utgard as the water allows. It is a camp at sea: only fleets can fight it, land units cannot.",
+      "crew": {
+        "heading": "Crew",
+        "ship": "Ship",
+        "count": "Count",
+        "attack": "Attack",
+        "defense": "Defense",
+        "total": "Together that is {attack} attack and {defense} defense, about as much as {snekkjas} Snekkjas."
+      },
+      "rules": {
+        "guard": "A fleet that sails within {range} hexes of Naglfar is ambushed in a full battle. If your fleet loses, it is lost.",
+        "calm": "After a fight Naglfar is calm for {n} hour. It does not ambush again until then.",
+        "beaten": "Naglfar is beaten when its whole crew is gone. It then stays empty for {grace} hour before the crew starts to regrow, over {regrow} hours.",
+        "noGate": "You do not have to beat it: fleets can land on Utgard's island whether Naglfar is beaten or not.",
+        "loot": "The fleet that beats Naglfar takes {pool} resources: iron {iron}, wood {wood}, brick {brick}. It carries as much as its surviving ships can hold, and the rest is lost. Beating Naglfar gives nothing beyond this loot."
+      },
+      "placementNote": "Placement: seven hexes of open sea (the anchor and its six neighbours), none of them in enclosed water or on any island's land, each {min} to {max} hexes from this island's land. Of all such spots the one closest to Utgard's anchor is chosen, ties going to the lower q, then the lower r; an island with no such spot gets no Naglfar. It is generated with the world, after the watchtowers, and stays hidden with the island until the endboss rises. Fights and the guard range are measured from the anchor hex.",
+      "artNote": "Drawn as a seven-piece giant tile (art family giantnaglfar): level001 while the crew stands, level000 once the garrison is empty.",
+      "history": "The Norse believed the dead's fingernails and toenails were used to build Naglfar, so it was the custom to pare the nails of the dying: every nail left uncut brought the giants' ship a little closer to finished. In Snorri's Gylfaginning it stays moored until Ragnarök, when the sea floods and it slips its moorings."
+    }
   },
   "wildlifeCamps": {
     "title": "Wildlife camps",
