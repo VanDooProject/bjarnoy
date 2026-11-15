@@ -7,20 +7,20 @@ import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
 import DocsHistoryNote from '../components/docs/DocsHistoryNote.vue';
 import DocsPageLink from '../components/docs/DocsPageLink.vue';
 import BuildingLink from '../components/docs/BuildingLink.vue';
+import ResourceCost from '../components/ResourceCost.vue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
-import { resourceName, shipGroupName, unitName } from '../i18n/catalogueNames';
+import { shipGroupName, unitName } from '../i18n/catalogueNames';
 import { groupByShipGroup } from '../lib/units/shipGroups';
 import { prerequisitesOf } from '../lib/techtree/nodes';
 import { favourAt } from '../lib/docs/shrineDocs';
-import { formatMinutes } from '../lib/docs/landMovementDocs';
-import { TOWER_DEFENCE_PERCENT_PER_LEVEL, minutesPerSeaHex } from '../lib/docs/shipDocs';
+import { TOWER_DEFENCE_PERCENT_PER_LEVEL } from '../lib/docs/shipDocs';
 import { SETTLERS_PER_FOUNDING } from '../lib/founding';
 
 // The ships page: the harbour and the shipyard, a table of the ships by group and the rules for fleets at sea. Ship figures come
 // from the unit catalogue, the buildings' from the building catalogue; the sea rules are mirrored in shipDocs.ts.
 
-const { n, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { n } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const buildings = useBuildingCatalogueStore();
 const units = useUnitCatalogueStore();
 onMounted(() => {
@@ -29,11 +29,9 @@ onMounted(() => {
 });
 
 
-const RESOURCES = ['wood', 'stone', 'food', 'iron'] as const;
-
-const ships = computed(() => groupByShipGroup(units.definitions.filter((u) => u.class === 'ship'), (u) => u.type).flatMap((g) => g.rows));
-// The column groups of the table: one heading cell per ship group, spanning its ships.
-const shipColumnGroups = computed(() => groupByShipGroup(ships.value, (u) => u.type).filter((g) => g.group !== null));
+// The ships by group, in display order: one heading row per group, one row per ship.
+const shipGroups = computed(() => groupByShipGroup(units.definitions.filter((u) => u.class === 'ship'), (u) => u.type).filter((g) => g.group !== null));
+const ships = computed(() => shipGroups.value.flatMap((g) => g.rows));
 // What land units take aboard, smallest first.
 const passengers = computed(() =>
   units.definitions.filter((u) => u.cargoSlots > 0).sort((a, b) => a.cargoSlots - b.cargoSlots),
@@ -56,7 +54,6 @@ const njord = computed(() => {
 });
 
 const loaded = computed(() => ships.value.length > 0 && harbour.value.longhouse > 0 && shipyard.value.longhouse > 0);
-const loc = computed(() => String(locale.value));
 </script>
 
 <template>
@@ -85,69 +82,42 @@ const loc = computed(() => String(locale.value));
     <section id="ships" class="block">
       <h2>{{ $t('docs.ships.table.heading') }}</h2>
       <p v-if="units.loading" class="muted">{{ $t('docs.status.loading') }}</p>
+      <i18n-t keypath="docs.ships.table.training" tag="p" class="text" scope="global">
+        <template #training>
+          <DocsPageLink to="/docs/training">{{ $t('docs.ships.table.trainingLink') }}</DocsPageLink>
+        </template>
+      </i18n-t>
       <div v-if="ships.length > 0" class="table-scroll">
         <table data-testid="ships-table">
           <thead>
-            <tr class="group-row">
-              <th />
-              <th v-for="g in shipColumnGroups" :key="g.group!" :colspan="g.rows.length" :data-group="g.group!" scope="colgroup" class="group">{{ shipGroupName(g.group!) }}</th>
-            </tr>
             <tr>
-              <th />
-              <th v-for="ship in ships" :key="ship.type" :data-ship="ship.type">{{ unitName(ship.type) }}</th>
+              <th scope="col">{{ $t('docs.ships.table.cols.ship') }}</th>
+              <th scope="col">{{ $t('docs.ships.table.cols.attack') }}</th>
+              <th scope="col">{{ $t('docs.ships.table.cols.defense') }}</th>
+              <th scope="col">{{ $t('docs.ships.table.cols.speed') }}</th>
+              <th scope="col">{{ $t('docs.ships.table.cols.loot') }}</th>
+              <th scope="col">{{ $t('docs.ships.table.cols.slots') }}</th>
+              <th scope="col">{{ $t('docs.ships.table.cols.food') }}</th>
+              <th scope="col">{{ $t('docs.ships.table.cols.upkeep') }}</th>
+              <th scope="col">{{ $t('docs.ships.table.cols.cost') }}</th>
+              <th scope="col">{{ $t('docs.ships.table.cols.time') }}</th>
             </tr>
           </thead>
-          <tbody>
-            <tr data-row="attack">
-              <th scope="row" class="name">{{ $t('docs.ships.table.rows.attack') }}</th>
-              <td v-for="ship in ships" :key="ship.type" class="value">{{ ship.attack }}</td>
+          <tbody v-for="g in shipGroups" :key="g.group!" :data-group="g.group!">
+            <tr class="group-row">
+              <th colspan="10" scope="colgroup" class="group">{{ shipGroupName(g.group!) }}</th>
             </tr>
-            <tr data-row="defense">
-              <th scope="row" class="name">{{ $t('docs.ships.table.rows.defense') }}</th>
-              <td v-for="ship in ships" :key="ship.type" class="value">{{ ship.defense }}</td>
-            </tr>
-            <tr data-row="speed">
-              <th scope="row" class="name">{{ $t('docs.ships.table.rows.speed') }}</th>
-              <td v-for="ship in ships" :key="ship.type" class="value">{{ n(ship.speed) }}</td>
-            </tr>
-            <tr data-row="perHex">
-              <th scope="row" class="name">{{ $t('docs.ships.table.rows.perHex') }}</th>
-              <td v-for="ship in ships" :key="ship.type" class="value">{{ formatMinutes(minutesPerSeaHex(ship.speed), loc) }}</td>
-            </tr>
-            <tr data-row="loot">
-              <th scope="row" class="name">{{ $t('docs.ships.table.rows.loot') }}</th>
-              <td v-for="ship in ships" :key="ship.type" class="value">{{ n(ship.carryCapacity) }}</td>
-            </tr>
-            <tr data-row="slots">
-              <th scope="row" class="name">{{ $t('docs.ships.table.rows.slots') }}</th>
-              <td v-for="ship in ships" :key="ship.type" class="value">{{ n(ship.shipSlots) }}</td>
-            </tr>
-            <tr data-row="food">
-              <th scope="row" class="name">{{ $t('docs.ships.table.rows.food') }}</th>
-              <td v-for="ship in ships" :key="ship.type" class="value">{{ n(ship.foodCarryCapacity) }}</td>
-            </tr>
-            <tr data-row="upkeep">
-              <th scope="row" class="name">{{ $t('docs.ships.table.rows.upkeep') }}</th>
-              <td v-for="ship in ships" :key="ship.type" class="value">{{ n(ship.upkeepPerHour) }}</td>
-            </tr>
-            <tr data-row="cost">
-              <th scope="row" class="name">{{ $t('docs.ships.table.rows.cost', { resources: RESOURCES.map(resourceName).join(' / ') }) }}</th>
-              <td v-for="ship in ships" :key="ship.type" class="value">{{ RESOURCES.map((r) => n(ship.trainingCost[r])).join(' / ') }}</td>
-            </tr>
-            <tr data-row="time">
-              <th scope="row" class="name">{{ $t('docs.ships.table.rows.time') }}</th>
-              <td v-for="ship in ships" :key="ship.type" class="value">{{ $t('docs.ships.table.minutes', { n: Math.round(ship.trainingSeconds / 60) }) }}</td>
-            </tr>
-            <tr data-row="fire">
-              <th scope="row" class="name">{{ $t('docs.ships.table.rows.fire') }}</th>
-              <td v-for="ship in ships" :key="ship.type" class="value">{{ ship.fireCraftPerLevel > 0 ? n(ship.fireCraftPerLevel) : '–' }}</td>
-            </tr>
-            <tr data-row="needs">
-              <th scope="row" class="name">{{ $t('docs.ships.table.rows.needs') }}</th>
-              <td v-for="ship in ships" :key="ship.type">
-                <BuildingLink :type="ship.requiredBuildingType" /> {{ ship.requiredBuildingLevel }}
-                <template v-if="ship.requiredLonghouseLevel > 1">· <BuildingLink type="longhouse" /> {{ ship.requiredLonghouseLevel }}</template>
-              </td>
+            <tr v-for="ship in g.rows" :key="ship.type" :data-ship="ship.type">
+              <th scope="row" class="name">{{ unitName(ship.type) }}</th>
+              <td data-col="attack" class="value">{{ ship.attack }}</td>
+              <td data-col="defense" class="value">{{ ship.defense }}</td>
+              <td data-col="speed" class="value">{{ n(ship.speed) }}</td>
+              <td data-col="loot" class="value">{{ n(ship.carryCapacity) }}</td>
+              <td data-col="slots" class="value">{{ n(ship.shipSlots) }}</td>
+              <td data-col="food" class="value">{{ n(ship.foodCarryCapacity) }}</td>
+              <td data-col="upkeep" class="value">{{ n(ship.upkeepPerHour) }}</td>
+              <td data-col="cost" class="cost"><ResourceCost :cost="ship.trainingCost" :size="13" /></td>
+              <td data-col="time" class="value">{{ $t('docs.ships.table.minutes', { n: Math.round(ship.trainingSeconds / 60) }) }}</td>
             </tr>
           </tbody>
         </table>
@@ -271,8 +241,7 @@ const loc = computed(() => String(locale.value));
 }
 .group {
   color: #fff;
-  text-align: center;
-  border-left: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.04);
 }
 .table-scroll {
   overflow-x: auto;
@@ -300,6 +269,12 @@ thead th {
 }
 .name {
   font-weight: 600;
+}
+.name {
+  white-space: nowrap;
+}
+.cost {
+  white-space: nowrap;
 }
 .value {
   white-space: nowrap;

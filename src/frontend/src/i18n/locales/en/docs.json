@@ -1393,20 +1393,20 @@
     },
     "table": {
       "heading": "The ships",
-      "rows": {
+      "cols": {
+        "ship": "Ship",
         "attack": "Attack",
         "defense": "Defence",
-        "speed": "Speed (hexes per hour)",
-        "perHex": "Time per sea hex",
+        "speed": "Speed",
         "loot": "Loot capacity",
         "slots": "Troop slots",
         "food": "Food capacity",
         "upkeep": "Upkeep per hour",
-        "fire": "Craft per level burned",
-        "cost": "Cost ({resources})",
-        "time": "Training time",
-        "needs": "Needs"
+        "cost": "Cost",
+        "time": "Training time"
       },
+      "training": "Where and at which level each ship is trained: {training}.",
+      "trainingLink": "Training troops",
       "minutes": "{n} min"
     },
     "sailing": {

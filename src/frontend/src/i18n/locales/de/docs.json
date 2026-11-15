@@ -1393,20 +1393,20 @@
     },
     "table": {
       "heading": "Die Schiffe",
-      "rows": {
+      "cols": {
+        "ship": "Schiff",
         "attack": "Angriff",
         "defense": "Verteidigung",
-        "speed": "Tempo (Felder pro Stunde)",
-        "perHex": "Zeit pro Seefeld",
+        "speed": "Tempo",
         "loot": "Beutekapazität",
         "slots": "Truppenplätze",
         "food": "Nahrungskapazität",
         "upkeep": "Unterhalt pro Stunde",
-        "fire": "Brandschiffe je verbrannter Stufe",
-        "cost": "Kosten ({resources})",
-        "time": "Ausbildungszeit",
-        "needs": "Voraussetzung"
+        "cost": "Kosten",
+        "time": "Ausbildungszeit"
       },
+      "training": "Wo und auf welcher Stufe du jedes Schiff ausbildest, steht unter {training}.",
+      "trainingLink": "Truppen ausbilden",
       "minutes": "{n} Min."
     },
     "sailing": {

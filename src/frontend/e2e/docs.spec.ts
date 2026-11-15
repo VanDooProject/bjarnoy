@@ -958,8 +958,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   }) => {
     await page.goto("/docs/ships");
     await expectPlayerPage(page, "Ships and water", "ships-table");
-    await expect(page.locator('[data-row="attack"]')).toContainText("60");
-    await expect(page.locator('[data-row="needs"]')).toContainText("Shipyard");
+    await expect(page.locator('[data-ship="snekkja"] [data-col="attack"]')).toHaveText("60");
+    await expect(page.locator('[data-ship="karve"] [data-col="cost"]')).toContainText("250");
+    await expect(page.locator("#ships").getByRole("link", { name: "Training troops" })).toHaveAttribute("href", "/docs/training");
     await expect(page.getByText("Under investigation")).toHaveCount(0);
   });
 
