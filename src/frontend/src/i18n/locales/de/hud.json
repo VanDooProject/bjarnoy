@@ -237,7 +237,13 @@
     "sendHome": "Heimschicken",
     "sendingHome": "Wird heimgeschickt…",
     "sendHomeError": "Die Armee konnte nicht heimgeschickt werden.",
-    "unknownSettlement": "Unbekannte Siedlung"
+    "unknownSettlement": "Unbekannte Siedlung",
+    "upkeep": "Unterhalt",
+    "upkeepPerHour": "−{amount}/h",
+    "foodPerHour": "{amount}/h",
+    "foodRunsOut": "Nahrung reicht noch {time}",
+    "showRates": "Tippen für Nahrung je Einheit",
+    "hideRates": "Tippen zum Ausblenden"
   },
   "queueDrawer": {
     "title": "Warteschlangen",

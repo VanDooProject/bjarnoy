@@ -310,6 +310,7 @@ const tocLinks = computed(() =>
           <DocsPageLink to="/docs/land-movement">{{ $t('docs.production.upkeep.movementLink') }}</DocsPageLink>
         </template>
       </i18n-t>
+      <p class="text">{{ $t('docs.production.upkeep.panel') }}</p>
       <i18n-t keypath="docs.production.upkeep.shrines" tag="p" class="text" scope="global">
         <template #freyja><BuildingLink type="shrineoffreyja" /></template>
         <template #ullr><BuildingLink type="shrineofullr" /></template>
