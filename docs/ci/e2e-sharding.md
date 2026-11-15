@@ -253,3 +253,9 @@ files into the 4 groups (largest file first, always into the
 currently-smallest running total) and update the `tag` on any files that
 moved. There is no tooling for this today; it was done by hand for the
 table above.
+
+## Visual specs are not part of this split
+
+`e2e/visual/` runs in its own workflow (`visual.yml`) inside the pinned Playwright image; the `chromium` project
+ignores it (`testIgnore: 'visual/**'`) and the visual projects only exist inside that image. They are not tagged and
+never land in `rest`. See `docs/ci/visual-tests.md`.

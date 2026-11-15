@@ -1,0 +1,79 @@
+name: Visual regression
+
+# Pixel-exact screenshots of the frontend (src/frontend/e2e/visual/), plus a report-only palette audit per screen.
+# Its own workflow so the e2e shards stay as fast as they are. See docs/ci/visual-tests.md.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/frontend/**'
+      - 'src/shared/**'
+      - '.github/workflows/visual.yml'
+  pull_request:
+    paths:
+      - 'src/frontend/**'
+      - 'src/shared/**'
+      - '.github/workflows/visual.yml'
+
+jobs:
+  # Baselines are only valid in the image they were made in, so the job runs in exactly the image the local
+  # script uses (e2e/visual/image.json; visualImagePin.test.ts keeps it equal to the installed Playwright).
+  image:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.read.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: src/frontend/e2e/visual/image.json
+          sparse-checkout-cone-mode: false
+      - id: read
+        run: echo "image=$(jq -r .image src/frontend/e2e/visual/image.json)" >> "$GITHUB_OUTPUT"
+
+  visual:
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: ${{ needs.image.outputs.image }}
+      options: --ipc=host
+    env:
+      BJARNOY_VISUAL_IMAGE: ${{ needs.image.outputs.image }}
+    defaults:
+      run:
+        working-directory: src/frontend
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [desktop, phone]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same as frontend-ci.yml: bg_assets_hextile is private, so its URL goes through a PAT; the submodule
+      # pathspec is relative to the repo root.
+      - run: |
+          git config --global --add safe.directory '*'
+          git config --global url."https://x-access-token:${ASSETS_REPO_TOKEN}@github.com/VanDooProject/bg_assets_hextile".insteadOf "https://github.com/VanDooProject/bg_assets_hextile"
+        env:
+          ASSETS_REPO_TOKEN: ${{ secrets.ASSETS_REPO_TOKEN }}
+
+      - run: git submodule update --init --depth 1 -- vendor/bg_assets_hextile
+
+      - run: npm ci
+
+      # The image ships its own browsers; no `playwright install`.
+      - run: npx vite build
+
+      - name: Visual tests
+        run: npx playwright test --project=visual-${{ matrix.project }}
+
+      # Always: the palette-<screen>.json reports are wanted on green runs too.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-${{ matrix.project }}
+          path: |
+            src/frontend/playwright-report/
+            src/frontend/test-results/
+          retention-days: 7

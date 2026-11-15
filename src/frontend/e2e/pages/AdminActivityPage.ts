@@ -73,6 +73,19 @@ export class AdminActivityPage {
     );
   }
 
+  /**
+   * Finishes Chart.js's draw-in animation deterministically. Chart.js times it with `Date.now()`, which a pinned clock
+   * (`page.clock.setFixedTime`) never advances, so the chart would sit at its first frame. Jumping the clock past the
+   * animation's end lets the next frame draw the final state; two frames later the clock goes back to `pinnedAt`.
+   */
+  async finishChartAnimation(pinnedAt: Date): Promise<void> {
+    await this.page.clock.setFixedTime(new Date(pinnedAt.getTime() + 60_000));
+    await this.page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined)))),
+    );
+    await this.page.clock.setFixedTime(pinnedAt);
+  }
+
   /** A row by user name. */
   userRow(userName: string): Locator {
     return this.userRows.filter({ hasText: userName });

@@ -109,16 +109,36 @@ one-off abstraction inside the spec.
 
 | Class | Covers |
 | --- | --- |
-| `SettlementPage` | The settlement view and the landing page's onboarding step: `found()` / `openLanding()`, `findHex({ terrain, notTerrain, coastalWater, withRiver, reach, nearest })` (`nearest`: the matching hex drawn closest to a screen point), `standTowerTowardCoast()` (a start position keeps two hexes from the sea, so a spec that needs sand or coastal water stands a tower toward the shore and passes its `reach` to `findHex`), `centreHex()`, `clickHex()`, `countBuildings()`, `buildingTypeAt()`, `setSettlementLevel()`, `setResources()`, `hudResources()`, `canvasBox()` / `canvasCentre()`, plus `.ring`. Guided-onboarding UI (design handoff "2a"): `.guidancePointer`, `.checklist`, `.banner` (filter `.landfall`/`.complete`), `.continueButton`, `.profileNudge`. |
+| `SettlementPage` | The settlement view and the landing page's onboarding step: `found()` / `openLanding()`, `findHex({ terrain, notTerrain, coastalWater, withRiver, reach, nearest })` (`nearest`: the matching hex drawn closest to a screen point), `standTowerTowardCoast()` (a start position keeps two hexes from the sea, so a spec that needs sand or coastal water stands a tower toward the shore and passes its `reach` to `findHex`), `centreHex()`, `findBuilding(type)`, `clickHex()`, `countBuildings()`, `buildingTypeAt()`, `setSettlementLevel()`, `setResources()`, `hudResources()`, `canvasBox()` / `canvasCentre()`, plus `.ring`. Guided-onboarding UI (design handoff "2a"): `.guidancePointer`, `.checklist`, `.banner` (filter `.landfall`/`.complete`), `.continueButton`, `.profileNudge`. |
 | `RingMenuComponent` | The radial menu: `bubbles` / `backBubble` / `categoryBubbles` / `childBubbles` / `card`, `action()` / `category()` / `child()`, `hover()` (previews a card), `click()`, `openBuildCategories()` / `openCategory()` (click — hover never navigates). |
 | `WorldMapPage` | `/settlement#world`: `open()`, `box()`, `centre()`, `pointAt(dx, dy)`, `moveTo(point)`, `screenshot()` for the canvas pixel-diff assertions. |
 | `AdminAuthFixture` | The mocked session. Reached as the **`adminAuth` fixture** (`async ({ page, adminAuth })`), then `adminAuth.login()` / `loginAsPlayer(name)`. |
 | `AdminTablePage` | The shared `table.table` list: `table` / `body` / `rows` / `row(text)` / `myRow`. |
 | `AdminSettlementsPage` | `/admin/settlements`: `openManagePanel()`, `hex(q, r)`, `hexForm` / `garrisonForm` / `armyEditor` / `grantForm` / `stocks` / `clampNotice`. |
-| `AdminActivityPage` | `/admin/activity`: `mockApi({ buckets, users })`, `userRows` / `userRow(name)`, `chartCanvas`, `shell`. |
+| `AdminActivityPage` | `/admin/activity`: `mockApi({ buckets, users })`, `finishChartAnimation(pinnedAt)` (Chart.js animates off `Date.now()`), `userRows` / `userRow(name)`, `chartCanvas`, `shell`. |
+| `HudBarComponent` | The HUD bar: `bar`, `resourceBar`, `connectionBanner`, `failPoll()` (a failing background poll). |
+| `QueueDrawerComponent` | The phone queue drawer: `handle` / `body` / `rows` / `cancelButtons` / `error`, `seed()`, `open()`. |
+| `ArmyPanelComponent` / `MobileDispatchSheet` | Desktop army card (`seedArmy()`); phone dispatch sheet with `moveTab` / `attackTab` / `supportTab` / `note`, `openFromRing(settlement, hex)`. |
+| `RegisterPage` | `/register` and `/login`: `openRegister()` / `openLogin()`, `seedPlayerId()`, `mockRegister()`, `fill()`, `submit()`. |
+| `MessagesPage` | Messages: `mockApi({ unread, thread })`, `openList()`, `openConversation()`, `bubbles`. |
+| `LeaderboardPage` | Leaderboards: `mockApi()`, `goto()`, `seedWorld()`, `scoreTabs`, `firstScoreBoard`, `boardsNav`, `dialog`; `scoreEntry()` builds a row. |
+| `DocsPage` | `/docs`: `openHub()`, `openTechTree()`, `openTiles()`, `artLoaded()`. |
+| `LandingPage` | `/` with the intro skipped: `open()`. |
 | `BuildingHudComponent` | The building HUD of the settlement view: `markers` / `dialOnlyMarkers` / `toggle`, `marker(hex)` / `dialOnly(hex)` / `dial(hex)` / `dialLabel(hex)` / `box(hex)`, `ownedBuildings()`, `standBuildingAt(hex, type, level)`, `startUpgrade(hex, type, targetLevel)`, `dialOnlyKeys()`, `elementTagAt(point)`, `cameraZoom()`. |
 | `ScrollableView` | The "does this view scroll inside its own box" check (#101): `metrics()`, `wheel(delta)`, `noHorizontalOverflow()`. |
 
 Page objects import `expect` from `@playwright/test`, not from `./fixtures` —
 `fixtures.ts` imports `pages/AdminAuthFixture`, so importing back would close a
 module cycle. **Specs still import `test` from `./fixtures`.**
+
+## Visual specs (`e2e/visual/`)
+
+`*.visual.spec.ts` are pixel-exact screenshot tests that run only inside the pinned Playwright image
+(`npm run test:visual`, `npm run test:visual:update`), in their own CI workflow (`visual.yml`). The whole setup,
+including how to add a screen and review baseline changes, is in `docs/ci/visual-tests.md`. Rules:
+
+- every shot goes through `expectScreen` from `./screen` (hides the map canvas, writes the palette report); no direct
+  `toHaveScreenshot` calls — `src/test/e2eWaterOptOut.test.ts` enforces it
+- flows come from the page objects below, as in every other spec; a flow a visual spec needs that an e2e spec inlines
+  moves into the page object and both use it
+- the visual projects are not part of the `chromium` project and its `@g1`/`@g2`/`@g3` sharding
