@@ -132,8 +132,10 @@ watch(
   { flush: 'post', immediate: true },
 );
 
-const trackColor = computed(() => RING_COLOR[props.ring]);
-const trackOpacity = computed(() => (props.ring === 'upgrading' ? 0.3 : props.ring === 'none' ? 0.2 : 1));
+// While the blocked-upgrade refusal plays, the ring is red whatever the upgrade state says (a full queue blocks a building whose
+// ring is green): the refusal reads as one red signal, the same red as its flash and shockwaves.
+const trackColor = computed(() => (blockedFrame.value !== null ? RED : RING_COLOR[props.ring]));
+const trackOpacity = computed(() => (blockedFrame.value !== null ? 1 : props.ring === 'upgrading' ? 0.3 : props.ring === 'none' ? 0.2 : 1));
 const labelColor = computed(() => (props.urgent ? YELLOW : props.ring === 'max' ? GOLD : '#fff'));
 
 // ---- the order dial's frames ----------------------------------------------------------------------------------------------
