@@ -45,8 +45,8 @@ public class UnitCatalogueTests
     [InlineData(UnitType.Thrall, 1, true)]
     [InlineData(UnitType.Spearman, 4, false)]
     [InlineData(UnitType.Spearman, 5, true)]
-    [InlineData(UnitType.Axeman, 5, false)]
-    [InlineData(UnitType.Axeman, 6, true)]
+    [InlineData(UnitType.Axeman, 4, false)]
+    [InlineData(UnitType.Axeman, 5, true)]
     public void A_unit_with_no_prerequisite_is_gated_only_by_longhouse_level(
         UnitType type, int longhouseLevel, bool expectedAvailable)
     {
@@ -54,32 +54,22 @@ public class UnitCatalogueTests
     }
 
     [Fact]
-    public void A_unit_with_a_prerequisite_needs_both_its_own_and_the_prerequisites_longhouse_level()
+    public void The_siege_engines_have_no_gate_of_their_own_and_open_with_their_workshop_level()
     {
-        // The Ram needs the Berserker to be unlocked and has no Longhouse gate of its own: the Berserker's 20 carries it.
         Assert.Equal(1, UnitCatalogue.Get(UnitType.Ram).RequiredLonghouseLevel);
-        Assert.False(UnitCatalogue.IsAvailable(UnitType.Ram, 19));
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.Ram, 20));
+        Assert.Equal(1, UnitCatalogue.Get(UnitType.Catapult).RequiredLonghouseLevel);
+        Assert.Equal(10, UnitCatalogue.Get(UnitType.Ram).RequiredBuildingLevel);
+        Assert.Equal(5, UnitCatalogue.Get(UnitType.Catapult).RequiredBuildingLevel);
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Catapult, 1, _ => 5));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Catapult, 1, _ => 4));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Ram, 1, _ => 9));
     }
 
     [Fact]
-    public void A_chained_prerequisite_recurses_through_every_link()
+    public void No_unit_needs_another_unit_first()
     {
-        // Catapult requires Berserker, which stands on its own (the building level, not the Axeman, orders the Barracks'
-        // units). At longhouse 20 every link in the chain is satisfied.
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.Catapult, 20));
-
-        // Below 20 Berserker is not available, so neither is Catapult, even
-        // though the Axeman (longhouse 6) is.
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.Axeman, 19));
-        Assert.False(UnitCatalogue.IsAvailable(UnitType.Catapult, 19));
-    }
-
-    [Fact]
-    public void No_ship_needs_another_unit_first()
-    {
-        // The building level orders the ships now (docs/design/units-and-ships.md §1): the Karve is no prerequisite any more.
-        foreach (var type in UnitCatalogue.AllTypes.Where(t => UnitCatalogue.Get(t).Class == UnitClass.Ship))
+        // The building level orders the roster (docs/design/units-and-ships.md §1): no unit is a prerequisite of another.
+        foreach (var type in UnitCatalogue.AllTypes)
         {
             Assert.Null(UnitCatalogue.Get(type).RequiredUnitType);
         }
@@ -87,12 +77,12 @@ public class UnitCatalogueTests
 
     [Theory]
     [InlineData(UnitType.Faering, BuildingType.Harbour, 1, 1)]
-    [InlineData(UnitType.Byrding, BuildingType.Harbour, 1, 1)]
-    [InlineData(UnitType.Knarr, BuildingType.Harbour, 3, 1)]
+    [InlineData(UnitType.Byrding, BuildingType.Harbour, 3, 1)]
     [InlineData(UnitType.Karve, BuildingType.Harbour, 5, 1)]
+    [InlineData(UnitType.Knarr, BuildingType.Harbour, 8, 1)]
     [InlineData(UnitType.Snekkja, BuildingType.Shipyard, 1, 1)]
     [InlineData(UnitType.Skeid, BuildingType.Shipyard, 10, 20)]
-    [InlineData(UnitType.FireRaft, BuildingType.Shipyard, 1, 1)]
+    [InlineData(UnitType.FireRaft, BuildingType.Shipyard, 3, 1)]
     [InlineData(UnitType.FireHulk, BuildingType.Shipyard, 5, 12)]
     public void Every_ship_has_its_building_its_building_level_and_its_own_longhouse_gate(
         UnitType type, BuildingType building, int buildingLevel, int longhouseGate)
@@ -108,9 +98,9 @@ public class UnitCatalogueTests
     [Fact]
     public void A_unit_needs_the_building_level_not_just_a_standing_building()
     {
-        // Knarr: Harbour 3. A level-2 Harbour does not do, level 3 does, and a Shipyard is the wrong building.
-        Assert.False(UnitCatalogue.IsAvailable(UnitType.Knarr, 30, t => t == BuildingType.Harbour ? 2 : 0));
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.Knarr, 30, t => t == BuildingType.Harbour ? 3 : 0));
+        // Knarr: Harbour 8. A level-7 Harbour does not do, level 8 does, and a Shipyard is the wrong building.
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Knarr, 30, t => t == BuildingType.Harbour ? 7 : 0));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Knarr, 30, t => t == BuildingType.Harbour ? 8 : 0));
         Assert.False(UnitCatalogue.IsAvailable(UnitType.Knarr, 30, t => t == BuildingType.Shipyard ? 10 : 0));
         // Skeid: Shipyard 10 and its own Longhouse 20.
         Assert.False(UnitCatalogue.IsAvailable(UnitType.Skeid, 19, t => t == BuildingType.Shipyard ? 10 : 0));
@@ -252,7 +242,7 @@ public class UnitCatalogueTests
     [Theory]
     [InlineData(UnitType.Thrall, 1)]
     [InlineData(UnitType.Spearman, 5)]
-    [InlineData(UnitType.Axeman, 6)]
+    [InlineData(UnitType.Axeman, 5)]
     [InlineData(UnitType.Bowman, 9)]
     [InlineData(UnitType.Skirmisher, 9)]
     [InlineData(UnitType.Provisioner, 10)]
@@ -293,29 +283,6 @@ public class UnitCatalogueTests
         {
             Assert.Equal(hammer, UnitCatalogue.Get(type).RequiredLonghouseLevel);
         }
-
-        // The siege engines have no gate of their own: they open with the Berserker they need.
-        foreach (var type in new[] { UnitType.Catapult, UnitType.Ram })
-        {
-            Assert.False(UnitCatalogue.IsAvailable(type, hammer - 1, _ => 20));
-            Assert.True(UnitCatalogue.IsAvailable(type, hammer, _ => 20));
-        }
-    }
-
-    [Fact]
-    public void A_unit_never_opens_before_its_prerequisite_unit()
-    {
-        // With every building at its top level, the Longhouse alone decides: a unit is never available where its prerequisite is not.
-        foreach (var longhouse in Enumerable.Range(1, 20))
-        {
-            foreach (var type in UnitCatalogue.AllTypes)
-            {
-                if (UnitCatalogue.Get(type).RequiredUnitType is { } prerequisite && UnitCatalogue.IsAvailable(type, longhouse, _ => 20))
-                {
-                    Assert.True(UnitCatalogue.IsAvailable(prerequisite, longhouse, _ => 20), $"{type} opens before {prerequisite}");
-                }
-            }
-        }
     }
 
     [Fact]
@@ -335,16 +302,15 @@ public class UnitCatalogueTests
         Assert.Equal(1.5, ram.UpkeepPerHour);
         Assert.Equal(new ResourceAmounts(Wood: 400, Stone: 100, Food: 40, Iron: 150), ram.TrainingCost);
         Assert.Equal(TimeSpan.FromHours(1), ram.TrainingDuration);
-        Assert.Equal(UnitType.Berserker, ram.RequiredUnitType);
+        Assert.Null(ram.RequiredUnitType);
         Assert.Equal(BuildingType.SiegeWorkshop, ram.RequiredBuildingType);
     }
 
     [Fact]
     public void The_siege_workshop_trains_the_ram_and_the_archery_range_does_not()
     {
-        // The ram needs a Siege Workshop standing (its Berserker prerequisite a Barracks); an Archery Range, which keeps
-        // the bowman and the catapult, is not enough.
-        int Standing(BuildingType trains, BuildingType t) => t == trains || t == BuildingType.Barracks ? 10 : 0;
+        // The ram needs a Siege Workshop standing; an Archery Range, which keeps the bowman, is not enough.
+        int Standing(BuildingType trains, BuildingType t) => t == trains ? 10 : 0;
 
         Assert.False(UnitCatalogue.IsAvailable(UnitType.Ram, 20, t => Standing(BuildingType.ArcheryRange, t)));
         Assert.True(UnitCatalogue.IsAvailable(UnitType.Ram, 20, t => Standing(BuildingType.SiegeWorkshop, t)));

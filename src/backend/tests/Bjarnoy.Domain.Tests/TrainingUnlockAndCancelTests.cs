@@ -56,16 +56,18 @@ public class TrainingUnlockAndCancelTests
     [InlineData(UnitType.Settler, 5)]
     [InlineData(UnitType.CampBuilder, 10)]
     [InlineData(UnitType.Ram, 10)]
-    [InlineData(UnitType.Catapult, 10)]
+    [InlineData(UnitType.Catapult, 5)]
     public void The_land_roster_has_the_building_levels_of_the_design_table(UnitType type, int level) =>
         Assert.Equal(level, UnitCatalogue.Get(type).RequiredBuildingLevel);
 
     [Fact]
-    public void Berserker_no_longer_needs_the_axeman_and_the_siege_engines_only_need_the_berserker()
+    public void No_unit_needs_another_unit_first_the_building_levels_order_them()
     {
-        Assert.Null(UnitCatalogue.Get(UnitType.Berserker).RequiredUnitType);
-        Assert.Equal(UnitType.Berserker, UnitCatalogue.Get(UnitType.Ram).RequiredUnitType);
-        Assert.Equal(UnitType.Berserker, UnitCatalogue.Get(UnitType.Catapult).RequiredUnitType);
+        foreach (var type in UnitCatalogue.AllTypes)
+        {
+            Assert.Null(UnitCatalogue.Get(type).RequiredUnitType);
+        }
+
         Assert.Equal(1, UnitCatalogue.Get(UnitType.Ram).RequiredLonghouseLevel);
         Assert.Equal(1, UnitCatalogue.Get(UnitType.Catapult).RequiredLonghouseLevel);
     }
@@ -141,11 +143,11 @@ public class TrainingUnlockAndCancelTests
     [Fact]
     public void The_units_own_longhouse_gate_still_applies_on_top_of_the_building_level()
     {
-        // Axeman: Barracks 6 and its own Longhouse 6.
-        var s = Found(5, Barracks(A, 8));
+        // Axeman: Barracks 6 and the Barracks' Longhouse gate of 5.
+        var s = Found(4, Barracks(A, 8));
 
         Assert.Equal(TrainRejection.UnitNotAvailable, Plan(s, UnitType.Axeman, 1, A).Rejection);
-        Assert.True(Plan(Found(6, Barracks(A, 8)), UnitType.Axeman, 1, A).Accepted);
+        Assert.True(Plan(Found(5, Barracks(A, 8)), UnitType.Axeman, 1, A).Accepted);
     }
 
     // --- cancel ------------------------------------------------------------------------------------------------------------------
