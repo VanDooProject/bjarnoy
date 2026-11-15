@@ -1,5 +1,5 @@
 // Layout of the training page's unit dependency graph (docs/design/units-and-ships.md section 5): one lane per training building,
-// every unit at the building level that opens it, an arrow from a prerequisite unit to the unit that needs it. Pure data in,
+// every unit at the building level that opens it. Pure data in,
 // positions out, so it is unit-testable without mounting anything; UnitDependencyGraph.vue only draws it.
 import type { UnitDefinitionResponse } from '../../api/types';
 
@@ -24,13 +24,6 @@ export interface GraphNode {
   y: number;
 }
 
-export interface GraphEdge {
-  from: string;
-  to: string;
-  /** The prerequisite stands in another building's lane. */
-  cross: boolean;
-}
-
 export interface GraphLane {
   building: string;
   top: number;
@@ -42,7 +35,6 @@ export interface GraphLane {
 export interface UnitGraphLayout {
   lanes: GraphLane[];
   nodes: GraphNode[];
-  edges: GraphEdge[];
   width: number;
   height: number;
 }
@@ -86,32 +78,7 @@ export function layoutUnitGraph(
     top += height;
   }
 
-  const edges: GraphEdge[] = [];
-  for (const d of definitions) {
-    if (!d.requiredUnitType) continue;
-    const from = definitions.find((o) => o.type === d.requiredUnitType);
-    if (!from) continue;
-    edges.push({ from: from.type, to: d.type, cross: from.requiredBuildingType !== d.requiredBuildingType });
-  }
-
-  return { lanes, nodes, edges, width: GRAPH_X0 + GRAPH_COL * GRAPH_MAX_LEVEL + 90, height: top + 6 };
-}
-
-/** The svg path of one edge between two laid-out nodes (see layoutUnitGraph). */
-export function edgePath(from: GraphNode, to: GraphNode, cross: boolean): string {
-  const half = GRAPH_NODE_W / 2;
-  const badge = from.longhouseBadge !== null ? 38 : 0;
-  if (cross || from.x >= to.x) {
-    // Down a gutter right of the source (also for units that share a level in one lane), then back left onto the right edge of the target: stacked targets each get their own arrow.
-    const x1 = from.x + half + badge;
-    const gx = x1 + 8;
-    const x2 = to.x + half + 3;
-    return `M${x1} ${from.y} H${gx - 6} Q${gx} ${from.y} ${gx} ${from.y + 6} V${to.y - 6} Q${gx} ${to.y} ${gx - 6} ${to.y} H${x2}`;
-  }
-  const x1 = from.x + half + badge;
-  const x2 = to.x - half - 2;
-  const mid = Math.max(x1 + 20, (x1 + x2) / 2);
-  return `M${x1} ${from.y} C ${mid} ${from.y}, ${mid} ${to.y}, ${x2} ${to.y}`;
+  return { lanes, nodes, width: GRAPH_X0 + GRAPH_COL * GRAPH_MAX_LEVEL + 90, height: top + 6 };
 }
 
 /** The units of one building in the order the phone list shows them: by building level, then catalogue order. */

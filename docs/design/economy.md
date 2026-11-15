@@ -772,7 +772,7 @@ sources have to line up with the unit unlocks:
 |---|---|---|
 | LH 1–2 | none | Thrall (no iron) |
 | from LH 3 | bog-ore works: bog ground has to be in reach of every start (`bog.md`) | the Barracks' first Spearmen (LH 5), then the main army: Axeman, Bowman, Karve, Settler, Provisioner |
-| LH 20 | Hammer Forge (bog creek) boosts bog ore | elite units: Berserker, Catapult, Ram, Skeid |
+| LH 20 | Hammer Forge (bog creek) boosts bog ore | elite units: Berserker, Skeid |
 
 So bog ground and the bog-ore works are needed by about LH 3, not as a
 late add-on. The unit costs and unlock levels are reworked together with
@@ -787,7 +787,7 @@ them so the levels match. *Implemented:*
   |---|---|---|
   | Thrall | Barracks | the Barracks' own gate (LH 5); no gate of its own (1) |
   | Spearman | Barracks | 5 (1) |
-  | Axeman | Barracks | 6 (3): three levels after the bog-ore works open (LH 3) |
+  | Axeman | Barracks | 5 (3): the Barracks' gate, like the Spearman |
   | Karve | Dockyard | 8 (5) |
   | Fire Ship | Dockyard | 12: after the Karve |
   | Bowman, Skirmisher | Archery Range | 9 (4) |
@@ -801,7 +801,8 @@ them so the levels match. *Implemented:*
 
   *Superseded (2026-11):* units are now also gated by the level of their training building, the same-building unit
   prerequisites are gone, the Dockyard is split into Harbour and Shipyard, and the Longship (now Snekkja) needs
-  Longhouse 10. The current table is in [units-and-ships.md](units-and-ships.md); costs there replace the ones above.
+  Longhouse 10. Since then no unit needs another unit at all (the Ram and the Catapult no longer need the Berserker),
+  the Axeman's own gate is the Barracks' 5, and the Catapult needs Siege Workshop 5. The current table is in [units-and-ships.md](units-and-ships.md); costs there replace the ones above.
 
 ### Bog-ore works numbers (Economy lab)
 
@@ -837,7 +838,7 @@ iron). The profile only shifts *when* a level is reached:
 There is no iron before the works (Longhouse 1 and 2). From Longhouse 3
 the works carry it, so the Barracks' first Spearmen (LH 5) are paid from
 works income, and every other unit is affordable the moment its gate opens,
-because its gate opens with or after the works: Axeman at LH 6, Karve at LH 8,
+because its gate opens with or after the works: Axeman at LH 5 (Barracks 6), Karve at LH 8,
 Settler and Provisioner at LH 10, the elite units at LH 20 (income 3 252/h
 against a Catapult's 250). The table is the Economy lab's own setup re-run for the
 rebalanced catalogue (three Lumberjacks, Quarries and Farms, one Clay

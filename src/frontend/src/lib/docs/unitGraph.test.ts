@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { UnitDefinitionResponse } from '../../api/types';
 import unitCatalogue from '../../data/unit-catalogue.json';
-import { GRAPH_COL, GRAPH_X0, GRAPH_NODE_W, edgePath, layoutUnitGraph, unitsByLevel } from './unitGraph';
+import { GRAPH_COL, GRAPH_X0, GRAPH_NODE_W, layoutUnitGraph, unitsByLevel } from './unitGraph';
 
 const definitions = unitCatalogue.data as UnitDefinitionResponse[];
 const unlock = (b: string) => ({ barracks: 5, archeryrange: 9, cartworkshop: 10, siegeworkshop: 18, harbour: 5, shipyard: 10 })[b] ?? null;
@@ -37,33 +37,20 @@ describe('layoutUnitGraph', () => {
   });
 
   it('shows a Longhouse badge only where the unit gate is above its building\'s unlock', () => {
-    expect(node('axeman').longhouseBadge).toBe(6);
+    expect(node('axeman').longhouseBadge).toBeNull();
     expect(node('berserker').longhouseBadge).toBe(20);
     expect(node('spearman').longhouseBadge).toBeNull();
     expect(node('thrall').longhouseBadge).toBeNull();
   });
 
-  it('draws an arrow per prerequisite unit, across lanes where the buildings differ', () => {
-    const pairs = layout.edges.map((e) => `${e.from}>${e.to}${e.cross ? ':cross' : ''}`).sort();
-    expect(pairs).toContain('berserker>ram:cross');
-    expect(pairs).toContain('berserker>catapult:cross');
-    // The Berserker no longer needs the Axeman: the building level orders them.
-    expect(pairs.some((p) => p.endsWith('>berserker'))).toBe(false);
+  it('has no arrows: no unit needs another unit, the building levels order them', () => {
+    expect(definitions.every((d) => d.requiredUnitType === null)).toBe(true);
+    expect('edges' in layout).toBe(false);
   });
 
-  it('stacks units that share a building level one under the other', () => {
-    const ram = node('ram');
-    const catapult = node('catapult');
-    expect(ram.x).toBe(catapult.x);
-    expect(ram.y).not.toBe(catapult.y);
-  });
-
-  it('builds a path for every edge', () => {
-    for (const e of layout.edges) {
-      const from = node(e.from);
-      const to = node(e.to);
-      expect(edgePath(from, to, e.cross)).toMatch(/^M/);
-    }
+  it('puts the Catapult at column 5 of the Siege Workshop lane and the Ram at column 10', () => {
+    expect(node('catapult').x).toBe(GRAPH_X0 + GRAPH_COL * 4.5);
+    expect(node('ram').x).toBe(GRAPH_X0 + GRAPH_COL * 9.5);
   });
 });
 
