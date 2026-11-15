@@ -927,11 +927,8 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(graph.locator("svg")).toBeVisible();
     await expect(graph.locator('svg [data-unit="spearman"]')).toBeVisible();
     await expect(graph.locator('svg [data-unit="snekkja"]')).toBeVisible();
-    // The Ram and the Catapult need the Berserker, across lanes; the Berserker needs no other unit.
-    await expect(
-      graph.locator('[data-edge="berserker>ram"]'),
-    ).toHaveCount(1);
-    await expect(graph.locator('[data-edge$=">berserker"]')).toHaveCount(0);
+    // No unit needs another unit, so the graph has no arrows.
+    await expect(graph.locator("[data-edge]")).toHaveCount(0);
     // The Longhouse trains nothing, so it has no lane.
     await expect(
       graph.locator('.lane-label[data-building="longhouse"]'),

@@ -288,7 +288,7 @@
       "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See), hinter einer Ziegelei der Stufe 3: von ein paar Gruben an den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %.",
       "hammerschmiede": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Es liefert kein eigenes Eisen, sondern steigert jede Raseneisenerz-Grube in der Reichweite seiner Stufe (höhere Stufen: größere Reichweite und stärkerer Bonus).",
       "bridge": "Öffnet einen breiten Fluss für Landarmeen. Es beginnt mit einem Damm, dann folgen ein Steg, die Königsbrücke und schließlich eine Wehrbrücke mit Wehranlagen, die nur du und deine Freunde überqueren dürft. Angreifer brennen eine Wehrbrücke Stufe um Stufe nieder.",
-      "siegeworkshop": "Bildet auf Gras die Belagerungswaffen aus: Katapulte, sobald eine in der Kaserne ausgebildete Berserker-Linie steht, und Rammböcke. Du schaltest sie ab Langhaus 18 frei, wenn ein Schießplatz der Stufe 3 steht. Nur Rammböcke brechen Mauern (Türme treffen sie auch); Katapulte brennen Türme und alle anderen Gebäude nieder."
+      "siegeworkshop": "Bildet auf Gras die Belagerungswaffen aus: Katapulte und Rammböcke. Du schaltest sie ab Langhaus 18 frei, wenn ein Schießplatz der Stufe 3 steht. Nur Rammböcke brechen Mauern (Türme treffen sie auch); Katapulte brennen Türme und alle anderen Gebäude nieder."
     },
     "table": {
       "level": "Stufe",
@@ -1031,16 +1031,15 @@
     "intro": "Welches Gebäude welche Einheiten ausbildet, wie die Warteschlangen funktionieren und wie du einen Auftrag auf mehrere Gebäude verteilst.",
     "buildings": {
       "heading": "Was jedes Gebäude ausbildet",
-      "body": "Jede Einheit bildest du in einer bestimmten Art von Gebäude aus, die meisten brauchen dafür eine Mindeststufe. Es zählt die Stufe des Gebäudes, in dem du den Auftrag erteilst: Eine zweite Kaserne auf Stufe 2 bildet keinen Speerträger aus, auch wenn deine erste auf Stufe 8 steht. Das Langhaus bildet nichts aus. Ein Pfeil heißt: Die erste Einheit muss freigeschaltet sein, bevor du die zweite ausbilden kannst."
+      "body": "Jede Einheit bildest du in einer bestimmten Art von Gebäude aus, die meisten brauchen dafür eine Mindeststufe. Es zählt die Stufe des Gebäudes, in dem du den Auftrag erteilst: Eine zweite Kaserne auf Stufe 2 bildet keinen Speerträger aus, auch wenn deine erste auf Stufe 8 steht. Das Langhaus bildet nichts aus."
     },
     "graph": {
       "label": "Welche Einheit auf welcher Stufe welches Gebäudes freigeschaltet wird",
-      "axis": "Gebäudestufe. Die Pfeile führen von der nötigen Einheit zu der Einheit, die sie freischaltet.",
+      "axis": "Gebäudestufe.",
       "opensAt": "Langhaus {level}",
       "longhouseShort": "LH {level}",
       "longhouse": "braucht Langhaus {level}",
-      "level": "Stufe {level}",
-      "needsUnit": "braucht {unit}"
+      "level": "Stufe {level}"
     },
     "queue": {
       "heading": "Warteschlangen und Tempo",

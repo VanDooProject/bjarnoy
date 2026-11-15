@@ -263,7 +263,7 @@
       "palisade": "One hex of the settlement's wall, on grass, forest or sand inside its claim, from Longhouse 7 behind a level-5 Tower (the Palisade and its Gate share one tech-tree card). Walls never branch: no hex may end up with three wall neighbours. Which piece draws, a straight, a bend or an end, follows the neighbouring wall hexes. Every wall hex stops every land army, its owner's included; a lone end of a wall (one wall neighbour) is only half open, any army crosses it, only slower, unless it touches a mountain or a wide river. At the coast the wall ends on a shallow-water hex, the sea end, which stays sea. A won siege that targets a wall hex takes one level off it, however many rams survive (on land only rams damage a wall; at the sea end a Fire Hulk does); fire will too, later.",
       "palisadegate": "A wall hex with a gate, only where the wall runs straight between two opposite wall hexes. Its owner's armies and their friends' (the same guild, or a guild at peace with it) pass it as quickly as the ground under it; every other army is stopped like at any wall hex. Same unlock, prerequisite, levels and cost as the Palisade, on one tech-tree card.",
       "bridge": "Opens a wide river to land armies. A causeway first, then a footbridge, the king's bridge, and a guarded bridge with forts that only you and your friends may cross. Attackers burn a guarded bridge down a level at a time.",
-      "siegeworkshop": "Trains the siege engines on grass: catapults, once a Barracks-trained berserker line stands, and battering rams. Unlocks at Longhouse 18 behind a level-3 Archery range. Rams are the only engine that breaches walls (they hit towers too); catapults burn towers and every other building.",
+      "siegeworkshop": "Trains the siege engines on grass: catapults and battering rams. Unlocks at Longhouse 18 behind a level-3 Archery range. Rams are the only engine that breaches walls (they hit towers too); catapults burn towers and every other building.",
       "reindeerherder": "A herder's hut and a pen of reindeer on open grassland — the settlement's first food building, available from the start.",
       "farm": "Grows food on open grassland, keeping the longhouse table full. Buildable on every island, regardless of soil, from Longhouse 4 behind a level-3 Reindeer Herder (it and Pumpkin Farm share one tech-tree card).",
       "storagehouse": "Extra room for the harvest, on grass. A resource stops being produced once it reaches the storage limit, so a full store wastes output.",
@@ -1031,16 +1031,15 @@
     "intro": "Which building trains which units, how the queues work, and how to spread an order over several buildings.",
     "buildings": {
       "heading": "What each building trains",
-      "body": "Every unit is trained in one kind of building, and most need that building at a minimum level. The level counts in the building you order from: a second Barracks that is still level 2 cannot train a Spearman, even when your first one is level 8. The Longhouse trains nothing. An arrow means you need the first unit unlocked before the second."
+      "body": "Every unit is trained in one kind of building, and most need that building at a minimum level. The level counts in the building you order from: a second Barracks that is still level 2 cannot train a Spearman, even when your first one is level 8. The Longhouse trains nothing."
     },
     "graph": {
       "label": "Which unit opens at which level of which building",
-      "axis": "Building level. Arrows point from the unit you need to the unit it opens.",
+      "axis": "Building level.",
       "opensAt": "Longhouse {level}",
       "longhouseShort": "LH {level}",
       "longhouse": "needs Longhouse {level}",
-      "level": "Level {level}",
-      "needsUnit": "needs {unit}"
+      "level": "Level {level}"
     },
     "queue": {
       "heading": "Queues and speed",
