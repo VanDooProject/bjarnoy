@@ -26,6 +26,12 @@ export function shownBorderOwner(source: RealmBorderSource, q: number, r: number
 // corner-index pair of the one edge that faces that neighbour (from each direction's screen-space offset against each edge's outward
 // normal). Used so only the realm's true outer edges get a border stroke, not every claimed hex's full hexagon outline.
 const EDGE_FOR_DIR = [3, 2, 1, 0, 5, 4];
+const DIR_FOR_EDGE = EDGE_FOR_DIR.map((_, edge) => EDGE_FOR_DIR.indexOf(edge));
+
+/** The hex across edge `edge` (corner `edge` to `edge + 1` of isoTopPoints()) of `c`. */
+export function neighbourAcrossEdge(c: AxialCoord, edge: number): AxialCoord {
+  return neighbors(c)[DIR_FOR_EDGE[edge]];
+}
 
 /** Per edge (corner `i` to `i + 1` of isoTopPoints()), whether the neighbour across it belongs to the same realm. */
 export function ownedAcrossEdges(source: Pick<RealmBorderSource, 'realmBorderOwnerAt'>, c: AxialCoord, ownerId: string): boolean[] {

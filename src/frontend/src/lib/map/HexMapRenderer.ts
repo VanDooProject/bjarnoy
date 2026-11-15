@@ -47,7 +47,8 @@ import { DIAL_FINISH_MS, DIAL_REJECT_MS, retainFinishingDials, rejectDialAt, fla
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import { atlasPageCount } from './atlasManifests';
 import { attachFramePacing } from './framePacing';
-import { insetBorderCorners, splitBorderEdges } from './realmBorderEdges';
+import { clippedStrokePieces } from './convexPolygon';
+import { createWaterlineBorders, type BorderLinePiece } from './realmBorderWaterline';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
 import { drawsAsSea, type CartShipment, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
@@ -71,7 +72,7 @@ import type { TerrainLookup, WaterMask } from './water/waterMask';
 import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
 import { fogMaskPlacement, type MaskBounds } from './fog/fogMaskLayout';
-import { outerEdgesOf, ownedAcrossEdges, shownBorderOwner } from './realmBorders';
+import { shownBorderOwner } from './realmBorders';
 import { chunkRangeOfTexels, rangesEqual, type ChunkRange } from './fog/fogChunks';
 import { bogCreekPathFor, riverPathFor, type RiverDrawing } from './riverPath';
 import {
@@ -5666,6 +5667,12 @@ export class HexMapRenderer {
       return;
     }
 
+    // Sea art's top face sits lower than land's in the settlement view only; the world map draws every hex on the one level.
+    const waterline = createWaterlineBorders(
+      { realmBorderOwnerAt: (q, r) => worldModel.realmBorderOwnerAt(q, r), isLowered: (q, r) => mode === 'settlement' && drawsAsSea(worldModel.getTile(q, r).terrain) },
+      TILE_W,
+      TILE_H,
+    );
     for (const c of coords) {
       // Own realm on explored ground, a rival's wherever the mist is not fully opaque; ground outside every claim has no owner.
       const ownerId = shownBorderOwner(worldModel, c.q, c.r, fogActive);
@@ -5678,10 +5685,6 @@ export class HexMapRenderer {
       const owner = worldModel.getSettlement(ownerId);
       const color = realmColor(owner, playerId);
 
-      const grid = isoGridPosition(c, TILE_W, TILE_H);
-      const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
-      const flat = top.flatMap((p) => [p.x, p.y]);
-
       // "Glow+wash" (docs/design/zip-brainstorms.md, zip 9): a soft
       // translucent fill across every owned hex ("wash"), with a brighter,
       // thicker stroke reserved for the realm's *outer* edges only
@@ -5690,16 +5693,16 @@ export class HexMapRenderer {
       // blur filter. Previously this stroked the *entire* outline of every
       // claimed hex, including edges shared with another owned hex, which
       // drew a solid mesh over the whole realm instead of a border around it.
-      this.borderLayer.poly(flat).fill({ color, alpha: 0.12 });
+      // On a coast the line sits on the waterline the player sees (sea art's top face is lower than land's), see realmBorderWaterline.
+      const { wash, lines } = waterline.hexGeometry(c, ownerId);
+      this.borderLayer.poly(wash.flatMap((p) => [p.x, p.y])).fill({ color, alpha: 0.12 });
 
       // Back edges (and in world mode, which has no tall art, all edges) stay in the layer under the toppings; in
       // settlement mode the front edges go to their own graphic in terrainTop so the hex's own art can't hide them.
       // Each realm draws its outline inside its own hexes (see insetBorderCorners), so touching realms show two lines side by side.
-      const owned = ownedAcrossEdges(worldModel, c, ownerId);
-      const corners = insetBorderCorners(top, owned);
-      const { back, front } = splitBorderEdges(outerEdgesOf(owned));
       if (mode === 'settlement') {
-        strokeBorderEdges(this.borderLayer, corners, back, color);
+        strokeBorderPieces(this.borderLayer, lines.filter((l) => l.layer === 'back'), color);
+        const front = lines.filter((l) => l.layer === 'front');
         if (front.length > 0) {
           let g = this.borderFrontPool[frontUsed];
           if (!g) {
@@ -5711,10 +5714,10 @@ export class HexMapRenderer {
           g.clear();
           g.visible = true;
           g.zIndex = isoDepthKey(c) + BORDER_FRONT_Z;
-          strokeBorderEdges(g, corners, front, color);
+          strokeBorderPieces(g, front, color);
         }
       } else {
-        strokeBorderEdges(this.borderLayer, corners, [...back, ...front], color);
+        strokeBorderPieces(this.borderLayer, lines, color);
       }
     }
     hideUnusedFront();
@@ -7361,13 +7364,20 @@ const NEIGHBOR_DIRS: AxialCoord[] = [
 /** Sort offset of a hex's front border edges in `terrainTop`: above its topping (+0 sprite, +0.5 overlay), below the next hex's. */
 const BORDER_FRONT_Z = 0.6;
 
-/** The two overlapping strokes (wide faint under thin solid) that fake the border glow, for the given corner-index edges. `corners` are the inset border corners (`insetBorderCorners`). */
-function strokeBorderEdges(g: Graphics, corners: readonly ({ x: number; y: number } | null)[], edges: readonly [number, number][], color: number) {
-  for (const edge of edges) {
-    const a = corners[edge[0]];
-    const b = corners[edge[1]];
-    if (!a || !b) continue;
-    g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
-    g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
+/** The two strokes (wide faint under thin solid) that fake the border glow, for each line piece. A piece with `clip` polygons is drawn as filled polygons around them (no mask), same colours and widths. */
+function strokeBorderPieces(g: Graphics, pieces: readonly BorderLinePiece[], color: number) {
+  for (const { a, b, clip } of pieces) {
+    for (const [width, alpha] of BORDER_STROKES) {
+      if (!clip) {
+        g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width, color, alpha, cap: 'round' });
+        continue;
+      }
+      for (const piece of clippedStrokePieces(a, b, width, clip)) g.poly(piece.flatMap((p) => [p.x, p.y])).fill({ color, alpha });
+    }
   }
 }
+
+const BORDER_STROKES: readonly (readonly [width: number, alpha: number])[] = [
+  [7, 0.25],
+  [2.5, 0.95],
+];
