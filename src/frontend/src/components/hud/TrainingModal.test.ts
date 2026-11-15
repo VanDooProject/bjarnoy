@@ -97,15 +97,15 @@ describe('TrainingModal', () => {
   });
 
   it('lists the Harbour\'s ships under white job headings and names the missing building level', () => {
-    setup([placed('harbour', 3, -2, 3)]);
-    const wrapper = mountModal(placed('harbour', 3, -2, 3));
+    setup([placed('harbour', 3, -2, 5)]);
+    const wrapper = mountModal(placed('harbour', 3, -2, 5));
     expect(wrapper.findAll('.group-heading').map((h) => [h.attributes('data-group'), h.text()])).toEqual([
       ['scouts', 'Scouts'], ['cargo', 'Cargo'], ['transport', 'Transport'],
     ]);
     expect(wrapper.findAll('.unit-name').map((n) => n.text())).toEqual(['Færing', 'Byrding', 'Knarr', 'Karve']);
     const rows = wrapper.findAll('.unit-row');
-    expect(rows.map((r) => r.classes().includes('locked'))).toEqual([false, false, false, true]);
-    expect(rows[3]!.text()).toContain('Harbour 5 (now 3)');
+    expect(rows.map((r) => r.classes().includes('locked'))).toEqual([false, false, true, false]);
+    expect(rows[2]!.text()).toContain('Harbour 8 (now 5)');
   });
 
   it('lists the Shipyard\'s warships and fire craft in their groups', () => {

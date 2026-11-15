@@ -23,12 +23,12 @@ function mountGraph() {
 }
 
 describe('UnitDependencyGraph', () => {
-  it('draws one node per unit and an arrow from the Berserker to the Ram and the Catapult', () => {
+  it('draws one node per unit and no arrows, since no unit needs another unit', () => {
     const wrapper = mountGraph();
     expect(wrapper.findAll('svg .node')).toHaveLength((unitCatalogue.data as unknown[]).length);
-    expect(wrapper.find('[data-edge="berserker>ram"]').exists()).toBe(true);
-    expect(wrapper.find('[data-edge="berserker>catapult"]').exists()).toBe(true);
-    expect(wrapper.find('[data-edge="axeman>berserker"]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-edge]')).toHaveLength(0);
+    expect(wrapper.find('svg path.edge').exists()).toBe(false);
+    expect(wrapper.get('svg [data-unit="axeman"]').text()).not.toContain('LH');
   });
 
   it('has a lane label per training building and the phone list with units ordered by level', () => {
