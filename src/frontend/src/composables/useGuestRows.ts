@@ -9,7 +9,7 @@ import { useWorldStore } from '../stores/world';
 import { unitName } from '../i18n/catalogueNames';
 import type { MessageSchema } from '../i18n/schema';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
-import { stackUpkeepPerHour, stacksUpkeepPerHour } from '../lib/units/garrisonUpkeep';
+import { stackUpkeepPerHour } from '../lib/units/garrisonUpkeep';
 
 export interface GuestUnitRow {
   key: string;
@@ -35,7 +35,7 @@ export function useGuestRows() {
     world.guestArmies.map((g) => ({
       key: g.armyId,
       ownerName: world.model.getSettlement(g.ownerSettlementId)?.name ?? t('hud.trainingQueue.unknownSettlement'),
-      foodPerHour: stacksUpkeepPerHour(g.stacks, catalogue.byType),
+      foodPerHour: g.totalUpkeepPerHour, // the server's own total for the army
       units: g.stacks
         .filter((s) => s.count > 0)
         .map((s) => ({

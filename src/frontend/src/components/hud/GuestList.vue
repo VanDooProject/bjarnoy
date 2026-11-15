@@ -77,16 +77,6 @@ const { guests, sendingId, error, sendHome } = useGuestRows();
   padding-left: 12px;
   border-left: 1px solid var(--panel-border);
 }
-:global(.garrison-list.is-rates-shown) .guest-rate {
-  max-width: 70px;
-  opacity: 1;
-}
-@media (hover: hover) {
-  :global(.garrison-list:hover) .guest-rate {
-    max-width: 70px;
-    opacity: 1;
-  }
-}
 html[data-hud-motion='reduced'] .guest-rate {
   transition: none;
 }

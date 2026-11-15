@@ -44,20 +44,6 @@ const { t, n } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
   color: var(--food);
   transition: opacity 160ms ease;
 }
-:global(.garrison-list.is-rates-shown) .garrison-row {
-  grid-template-columns: 1fr auto 58px;
-}
-:global(.garrison-list.is-rates-shown) .food-rate {
-  opacity: 1;
-}
-@media (hover: hover) {
-  :global(.garrison-list:hover) .garrison-row {
-    grid-template-columns: 1fr auto 58px;
-  }
-  :global(.garrison-list:hover) .food-rate {
-    opacity: 1;
-  }
-}
 html[data-hud-motion='reduced'] .garrison-row,
 html[data-hud-motion='reduced'] .food-rate {
   transition: none;

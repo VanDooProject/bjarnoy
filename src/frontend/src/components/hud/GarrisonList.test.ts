@@ -27,7 +27,7 @@ function seed() {
     {
       armyId: 'guest-1',
       ownerSettlementId: 'unknown',
-      totalUpkeepPerHour: 0,
+      totalUpkeepPerHour: 80,
       stacks: [
         { unit: 'axeman', count: 120 },
         { unit: 'bowman', count: 40 },

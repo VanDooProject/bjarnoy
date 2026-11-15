@@ -39,7 +39,7 @@ const guestCount = computed(() => world.guestArmies.length);
 const upkeepPerHour = computed(
   () =>
     stacksUpkeepPerHour(world.hud.garrison, catalogue.byType)
-    + world.guestArmies.reduce((sum, g) => sum + stacksUpkeepPerHour(g.stacks, catalogue.byType), 0),
+    + world.guestArmies.reduce((sum, g) => sum + g.totalUpkeepPerHour, 0),
 );
 
 const starving = computed(() => world.hud.rates.food < 0);
@@ -151,6 +151,33 @@ const ratesShown = ref(false);
 @media (hover: none) {
   .upkeep-hint {
     display: block;
+  }
+}
+/*
+ * The food-per-hour column of every unit row (GarrisonUnitRow.vue) and each guest army's total (GuestList.vue) is
+ * hidden until the list is hovered with a mouse or its rates are shown by a tap on the Upkeep line. The rules live
+ * here, on the list root, so both children follow one switch.
+ */
+.garrison-list.is-rates-shown :deep(.garrison-row) {
+  grid-template-columns: 1fr auto 58px;
+}
+.garrison-list.is-rates-shown :deep(.food-rate) {
+  opacity: 1;
+}
+.garrison-list.is-rates-shown :deep(.guest-rate) {
+  max-width: 70px;
+  opacity: 1;
+}
+@media (hover: hover) {
+  .garrison-list:hover :deep(.garrison-row) {
+    grid-template-columns: 1fr auto 58px;
+  }
+  .garrison-list:hover :deep(.food-rate) {
+    opacity: 1;
+  }
+  .garrison-list:hover :deep(.guest-rate) {
+    max-width: 70px;
+    opacity: 1;
   }
 }
 </style>
