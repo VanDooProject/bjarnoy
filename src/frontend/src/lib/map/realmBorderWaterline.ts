@@ -17,8 +17,8 @@
 import type { AxialCoord } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoTopPoints } from '../hex/geometry';
 import type { Pt } from './convexPolygon';
-import { insetBorderCorners, isBackEdge } from './realmBorderEdges';
-import { neighbourAcrossEdge, ownedAcrossEdges, type RealmBorderSource } from './realmBorders';
+import { insetBorderCorners, isBackEdge, splitBorderEdges } from './realmBorderEdges';
+import { neighbourAcrossEdge, outerEdgesOf, ownedAcrossEdges, type RealmBorderSource } from './realmBorders';
 import { TILE_ART_SEA_TOPFACE_DROP_FRAC } from './textures';
 
 /** What the geometry reads from the world: who owns a hex, and whether its art is drawn lowered (sea in settlement mode). */
@@ -124,11 +124,13 @@ const down = (p: Pt, d: number): Pt => ({ x: p.x, y: p.y + d });
  */
 export function createWaterlineBorders(source: WaterlineBorderSource, tileW: number, tileH: number) {
   const seaDrop = tileW * TILE_ART_SEA_TOPFACE_DROP_FRAC;
-  const topCache = new Map<string, Pt[]>();
-  const loweredCache = new Map<string, boolean>();
+  // Keyed by one number per hex (|q|, |r| stay far below 2^21), not a string: these run for every owned hex of every rebuild.
+  const hexKey = (c: AxialCoord) => c.q * 4194304 + c.r;
+  const topCache = new Map<number, Pt[]>();
+  const loweredCache = new Map<number, boolean>();
 
   const topOf = (c: AxialCoord): Pt[] => {
-    const k = `${c.q},${c.r}`;
+    const k = hexKey(c);
     let top = topCache.get(k);
     if (!top) {
       const grid = isoGridPosition(c, tileW, tileH);
@@ -138,7 +140,7 @@ export function createWaterlineBorders(source: WaterlineBorderSource, tileW: num
     return top;
   };
   const lowered = (c: AxialCoord): boolean => {
-    const k = `${c.q},${c.r}`;
+    const k = hexKey(c);
     let v = loweredCache.get(k);
     if (v === undefined) {
       v = source.isLowered(c.q, c.r);
@@ -150,6 +152,10 @@ export function createWaterlineBorders(source: WaterlineBorderSource, tileW: num
   /** Waterline rule: the hex in front of edge `e` of `c` decides. */
   const edgeDrop = (c: AxialCoord, e: number): number => dropOf(isBackEdge(e) ? c : neighbourAcrossEdge(c, e));
 
+  /** Whether any of the three hexes meeting at corner `k` of `c` is lowered; if none is, no edge there has a drop. */
+  const cornerLowered = (c: AxialCoord, k: number): boolean =>
+    lowered(c) || lowered(neighbourAcrossEdge(c, (k + 5) % 6)) || lowered(neighbourAcrossEdge(c, k));
+
   const cornerAt = (c: AxialCoord, k: number): Corner => ({
     v: topOf(c)[k],
     hexes: hexesAtCorner(c, k).map((h) => ({ ...h, top: topOf(h.c) })),
@@ -157,9 +163,6 @@ export function createWaterlineBorders(source: WaterlineBorderSource, tileW: num
 
   const junction = (corner: Corner, e1: EdgeId, e2: EdgeId, mode: JoinMode): Join => {
     const { v, hexes } = corner;
-    // No lowered hex at the corner means no edge there has a drop (an edge's front hex is one of the corner's three).
-    if (!hexes.some((h) => lowered(h.c))) return { end1: v, end2: v, link: null };
-
     const F = hexes.reduce((a, b) => (isoDepthKey(b.c) > isoDepthKey(a.c) ? b : a));
     const fEdges = [(F.k + 5) % 6, F.k].map((e) => ({ id: edgeId(F.c, e), a: F.top[e], b: F.top[(e + 1) % 6] }));
     const dF = dropOf(F.c);
@@ -203,7 +206,7 @@ export function createWaterlineBorders(source: WaterlineBorderSource, tileW: num
         f1 = f;
       }
     }
-    if (!Q || !f1) return { end1: v, end2: v, link: null };
+    if (!Q || !f1) throw new Error(`realm border: the lowered edge at corner ${v.x},${v.y} does not meet the outline of the hex in front`);
     const kind = (id: EdgeId) => (isT(id) ? 't' : sameEdge(id, f1.id) ? 'f1' : 'f2');
     const k1 = kind(e1);
     const k2 = kind(e2);
@@ -226,25 +229,38 @@ export function createWaterlineBorders(source: WaterlineBorderSource, tileW: num
     const top = topOf(c);
     const owned = ownedAcrossEdges(source, c, ownerId);
     const inset = insetBorderCorners(top, owned);
+    const { back, front } = splitBorderEdges(outerEdgesOf(owned));
+    const lines: BorderLinePiece[] = [];
+
+    // Inland (and the whole world map): nothing at any corner of this hex is lowered, so every drop is 0, every join is just the
+    // corner, and the border is the hex's top face with one inset line per outer edge.
+    if (!lowered(c) && !top.some((_, k) => cornerLowered(c, k))) {
+      for (const [e, layer] of [...back.map((x) => [x[0], 'back'] as const), ...front.map((x) => [x[0], 'front'] as const)]) {
+        lines.push({ a: inset[e]!, b: inset[(e + 1) % 6]!, layer });
+      }
+      return { wash: top, lines };
+    }
 
     const wash: Pt[] = [];
     for (let k = 0; k < 6; k++) {
+      if (!cornerLowered(c, k)) {
+        wash.push(top[k]);
+        continue;
+      }
       const j = junction(cornerAt(c, k), edgeId(c, (k + 5) % 6), edgeId(c, k), 'tilt');
       wash.push(j.end1);
       if (j.link) wash.push(j.link[1]);
     }
 
-    const lines: BorderLinePiece[] = [];
-    for (let e = 0; e < 6; e++) {
-      if (owned[e]) continue;
-      const layer = isBackEdge(e) ? 'back' : 'front';
+    const addEdge = (e: number, layer: 'back' | 'front') => {
       const self = edgeId(c, e);
       const ends = [e, (e + 1) % 6].map((k) => {
-        const corner = cornerAt(c, k);
-        const v = corner.v;
+        const v = top[k];
         const shift = inset[k] ? { x: inset[k].x - v.x, y: inset[k].y - v.y } : { x: 0, y: 0 };
         const move = (p: Pt): Pt => ({ x: p.x + shift.x, y: p.y + shift.y });
-        // The realm's other outline edge at this corner (the border is a closed loop, so there is one).
+        if (!cornerLowered(c, k)) return { end: move(v), link: null, clip: undefined, linkClip: undefined };
+        const corner = cornerAt(c, k);
+        // The realm's other outline edge at this corner: the border is a closed loop, so there is one.
         let other: EdgeId | null = null;
         for (const h of corner.hexes) {
           if (source.realmBorderOwnerAt(h.c.q, h.c.r) !== ownerId) continue;
@@ -255,7 +271,7 @@ export function createWaterlineBorders(source: WaterlineBorderSource, tileW: num
             if (source.realmBorderOwnerAt(n.q, n.r) !== ownerId) other = id;
           }
         }
-        if (!other) return { end: move(down(v, edgeDrop(c, e))), link: null, clip: undefined as Pt[] | undefined, linkClip: undefined as Pt[] | undefined };
+        if (!other) throw new Error(`realm border: no second outline edge at corner ${v.x},${v.y} of hex ${c.q},${c.r}`);
         const j = junction(corner, self, other, 'clip');
         return {
           end: move(j.end1),
@@ -266,10 +282,14 @@ export function createWaterlineBorders(source: WaterlineBorderSource, tileW: num
       });
       const clips = ends.flatMap((en) => (en.clip ? [en.clip] : []));
       lines.push({ a: ends[0].end, b: ends[1].end, layer, ...(clips.length > 0 ? { clip: clips } : {}) });
+      // A connector sits at the corner this edge starts at; it draws over the hex's topping when either edge of the hex there is a front edge.
+      const linkLayer = isBackEdge((e + 5) % 6) && isBackEdge(e) ? 'back' : 'front';
       for (const en of ends) {
-        if (en.link) lines.push({ a: en.link[0], b: en.link[1], layer, ...(en.linkClip ? { clip: [en.linkClip] } : {}) });
+        if (en.link) lines.push({ a: en.link[0], b: en.link[1], layer: linkLayer, ...(en.linkClip ? { clip: [en.linkClip] } : {}) });
       }
-    }
+    };
+    for (const [e] of back) addEdge(e, 'back');
+    for (const [e] of front) addEdge(e, 'front');
     return { wash, lines };
   };
 

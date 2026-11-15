@@ -234,6 +234,50 @@ describe('waterline border geometry', () => {
   });
 });
 
+describe('connectors and layers', () => {
+  it('a land hex in a sea realm: both cliff steps draw over its topping, each exactly once, and edges keep their own layer', () => {
+    // only the island's own outline: a realm of one land hex surrounded by sea
+    const one = scene(['WWWWW', 'WWWWW', 'WWSWW', 'WWWWW', 'WWWWW'], ['.....', '.....', '..a..', '.....', '.....']);
+    const geo = geometryOf(one).get(`${at(2, 2).q},${at(2, 2).r}`)!;
+    const connectors = geo.lines.filter(isVertical);
+    expect(connectors).toHaveLength(2);
+    expect(connectors.every((c) => c.layer === 'front')).toBe(true);
+    const keys = connectors.map((c) => [c.a.x, c.a.y, c.b.x, c.b.y].map((n) => n.toFixed(4)).join());
+    expect(new Set(keys).size).toBe(2);
+    const edges = geo.lines.filter((l) => !isVertical(l));
+    expect(edges).toHaveLength(6);
+    expect(edges.map((l) => l.layer)).toEqual(['back', 'back', 'back', 'front', 'front', 'front']);
+  });
+
+  it('emits every connector of a realm once', () => {
+    const s = scene(['SSSSSS', 'SSSSSS', 'SSSSSS', 'WWWWWW', 'WWWWWW'], ['......', '.aaaa.', '.aaaa.', '......', '......']);
+    const connectors = linesOf(geometryOf(s)).filter(isVertical);
+    const keys = connectors.map((c) => [c.a.x, c.a.y, c.b.x, c.b.y].map((n) => n.toFixed(4)).join());
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+describe('inland hexes', () => {
+  it('give the same geometry whether or not the world has sea elsewhere', () => {
+    const coast = scene(['SSSSSS', 'SSSSSS', 'SSSSSS', 'SSSSSS', 'WWWWWW'], ['......', 'aaaaaa', 'aaaaaa', '......', '......']);
+    const inland = geometryOf(coast).get(`${at(2, 1).q},${at(2, 1).r}`)!;
+    const asWorld = geometryOf(coast, false).get(`${at(2, 1).q},${at(2, 1).r}`)!;
+    expect(inland).toEqual(asWorld);
+  });
+});
+
+describe('invariants', () => {
+  it('never throws on scrambled coasts and realms', () => {
+    let seed = 12345;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    for (let n = 0; n < 40; n++) {
+      const terrain = Array.from({ length: 7 }, () => Array.from({ length: 8 }, () => (rnd() < 0.45 ? 'W' : 'S')).join(''));
+      const owners = Array.from({ length: 7 }, () => Array.from({ length: 8 }, () => (rnd() < 0.7 ? 'a' : rnd() < 0.5 ? 'b' : '.')).join(''));
+      expect(() => geometryOf(scene(terrain, owners))).not.toThrow();
+    }
+  });
+});
+
 /**
  * The washes of all owned hexes never overlap (sampled on a fine grid), also where a hex's wash tilts at a coast: neighbouring
  * washes meet along their shared, dropped edge.

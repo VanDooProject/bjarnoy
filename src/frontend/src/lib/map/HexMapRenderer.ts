@@ -5669,7 +5669,7 @@ export class HexMapRenderer {
 
     // Sea art's top face sits lower than land's in the settlement view only; the world map draws every hex on the one level.
     const waterline = createWaterlineBorders(
-      { realmBorderOwnerAt: (q, r) => worldModel.realmBorderOwnerAt(q, r), isLowered: (q, r) => mode === 'settlement' && drawsAsSea(worldModel.getTile(q, r).terrain) },
+      { realmBorderOwnerAt: (q, r) => worldModel.realmBorderOwnerAt(q, r), isLowered: (q, r) => mode === 'settlement' && drawsAsSea(worldModel.terrainOf(q, r)) },
       TILE_W,
       TILE_H,
     );
