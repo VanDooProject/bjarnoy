@@ -265,16 +265,16 @@ thead th {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
-  white-space: nowrap;
 }
 .name {
   font-weight: 600;
-}
-.name {
   white-space: nowrap;
 }
 .cost {
   white-space: nowrap;
+}
+.cost :deep(.resource-cost) {
+  flex-wrap: nowrap;
 }
 .value {
   white-space: nowrap;

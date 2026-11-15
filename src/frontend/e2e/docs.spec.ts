@@ -544,6 +544,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         "Resource production",
         "Shrines",
         "Walls",
+        "Extending the realm",
       ]);
       await expect(
         menu.getByRole("menuitem", { name: "Shrines" }),
@@ -669,8 +670,8 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       for (const [group, count] of [
         ["story", 1],
         ["island", 2],
-        ["building", 4],
-        ["move", 6],
+        ["building", 5],
+        ["move", 5],
         ["beyond", 2],
       ] as const) {
         await expect(
@@ -688,10 +689,10 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         "Resource production",
         "Shrines",
         "Walls",
+        "Extending the realm",
         "Training troops",
         "Founding settlements",
         "Beach camp",
-        "Extending the realm",
         "Land movement",
         "Ships and water",
         "Wildlife camps",
