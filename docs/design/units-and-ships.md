@@ -11,25 +11,23 @@ ranged volley. Numbers are starting values, to be tuned. Settled in the unit tra
   in**. A distributed order only goes to buildings of that type that have the level.
 - A unit can also have its own Longhouse gate. A building can never be above the Longhouse level, so the earliest
   Longhouse for a unit is the highest of: the building's unlock, the building level it needs, and its own gate.
-- A unit no longer needs another unit of the same building as a prerequisite: the building level already orders them.
-  The only unit prerequisite left is across buildings: the Ram and the Catapult need the Berserker to be unlocked.
-  Because the Berserker needs Longhouse 20, the Ram and the Catapult are in practice Longhouse 20 units too.
+- No unit needs another unit: the building levels order them.
 
 ### Land units
 
-| Building (opens at) | Unit | Building level | Own Longhouse gate | Needs unit |
-|---|---|---|---|---|
-| Barracks (LH 5, Tower 3) | Thrall | 1 | – | – |
-| | Spearman | 3 | – | – |
-| | Axeman | 6 | 6 | – |
-| | Berserker | 10 | 20 | – |
-| Archery Range (LH 9, Barracks 5) | Bowman | 1 | – | – |
-| | Skirmisher | 1 | – | – |
-| Cart Workshop (LH 10, Town Square 3) | Provisioner | 1 | – | – |
-| | Settler | 5 | – | – |
-| | Camp Builder | 10 | – | – |
-| Siege Workshop (LH 18, Archery Range 3) | Ram | 10 | – | Berserker |
-| | Catapult | 10 | – | Berserker |
+| Building (opens at) | Unit | Building level | Own Longhouse gate |
+|---|---|---|---|
+| Barracks (LH 5, Tower 3) | Thrall | 1 | – |
+| | Spearman | 3 | – |
+| | Axeman | 6 | – |
+| | Berserker | 10 | 20 |
+| Archery Range (LH 9, Barracks 5) | Bowman | 1 | – |
+| | Skirmisher | 1 | – |
+| Cart Workshop (LH 10, Town Square 3) | Provisioner | 1 | – |
+| | Settler | 5 | – |
+| | Camp Builder | 10 | – |
+| Siege Workshop (LH 18, Archery Range 3) | Catapult | 5 | – |
+| | Ram | 10 | – |
 
 ### Ships: Harbour and Shipyard
 
@@ -39,12 +37,12 @@ spots for every ship (a fleet lies at whichever one it was trained in or sent ho
 | Building (opens at) | Group | Ship | Building level | Own Longhouse gate |
 |---|---|---|---|---|
 | Harbour (LH 5, Fishing Hut 3) | Scouts | Færing | 1 | – |
-| | Cargo | Byrding | 1 | – |
-| | Cargo | Knarr | 3 | – |
+| | Cargo | Byrding | 3 | – |
 | | Transport | Karve | 5 | – |
+| | Cargo | Knarr | 8 | – |
 | Shipyard (LH 10, Harbour 5) | Warships | Snekkja (was the Longship) | 1 | – |
 | | Warships | Skeid | 10 | 20 |
-| | Fire craft | Fire Raft | 1 | – |
+| | Fire craft | Fire Raft | 3 | – |
 | | Fire craft | Fire Hulk (was the Fire Ship) | 5 | 12 |
 
 - The Harbour takes the Dockyard's place everywhere the Dockyard is a feeder (the Shrine of Njörd needs Harbour 10).
@@ -110,6 +108,6 @@ Ships:
 ## 5. Docs
 
 - The player docs' Training troops page shows the unlocks as a dependency graph (one lane per training building, units at
-  their building level, arrows for unit prerequisites); on phones it is a list per building ordered by level.
+  their building level); on phones it is a list per building ordered by level.
 - Historical background of units and buildings goes into history notes on the docs pages, behind a second admin switch
   "Show history" next to "Show admin notes".
