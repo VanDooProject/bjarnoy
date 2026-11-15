@@ -87,6 +87,12 @@ export const TILE_ART_NATIVE_H = 300;
 export const TILE_ART_TOPFACE_Y_FRAC = 140 / 200;
 /** Top-face height as a fraction of the tile width (92 / 200). */
 export const TILE_ART_TOPFACE_H_FRAC = 92 / 200;
+/**
+ * How far lower, as a fraction of the tile width, the sea art's top face starts than land's (12 / 200): measured on the art, the
+ * watertile, coastalwatertile and taintedwater top faces start at native y 152, the river and bog art at 140 like land. Realm borders
+ * on a coast use it to sit on the visible waterline (`realmBorderWaterline.ts`).
+ */
+export const TILE_ART_SEA_TOPFACE_DROP_FRAC = 12 / 200;
 
 // 'sawmillriver'/'sawmillbend'/'sawmillbend60' aren't real
 // `Tile['buildingType']` values — a Sawmill's wire building type always
