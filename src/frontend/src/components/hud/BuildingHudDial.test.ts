@@ -5,7 +5,7 @@
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BuildingHudDial from './BuildingHudDial.vue';
-import type { ConstructionDial } from '../../lib/map/constructionDial';
+import { CONSTRUCTION_DIAL_REJECT_COLOR, type ConstructionDial } from '../../lib/map/constructionDial';
 import { animationPreference } from '../../lib/perf/animationPreference';
 import { motionPreferences } from '../../lib/perf/motionPreferences';
 import { installFakeAnimate, type FakeAnimate } from '../../test/fakeAnimate';
@@ -109,5 +109,31 @@ describe('BuildingHudDial arc', () => {
     await wrapper!.vm.$nextTick();
     expect(fake.animations).toHaveLength(0);
     expect(arc().exists()).toBe(false);
+  });
+});
+
+describe('BuildingHudDial blocked refusal', () => {
+  let wrapper: VueWrapper | undefined;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date', 'requestAnimationFrame', 'cancelAnimationFrame'] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    wrapper?.unmount();
+    wrapper = undefined;
+    vi.useRealTimers();
+  });
+
+  // The track is the outline polygon drawn with the dial's own stroke width right after the fill.
+  const track = (w: VueWrapper) => w.findAll('polygon').filter((p) => p.attributes('fill') === 'none').at(-1)!;
+
+  it('turns a green ring red while the refusal plays, and back to green once it has played out', async () => {
+    wrapper = mount(BuildingHudDial, { props: { radius: 20, ring: 'ready', label: '3', blockedAtMs: NOW } });
+    expect(track(wrapper).attributes('stroke')?.toLowerCase()).toBe(`#${CONSTRUCTION_DIAL_REJECT_COLOR.toString(16).padStart(6, '0')}`);
+
+    vi.setSystemTime(NOW + 2_000);
+    await wrapper.setProps({ blockedAtMs: undefined });
+    expect(track(wrapper).attributes('stroke')?.toLowerCase()).toBe('#5fd08a');
   });
 });
