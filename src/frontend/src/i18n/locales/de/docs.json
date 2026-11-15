@@ -1018,6 +1018,7 @@
       "heading": "Unterhalt und Schreine",
       "body": "Truppen essen jede Stunde Nahrung. Geht dir die Nahrung aus, verhungern Einheiten, zuerst die mit dem höchsten Unterhalt, bis deine Nahrungsbilanz nicht mehr negativ ist. Armeen unterwegs haben eigene Nahrungsregeln: siehe {movement}.",
       "movementLink": "Bewegung an Land",
+      "panel": "Wie viel Nahrung deine Truppen und deine Gäste pro Stunde essen, zeigt dir die Garnison-Leiste. Fahr mit der Maus darüber oder tipp am Handy auf die Summe, dann siehst du den Wert für jede Einheit.",
       "shrines": "Zwei Schreine steigern die Produktion: {freyja} die Nahrung, {ullr} das Holz. Was die Götter sonst noch geben, steht unter {shrines}.",
       "shrinesLink": "Schreine"
     },

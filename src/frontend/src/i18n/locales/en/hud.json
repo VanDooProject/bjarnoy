@@ -237,7 +237,13 @@
     "sendHome": "Send home",
     "sendingHome": "Sending home…",
     "sendHomeError": "Couldn't send the army home.",
-    "unknownSettlement": "Unknown settlement"
+    "unknownSettlement": "Unknown settlement",
+    "upkeep": "Upkeep",
+    "upkeepPerHour": "−{amount}/h",
+    "foodPerHour": "{amount}/h",
+    "foodRunsOut": "Food runs out in {time}",
+    "showRates": "Tap for food per unit type",
+    "hideRates": "Tap to hide food per unit type"
   },
   "queueDrawer": {
     "title": "Queues",

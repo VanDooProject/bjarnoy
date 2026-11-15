@@ -1018,6 +1018,7 @@
       "heading": "Upkeep and shrines",
       "body": "Troops eat food every hour. When your food runs out, units starve, the ones that cost the most to feed first, until your food income is no longer negative. Armies on the road have their own food rules: see {movement}.",
       "movementLink": "Land movement",
+      "panel": "The Garrison panel shows how much food your troops and your guests eat per hour. Point at it, or tap the total on a phone, to see each unit type.",
       "shrines": "Two shrines raise production: {freyja} adds to food, {ullr} to wood. See {shrines} for everything the gods give.",
       "shrinesLink": "Shrines"
     },
