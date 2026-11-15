@@ -114,6 +114,7 @@ describe('BuildingHudDial arc', () => {
 
 describe('BuildingHudDial blocked refusal', () => {
   let wrapper: VueWrapper | undefined;
+  const RED = `#${CONSTRUCTION_DIAL_REJECT_COLOR.toString(16).padStart(6, '0')}`;
 
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date', 'requestAnimationFrame', 'cancelAnimationFrame'] });
@@ -122,18 +123,29 @@ describe('BuildingHudDial blocked refusal', () => {
   afterEach(() => {
     wrapper?.unmount();
     wrapper = undefined;
+    motionPreferences.hud = 'auto';
     vi.useRealTimers();
   });
 
-  // The track is the outline polygon drawn with the dial's own stroke width right after the fill.
+  // The track is the dial's outline: the last plain stroked polygon of the dial body.
   const track = (w: VueWrapper) => w.findAll('polygon').filter((p) => p.attributes('fill') === 'none').at(-1)!;
 
-  it('turns a green ring red while the refusal plays, and back to green once it has played out', async () => {
+  it('turns a green ring red while the refusal plays, and green again once it has played out on its own', async () => {
     wrapper = mount(BuildingHudDial, { props: { radius: 20, ring: 'ready', label: '3', blockedAtMs: NOW } });
-    expect(track(wrapper).attributes('stroke')?.toLowerCase()).toBe(`#${CONSTRUCTION_DIAL_REJECT_COLOR.toString(16).padStart(6, '0')}`);
+    expect(track(wrapper).attributes('stroke')?.toLowerCase()).toBe(RED);
 
-    vi.setSystemTime(NOW + 2_000);
-    await wrapper.setProps({ blockedAtMs: undefined });
+    vi.advanceTimersByTime(1_600);
+    await wrapper.vm.$nextTick();
+    expect(track(wrapper).attributes('stroke')?.toLowerCase()).toBe('#5fd08a');
+  });
+
+  it('turns the ring red with the HUD motion off too, and back afterwards', async () => {
+    motionPreferences.hud = 'off';
+    wrapper = mount(BuildingHudDial, { props: { radius: 20, ring: 'ready', label: '3', blockedAtMs: NOW } });
+    expect(track(wrapper).attributes('stroke')?.toLowerCase()).toBe(RED);
+
+    vi.advanceTimersByTime(1_600);
+    await wrapper.vm.$nextTick();
     expect(track(wrapper).attributes('stroke')?.toLowerCase()).toBe('#5fd08a');
   });
 });
