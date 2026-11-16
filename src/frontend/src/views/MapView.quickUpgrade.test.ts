@@ -241,7 +241,7 @@ describe('MapView quick upgrade', () => {
     expect(wrapper.findComponent(RingMenu).exists()).toBe(true);
   });
 
-  it('holding the ring\'s Upgrade bubble turns the mode on, closes the ring and orders that building', async () => {
+  it('holding the ring\'s Upgrade bubble turns the mode on and closes the ring without ordering the upgrade', async () => {
     seedWorld({ premium: true });
     const canvas = await mountView();
 
@@ -253,7 +253,7 @@ describe('MapView quick upgrade', () => {
     await flushPromises();
 
     expect(useQuickUpgradeStore().on).toBe(true);
-    expect(queueBuild).toHaveBeenCalledTimes(1);
+    expect(queueBuild).not.toHaveBeenCalled();
     expect(wrapper.findComponent(RingMenu).exists()).toBe(false);
   });
 

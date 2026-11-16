@@ -133,9 +133,9 @@ test.describe('quick upgrade mode on a phone', { tag: '@g3' }, () => {
     await expect(chip).toBeVisible();
     await fingerUp(page);
 
-    // The hold ordered the longhouse's upgrade, and the ring is gone.
-    await expect.poll(() => settlement.longhouseBuildingLevel()).toBe(longhouseBefore + 1);
+    // The hold only switched the mode on: the ring is gone and the longhouse was not upgraded.
     await expect(settlement.ring.backdrop).toHaveCount(0);
+    expect(await settlement.longhouseBuildingLevel()).toBe(longhouseBefore);
 
     // A tap on another own building upgrades it, with no ring.
     const box = await settlement.canvasBox();
