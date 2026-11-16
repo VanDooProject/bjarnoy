@@ -319,6 +319,29 @@ export function terrainVariantArt(family: string, variant: number): ArtRef {
   return { kind: 'png', url: pngUrl };
 }
 
+/**
+ * The layers, bottom first, of one look of a terrain family: the flattened showcase frame when the pack has one, else the
+ * family's base slab with the look's top on it (coastal water ships its looks as tops only). `variant` is `null` for the plain
+ * look, N for `variantNNN`. `undefined` when the pack has no such look.
+ */
+export function terrainLookLayers(family: string, variant: number | null): AtlasFrameRect[] | undefined {
+  const name = `${family}_SE${variant === null ? '' : `_variant${String(variant).padStart(3, '0')}`}`;
+  const flat = findAtlasFrame('showcase', name);
+  if (flat) return [flat];
+  const base = findAtlasFrame('terrain', `${family}_SE_base`);
+  const top = findAtlasFrame('terrain', name);
+  return base && top ? [base, top] : undefined;
+}
+
+/** Every look the pack has for a terrain family, in slot order: `null` (plain) first, then each `variantNNN` that exists. */
+export function terrainLooksOf(family: string): (number | null)[] {
+  const looks: (number | null)[] = [];
+  for (const variant of [null, ...Array.from({ length: 20 }, (_, i) => i)]) {
+    if (terrainLookLayers(family, variant)) looks.push(variant);
+  }
+  return looks;
+}
+
 /** Art for coastal (shallow) water — a rendering variant of `sea`, not a `Terrain` of its own (see `Tile.isCoastalWater`), so it isn't reachable through `terrainArt`. */
 export function coastalWaterArt(): ArtRef {
   return terrainFamilyArt('coastalwatertile', false);

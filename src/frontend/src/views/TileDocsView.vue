@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
+import LayeredAtlasSprite from '../components/LayeredAtlasSprite.vue';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsPicker from '../components/docs/DocsPicker.vue';
 import DocsTileEntry from '../components/docs/DocsTileEntry.vue';
@@ -14,6 +15,8 @@ import {
   riverArt,
   terrainArt,
   terrainArtByFamily,
+  terrainLookLayers,
+  terrainLooksOf,
   terrainVariantArt,
   type ArtRef,
 } from '../lib/map/buildingArt';
@@ -115,6 +118,34 @@ const sandLookArt = computed<ArtRef>(() => {
   const look = SAND_LOOKS.find((l) => l.id === sandLook.value)!;
   return look.variant === null ? terrainArt('sand') : terrainVariantArt('sandtile', look.variant);
 });
+
+// Grass and coastal water: one look per variant slot the pack ships, named by what the look adds to the tile (slot order
+// = `variantAt`'s roll: the plain look first, then variant000, variant001, ...). The pickers list only the slots the pack
+// has, so a look that isn't drawn never shows up.
+const TERRAIN_LOOKS: Record<string, { family: string; names: readonly string[] }> = {
+  grass: { family: 'grasstile', names: ['plain', 'rocks', 'shrubs', 'birch'] },
+  'coastal-water': { family: 'coastalwatertile', names: ['plain', 'boat', 'rock'] },
+};
+const terrainLookIndex = reactive<Record<string, number>>({});
+
+/** The looks of a tile entry with a look picker: the slot index (0 = plain) and its i18n name, for the slots the pack has. */
+function terrainLooksFor(tileId: string): { slot: number; name: string }[] {
+  const def = TERRAIN_LOOKS[tileId];
+  if (!def) return [];
+  return terrainLooksOf(def.family).map((variant) => {
+    const slot = variant === null ? 0 : variant + 1;
+    return { slot, name: def.names[slot]! };
+  });
+}
+function selectedTerrainLook(tileId: string): number {
+  return terrainLookIndex[tileId] ?? 0;
+}
+function terrainLookFrames(tileId: string): AtlasFrameRect[] | undefined {
+  const def = TERRAIN_LOOKS[tileId];
+  if (!def) return undefined;
+  const slot = selectedTerrainLook(tileId);
+  return terrainLookLayers(def.family, slot === 0 ? null : slot - 1);
+}
 
 // id doubles as the anchor/ToC key; terrain is the wire name a building's
 // AllowedTerrain lists (see BuildingCatalogue.cs) — null for the rows that
@@ -226,7 +257,8 @@ const buildingsByTile = computed(() => {
       :title="t(`docs.tiles.entries.${tileEntryKey(tile.id)}.title`)"
     >
       <template #thumb>
-        <AtlasSprite v-if="thumbFrame(tile)" :frame="thumbFrame(tile)!" />
+        <LayeredAtlasSprite v-if="terrainLookFrames(tile.id)" :frames="terrainLookFrames(tile.id)!" />
+        <AtlasSprite v-else-if="thumbFrame(tile)" :frame="thumbFrame(tile)!" />
         <img v-else-if="thumbUrl(tile)" class="thumb-img" :src="thumbUrl(tile)!" alt="" />
       </template>
       <p class="lore">{{ t(`docs.tiles.entries.${tileEntryKey(tile.id)}.lore`) }}</p>
@@ -283,6 +315,20 @@ const buildingsByTile = computed(() => {
           "
           :model-value="mountainVariant"
           @update:model-value="mountainVariant = $event"
+        />
+
+        <!-- Grass and coastal water: the looks the generator rolls for them (see `TERRAIN_LOOKS`). -->
+        <DocsPicker
+          v-if="terrainLooksFor(tile.id).length > 1"
+          :label="$t('docs.tiles.lookLabel')"
+          :options="
+            terrainLooksFor(tile.id).map((look) => ({
+              value: String(look.slot),
+              label: t(`docs.tiles.looks.${tileEntryKey(tile.id)}.${look.name}`),
+            }))
+          "
+          :model-value="String(selectedTerrainLook(tile.id))"
+          @update:model-value="terrainLookIndex[tile.id] = Number($event)"
         />
 
         <!-- Same idea for Sand's decorated looks (dunes, driftwood, a wreck, ...). -->

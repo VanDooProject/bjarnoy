@@ -355,6 +355,11 @@
       "boat": "Kieloben liegendes Boot",
       "sandCastle": "Sandburg"
     },
+    "lookLabel": "Aussehen:",
+    "looks": {
+      "coastalWater": { "plain": "Schlicht", "boat": "Boot", "rock": "Felsen" },
+      "grass": { "plain": "Schlicht", "rocks": "Steine", "shrubs": "Büsche", "birch": "Birke" }
+    },
     "riverShapes": {
       "spring": "Quelle",
       "straight": "Gerade",
