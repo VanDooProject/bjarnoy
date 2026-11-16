@@ -968,6 +968,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(page.locator('[data-ship="karve"] [data-col="cost"]')).toContainText("250");
     await expect(page.locator("#ships").getByRole("link", { name: "Training troops" })).toHaveAttribute("href", "/docs/training");
     await expect(page.locator('[data-ship="karve"] [data-col="vision"]')).toBeVisible();
+    // expectPlayerPage left the viewport at phone width, so the water graph shows as its list.
+    await expect(page.getByTestId("unit-list-water").locator('a[href="/docs/units/karve"]')).toBeVisible();
+    await page.setViewportSize({ width: 1280, height: 800 });
     await expect(page.getByTestId("unit-graph-water").locator('svg [data-unit="karve"]')).toBeVisible();
     await expect(page.getByText("Under investigation")).toHaveCount(0);
   });
