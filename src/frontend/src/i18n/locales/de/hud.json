@@ -159,6 +159,7 @@
       "raze": "Abreißen",
       "cancelBuild": "Bau abbrechen",
       "cancelUpgrade": "Ausbau abbrechen",
+      "cancelRaze": "Abriss abbrechen",
       "cantRazeLonghouse": "Das Langhaus kann nicht abgerissen werden",
       "trainUnits": "Einheiten ausbilden",
       "feasts": "Feste",

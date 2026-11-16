@@ -26,14 +26,7 @@ export function buildingEntryId(buildingType: string, level: number): 'train' | 
   return null;
 }
 
-/**
- * The order the ring's Cancel bubble takes back on a hex: the newest one, since an earlier order stays while a later one builds on it.
- * Only a build or an upgrade can be cancelled there; a raze (newest) offers nothing.
- */
-export function cancellableBuildOrder<T extends { q: number; r: number; kind: 'build' | 'raze' }>(
-  queue: readonly T[],
-  at: { q: number; r: number },
-): T | undefined {
-  const last = queue.filter((o) => o.q === at.q && o.r === at.r).at(-1);
-  return last?.kind === 'build' ? last : undefined;
+/** The order the ring's Cancel bubble takes back on a hex: the newest one, since an earlier order stays while a later one builds on it. */
+export function cancellableOrder<T extends { q: number; r: number }>(queue: readonly T[], at: { q: number; r: number }): T | undefined {
+  return queue.filter((o) => o.q === at.q && o.r === at.r).at(-1);
 }

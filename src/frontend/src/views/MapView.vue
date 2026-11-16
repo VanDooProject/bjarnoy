@@ -80,7 +80,7 @@ import { razeBlock, razeRefund, razeSeconds } from '../lib/map/raze';
 import { formatBuildTime, formatMissingResources, longhouseLock, scaledBuildSeconds } from '../lib/map/ringCatalogue';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { ringShapes } from '../lib/map/ringLayout';
-import { buildingEntryId, cancellableBuildOrder, offersUpgradeAndRaze, primaryActionFirst } from '../lib/map/ringActions';
+import { buildingEntryId, cancellableOrder, offersUpgradeAndRaze, primaryActionFirst } from '../lib/map/ringActions';
 import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
 import { useRingMaxScale } from '../composables/useRingMaxScale';
 import type { Tile } from '../lib/map/types';
@@ -1263,12 +1263,18 @@ function rootActionList(): RingAction[] {
       upgrade,
       razeActionFor(tile),
     ];
-    // A build or upgrade still in the queue (under construction or waiting for a slot) can be taken back from the ring.
-    const cancellable = cancellableBuildOrder(world.hud.queue, tile);
+    // An order still in the queue (under construction or waiting for a slot) can be taken back from the ring.
+    const cancellable = cancellableOrder(world.hud.queue, tile);
     if (cancellable) {
       actions.push({
         id: 'cancel-build',
-        label: t(cancellable.targetLevel <= 1 ? 'hud.ringMenu.actions.cancelBuild' : 'hud.ringMenu.actions.cancelUpgrade'),
+        label: t(
+          cancellable.kind === 'raze'
+            ? 'hud.ringMenu.actions.cancelRaze'
+            : cancellable.targetLevel <= 1
+              ? 'hud.ringMenu.actions.cancelBuild'
+              : 'hud.ringMenu.actions.cancelUpgrade',
+        ),
       });
     }
     // Training belongs to a building: every building any UnitDefinition.RequiredBuildingType
@@ -1595,11 +1601,11 @@ async function raze() {
   });
 }
 
-/** Takes back the newest build or upgrade order on the selected hex (the cost comes back); a refusal shows in the chip under the hex. */
+/** Takes back the newest order (build, upgrade or raze) on the selected hex (the cost comes back); a refusal shows in the chip under the hex. */
 async function cancelBuild() {
   const coord = selectedCoord.value;
   if (!coord) return;
-  const order = cancellableBuildOrder(world.hud.queue, coord);
+  const order = cancellableOrder(world.hud.queue, coord);
   closeModal();
   if (!order) return;
   try {

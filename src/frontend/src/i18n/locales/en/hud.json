@@ -159,6 +159,7 @@
       "raze": "Raze",
       "cancelBuild": "Cancel build",
       "cancelUpgrade": "Cancel upgrade",
+      "cancelRaze": "Cancel raze",
       "cantRazeLonghouse": "Can't raze the longhouse",
       "trainUnits": "Train units",
       "feasts": "Feasts",
