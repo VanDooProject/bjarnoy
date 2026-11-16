@@ -34,8 +34,8 @@
         "walls": "Die Palisade braucht einen Turm auf Stufe 5."
       },
       "tiles": {
+        "rivers": "Wie ein Fluss verläuft, aus welchen Stücken er besteht und was darauf steht.",
         "bogLands": "Die Moorfelder im Einzelnen.",
-        "production": "Was die Gebäude auf dem jeweiligen Boden erzeugen.",
         "landMovement": "Was jedes Feld eine Armee beim Überqueren kostet."
       },
       "bogLands": {
@@ -71,7 +71,7 @@
       "landMovement": {
         "walls": "Ein Mauerfeld hält jede Landarmee auf.",
         "wildlifeCamps": "Starke Lager überfallen Armeen, die ihnen zu nahe kommen.",
-        "founding": "Siedler ziehen über dieselben Böden."
+        "rivers": "Bäche, breite Flüsse und wo eine Brücke stehen kann."
       },
       "ships": {
         "shrines": "Njörds Schrein lässt deine Schiffe härter zuschlagen.",
@@ -92,6 +92,11 @@
         "founding": "Wie deine erste Landung im Spiel abläuft.",
         "realm": "Was das Reich ausmacht, das du für den Sohn des Jarls aufbaust.",
         "ships": "Die Langschiffe, die dich hergebracht haben."
+      },
+      "rivers": {
+        "landMovement": "Wie Armeen Bäche durchwaten und breite Flüsse über eine Brücke überqueren.",
+        "production": "Wie Mühlen deine Holzfäller und Bauernhöfe steigern.",
+        "bogLands": "Die Moorseen und Moorbäche, durch die Flüsse laufen."
       }
     }
   },
@@ -130,6 +135,10 @@
       "tiles": {
         "title": "Kacheln",
         "description": "Der Boden deiner Insel und was du darauf bauen kannst."
+      },
+      "rivers": {
+        "title": "Flüsse",
+        "description": "Von der Quelle zum Meer: Bäche, breite Flüsse, Brücken und die Mühlen am Ufer."
       },
       "bogLands": {
         "title": "Moorland",
@@ -325,17 +334,6 @@
     "generation": "Entstehung:",
     "buildings": "Gebäude:",
     "none": "keine",
-    "riverVariants": "Form:",
-    "riverSawmillNote": "Die Sägemühle ist das einzige Gebäude, das direkt auf einem Flussfeld steht – und nur auf einem geraden oder gebogenen.",
-    "riverLookLabel": "Aussehen:",
-    "riverLooks": {
-      "plain": "Schlicht",
-      "island": "Insel",
-      "meander": "Mäander",
-      "loop": "Schlaufe",
-      "narrow": "Schmal",
-      "wide": "Breit"
-    },
     "mountainVariants": "Landform:",
     "mountainLandforms": {
       "plain": "Schlicht",
@@ -354,13 +352,6 @@
       "whaleBones": "Walknochen",
       "boat": "Kieloben liegendes Boot",
       "sandCastle": "Sandburg"
-    },
-    "riverShapes": {
-      "spring": "Quelle",
-      "straight": "Gerade",
-      "bend": "Biegung",
-      "bend60": "Biegung (60°)",
-      "confluence": "Zusammenfluss"
     },
     "entries": {
       "sea": {
@@ -400,10 +391,12 @@
       },
       "river": {
         "title": "Fluss",
-        "lore": "Wasser, das sich selbst einen Weg durch das Land gräbt, von einer Bergquelle hinunter zum Meer. Die Grafik eines Flussfelds ersetzt das Landgelände, über das er fließt, vollständig.",
-        "generation": "Der Fluss verläuft von einer Quelle auf einem geeigneten Gebirgscluster (mindestens 2 zusammenhängende Gebirgsfelder) bergab bis zur Küste und mäandert dabei. Kreuzen sich zwei Flüsse, verschmelzen sie zu einem Zusammenfluss. Alles, was kürzer als 2 Felder ist, wird verworfen."
+        "lore": "Wasser, das von einer Bergquelle hinunter zum Meer fließt. Einen Bach kannst du durchwaten, ein breiter Fluss hält Landarmeen auf, solange keine Brücke darüber führt.",
+        "generation": "Ein Fluss entspringt einer Quelle, fließt als Bach, wird einmal zu einem breiten Fluss und endet im Meer in einem Delta."
       }
-    }
+    },
+    "riverNote": "Was du auf einem Fluss bauen kannst und wie er von der Quelle zum Meer verläuft, steht auf der Seite {link}.",
+    "riverNoteLink": "Flüsse"
   },
   "impressum": {
     "title": "Impressum",
@@ -1527,5 +1520,123 @@
   "historyNotes": {
     "toggle": "Geschichte zeigen",
     "label": "Geschichte"
+  },
+  "rivers": {
+    "title": "Flüsse",
+    "intro": "Wo ein Fluss entspringt, wie aus einem Bach ein breiter Fluss wird und was du darauf bauen und darüber marschieren kannst.",
+    "example": {
+      "heading": "Beispielkarte",
+      "body": "Eine echte Insel, die das Spiel erzeugt hat, mit Flüssen, Lagern und einer kleinen Siedlung. Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
+      "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
+      "pieces": {
+        "spring": "Quelle",
+        "stream": "Bach",
+        "widening": "Verbreiterung",
+        "river": "Breiter Fluss",
+        "confluence": "Zusammenfluss",
+        "mouth": "Delta"
+      }
+    },
+    "course": {
+      "heading": "Von der Quelle zum Meer",
+      "rise": "Ein Fluss entspringt an einer Quelle am Rand eines Gebirges und beginnt als Bach. Der Bach fließt hinunter zum Meer oder mündet in einen anderen Bach oder in einen Fluss.",
+      "widen": "Dort, wo zwei Bäche zusammenfließen, oder irgendwo vor dem Meer, wird ein Bach einmal zu einem breiten Fluss und bleibt es bis zum Meer. Ein Bach kann auch direkt in einen breiten Fluss münden.",
+      "delta": "Jeder Fluss endet im Meer in einem Delta. Am Strand entlang fließt nie ein Fluss.",
+      "bog": "Manche Flüsse fließen durch einen Moorsee, manche entspringen einer Quelle im Moor: siehe {link}.",
+      "bogLink": "Moorland",
+      "valleys": "Ein großes Tal, das ringsum von Bergen eingeschlossen ist, bekommt meist einen Bach, der durch die Berge hinausführt. So kommt eine Armee dort heraus.",
+      "courseTechNote": "Der Generator entwässert jede Insel über ein paar Abflüsse ins Meer, hält die Quellen auseinander und lässt die Läufe mäandern. Ein von Bergen eingeschlossenes Tal ab 100 Feldern bekommt einen Bach durch die Berge nach draußen. Details: docs/design/river-generation.md."
+    },
+    "pieces": {
+      "heading": "Flussstücke",
+      "body": "Ein Fluss setzt sich aus diesen Stücken zusammen. Wähl Breite und Aussehen, um jedes zu sehen.",
+      "widthLabel": "Breite:",
+      "lookLabel": "Aussehen:",
+      "widths": {
+        "stream": "Bach",
+        "river": "Breiter Fluss"
+      },
+      "looks": {
+        "plain": "Schlicht",
+        "island": "Insel",
+        "meander": "Mäander",
+        "loop": "Schlaufe",
+        "narrow": "Schmal",
+        "wide": "Breit",
+        "corrie": "Kar",
+        "saddleback": "Sattelberg"
+      },
+      "entries": {
+        "spring": {
+          "name": "Quelle",
+          "body": "Hier entspringt ein Fluss, am Fuß eines Berges. Er beginnt immer als Bach."
+        },
+        "straight": {
+          "name": "Gerade",
+          "body": "Der Fluss läuft gerade durch das Feld. Manche Varianten teilen sich um eine Kiesbank oder schlängeln sich in einem Mäander."
+        },
+        "bend": {
+          "name": "Biegung",
+          "body": "Der Fluss macht eine Kurve. Manche Varianten teilen sich um eine Kiesbank oder mäandern."
+        },
+        "bend60": {
+          "name": "Scharfe Biegung",
+          "body": "Eine enge Kehre, die fast zurückläuft. Eine Variante dreht eine ganze Schlaufe."
+        },
+        "widening": {
+          "name": "Verbreiterung",
+          "body": "Hier wird ein Bach einmal zu einem breiten Fluss."
+        },
+        "streamsMeet": {
+          "name": "Bäche treffen sich",
+          "body": "Zwei Bäche fließen zusammen und laufen als ein breiter Fluss weiter."
+        },
+        "confluence": {
+          "name": "Zusammenfluss",
+          "body": "Zwei breite Flüsse werden zu einem."
+        },
+        "streamIntoRiver": {
+          "name": "Bach mündet in Fluss",
+          "body": "Ein Bach mündet in einen breiten Fluss."
+        },
+        "mouth": {
+          "name": "Delta",
+          "body": "Hier erreicht der Fluss das Meer."
+        }
+      }
+    },
+    "crossing": {
+      "heading": "Bäche und breite Flüsse",
+      "stream": "Einen Bach kannst du durchwaten: Jede Landarmee kommt hindurch, wenn auch langsam.",
+      "river": "Ein breiter Fluss hält Landarmeen auf, es sei denn, eine {bridge} führt darüber. Wie lange eine Überquerung dauert und was jede Brückenstufe bringt, steht unter {link}.",
+      "moveLink": "Bewegung an Land",
+      "walls": "Eine Mauer, die an einem breiten Fluss endet, ist dort verschlossen. Ein Bach lässt in einer Mauer dagegen immer eine Lücke. Mehr dazu unter {link}.",
+      "wallsLink": "Mauern"
+    },
+    "building": {
+      "heading": "Bauen am Fluss",
+      "body": "Nur ein breiter Fluss nimmt Gebäude auf, und zwar nur diese:",
+      "building": "Gebäude",
+      "stands": "Steht auf",
+      "rows": {
+        "sawmill": "Einem geraden oder gebogenen Stück, nicht der Haarnadelschlaufe",
+        "cropmill": "Nur einem geraden Stück",
+        "bridge": "Einem geraden oder gebogenen Stück, innerhalb deines Gebiets"
+      },
+      "nothing": "Auf einer Quelle, einem Bach, einer Verbreiterung, einem Zusammenfluss oder einem Delta kannst du nichts bauen. Mauern und Türme stehen ebenfalls nie auf einem Fluss.",
+      "mills": "Das Sägewerk steigert jeden {lumberjack} in seiner Reichweite, die Getreidemühle jeden {farm}; die Zahlen stehen unter {link}.",
+      "productionLink": "Rohstoffproduktion",
+      "creek": "Die {hammer} steht stattdessen an einem Moorbach: siehe {link}."
+    },
+    "camps": {
+      "heading": "Lager am Fluss",
+      "body": "Die Bärenstromschnelle und die Otterrutsche liegen an einem geraden, breiten Fluss. Was sie bewachen und was sie abwerfen, steht unter {link}.",
+      "link": "Wildtierlager"
+    },
+    "lava": {
+      "heading": "Lava",
+      "body": "In den {link} fließt Lava statt Wasser.",
+      "link": "Ödlanden"
+    }
   }
 }

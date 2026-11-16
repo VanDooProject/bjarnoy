@@ -38,7 +38,7 @@ describe('docsPages', () => {
   it('keeps the hub order: story, island, building, move, beyond', () => {
     expect(DOCS_GROUPS.map((g) => g.id)).toEqual(['story', 'island', 'building', 'move', 'beyond']);
     expect(DOCS_PAGES.map((p) => p.id)).toEqual([
-      'saga', 'tiles', 'bogLands', 'techTree', 'production', 'shrines', 'walls', 'realm', 'training', 'founding', 'beachCamp', 'landMovement', 'ships', 'wildlifeCamps', 'wastedLands',
+      'saga', 'tiles', 'rivers', 'bogLands', 'techTree', 'production', 'shrines', 'walls', 'realm', 'training', 'founding', 'beachCamp', 'landMovement', 'ships', 'wildlifeCamps', 'wastedLands',
     ]);
   });
 
@@ -72,7 +72,7 @@ describe('docsPages', () => {
   it('has a header art mode per page: icon for single-family pages, backdrop for the rest', () => {
     const modes = Object.fromEntries(DOCS_PAGES.map((p) => [p.id, p.headerArt]));
     expect(modes).toEqual({
-      saga: 'backdrop', tiles: 'icon', bogLands: 'icon', walls: 'icon', shrines: 'icon', production: 'icon', wildlifeCamps: 'icon',
+      saga: 'backdrop', tiles: 'icon', rivers: 'icon', bogLands: 'icon', walls: 'icon', shrines: 'icon', production: 'icon', wildlifeCamps: 'icon',
       techTree: 'backdrop', training: 'backdrop', founding: 'backdrop', beachCamp: 'backdrop', realm: 'backdrop', landMovement: 'backdrop', ships: 'backdrop', wastedLands: 'backdrop',
     });
   });

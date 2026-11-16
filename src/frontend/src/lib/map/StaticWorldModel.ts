@@ -18,13 +18,15 @@
 import { coordKey, type AxialCoord } from '../hex/coords';
 import { WorldModel, terrainKey } from './WorldModel';
 import type { RiverTile, Terrain, Tile } from './types';
+import type { WorldGenerationConstants } from './worldGenerator';
 
 export class StaticWorldModel extends WorldModel {
   private staticTiles = new Map<string, Tile>();
   private staticRivers = new Map<string, RiverTile>();
 
-  constructor(tiles: Tile[] = []) {
-    super();
+  /** `seed` and `generation` are the world the fixed layout came from: the river art variant a hex draws (and the Sawmill's loop rule reads) is sampled from them. */
+  constructor(tiles: Tile[] = [], seed?: number, generation?: WorldGenerationConstants) {
+    super(seed, generation);
     this.setTiles(tiles);
   }
 

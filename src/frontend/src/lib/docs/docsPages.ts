@@ -7,6 +7,7 @@
 export type DocsPageId =
   | 'saga'
   | 'tiles'
+  | 'rivers'
   | 'bogLands'
   | 'techTree'
   | 'production'
@@ -86,7 +87,8 @@ export const DOCS_GROUPS: DocsGroupEntry[] = [
     page('saga', '/docs/saga', 'greathall_SE_level004', 'backdrop', ['founding', 'realm', 'ships']),
   ]),
   group('island', [
-    page('tiles', '/docs/tiles', 'foresttile_SE_variant001', 'icon', ['bogLands', 'production', 'landMovement']),
+    page('tiles', '/docs/tiles', 'foresttile_SE_variant001', 'icon', ['rivers', 'bogLands', 'landMovement']),
+    page('rivers', '/docs/rivers', 'rivertile_SE', 'icon', ['landMovement', 'production', 'bogLands']),
     page('bogLands', '/docs/bog-lands', 'bog_SE_variant004', 'icon', ['tiles', 'production', 'wildlifeCamps']),
   ]),
   group('building', [
@@ -101,7 +103,7 @@ export const DOCS_GROUPS: DocsGroupEntry[] = [
     page('training', '/docs/training', 'barracks_SE_level004', 'backdrop', ['founding', 'ships', 'realm']),
     page('founding', '/docs/founding', 'cartworkshop_SE_level004', 'backdrop', ['landMovement', 'wildlifeCamps', 'realm']),
     page('beachCamp', '/docs/beach-camp', 'beachcamp_SE_level001', 'backdrop', ['founding', 'ships', 'realm']),
-    page('landMovement', '/docs/land-movement', 'riverbridge_SE_level004', 'backdrop', ['walls', 'wildlifeCamps', 'founding']),
+    page('landMovement', '/docs/land-movement', 'riverbridge_SE_level004', 'backdrop', ['walls', 'wildlifeCamps', 'rivers']),
     page('ships', '/docs/ships', 'dockyard_SE_level007', 'backdrop', ['shrines', 'walls', 'wildlifeCamps']),
   ]),
   group('beyond', [

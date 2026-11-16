@@ -178,6 +178,13 @@ export const router = createRouter({
       beforeEnter: () => startAtlasManifestLoad(),
     },
     {
+      path: '/docs/rivers',
+      name: 'rivers-docs',
+      component: () => import('../views/RiversView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
       path: '/docs/wasted-lands',
       name: 'wasted-lands-docs',
       component: () => import('../views/WastedLandsView.vue'),

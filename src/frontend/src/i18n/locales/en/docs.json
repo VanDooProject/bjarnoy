@@ -34,8 +34,8 @@
         "walls": "The palisade needs a level-5 Tower."
       },
       "tiles": {
+        "rivers": "How a river runs, its pieces and what stands on it.",
         "bogLands": "The bog tiles in detail.",
-        "production": "What the buildings on each ground produce.",
         "landMovement": "What each ground costs an army to cross."
       },
       "bogLands": {
@@ -71,7 +71,7 @@
       "landMovement": {
         "walls": "A wall hex stops every land army.",
         "wildlifeCamps": "Strong camps ambush armies that come close.",
-        "founding": "Settlers cross the same grounds."
+        "rivers": "Streams, wide rivers and where a bridge can stand."
       },
       "ships": {
         "shrines": "Njörd's shrine makes your ships attack harder.",
@@ -92,6 +92,11 @@
         "founding": "How your first landfall works in the game.",
         "realm": "What the realm you build for the jarl's son is made of.",
         "ships": "The longships that carried you here."
+      },
+      "rivers": {
+        "landMovement": "How armies wade streams and cross wide rivers over a bridge.",
+        "production": "How mills raise your Lumberjacks and Farms.",
+        "bogLands": "The bog lakes and creeks that rivers run through."
       }
     }
   },
@@ -130,6 +135,10 @@
       "tiles": {
         "title": "Tiles",
         "description": "The ground your island is made of and what you can build on it."
+      },
+      "rivers": {
+        "title": "Rivers",
+        "description": "From spring to sea: streams, wide rivers, bridges and the mills on the bank."
       },
       "bogLands": {
         "title": "Bog lands",
@@ -325,17 +334,6 @@
     "generation": "Generation:",
     "buildings": "Buildings:",
     "none": "none",
-    "riverVariants": "Shape:",
-    "riverSawmillNote": "The Sawmill is the one building that goes directly on a river tile — only a Straight or Bend one.",
-    "riverLookLabel": "Look:",
-    "riverLooks": {
-      "plain": "Plain",
-      "island": "Island",
-      "meander": "Meander",
-      "loop": "Loop",
-      "narrow": "Narrow",
-      "wide": "Wide"
-    },
     "mountainVariants": "Landform:",
     "mountainLandforms": {
       "plain": "Plain",
@@ -354,13 +352,6 @@
       "whaleBones": "Whale bones",
       "boat": "Upturned boat",
       "sandCastle": "Sand castle"
-    },
-    "riverShapes": {
-      "spring": "Spring",
-      "straight": "Straight",
-      "bend": "Bend",
-      "bend60": "Bend (60°)",
-      "confluence": "Confluence"
     },
     "entries": {
       "sea": {
@@ -400,10 +391,12 @@
       },
       "river": {
         "title": "River",
-        "lore": "Water cut through the land itself, from a mountain spring down to the sea — a river tile's art fully replaces whatever land terrain it flows over.",
-        "generation": "Traced downhill from a spring on a qualifying mountain cluster (2+ connected mountain tiles) to the coast, meandering as it goes; two rivers that cross merge into a confluence, and anything shorter than 2 tiles is discarded."
+        "lore": "Water running from a mountain spring down to the sea. A stream can be waded; a wide river stops land armies unless a bridge spans it.",
+        "generation": "A river rises at a spring, runs as a stream, widens once into a wide river and ends in a delta at the sea."
       }
-    }
+    },
+    "riverNote": "What can be built on a river, and how it runs from spring to sea, is on the {link} page.",
+    "riverNoteLink": "Rivers"
   },
   "impressum": {
     "title": "Impressum",
@@ -1527,5 +1520,123 @@
   "historyNotes": {
     "toggle": "Show history",
     "label": "History"
+  },
+  "rivers": {
+    "title": "Rivers",
+    "intro": "Where a river rises, how a stream grows into a wide river, and what you can build on it and march across.",
+    "example": {
+      "heading": "Example map",
+      "body": "A real island the game generated, with its rivers, camps and a small settlement. Hover a hex to see what it is.",
+      "hoverHint": "Hover a hex to see what it is.",
+      "pieces": {
+        "spring": "Spring",
+        "stream": "Stream",
+        "widening": "Widening",
+        "river": "Wide river",
+        "confluence": "Confluence",
+        "mouth": "Delta"
+      }
+    },
+    "course": {
+      "heading": "From spring to sea",
+      "rise": "A river rises at a spring at the edge of a mountain range and starts out as a stream. A stream runs down to the sea, or joins another stream or a river.",
+      "widen": "Where two streams meet, or somewhere before it reaches the sea, a stream widens once into a wide river and stays wide down to the sea. A stream can also flow straight into a wide river.",
+      "delta": "Every river ends in a delta at the sea. Rivers never run along the beach.",
+      "bog": "Some rivers run through a bog lake, and some rise from a spring in a bog: see {link}.",
+      "bogLink": "Bog lands",
+      "valleys": "A big valley that mountains close in on every side usually gets a stream that leads out through the mountains, so an army can walk out of it.",
+      "courseTechNote": "The generator drains each island through a few outlets to the sea, keeps springs spaced apart and lets the courses meander. A valley enclosed by mountains of 100 or more hexes gets a stream out through the mountains. Details: docs/design/river-generation.md."
+    },
+    "pieces": {
+      "heading": "River pieces",
+      "body": "A river is drawn from these pieces. Pick a width and a look to see each one.",
+      "widthLabel": "Width:",
+      "lookLabel": "Look:",
+      "widths": {
+        "stream": "Stream",
+        "river": "Wide river"
+      },
+      "looks": {
+        "plain": "Plain",
+        "island": "Island",
+        "meander": "Meander",
+        "loop": "Loop",
+        "narrow": "Narrow",
+        "wide": "Wide",
+        "corrie": "Corrie",
+        "saddleback": "Saddleback"
+      },
+      "entries": {
+        "spring": {
+          "name": "Spring",
+          "body": "Where a river rises, at the foot of a mountain. It always starts as a stream."
+        },
+        "straight": {
+          "name": "Straight",
+          "body": "The river runs straight through the hex. Some looks split round a gravel bar or wander in a lazy meander."
+        },
+        "bend": {
+          "name": "Bend",
+          "body": "The river turns a corner. Some looks split round a gravel bar or meander."
+        },
+        "bend60": {
+          "name": "Sharp bend",
+          "body": "A tight turn that almost doubles back. One look loops round on itself."
+        },
+        "widening": {
+          "name": "Widening",
+          "body": "A stream widens here, once, into a wide river."
+        },
+        "streamsMeet": {
+          "name": "Streams meet",
+          "body": "Two streams meet and flow on as one wide river."
+        },
+        "confluence": {
+          "name": "Confluence",
+          "body": "Two wide rivers join into one."
+        },
+        "streamIntoRiver": {
+          "name": "Stream joins river",
+          "body": "A stream flows into a wide river."
+        },
+        "mouth": {
+          "name": "Delta",
+          "body": "Where the river reaches the sea."
+        }
+      }
+    },
+    "crossing": {
+      "heading": "Streams and wide rivers",
+      "stream": "A stream is shallow enough to wade: any land army crosses it, slowly.",
+      "river": "A wide river stops land armies unless a {bridge} spans it. How long a crossing takes, and what each bridge level does, is on {link}.",
+      "moveLink": "Land movement",
+      "walls": "A wall that ends at a wide river is sealed there; a stream always leaves a gap in a wall. See {link}.",
+      "wallsLink": "Walls"
+    },
+    "building": {
+      "heading": "Building on rivers",
+      "body": "Only a wide river takes buildings, and only these:",
+      "building": "Building",
+      "stands": "Stands on",
+      "rows": {
+        "sawmill": "A straight or bending piece, but not the looping hairpin",
+        "cropmill": "A straight piece only",
+        "bridge": "A straight or bending piece, inside your claim"
+      },
+      "nothing": "Nothing can be built on a spring, a stream, a widening, a confluence or a delta. Walls and towers never stand on a river either.",
+      "mills": "The Sawmill boosts every {lumberjack} in its range, the Crop Mill every {farm}; the numbers are on {link}.",
+      "productionLink": "Resource production",
+      "creek": "The {hammer} stands on a bog creek instead: see {link}."
+    },
+    "camps": {
+      "heading": "Camps on rivers",
+      "body": "The Bear rapids and the Otter slide stand on a straight wide river. What they guard and what they give is on {link}.",
+      "link": "Wildlife camps"
+    },
+    "lava": {
+      "heading": "Lava",
+      "body": "On the {link} the rivers run with lava.",
+      "link": "Wasted Lands"
+    }
   }
 }

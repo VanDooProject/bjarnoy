@@ -9,6 +9,7 @@ import DocsPicker from '../components/docs/DocsPicker.vue';
 import DocsTileEntry from '../components/docs/DocsTileEntry.vue';
 import DocsToc from '../components/docs/DocsToc.vue';
 import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
+import DocsPageLink from '../components/docs/DocsPageLink.vue';
 import {
   coastalWaterArt,
   riverArt,
@@ -24,60 +25,6 @@ const catalogue = useBuildingCatalogueStore();
 const { t, te, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 onMounted(() => catalogue.load());
-
-// A river shape has no `Terrain`/`AllowedTerrain` entry of its own — its art
-// fully replaces whatever land it flows over (see WorldModel's `river`
-// rendering branch) — so it gets one entry with a shape picker below rather
-// than being folded into the terrain list.
-const RIVER_SHAPES = ['spring', 'straight', 'bend', 'bend60', 'confluence'] as const;
-type RiverShape = (typeof RIVER_SHAPES)[number];
-const riverShape = ref<RiverShape>('straight');
-
-// The pack shipped alternate art for four of the five shapes above — not a
-// different connectivity, just a different picture for the same crossing
-// (VanDooProject/3d_assets' asset-inventory.md: "the number in these names
-// is the family's turn-through angle... not the shape of its own channel").
-// `Confluence` is the one exception: `ywide` is a genuinely different
-// junction (three arms 120° apart each) rather than a reskin of `y_narrow`'s
-// asymmetric one — still offered as a "look" here for a consistent picker,
-// but see routing.ts's `confluenceOrientationOf` for where that distinction
-// actually matters (which real in-game confluences each family can render).
-const RIVER_LOOKS: Partial<Record<RiverShape, { id: string; family: string; labelKey: string }[]>> = {
-  straight: [
-    { id: 'plain', family: 'rivertile', labelKey: 'docs.tiles.riverLooks.plain' },
-    { id: 'island', family: 'rivertile_bend180_island', labelKey: 'docs.tiles.riverLooks.island' },
-    { id: 'meander', family: 'rivertile_bend180_meander', labelKey: 'docs.tiles.riverLooks.meander' },
-  ],
-  bend: [
-    { id: 'plain', family: 'rivertile_bend', labelKey: 'docs.tiles.riverLooks.plain' },
-    { id: 'island', family: 'rivertile_bend120_island', labelKey: 'docs.tiles.riverLooks.island' },
-    { id: 'meander', family: 'rivertile_bend120_meander', labelKey: 'docs.tiles.riverLooks.meander' },
-  ],
-  bend60: [
-    { id: 'plain', family: 'rivertile_bend60', labelKey: 'docs.tiles.riverLooks.plain' },
-    { id: 'loop', family: 'rivertile_bend60_loop', labelKey: 'docs.tiles.riverLooks.loop' },
-  ],
-  confluence: [
-    { id: 'narrow', family: 'rivertile_y_narrow', labelKey: 'docs.tiles.riverLooks.narrow' },
-    { id: 'wide', family: 'rivertile_ywide', labelKey: 'docs.tiles.riverLooks.wide' },
-  ],
-};
-const riverLook = ref<string>('');
-
-function riverLooksFor(shape: RiverShape) {
-  return RIVER_LOOKS[shape] ?? [];
-}
-function selectedRiverLookId(shape: RiverShape): string {
-  return riverLook.value || riverLooksFor(shape)[0]?.id || '';
-}
-const riverShapeArt = computed<ArtRef>(() => {
-  const looks = riverLooksFor(riverShape.value);
-  if (looks.length > 0) {
-    const look = looks.find((l) => l.id === selectedRiverLookId(riverShape.value)) ?? looks[0]!;
-    return terrainArtByFamily(look.family);
-  }
-  return riverArt(riverShape.value);
-});
 
 // The pack carves a mountain hex into one of three landforms (plus the
 // plain, undecorated look `terrainArt('mountain')` otherwise shows) — same
@@ -150,7 +97,6 @@ const TILES = computed<TileEntry[]>(() => [
 
 /** The picture a tile's card shows — the river/mountain/sand entries swap in whichever shape/landform/look is picked, everything else is static. */
 function thumbArt(tile: TileEntry): ArtRef {
-  if (tile.river) return riverShapeArt.value;
   if (tile.mountain) return mountainVariantArt.value;
   if (tile.sand) return sandLookArt.value;
   return tile.art;
@@ -235,7 +181,11 @@ const buildingsByTile = computed(() => {
           {{ $t('docs.tiles.generation') }} {{ t(`docs.tiles.entries.${tileEntryKey(tile.id)}.generation`) }}
         </p>
       </DocsAdminNote>
-      <p v-if="tile.river" class="buildings">{{ $t('docs.tiles.riverSawmillNote') }}</p>
+      <i18n-t v-if="tile.river" keypath="docs.tiles.riverNote" tag="p" class="buildings" scope="global">
+        <template #link>
+          <DocsPageLink to="/docs/rivers">{{ $t('docs.tiles.riverNoteLink') }}</DocsPageLink>
+        </template>
+      </i18n-t>
       <p v-else class="buildings">
         {{ $t('docs.tiles.buildings') }}
         <span v-if="buildingsByTile[tile.id]?.length">{{ buildingsByTile[tile.id]!.join(', ') }}</span>
@@ -243,33 +193,6 @@ const buildingsByTile = computed(() => {
       </p>
 
       <template #pickers>
-        <!-- A river's picture depends on its shape (Straight/Bend/Bend60/Spring/
-             Confluence — see docs/design/river-generation.md), so instead of one
-             static thumbnail this is a small gallery: pick a shape, the thumbnail
-             above updates to it. -->
-        <DocsPicker
-          v-if="tile.river"
-          :label="$t('docs.tiles.riverVariants')"
-          :options="RIVER_SHAPES.map((shape) => ({ value: shape, label: t(`docs.tiles.riverShapes.${shape}`) }))"
-          :model-value="riverShape"
-          @update:model-value="
-            riverShape = $event;
-            riverLook = '';
-          "
-        />
-
-        <!-- The pack shipped more than one look for most shapes (a plain
-             channel vs. one that divides round a gravel bar, or meanders, or
-             loops back on itself) — a second picker, only shown for shapes
-             that actually have alternates. -->
-        <DocsPicker
-          v-if="tile.river && riverLooksFor(riverShape).length > 0"
-          :label="$t('docs.tiles.riverLookLabel')"
-          :options="riverLooksFor(riverShape).map((look) => ({ value: look.id, label: t(look.labelKey) }))"
-          :model-value="selectedRiverLookId(riverShape)"
-          @update:model-value="riverLook = $event"
-        />
-
         <!-- Same idea for Mountain's landform (Plain/Corrie/Saddleback/Table) —
              the Quarry building's own variant picker sits on one of these. -->
         <DocsPicker
