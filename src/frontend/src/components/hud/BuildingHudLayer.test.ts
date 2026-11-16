@@ -597,6 +597,29 @@ describe('BuildingHudLayer', () => {
     }
     const rich = { wood: 1e6, stone: 1e6, food: 1e6, iron: 1e6 };
 
+    it('makes room in the box for the level hex while the quick look shows: the content moves right, the box stays against the dial', async () => {
+      premium(true);
+      const world = seedBuildings();
+      world.hud.available = { ...rich };
+      world.hud.storageCap = { ...rich };
+      const renderer = fakeRenderer();
+      wrapper = mountLayer(renderer);
+      renderer.dialMapScale = 1;
+      runFrame();
+      await flushPromises();
+      const box = () => wrapper!.get<HTMLElement>('[data-coord="3,0"] .hud-marker__box').element.style;
+      const plain = { left: box().marginLeft, pad: parseFloat(box().paddingLeft) };
+
+      useQuickUpgradeStore().setShift(true);
+      await flushPromises();
+      expect(box().marginLeft).toBe(plain.left);
+      expect(parseFloat(box().paddingLeft)).toBeGreaterThan(plain.pad);
+
+      useQuickUpgradeStore().setShift(false);
+      await flushPromises();
+      expect(parseFloat(box().paddingLeft)).toBe(plain.pad);
+    });
+
     it('shows the markers with glyphs in place of levels while Shift is held, even with building info off', async () => {
       localStorage.setItem('bjarnoy.hudBuildingInfo', 'off');
       premium(true);
