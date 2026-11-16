@@ -643,6 +643,8 @@ function onArmyTap(armyId: string, screen: { x: number; y: number }): boolean {
   if (!world.sendPicker) {
     if (world.dispatchDraft || world.fieldOrderDraft) return false;
     world.selectArmy(armyId);
+    // The selection shows in the Armies panel, so bring it up if it was closed or collapsed (the docked panel is settlement view, desktop only).
+    if (!isMobile.value && mode.value === 'settlement') hudPrefs.showPanel('armies');
     return !!world.armies.find((a) => a.id === armyId)?.movement;
   }
   const row = sendPicker.rows.value.find((r) => r.id === armyId);
