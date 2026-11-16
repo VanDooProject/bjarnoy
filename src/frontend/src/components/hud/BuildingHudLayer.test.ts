@@ -597,6 +597,29 @@ describe('BuildingHudLayer', () => {
     }
     const rich = { wood: 1e6, stone: 1e6, food: 1e6, iron: 1e6 };
 
+    it('makes room in the box for the level hex while the quick look shows: the content moves right, the box stays against the dial', async () => {
+      premium(true);
+      const world = seedBuildings();
+      world.hud.available = { ...rich };
+      world.hud.storageCap = { ...rich };
+      const renderer = fakeRenderer();
+      wrapper = mountLayer(renderer);
+      renderer.dialMapScale = 1;
+      runFrame();
+      await flushPromises();
+      const box = () => wrapper!.get<HTMLElement>('[data-coord="3,0"] .hud-marker__box').element.style;
+      const plain = { left: box().marginLeft, pad: parseFloat(box().paddingLeft) };
+
+      useQuickUpgradeStore().setShift(true);
+      await flushPromises();
+      expect(box().marginLeft).toBe(plain.left);
+      expect(parseFloat(box().paddingLeft)).toBeGreaterThan(plain.pad);
+
+      useQuickUpgradeStore().setShift(false);
+      await flushPromises();
+      expect(parseFloat(box().paddingLeft)).toBe(plain.pad);
+    });
+
     it('shows the markers with glyphs in place of levels while Shift is held, even with building info off', async () => {
       localStorage.setItem('bjarnoy.hudBuildingInfo', 'off');
       premium(true);
@@ -612,7 +635,9 @@ describe('BuildingHudLayer', () => {
       // The barracks can be upgraded now: the double chevron, and no level number.
       const barracks = wrapper!.get('[data-coord="3,0"]');
       expect(barracks.find('.hud-dial__glyph--up').exists()).toBe(true);
-      expect(barracks.find('text').exists()).toBe(false);
+      // The level moves into the small hex at the dial's corner: it is the only number the dial shows.
+      expect(barracks.findAll('text')).toHaveLength(1);
+      expect(barracks.get('.hud-dial__level text').text()).toBe('2');
       // The tower stands at its maximum: it keeps its level.
       expect(wrapper.get('[data-coord="2,0"] text').text()).toBe('10');
       expect(wrapper.find('[data-coord="2,0"] .hud-dial__glyph').exists()).toBe(false);

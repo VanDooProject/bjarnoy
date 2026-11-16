@@ -329,12 +329,19 @@ const DIAL_HALF = DIAL_RADIUS + DIAL_PAD;
 const innerStyle = { left: `${-DIAL_HALF}px`, top: `${-DIAL_HALF}px`, height: `${2 * DIAL_HALF}px` };
 
 /** The box starts on the dial's vertical centre line, behind the dial, with its text clear of the dial's right half. */
-function boxStyle(currentTier: HudTier) {
+/**
+ * How far the quick look's level hex (BuildingHudDial: on the dial's lower right corner point, 0.6 of the dial) reaches past the
+ * dial's right edge, ring included: the box's content moves right by this much so the hex never covers it. The box itself keeps
+ * its place against the dial and grows to the right (no gap between dial and box).
+ */
+const LEVEL_HEX_OVERHANG = (0.866 * 0.98 + 0.6 * 0.866 - 0.866) * DIAL_RADIUS + 2;
+
+function boxStyle(currentTier: HudTier, quickLook = false) {
   const half = (DIAL_RADIUS * Math.sqrt(3)) / 2;
   return {
     maxHeight: `${2 * DIAL_RADIUS}px`,
     marginLeft: `${-DIAL_HALF}px`,
-    paddingLeft: `${half + (currentTier === 'near' ? 9 : 7)}px`,
+    paddingLeft: `${half + (currentTier === 'near' ? 9 : 7) + (quickLook ? LEVEL_HEX_OVERHANG : 0)}px`,
   };
 }
 
@@ -822,11 +829,12 @@ onUnmounted(() => {
                 :order="m.vm.dial.order"
                 :label-visible="tierOf(m.key) !== 'far'"
                 :glyph="glyphOf(m)"
+                :level="m.level"
                 :blocked-at-ms="blockedAt[m.key]"
               />
             </span>
             <Transition :css="false" @enter="(el, done) => boxHook('in', el, done)" @leave="(el, done) => boxHook('out', el, done)">
-              <div v-if="rowsOf(m).length" :ref="(el) => setBox(m.key, el)" class="hud-marker__box" :style="boxStyle(tierOf(m.key))">
+              <div v-if="rowsOf(m).length" :ref="(el) => setBox(m.key, el)" class="hud-marker__box" :style="boxStyle(tierOf(m.key), glyphOf(m) !== undefined)">
                 <BuildingHudBox :rows="rowsOf(m)" :tier="tierOf(m.key) === 'near' ? 'near' : 'mid'" />
               </div>
             </Transition>
@@ -921,6 +929,11 @@ onUnmounted(() => {
   border-left: 0;
   border-radius: 0 8px 8px 0;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  /* The quick look's level hex slides in over 450 ms (BuildingHudDial); the content makes room alongside it. */
+  transition: padding-left 450ms cubic-bezier(0.3, 0, 0.2, 1);
+}
+html[data-hud-motion='reduced'] .hud-marker__box {
+  transition: none;
 }
 /* Phone: the switch sits at the map's top left, below the settlement bubble that sits there (it ends about 44px under the bar). */
 .building-hud__toggle--phone {
