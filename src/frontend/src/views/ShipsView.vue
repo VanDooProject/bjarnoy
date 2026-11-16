@@ -7,7 +7,9 @@ import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
 import DocsHistoryNote from '../components/docs/DocsHistoryNote.vue';
 import DocsPageLink from '../components/docs/DocsPageLink.vue';
 import BuildingLink from '../components/docs/BuildingLink.vue';
+import UnitDependencyGraph from '../components/docs/UnitDependencyGraph.vue';
 import ResourceCost from '../components/ResourceCost.vue';
+import { RouterLink } from 'vue-router';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { shipGroupName, unitName } from '../i18n/catalogueNames';
@@ -95,6 +97,7 @@ const loaded = computed(() => ships.value.length > 0 && harbour.value.longhouse 
               <th scope="col">{{ $t('docs.ships.table.cols.attack') }}</th>
               <th scope="col">{{ $t('docs.ships.table.cols.defense') }}</th>
               <th scope="col">{{ $t('docs.ships.table.cols.speed') }}</th>
+              <th scope="col">{{ $t('docs.ships.table.cols.vision') }}</th>
               <th scope="col">{{ $t('docs.ships.table.cols.loot') }}</th>
               <th scope="col">{{ $t('docs.ships.table.cols.slots') }}</th>
               <th scope="col">{{ $t('docs.ships.table.cols.food') }}</th>
@@ -105,13 +108,14 @@ const loaded = computed(() => ships.value.length > 0 && harbour.value.longhouse 
           </thead>
           <tbody v-for="g in shipGroups" :key="g.group!" :data-group="g.group!">
             <tr class="group-row">
-              <th colspan="10" scope="colgroup" class="group">{{ shipGroupName(g.group!) }}</th>
+              <th colspan="11" scope="colgroup" class="group">{{ shipGroupName(g.group!) }}</th>
             </tr>
             <tr v-for="ship in g.rows" :key="ship.type" :data-ship="ship.type">
-              <th scope="row" class="name">{{ unitName(ship.type) }}</th>
+              <th scope="row" class="name"><RouterLink :to="`/docs/units/${ship.type}`" class="unit-link">{{ unitName(ship.type) }}</RouterLink></th>
               <td data-col="attack" class="value">{{ ship.attack }}</td>
               <td data-col="defense" class="value">{{ ship.defense }}</td>
               <td data-col="speed" class="value">{{ n(ship.speed) }}</td>
+              <td data-col="vision" class="value">{{ n(ship.visionRadius) }}</td>
               <td data-col="loot" class="value">{{ n(ship.carryCapacity) }}</td>
               <td data-col="slots" class="value">{{ n(ship.shipSlots) }}</td>
               <td data-col="food" class="value">{{ n(ship.foodCarryCapacity) }}</td>
@@ -122,6 +126,9 @@ const loaded = computed(() => ships.value.length > 0 && harbour.value.longhouse 
           </tbody>
         </table>
       </div>
+      <h3>{{ $t('docs.ships.graph.heading') }}</h3>
+      <p class="text">{{ $t('docs.ships.graph.body') }}</p>
+      <UnitDependencyGraph domain="water" />
     </section>
 
     <DocsHistoryNote class="block">
@@ -170,7 +177,7 @@ const loaded = computed(() => ships.value.length > 0 && harbour.value.longhouse 
           </thead>
           <tbody>
             <tr v-for="unit in passengers" :key="unit.type" :data-unit="unit.type">
-              <th scope="row" class="name">{{ unitName(unit.type) }}</th>
+              <th scope="row" class="name"><RouterLink :to="`/docs/units/${unit.type}`" class="unit-link">{{ unitName(unit.type) }}</RouterLink></th>
               <td class="value">{{ n(unit.cargoSlots) }}</td>
             </tr>
           </tbody>
@@ -225,6 +232,14 @@ const loaded = computed(() => ships.value.length > 0 && harbour.value.longhouse 
   margin: 0 0 12px;
   line-height: 1.6;
   color: var(--muted);
+}
+.block h3 {
+  margin: 24px 0 8px;
+}
+.unit-link {
+  color: inherit;
+  text-decoration: underline dotted var(--gold);
+  text-underline-offset: 3px;
 }
 .muted {
   color: var(--muted);

@@ -924,10 +924,15 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(
       page.getByRole("heading", { level: 1, name: "Training troops" }),
     ).toBeVisible();
-    const graph = page.getByTestId("unit-graph");
+    const graph = page.getByTestId("unit-graph-land");
+    const waterGraph = page.getByTestId("unit-graph-water");
     await expect(graph.locator("svg")).toBeVisible();
     await expect(graph.locator('svg [data-unit="spearman"]')).toBeVisible();
-    await expect(graph.locator('svg [data-unit="snekkja"]')).toBeVisible();
+    await expect(graph.locator('svg [data-unit="snekkja"]')).toHaveCount(0);
+    await expect(waterGraph.locator('svg [data-unit="snekkja"]')).toBeVisible();
+    await graph.locator('svg [data-unit="spearman"]').click();
+    await expect(page).toHaveURL(/\/docs\/units\/spearman$/);
+    await page.goBack();
     // No unit needs another unit, so the graph has no arrows.
     await expect(graph.locator("[data-edge]")).toHaveCount(0);
     // The Longhouse trains nothing, so it has no lane.
@@ -962,6 +967,11 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(page.locator('[data-ship="snekkja"] [data-col="attack"]')).toHaveText("60");
     await expect(page.locator('[data-ship="karve"] [data-col="cost"]')).toContainText("250");
     await expect(page.locator("#ships").getByRole("link", { name: "Training troops" })).toHaveAttribute("href", "/docs/training");
+    await expect(page.locator('[data-ship="karve"] [data-col="vision"]')).toBeVisible();
+    // expectPlayerPage left the viewport at phone width, so the water graph shows as its list.
+    await expect(page.getByTestId("unit-list-water").locator('a[href="/docs/units/karve"]')).toBeVisible();
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(page.getByTestId("unit-graph-water").locator('svg [data-unit="karve"]')).toBeVisible();
     await expect(page.getByText("Under investigation")).toHaveCount(0);
   });
 

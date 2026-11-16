@@ -24,11 +24,11 @@ function lookup(tree: unknown, key: string): unknown {
 }
 
 describe('docsPages', () => {
-  it('lists every docs route exactly once, and nothing else', () => {
+  it('lists every docs route exactly once, and nothing else (parameterised detail pages like /docs/units/:type are not hub pages)', () => {
     const routes = router
       .getRoutes()
       .map((r) => r.path)
-      .filter((p) => p.startsWith('/docs/') && p !== '/docs/saga/replay')
+      .filter((p) => p.startsWith('/docs/') && p !== '/docs/saga/replay' && !p.includes('/:'))
       .sort();
     expect(DOCS_PAGES.map((p) => p.to).sort()).toEqual(routes);
     expect(new Set(DOCS_PAGES.map((p) => p.id)).size).toBe(DOCS_PAGES.length);

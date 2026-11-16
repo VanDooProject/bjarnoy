@@ -51,7 +51,7 @@ describe('ShipsView', () => {
     ]);
     expect(table.findAll('tr.group-row').map((tr) => tr.text())).toEqual(['Scouts', 'Cargo', 'Transport', 'Warships', 'Fire craft']);
     expect(table.findAll('thead th').map((th) => th.text())).toEqual([
-      'Ship', 'Attack', 'Defence', 'Speed', 'Loot capacity', 'Troop slots', 'Food capacity', 'Upkeep per hour', 'Cost', 'Training time',
+      'Ship', 'Attack', 'Defence', 'Speed', 'Vision range', 'Loot capacity', 'Troop slots', 'Food capacity', 'Upkeep per hour', 'Cost', 'Training time',
     ]);
     expect(table.findAll('tr[data-ship]').map((tr) => tr.get('th').text())).toEqual([
       'Færing', 'Byrding', 'Knarr', 'Karve', 'Snekkja', 'Skeid', 'Fire Raft', 'Fire Hulk',
@@ -60,6 +60,7 @@ describe('ShipsView', () => {
     expect(col('attack')).toEqual(['0', '0', '0', '5', '60', '90', '0', '0']);
     expect(col('defense')).toEqual(['3', '10', '20', '30', '40', '60', '3', '25']);
     expect(col('speed')).toEqual(['8', '6', '4', '8', '10', '11', '5', '8']);
+    expect(col('vision')).toEqual(['7', '5', '5', '6', '4', '4', '2', '6']);
     expect(col('loot')).toEqual(['0', '160', '600', '200', '80', '120', '0', '0']);
     expect(col('slots')).toEqual(['0', '0', '0', '10', '20', '30', '0', '0']);
     expect(col('food')).toEqual(['40', '150', '1,200', '600', '320', '480', '30', '200']);
