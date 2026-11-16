@@ -634,26 +634,31 @@ watch(
 const armyHint = ref<{ x: number; y: number; text: string } | null>(null);
 let armyHintTimer: ReturnType<typeof setTimeout> | null = null;
 const sendBlockText = useSendBlockText();
-function onArmyTap(armyId: string, screen: { x: number; y: number }) {
+function onArmyTap(armyId: string, screen: { x: number; y: number }): boolean {
   if (armyHintTimer) clearTimeout(armyHintTimer);
   armyHint.value = null;
   // No picker open: the marker selects its army, shown highlighted in the armies panel. The tap still reaches the tile (onHexClick), so
-  // while a route is being composed it adds the waypoint and selects nothing.
+  // while a route is being composed it adds the waypoint and selects nothing. A moving army only gets selected: returning true keeps the
+  // tap from reaching the tile, so no ring menu opens.
   if (!world.sendPicker) {
-    if (!world.dispatchDraft && !world.fieldOrderDraft) world.selectArmy(armyId);
-    return;
+    if (world.dispatchDraft || world.fieldOrderDraft) return false;
+    world.selectArmy(armyId);
+    // The selection shows in the Armies panel, so bring it up if it was closed or collapsed (the docked panel is settlement view, desktop only).
+    if (!isMobile.value && mode.value === 'settlement') hudPrefs.showPanel('armies');
+    return !!world.armies.find((a) => a.id === armyId)?.movement;
   }
   const row = sendPicker.rows.value.find((r) => r.id === armyId);
-  if (!row) return;
+  if (!row) return false;
   if (row.ok) {
     world.selectSendSource(armyId);
-    return;
+    return false;
   }
-  if (row.block === 'pending') return;
+  if (row.block === 'pending') return false;
   const text = sendBlockText(row, sendPicker.target.value);
-  if (!text) return;
+  if (!text) return false;
   armyHint.value = { x: Math.min(Math.max(screen.x, 110), Math.max(110, stage.value.w - 110)), y: Math.max(48, screen.y - 34), text };
   armyHintTimer = setTimeout(() => (armyHint.value = null), 3500);
+  return false;
 }
 watch(
   () => world.sendPicker,

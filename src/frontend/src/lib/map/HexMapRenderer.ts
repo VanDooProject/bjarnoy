@@ -549,7 +549,7 @@ export interface HexMapRendererOptions {
    * A tap landed on an army's marker (while the send picker is open, only on its `pick` markers; otherwise on any own marker): the
    * army's id and the marker's canvas position, so the host can show a hint beside it. While the send picker is open the tap does not reach the tile below (`armyTapSwallowed`); otherwise it does.
    */
-  onArmyTap?: (armyId: string, screen: { x: number; y: number }) => void;
+  onArmyTap?: (armyId: string, screen: { x: number; y: number }) => boolean | void;
   /**
    * docs/design/zoom-transition.md: fired when a wheel/pinch zoom step
    * crosses the enter-settlement or exit-to-world threshold
@@ -646,6 +646,11 @@ export interface ArmyOverlayMarker {
 /** True while the send picker marks armies: a tap on a marker then only picks it and never reaches the tile below. */
 export function armyTapSwallowed(armies: readonly ArmyOverlayMarker[]): boolean {
   return armies.some((a) => a.pick);
+}
+
+/** Whether a tap on an army marker ends there instead of reaching the tile: the send picker is open, or the host returned `true` (handled). */
+export function armyTapStopsHere(armies: readonly ArmyOverlayMarker[], handled: boolean | void): boolean {
+  return handled === true || armyTapSwallowed(armies);
 }
 
 /**
@@ -4033,11 +4038,12 @@ export class HexMapRenderer {
     // Touch/pen has no hover: the HTML markers (construction dials included) reveal themselves from this tap, which still reaches the tile.
     if (e.pointerType !== 'mouse') this.tapObserver?.(screen);
     // An army's marker is a button while the send picker is open: the tap picks it instead of reaching the tile below. Otherwise the
-    // tap also selects the army but still reaches the tile (ring menu, waypoint drafts), so a hex holding an army stays tappable.
+    // tap also selects the army but still reaches the tile (ring menu, waypoint drafts), so a hex holding an army stays tappable,
+    // unless the host reports the tap as fully handled (a moving army: selection only, no ring).
     const armyId = this.pickedArmyAt(screen);
     if (armyId) {
-      this.options.onArmyTap?.(armyId, screen);
-      if (armyTapSwallowed(this.armyOverlay?.armies ?? [])) return;
+      const handled = this.options.onArmyTap?.(armyId, screen);
+      if (armyTapStopsHere(this.armyOverlay?.armies ?? [], handled)) return;
     }
     const world = screenToWorld(this.camera, screen, this.viewport);
     const coord = isoPixelToAxial(world, TILE_W, TILE_H);

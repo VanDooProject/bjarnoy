@@ -137,6 +137,20 @@ describe('hudPrefs store', () => {
       expect(again.panels.garrison.collapsed).toBe(false);
     });
 
+    it('showPanel opens a closed panel and expands a collapsed one, and leaves an open expanded one alone', () => {
+      const backing = stubLocalStorage();
+      const prefs = useHudPrefsStore();
+      prefs.togglePanel('armies');
+      prefs.toggleCollapsed('armies');
+      expect(prefs.panels.armies).toMatchObject({ open: false, collapsed: true });
+      prefs.showPanel('armies');
+      expect(prefs.panels.armies).toMatchObject({ open: true, collapsed: false });
+      expect(JSON.parse(backing.get('bjarnoy.hudPanels')!)).toMatchObject({ armies: { open: true, collapsed: false } });
+      backing.delete('bjarnoy.hudPanels');
+      prefs.showPanel('armies');
+      expect(backing.has('bjarnoy.hudPanels')).toBe(false);
+    });
+
     it('validates each panel on its own and falls back per panel to its default', () => {
       const backing = stubLocalStorage();
       backing.set(
