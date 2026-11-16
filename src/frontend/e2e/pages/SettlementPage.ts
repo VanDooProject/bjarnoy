@@ -2,6 +2,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { claimLandfall, foundSettlement, placeGuidedBuildings } from '../helpers';
 import { captureCanvas, waitForMapReady } from '../support/render';
+import { hexCenterScreen } from '../support/renderer';
 import { BuildingHudComponent } from './BuildingHudComponent';
 import { RingMenuComponent } from './RingMenuComponent';
 
@@ -292,13 +293,7 @@ export class SettlementPage {
 
   /** Where a hex is drawn on the canvas right now (canvas px, like `findHex`'s `screen`). */
   screenOf(hex: HexCoord): Promise<ScreenPoint> {
-    return this.page.evaluate(
-      (at) =>
-        (window as unknown as { __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } } })
-          .__settlementRenderer()
-          .hexCenterScreen(at),
-      hex,
-    );
+    return hexCenterScreen(this.page, hex);
   }
 
   /** The longhouse's own hex, and where it is on screen. */
