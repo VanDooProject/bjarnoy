@@ -699,8 +699,7 @@
     "chipHintTouch": "Gebäude antippen · Karte gedrückt halten zum Beenden",
     "chipHintMouse": "Gebäude anklicken · Esc zum Beenden",
     "stop": "Schnellausbau beenden",
-    "holdHint": "Gedrückt halten: danach baust du mit einem Tipp pro Gebäude aus",
-    "premiumHold": "Premium: Gedrückt halten und mit einem Tipp pro Gebäude ausbauen",
+    "holdHint": "Halten für Schnellausbau",
     "shiftHint": "Umschalt+Klick: auf Stufe {level} ausbauen",
     "premiumShift": "Premium: Mit Umschalt+Klick ausbauen"
   }

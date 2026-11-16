@@ -99,8 +99,8 @@ export interface RingCard {
   refund?: { wood?: number; stone?: number; food?: number; iron?: number };
   /** Touch: what a second tap on this root action does ("Tap Raze again to raze"); defaults to the upgrade wording. */
   tapHint?: string;
-  /** The badge shown while nothing blocks the action; defaults to "buildable here" (a raze: "can be razed"). */
-  okBadge?: string;
+  /** The badge shown while nothing blocks the action; defaults to "buildable here" (a raze: "can be razed"). `null`: no badge (an upgrade: the building is already there). */
+  okBadge?: string | null;
   /** One-line summary of what it produces. */
   gives?: string;
   /** For an upgrade, the building's new total next to the gain in `gives` ("90 total"); shown on wide screens only. */
@@ -112,8 +112,8 @@ export interface RingCard {
   /** Art for the card thumbnail. */
   art?: ArtRef;
   availability?: RingAvailability;
-  /** The card's last line: what holding the bubble does (gold arrows), or, locked, that it needs premium (lock, muted). */
-  holdHint?: { text: string; locked: boolean };
+  /** The card's last line: what holding the bubble does (gold arrows). Only set when the player can use it. */
+  holdHint?: string;
 }
 
 export interface RingBuilding extends RingAction, Omit<RingCard, 'title'> {
@@ -501,7 +501,7 @@ interface CardView {
   statuses: { text: string; tone: Tone }[];
   /** Touch: "Tap X again to build" — only while the shown item is armed and committable. */
   tapHint?: string;
-  holdHint?: { text: string; locked: boolean };
+  holdHint?: string;
 }
 
 function resourceList(shortfall: Partial<Record<(typeof RESOURCE_KEYS)[number], number>>): string {
@@ -559,7 +559,7 @@ const cardView = computed<CardView | null>(() => {
   if (locks.length) badge = { text: locks[0].toUpperCase(), tone: 'lock' };
   else if (resourcesShort) badge = { text: t('hud.ringMenu.card.badgeNoResources').toUpperCase(), tone: 'wait' };
   else if (a?.state === 'waiting') badge = { text: t('hud.ringMenu.card.badgeNoSlot').toUpperCase(), tone: 'wait' };
-  else badge = { text: card.okBadge ?? t('hud.ringMenu.buildableHere'), tone: 'ok' };
+  else if (card.okBadge !== null) badge = { text: card.okBadge ?? t('hud.ringMenu.buildableHere'), tone: 'ok' };
 
   return {
     title: card.title,
@@ -1158,10 +1158,9 @@ function onBackdropPointerDown(e: PointerEvent) {
         <i class="tap-bubble" aria-hidden="true" />{{ cardView.tapHint }}
       </p>
       <div v-else-if="!(cardView.statuses.length || error || cardView.holdHint)" class="card-foot" />
-      <p v-if="cardView.holdHint" class="card-hold-hint" :class="{ locked: cardView.holdHint.locked }" data-testid="ring-hold-hint">
-        <svg v-if="cardView.holdHint.locked" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
-        <svg v-else viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.5 6 3l3.5 3.5M2.5 10 6 6.5 9.5 10" /></svg>
-        {{ cardView.holdHint.text }}
+      <p v-if="cardView.holdHint" class="card-hold-hint" data-testid="ring-hold-hint">
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.5 6 3l3.5 3.5M2.5 10 6 6.5 9.5 10" /></svg>
+        {{ cardView.holdHint }}
       </p>
     </div>
 
@@ -1536,9 +1535,6 @@ function onBackdropPointerDown(e: PointerEvent) {
   stroke-width: 1.4;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-.card-hold-hint.locked {
-  color: var(--muted);
 }
 /* The hold ring sits around the bubble, outside its border; the press itself stays on the bubble. */
 .ring-bubble.holdable {

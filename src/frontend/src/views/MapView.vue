@@ -1108,10 +1108,9 @@ function upgradeActionFor(tile: Tile): RingAction {
       givesTotal: rate ? t('hud.ringMenu.card.givesTotal', { amount: rate.total }) : undefined,
       locks: busyNote ? [busyNote, ...locks] : locks,
       art: buildingArt(type, nextLevel),
+      okBadge: null,
       availability: busyNote ? undefined : availability,
-      holdHint: quickUpgrade.available
-        ? { text: t('hud.quickUpgrade.holdHint'), locked: false }
-        : { text: t('hud.quickUpgrade.premiumHold'), locked: true },
+      holdHint: quickUpgrade.available ? t('hud.quickUpgrade.holdHint') : undefined,
     },
   };
 }
