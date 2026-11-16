@@ -342,6 +342,19 @@ export function terrainLooksOf(family: string): (number | null)[] {
   return looks;
 }
 
+/**
+ * One look of a living forest family (`forest_taiga` / `forest_birch` / `forest_mixed`) as the layers `AnimatedBuildingSprite`
+ * plays: the family's base slab under its swaying-trees clip (the clip's rest frame is the ground decoration, its frames the
+ * trees). `variant` is `null` for the plain look, N for `variantNNN`. `undefined` when the pack has no such look.
+ */
+export function forestLookLayers(family: string, variant: number | null): BuildingLayers | undefined {
+  const name = `${family}_SE${variant === null ? '' : `_variant${String(variant).padStart(3, '0')}`}`;
+  const clip = findAtlasClip('buildings-anim', name);
+  const base = findAtlasFrame('terrain', `${family}_SE_base`);
+  if (!clip || !base) return undefined;
+  return { base, top: clip.restRect, clip };
+}
+
 /** Art for coastal (shallow) water — a rendering variant of `sea`, not a `Terrain` of its own (see `Tile.isCoastalWater`), so it isn't reachable through `terrainArt`. */
 export function coastalWaterArt(): ArtRef {
   return terrainFamilyArt('coastalwatertile', false);

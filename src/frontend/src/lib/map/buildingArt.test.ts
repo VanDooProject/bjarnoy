@@ -11,7 +11,7 @@
 //   only working by accident against whatever was open in an editor at the
 //   time.
 import { describe, expect, it } from 'vitest';
-import { buildingArt, buildingArtByFamily, buildingLayers, buildingLayersForType, terrainArt, terrainLookLayers, terrainLooksOf, terrainVariantArt } from './buildingArt';
+import { buildingArt, buildingArtByFamily, buildingLayers, buildingLayersForType, forestLookLayers, terrainArt, terrainLookLayers, terrainLooksOf, terrainVariantArt } from './buildingArt';
 
 describe('buildingArtByFamily', () => {
   it('resolves art for each of the sawmill families', () => {
@@ -152,5 +152,23 @@ describe('terrainLookLayers', () => {
 
   it('is undefined for a look the pack does not ship', () => {
     expect(terrainLookLayers('grasstile', 99)).toBeUndefined();
+  });
+});
+
+// Backs the tiles docs page's forest picker: every wood has the plain look plus variant000-002, each a base slab under a
+// swaying-trees clip.
+describe('forestLookLayers', () => {
+  it('resolves all four looks of every wood with a base and a clip', () => {
+    for (const family of ['forest_taiga', 'forest_birch', 'forest_mixed']) {
+      for (const variant of [null, 0, 1, 2]) {
+        const layers = forestLookLayers(family, variant);
+        expect(layers?.base).toBeDefined();
+        expect(layers?.clip?.frameRects.length).toBeGreaterThan(1);
+      }
+    }
+  });
+
+  it('is undefined for a look the pack does not ship', () => {
+    expect(forestLookLayers('forest_birch', 99)).toBeUndefined();
   });
 });

@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
+import AnimatedBuildingSprite from '../components/AnimatedBuildingSprite.vue';
 import LayeredAtlasSprite from '../components/LayeredAtlasSprite.vue';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsPicker from '../components/docs/DocsPicker.vue';
@@ -14,11 +15,13 @@ import {
   coastalWaterArt,
   riverArt,
   terrainArt,
+  forestLookLayers,
   terrainArtByFamily,
   terrainLookLayers,
   terrainLooksOf,
   terrainVariantArt,
   type ArtRef,
+  type BuildingLayers,
 } from '../lib/map/buildingArt';
 import type { AtlasFrameRect } from '../lib/map/atlas';
 import { buildingAllowedOnHex } from '../lib/map/ringCatalogue';
@@ -147,6 +150,23 @@ function terrainLookFrames(tileId: string): AtlasFrameRect[] | undefined {
   return terrainLookLayers(def.family, slot === 0 ? null : slot - 1);
 }
 
+// Forest: three woods (the generator's `forestKindAt`), each with the same four looks: the open clearing, the dense wood,
+// the fairy ring and the tarn (slot order = `FOREST_VARIANT_WEIGHTS`). The trees sway, as on the map.
+const FOREST_WOODS = ['taiga', 'birch', 'mixed'] as const;
+type ForestWood = (typeof FOREST_WOODS)[number];
+const FOREST_LOOK_NAMES = ['clearing', 'dense', 'fairyRing', 'tarn'] as const;
+const forestWood = ref<ForestWood>('taiga');
+
+function forestLooks(): { slot: number; name: string }[] {
+  return FOREST_LOOK_NAMES.map((name, slot) => ({ slot, name })).filter(({ slot }) =>
+    forestLookLayers(`forest_${forestWood.value}`, slot === 0 ? null : slot - 1),
+  );
+}
+function forestLayers(): BuildingLayers | undefined {
+  const slot = terrainLookIndex.forest ?? 0;
+  return forestLookLayers(`forest_${forestWood.value}`, slot === 0 ? null : slot - 1);
+}
+
 // id doubles as the anchor/ToC key; terrain is the wire name a building's
 // AllowedTerrain lists (see BuildingCatalogue.cs) — null for the rows that
 // aren't a BuildingType terrain value on their own (sea never holds a
@@ -257,7 +277,8 @@ const buildingsByTile = computed(() => {
       :title="t(`docs.tiles.entries.${tileEntryKey(tile.id)}.title`)"
     >
       <template #thumb>
-        <LayeredAtlasSprite v-if="terrainLookFrames(tile.id)" :frames="terrainLookFrames(tile.id)!" />
+        <AnimatedBuildingSprite v-if="tile.id === 'forest' && forestLayers()" :layers="forestLayers()!" />
+        <LayeredAtlasSprite v-else-if="terrainLookFrames(tile.id)" :frames="terrainLookFrames(tile.id)!" />
         <AtlasSprite v-else-if="thumbFrame(tile)" :frame="thumbFrame(tile)!" />
         <img v-else-if="thumbUrl(tile)" class="thumb-img" :src="thumbUrl(tile)!" alt="" />
       </template>
@@ -315,6 +336,22 @@ const buildingsByTile = computed(() => {
           "
           :model-value="mountainVariant"
           @update:model-value="mountainVariant = $event"
+        />
+
+        <!-- Forest: wood, then look (the trees sway, as on the map). -->
+        <DocsPicker
+          v-if="tile.id === 'forest'"
+          :label="$t('docs.tiles.forestWoodLabel')"
+          :options="FOREST_WOODS.map((wood) => ({ value: wood, label: t(`docs.tiles.forestWoods.${wood}`) }))"
+          :model-value="forestWood"
+          @update:model-value="forestWood = $event"
+        />
+        <DocsPicker
+          v-if="tile.id === 'forest' && forestLooks().length > 1"
+          :label="$t('docs.tiles.lookLabel')"
+          :options="forestLooks().map((look) => ({ value: String(look.slot), label: t(`docs.tiles.forestLooks.${look.name}`) }))"
+          :model-value="String(terrainLookIndex.forest ?? 0)"
+          @update:model-value="terrainLookIndex.forest = Number($event)"
         />
 
         <!-- Grass and coastal water: the looks the generator rolls for them (see `TERRAIN_LOOKS`). -->
