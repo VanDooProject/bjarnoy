@@ -296,7 +296,7 @@ public sealed class LinkedRealmEndpointsTests : IAsyncLifetime
         };
         return await WithDbAsync(async db =>
         {
-            db.Armies.Add(army);
+            db.AddArmyRows(army);
             await db.SaveChangesAsync(Ct);
             return army.Id;
         });

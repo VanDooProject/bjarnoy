@@ -153,7 +153,14 @@ describe('LandingIntro', () => {
   it('loop: restarts after landfall, never fades out, emits nothing and shows no end screen', async () => {
     const w = await mountIntro({ mode: 'loop' });
     const total = BEATS_EN.reduce((t, b) => t + (b.role === 'hold' ? holdMinMs('en') : b.durationMs), 0);
-    await advanceAndRender(total);
+    // stop in the landfall too: a sweep only renders (and emits) its end state
+    await advanceAndRender(total - EXIT_MS + 1);
+    expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe('landfall');
+    expect(phase(w)).toBe('exiting');
+    expect(w.classes()).not.toContain('is-fading');
+    expect(w.find('[data-testid="intro-end"]').exists()).toBe(false);
+    expect(Object.keys(w.emitted())).not.toContain('done');
+    await advanceAndRender(EXIT_MS - 1);
     expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe(BEATS[0].id);
     expect(phase(w)).toBe('playing');
     expect(w.classes()).not.toContain('is-fading');

@@ -62,7 +62,7 @@ public static class BuildingCatalogue
         BuildingType.Lumberjack or BuildingType.Quarry or BuildingType.ClayBrickworks
             or BuildingType.Farm or BuildingType.PumpkinFarm or BuildingType.FishingHut
             or BuildingType.ReindeerHerder or BuildingType.BogOreWorks or BuildingType.StorageHouse => 25,
-        BuildingType.Barracks or BuildingType.ArcheryRange or BuildingType.Dockyard
+        BuildingType.Barracks or BuildingType.ArcheryRange or BuildingType.Harbour or BuildingType.Shipyard
             or BuildingType.TownSquare or BuildingType.CartWorkshop or BuildingType.DruidHut
             or BuildingType.Smithy or BuildingType.Meadery or BuildingType.Sawmill
             or BuildingType.CropMill or BuildingType.Hammerschmiede => 20,
@@ -187,7 +187,8 @@ public static class BuildingCatalogue
             [BuildingType.Palisade] = 7,
             [BuildingType.PalisadeGate] = 7,
             [BuildingType.Bridge] = 7,
-            [BuildingType.Dockyard] = 8,
+            [BuildingType.Harbour] = 5,
+            [BuildingType.Shipyard] = 10,
             [BuildingType.ArcheryRange] = 9,
             [BuildingType.CartWorkshop] = 10,
             [BuildingType.Meadery] = 11,
@@ -288,7 +289,7 @@ public static class BuildingCatalogue
     /// <para>
     /// Every entry must be met, not any one of them. The lines are: Tower →
     /// Barracks → Archery Range → Weaponsmith (Smithy) → Shrine of Thor for
-    /// the military; Fishing Hut → Dockyard → Shrine of Njörd for the water;
+    /// the military; Fishing Hut → Harbour → Shipyard, and Harbour → Shrine of Njörd for the water;
     /// Lumberjack → Sawmill → Shrine of Ullr and Reindeer Herder → Farm → Meadery / Crop Mill →
     /// Shrine of Freyja for the land; Town Square → Cart Workshop / Druid Hut
     /// for the civic line; Storage House → Great Storehouse for storage. See
@@ -311,7 +312,8 @@ public static class BuildingCatalogue
             [BuildingType.Palisade] = [new(BuildingType.Tower, 5)],
             [BuildingType.PalisadeGate] = [new(BuildingType.Tower, 5)],
             [BuildingType.Bridge] = [new(BuildingType.TownSquare, 1)],
-            [BuildingType.Dockyard] = [new(BuildingType.FishingHut, 5)],
+            [BuildingType.Harbour] = [new(BuildingType.FishingHut, 3)],
+            [BuildingType.Shipyard] = [new(BuildingType.Harbour, 5)],
             [BuildingType.ArcheryRange] = [new(BuildingType.Barracks, 5)],
             [BuildingType.SiegeWorkshop] = [new(BuildingType.ArcheryRange, 3)],
             [BuildingType.CartWorkshop] = [new(BuildingType.TownSquare, 3)],
@@ -325,7 +327,7 @@ public static class BuildingCatalogue
             [BuildingType.Hammerschmiede] = [new(BuildingType.BogOreWorks, 10)],
             [BuildingType.ShrineOfUllr] = [new(BuildingType.Sawmill, 5)],
             [BuildingType.ShrineOfFreyja] = [new(BuildingType.CropMill, 5)],
-            [BuildingType.ShrineOfNjord] = [new(BuildingType.Dockyard, 10)],
+            [BuildingType.ShrineOfNjord] = [new(BuildingType.Harbour, 10)],
             [BuildingType.ShrineOfThor] = [new(BuildingType.Smithy, 5)],
             // A settlement holds only one shrine, so Odin cannot ask for
             // another one as a feeder; the Druid Hut is the civic line's end.
@@ -390,7 +392,8 @@ public static class BuildingCatalogue
             BuildingType.Bridge => BridgeHex(level),
             BuildingType.ArcheryRange => ArcheryRange(level),
             BuildingType.SiegeWorkshop => SiegeWorkshop(level),
-            BuildingType.Dockyard => Dockyard(level),
+            BuildingType.Harbour => Harbour(level),
+            BuildingType.Shipyard => Shipyard(level),
             BuildingType.Barracks => Barracks(level),
             // Grass qualifies terrain-wise, but only a hex that is itself a
             // Straight/Bend river tile is actually buildable — see
@@ -506,8 +509,9 @@ public static class BuildingCatalogue
             [BuildingType.ShrineOfUllr] = (BuildingRingCategory.Religion, 2),
             [BuildingType.OdinStatue] = (BuildingRingCategory.Religion, 3),
             [BuildingType.FishingHut] = (BuildingRingCategory.Water, 0),
-            [BuildingType.Dockyard] = (BuildingRingCategory.Water, 1),
-            [BuildingType.ShrineOfNjord] = (BuildingRingCategory.Water, 2),
+            [BuildingType.Harbour] = (BuildingRingCategory.Water, 1),
+            [BuildingType.Shipyard] = (BuildingRingCategory.Water, 2),
+            [BuildingType.ShrineOfNjord] = (BuildingRingCategory.Water, 3),
         };
 
     public static BuildingDefinition Get(BuildingType type, int level) =>
@@ -801,7 +805,8 @@ public static class BuildingCatalogue
         [BuildingType.Palisade] = Tech(10, 1),
         [BuildingType.PalisadeGate] = Tech(10, 1),
         [BuildingType.Bridge] = Tech(30, 3),
-        [BuildingType.Dockyard] = Tech(30, 24),
+        [BuildingType.Harbour] = Tech(30, 24),
+        [BuildingType.Shipyard] = Tech(30, 24),
         [BuildingType.ArcheryRange] = Tech(45, 22),
         [BuildingType.CartWorkshop] = Tech(60, 22),
         [BuildingType.Meadery] = Tech(60, 24),
@@ -1082,7 +1087,7 @@ public static class BuildingCatalogue
     /// forest (a grove shrine), and the Shrine of Njörd, whose art is a shrine on a skerry standing
     /// in the shallows: it is built directly on a coastal-water hex
     /// (<see cref="BuildingDefinition.RequiresCoastalWater"/>, the hex under it
-    /// stays plain <see cref="World.Terrain.Sea"/>) like FishingHut/Dockyard
+    /// stays plain <see cref="World.Terrain.Sea"/>) like FishingHut/Harbour
     /// and has no <see cref="BuildingDefinition.AllowedTerrain"/>. Every shrine
     /// unlocks at LH 25, each behind its own feeder building (see
     /// PrerequisiteTable), and has 5 levels.
@@ -1207,13 +1212,24 @@ public static class BuildingCatalogue
     // Longhouse (see Units.UnitDefinition.RequiredBuildingType).
     //
     // When the settlement centre is inland, fleets depart from and return to
-    // the Dockyard's hex (see Army.FleetAnchor).
-    private static BuildingDefinition Dockyard(int level) => new()
+    // the Harbour's hex (see Army.FleetAnchor).
+    private static BuildingDefinition Harbour(int level) => new()
     {
-        Type = BuildingType.Dockyard,
+        Type = BuildingType.Harbour,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 150, Stone: 37, Food: 12, Iron: 0) * CostFactor(level),
+        BuildDuration = BuildTime(BuildingType.Harbour, level),
+        RequiresCoastalWater = true,
+    };
+
+    // The Shipyard: the second half of the old Dockyard (docs/design/units-and-ships.md §1). Stands in coastal water like the Harbour and builds in the same time (the Harbour is cheaper; economy.md),
+    // trains the warships and the fire craft, and is a garrison spot for every ship.
+    private static BuildingDefinition Shipyard(int level) => new()
+    {
+        Type = BuildingType.Shipyard,
         Level = level,
         Cost = new ResourceAmounts(Wood: 410, Stone: 99, Food: 33, Iron: 0) * CostFactor(level),
-        BuildDuration = BuildTime(BuildingType.Dockyard, level),
+        BuildDuration = BuildTime(BuildingType.Shipyard, level),
         RequiresCoastalWater = true,
     };
 

@@ -99,7 +99,7 @@ const reservedTotal = computed(() => {
 </script>
 
 <template>
-  <div v-if="hasContent" ref="cardEl" class="status-card" data-testid="construction-panel" :class="{ 'is-held': cardHeld }">
+  <div v-if="hasContent" ref="cardEl" class="status-card" data-testid="construction-panel" data-quick-upgrade-keep :class="{ 'is-held': cardHeld }">
     <div class="status-card-header" data-dock-handle>
       <span class="status-card-title">{{ t('hud.buildQueue.title') }}</span>
       <span class="status-card-count">{{ t('hud.buildQueue.slots', { used: world.hud.construction.slotsUsed, total: world.hud.construction.slots }) }}</span>

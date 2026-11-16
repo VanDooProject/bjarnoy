@@ -1112,6 +1112,12 @@ export const useWorldStore = defineStore('world', {
       await api.cancelBuild(this.selectedSettlementId, orderId, this.ownerId ?? undefined);
       await this.refreshLiveSettlement();
     },
+    /** Live mode: cancels a training order (any in the queue); the units not trained yet are refunded at 50 %. Throws `ApiError`. */
+    async cancelTrainingLive(orderId: string) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      await api.cancelTraining(this.selectedSettlementId, orderId, this.ownerId ?? undefined);
+      await this.refreshLiveSettlement();
+    },
     /**
      * Live mode: queues a training batch against the backend, charging its
      * cost immediately — mirrors `queueBuildOptimistic` above, including the
@@ -1830,7 +1836,8 @@ export const useWorldStore = defineStore('world', {
         realms.map(async ({ id: realmId, name }): Promise<OtherRealmSnapshot | null> => {
           try {
             const [settlement, summaries] = await Promise.all([api.getSettlement(realmId, owner), api.getSettlementArmies(realmId, owner)]);
-            const armies = await Promise.all(summaries.map((s) => api.getArmy(s.id, owner)));
+            // The armies without a home are in every realm's list; the open realm's already carries them, so they are not read again.
+            const armies = await Promise.all(summaries.filter((s) => s.settlementId !== null).map((s) => api.getArmy(s.id, owner)));
             return {
               realmId,
               name,

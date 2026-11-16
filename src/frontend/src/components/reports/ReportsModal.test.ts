@@ -48,6 +48,8 @@ function battleReport(overrides: Partial<BattleReportResponse> = {}): BattleRepo
     winner: 'attacker',
     attackPower: 100,
     defensePower: 50,
+    attackerVolleyPower: 0,
+    defenderVolleyPower: 0,
     seed: 1,
     lootTaken: { wood: 0, stone: 0, food: 0, iron: 0 },
     attackerLines: [],

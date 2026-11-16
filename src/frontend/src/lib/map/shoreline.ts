@@ -1,6 +1,6 @@
 // Issue #40 phase 6 §4: a client-side mirror of the backend's
 // `Bjarnoy.Domain.World.Shoreline.IsShoreline`, so TrainingModal.vue can grey
-// out Karve/Longship at a non-coastal settlement the same way it already
+// out Karve/Snekkja at a non-coastal settlement the same way it already
 // greys out a unit whose longhouse level isn't high enough yet, instead of
 // only finding out from the backend's `SettlementNotCoastal` rejection after
 // clicking Train.
@@ -37,7 +37,7 @@ export function hasShoreline(center: AxialCoord, claimRadius: number, terrain: T
 
 /**
  * Mirrors the backend's rule for where a fleet may be sent (`Army.PlanDispatch`'s fleet Attack/Raid gate): a building
- * hex is on the shore when it is a sea hex (the coastal-water buildings: Dockyard, Fishing Hut, Shrine of Njörd; a building on an inland lake is not) or a
+ * hex is on the shore when it is a sea hex (the coastal-water buildings: Harbour, Fishing Hut, Shrine of Njörd; a building on an inland lake is not) or a
  * shoreline land hex. The claim check is not mirrored: the buildings a caller offers already belong to the target.
  */
 export function isShoreBuildingHex(coord: AxialCoord, terrain: TerrainLookup): boolean {

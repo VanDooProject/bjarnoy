@@ -531,16 +531,25 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .HasConversion(new DoubleListConverter())
                 .Metadata.SetValueComparer(DoubleListConverter.Comparer);
 
-            // Restrict rather than cascade: nothing should delete a
-            // settlement out from under an army still travelling. In
-            // practice settlements are never deleted today, but the intent
-            // matches UserEntity/SettlementEntity's ownership FK below.
+            // Restrict rather than SetNull: the one place that deletes a settlement (a destroyed beach camp, ArmyService) first gives
+            // every army homed there the nearest garrison spot it can reach, and only the rest lose their home (and so start to
+            // starve). A delete anywhere else must make the same choice, not silently leave armies homeless.
             army.HasOne(a => a.Settlement)
                 .WithMany()
                 .HasForeignKey(a => a.SettlementId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.Restrict);
 
             army.HasIndex(a => a.SettlementId);
+
+            // The army's own world and owner (it keeps them when it loses its home): ownership checks and the player's army
+            // list read these, not the home settlement's.
+            army.Property(a => a.OwnerId).HasMaxLength(200).IsRequired();
+            army.HasOne(a => a.World)
+                .WithMany()
+                .HasForeignKey(a => a.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+            army.HasIndex(a => new { a.WorldId, a.OwnerId });
 
             // Same Restrict posture as the SettlementId FK above — an attack
             // or support target/host settlement is never expected to vanish

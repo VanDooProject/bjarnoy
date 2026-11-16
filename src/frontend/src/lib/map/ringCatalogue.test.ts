@@ -181,7 +181,7 @@ describe('formatMissingResources', () => {
 });
 
 describe('isWaterOnlyBuilding / tileIsBuildable', () => {
-  it.each(['fishinghut', 'dockyard', 'shrineofnjord'])('treats %s as a coastal-water building', (type) => {
+  it.each(['fishinghut', 'harbour', 'shrineofnjord'])('treats %s as a coastal-water building', (type) => {
     expect(isWaterOnlyBuilding(type)).toBe(true);
     expect(tileIsBuildable({ terrain: 'sea', buildingType: type })).toBe(true);
   });
@@ -266,7 +266,7 @@ describe('buildingAllowedOnHex', () => {
 
   it('only the Fishing Hut stands on an inland-lake hex, and only one beside land', () => {
     expect(buildingAllowedOnHex('fishinghut', { terrain: 'inlandlake', isCoastalWater: true })).toBe(true);
-    for (const type of ['dockyard', 'shrineofnjord', 'palisade', 'palisadegate', 'farm', 'tower']) {
+    for (const type of ['harbour', 'shrineofnjord', 'palisade', 'palisadegate', 'farm', 'tower']) {
       expect(buildingAllowedOnHex(type, { terrain: 'inlandlake', isCoastalWater: true }), type).toBe(false);
     }
     // An interior inland-lake hex takes nothing, the Fishing Hut included.
@@ -279,7 +279,7 @@ describe('buildingAllowedOnHex', () => {
   });
 
   it('the other water buildings never stand on the bog', () => {
-    for (const type of ['dockyard', 'shrineofnjord']) {
+    for (const type of ['harbour', 'shrineofnjord']) {
       expect(buildingAllowedOnHex(type, { terrain: 'sea', isCoastalWater: true })).toBe(true);
       for (const kind of ALL_KINDS) expect(buildingAllowedOnHex(type, bogHex(kind)), `${type} on ${kind}`).toBe(false);
     }

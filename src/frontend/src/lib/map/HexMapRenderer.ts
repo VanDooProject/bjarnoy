@@ -43,11 +43,12 @@ import type { AxialCoord } from '../hex/coords';
 import { axialToOddQ, coordKey, hexesInRadius, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
-import { DIAL_FINISH_MS, DIAL_REJECT_MS, retainFinishingDials, rejectDialAt, type ConstructionDial } from './constructionDial';
+import { DIAL_FINISH_MS, DIAL_REJECT_MS, retainFinishingDials, rejectDialAt, flashBlockedAt, type BlockedMarker, type ConstructionDial } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import { atlasPageCount } from './atlasManifests';
 import { attachFramePacing } from './framePacing';
-import { insetBorderCorners, splitBorderEdges } from './realmBorderEdges';
+import { clippedStrokePieces } from './convexPolygon';
+import { createWaterlineBorders, type BorderLinePiece } from './realmBorderWaterline';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
 import { drawsAsSea, type CartShipment, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
@@ -71,7 +72,7 @@ import type { TerrainLookup, WaterMask } from './water/waterMask';
 import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
 import { fogMaskPlacement, type MaskBounds } from './fog/fogMaskLayout';
-import { outerEdgesOf, ownedAcrossEdges, shownBorderOwner } from './realmBorders';
+import { shownBorderOwner } from './realmBorders';
 import { chunkRangeOfTexels, rangesEqual, type ChunkRange } from './fog/fogChunks';
 import { bogCreekPathFor, riverPathFor, type RiverDrawing } from './riverPath';
 import {
@@ -112,6 +113,7 @@ import { bogEdgeShapes, bogEdgesOf, isBogGround, type BogEdgeShape } from './bog
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
 import { DOUBLE_TAP_MS, DOUBLE_TAP_ZOOM_MS, doubleTapZoomLog, isDoubleTap, type Tap } from './doubleTap';
+import { LongPressTracker } from './longPress';
 import { animationPreference } from '../perf/animationPreference';
 import { prefersReducedMotion } from '../motion';
 import { antialiasPreference } from '../perf/antialiasPreference';
@@ -533,6 +535,16 @@ export interface HexMapRendererOptions {
   // none, so nothing changes there (a stationary click on a pin previously
   // did nothing at all — see the pointerup early-return this replaces).
   onWaypointTap?: (index: number) => void;
+  /**
+   * A press held still on the map for LONG_PRESS_MS (lib/map/longPress.ts), the canvas position of it. Only fires while
+   * `setLongPressEnabled(true)`; the release that follows is not a tap. Drifting past the tap slop makes it a pan instead.
+   */
+  onLongPress?: (screen: { x: number; y: number }) => void;
+  /**
+   * The hold behind `onLongPress` while it fills: `{ screen }` when a press that could become one starts, `null` when it ends
+   * (fired, released, moved off, a second finger). The host draws the progress ring at that point.
+   */
+  onLongPressProgress?: (state: { screen: { x: number; y: number } } | null) => void;
   /**
    * A tap landed on an army's marker (while the send picker is open, only on its `pick` markers; otherwise on any own marker): the
    * army's id and the marker's canvas position, so the host can show a hint beside it. While the send picker is open the tap does not reach the tile below (`armyTapSwallowed`); otherwise it does.
@@ -1049,6 +1061,7 @@ function hexPoints(cx: number, cy: number, r: number): number[] {
 }
 
 const NO_DIALS: readonly ConstructionDial[] = [];
+const NO_BLOCKED: readonly BlockedMarker[] = [];
 
 // Construction progress dial (see `constructionDial.ts`): drawn by the HTML layer (BuildingHudLayer / BuildingHudDial); the renderer only
 // holds the data and the lift of the dial's centre above its hex.
@@ -2330,6 +2343,7 @@ export class HexMapRenderer {
   // Construction progress dials — just stores data, drawn every tick into
   // `highlightLayer` (above the buildings) in settlement mode only.
   private constructionDials: ConstructionDial[] | null = null;
+  private blockedMarkers: readonly BlockedMarker[] = NO_BLOCKED;
   // Fog v2 (docs/design/map-fog-v2.md §2.4/§4): two screen-space Pixi Mesh
   // layers sampling the fetched mask texture through a shared GLSL shader —
   // see fog/FogMaskLayer.ts. blackFogLayer (out-of-sight tint) sits between
@@ -2539,6 +2553,27 @@ export class HexMapRenderer {
   // this flag tells onPointerUp that particular click is the same gesture
   // that already closed the ring, so it shouldn't also reopen one.
   private suppressNextClick = false;
+  // Long press on the map (`setLongPressEnabled`): off, a press behaves exactly as it always did. On, a single-pointer press that
+  // stays within the tap slop for LONG_PRESS_MS fires `onLongPress`, and touch taps no longer wait out the double-tap window
+  // (`handleTap`): the mode that turns this on is one where repeated taps on one spot must each count.
+  private longPressEnabled = false;
+  private longPressScreen: { x: number; y: number } | null = null;
+  private longPress = new LongPressTracker(
+    {
+      onStart: () => this.options.onLongPressProgress?.(this.longPressScreen ? { screen: this.longPressScreen } : null),
+      onCancel: () => this.options.onLongPressProgress?.(null),
+      onFire: () => {
+        const screen = this.longPressScreen;
+        this.longPressScreen = null;
+        this.options.onLongPressProgress?.(null);
+        this.dropPendingTap();
+        // The release that ends this press is not a tap on whatever is under it.
+        this.suppressNextClick = true;
+        if (screen) this.options.onLongPress?.(screen);
+      },
+    },
+    { slopPx: DRAG_CLICK_SLOP_PX },
+  );
   private lastPointer = { x: 0, y: 0 };
   private hoveredKey: string | null = null;
   /** Mouse position in canvas px while hovering the canvas (never set for touch/pen); null otherwise. */
@@ -3263,11 +3298,16 @@ export class HexMapRenderer {
         return;
       }
       this.startDrag(e);
+      if (this.longPressEnabled && screen && (e.pointerType !== 'mouse' || e.button === 0)) {
+        this.longPressScreen = screen;
+        this.longPress.start({ x: e.clientX, y: e.clientY });
+      }
       return;
     }
     // A drag (or an existing pinch) is already in progress and another
     // finger just landed — join it as (or add to) a pinch. See the pinch
     // branch of onPointerMove and zoomBy's own doc comment.
+    this.longPress.cancel();
     this.idleDrift = false;
     this.pinch.down(e.pointerId, { x: e.clientX, y: e.clientY });
     this.setHoveredCoord(null);
@@ -3424,6 +3464,7 @@ export class HexMapRenderer {
     // move, or a finger onPointerDown ignored while a pin drag was active)
     // must not feed into someone else's pan.
     if (e.pointerId !== this.dragPointerId) return;
+    this.longPress.move({ x: e.clientX, y: e.clientY });
     const dx = e.clientX - this.lastPointer.x;
     const dy = e.clientY - this.lastPointer.y;
     this.dragMoved += Math.abs(dx) + Math.abs(dy);
@@ -3492,6 +3533,7 @@ export class HexMapRenderer {
    * logic `onPointerUp` always had, just pointerId-aware.
    */
   private endTrackedPointer(id: number, allowClick: boolean, e: PointerEvent) {
+    this.longPress.cancel();
     this.pinch.up(id);
     const remaining = this.pinch.primary();
     if (remaining) {
@@ -3914,7 +3956,7 @@ export class HexMapRenderer {
    * fires as a normal click.
    */
   private handleTap(e: PointerEvent) {
-    if (e.pointerType !== 'touch' || this.lockCamera) {
+    if (e.pointerType !== 'touch' || this.lockCamera || this.longPressEnabled) {
       this.flushPendingTap();
       this.handleClick(e);
       return;
@@ -5625,6 +5667,12 @@ export class HexMapRenderer {
       return;
     }
 
+    // Sea art's top face sits lower than land's in the settlement view only; the world map draws every hex on the one level.
+    const waterline = createWaterlineBorders(
+      { realmBorderOwnerAt: (q, r) => worldModel.realmBorderOwnerAt(q, r), isLowered: (q, r) => mode === 'settlement' && drawsAsSea(worldModel.terrainOf(q, r)) },
+      TILE_W,
+      TILE_H,
+    );
     for (const c of coords) {
       // Own realm on explored ground, a rival's wherever the mist is not fully opaque; ground outside every claim has no owner.
       const ownerId = shownBorderOwner(worldModel, c.q, c.r, fogActive);
@@ -5637,10 +5685,6 @@ export class HexMapRenderer {
       const owner = worldModel.getSettlement(ownerId);
       const color = realmColor(owner, playerId);
 
-      const grid = isoGridPosition(c, TILE_W, TILE_H);
-      const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
-      const flat = top.flatMap((p) => [p.x, p.y]);
-
       // "Glow+wash" (docs/design/zip-brainstorms.md, zip 9): a soft
       // translucent fill across every owned hex ("wash"), with a brighter,
       // thicker stroke reserved for the realm's *outer* edges only
@@ -5649,16 +5693,16 @@ export class HexMapRenderer {
       // blur filter. Previously this stroked the *entire* outline of every
       // claimed hex, including edges shared with another owned hex, which
       // drew a solid mesh over the whole realm instead of a border around it.
-      this.borderLayer.poly(flat).fill({ color, alpha: 0.12 });
+      // On a coast the line sits on the waterline the player sees (sea art's top face is lower than land's), see realmBorderWaterline.
+      const { wash, lines } = waterline.hexGeometry(c, ownerId);
+      this.borderLayer.poly(wash.flatMap((p) => [p.x, p.y])).fill({ color, alpha: 0.12 });
 
       // Back edges (and in world mode, which has no tall art, all edges) stay in the layer under the toppings; in
       // settlement mode the front edges go to their own graphic in terrainTop so the hex's own art can't hide them.
       // Each realm draws its outline inside its own hexes (see insetBorderCorners), so touching realms show two lines side by side.
-      const owned = ownedAcrossEdges(worldModel, c, ownerId);
-      const corners = insetBorderCorners(top, owned);
-      const { back, front } = splitBorderEdges(outerEdgesOf(owned));
       if (mode === 'settlement') {
-        strokeBorderEdges(this.borderLayer, corners, back, color);
+        strokeBorderPieces(this.borderLayer, lines.filter((l) => l.layer === 'back'), color);
+        const front = lines.filter((l) => l.layer === 'front');
         if (front.length > 0) {
           let g = this.borderFrontPool[frontUsed];
           if (!g) {
@@ -5670,10 +5714,10 @@ export class HexMapRenderer {
           g.clear();
           g.visible = true;
           g.zIndex = isoDepthKey(c) + BORDER_FRONT_Z;
-          strokeBorderEdges(g, corners, front, color);
+          strokeBorderPieces(g, front, color);
         }
       } else {
-        strokeBorderEdges(this.borderLayer, corners, [...back, ...front], color);
+        strokeBorderPieces(this.borderLayer, lines, color);
       }
     }
     hideUnusedFront();
@@ -6456,6 +6500,19 @@ export class HexMapRenderer {
     this.constructionDials = rejectDialAt(this.constructionDials ?? [], coord, Date.now());
   }
 
+  /** The markers playing the blocked-upgrade animation (`flashBlockedMarker`); the list is replaced on every change. */
+  get blockedMarkerList(): readonly BlockedMarker[] {
+    return this.blockedMarkers;
+  }
+
+  /**
+   * A quick upgrade hit a building that cannot be upgraded now: its marker plays the refusal animation of a refused order's
+   * dial without the cross and the fade-out (`BLOCKED_DIAL_OPTIONS`) and stays as it was.
+   */
+  flashBlockedMarker(coord: AxialCoord) {
+    this.blockedMarkers = flashBlockedAt(this.blockedMarkers, coord, Date.now());
+  }
+
   /**
    * Screen position (the space `hexCenterScreen` reports in) of the middle of
    * the construction dial over `coord`: the hex's centre lifted by the same
@@ -7027,6 +7084,15 @@ export class HexMapRenderer {
   }
 
   /**
+   * Turns the map's long press on or off (`onLongPress`). Off is the renderer as it always was; turning it off drops a hold that
+   * is running.
+   */
+  setLongPressEnabled(enabled: boolean) {
+    this.longPressEnabled = enabled;
+    if (!enabled) this.longPress.cancel();
+  }
+
+  /**
    * The zoom-driven world<->settlement transition (docs/design/
    * zoom-transition.md §4/§8) — a level-of-detail switch only: `mode`
    * changes, nothing about `settlementId`/the camera does, which is what
@@ -7118,6 +7184,7 @@ export class HexMapRenderer {
     // would fire its rebuild into a torn-down app (see noteZoomActivity).
     this.endZoomActivity();
     this.dropPendingTap();
+    this.longPress.cancel();
     this.pinch.clear();
     this.app?.ticker.remove(this.onTick);
     this.detachFramePacing?.();
@@ -7297,13 +7364,20 @@ const NEIGHBOR_DIRS: AxialCoord[] = [
 /** Sort offset of a hex's front border edges in `terrainTop`: above its topping (+0 sprite, +0.5 overlay), below the next hex's. */
 const BORDER_FRONT_Z = 0.6;
 
-/** The two overlapping strokes (wide faint under thin solid) that fake the border glow, for the given corner-index edges. `corners` are the inset border corners (`insetBorderCorners`). */
-function strokeBorderEdges(g: Graphics, corners: readonly ({ x: number; y: number } | null)[], edges: readonly [number, number][], color: number) {
-  for (const edge of edges) {
-    const a = corners[edge[0]];
-    const b = corners[edge[1]];
-    if (!a || !b) continue;
-    g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
-    g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
+/** The two strokes (wide faint under thin solid) that fake the border glow, for each line piece. A piece with `clip` polygons is drawn as filled polygons around them (no mask), same colours and widths. */
+function strokeBorderPieces(g: Graphics, pieces: readonly BorderLinePiece[], color: number) {
+  for (const { a, b, clip } of pieces) {
+    for (const [width, alpha] of BORDER_STROKES) {
+      if (!clip) {
+        g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width, color, alpha, cap: 'round' });
+        continue;
+      }
+      for (const piece of clippedStrokePieces(a, b, width, clip)) g.poly(piece.flatMap((p) => [p.x, p.y])).fill({ color, alpha });
+    }
   }
 }
+
+const BORDER_STROKES: readonly (readonly [width: number, alpha: number])[] = [
+  [7, 0.25],
+  [2.5, 0.95],
+];

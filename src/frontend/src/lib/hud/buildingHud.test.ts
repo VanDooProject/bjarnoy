@@ -66,6 +66,16 @@ describe('upgrade state', () => {
     expect(vm.dial).toMatchObject({ kind: 'state', ring: 'ready' });
   });
 
+  it('carries the next level\'s cost and its build time as the settlement runs it', () => {
+    expect(buildingHudViewModel(input()).upgrade).toMatchObject({ cost: stock({ wood: 100 }), buildSeconds: 60 });
+    // Odin's Wisdom shortens it, the world's speed divides it (scaledBuildSeconds).
+    expect(buildingHudViewModel(input({ wisdomFactor: 0.5, worldSpeedFactor: 2 })).upgrade.buildSeconds).toBe(15);
+    // No catalogue entry for the next level: the client's estimate prices it, and there is no time.
+    const estimated = buildingHudViewModel(input({ definitions: undefined })).upgrade;
+    expect(estimated.cost).toBeDefined();
+    expect(estimated.buildSeconds).toBeUndefined();
+  });
+
   it('is short with the missing amounts and the time until production covers them', () => {
     const vm = buildingHudViewModel(input({ available: stock({ wood: 40 }), rates: stock({ wood: 120 }) }));
     expect(vm.upgrade.state).toBe('short');
@@ -236,6 +246,36 @@ describe('rowsFor', () => {
   it('a running feast replaces production on the Town Square', () => {
     const vm = buildingHudViewModel(input({ type: 'townsquare', definitions: undefined, feast: { secondsLeft: 100, totalSeconds: 200, renownGain: 6122 } }));
     expect(rowsFor(vm, 'near', { premium: false })[1]).toMatchObject({ kind: 'feast', secondsLeft: 100, renownGain: 6122 });
+  });
+
+  describe('quick upgrade line of the hovered marker', () => {
+    const upgradeRow = (vm: ReturnType<typeof buildingHudViewModel>, quick?: 'premium' | 'locked', shift = false) =>
+      rowsFor(vm, 'near', { premium: quick !== 'locked', quick, shift })[0] as Extract<HudRow, { kind: 'upgrade' }>;
+
+    it('a ready upgrade carries the next level\'s cost and build time', () => {
+      expect(upgradeRow(buildingHudViewModel(input()), 'premium', true).quick).toEqual({
+        mode: 'premium',
+        shift: true,
+        cost: stock({ wood: 100 }),
+        buildSeconds: 60,
+      });
+    });
+    it('a blocked upgrade adds nothing: its own state shows as before', () => {
+      expect(upgradeRow(buildingHudViewModel(input({ available: stock({ wood: 40 }) })), 'premium').quick).toBeUndefined();
+      expect(upgradeRow(buildingHudViewModel(input({ type: 'tower', level: 5 })), 'premium').quick).toBeUndefined();
+    });
+    it('a free account holding Shift gets the locked line, whatever the state', () => {
+      expect(upgradeRow(buildingHudViewModel(input()), 'locked').quick).toMatchObject({ mode: 'locked' });
+      expect(upgradeRow(buildingHudViewModel(input({ available: stock() })), 'locked').quick).toMatchObject({ mode: 'locked' });
+    });
+    it('without a quick mode the row is the plain one, and the layout signature tells the two apart', () => {
+      const vm = buildingHudViewModel(input());
+      const plain = rowsFor(vm, 'near', { premium: true });
+      expect((plain[0] as Extract<HudRow, { kind: 'upgrade' }>).quick).toBeUndefined();
+      const quick = rowsFor(vm, 'near', { premium: true, quick: 'premium' });
+      expect(rowsSignature('near', quick)).not.toBe(rowsSignature('near', plain));
+      expect(rowsSignature('near', rowsFor(vm, 'near', { premium: true, quick: 'premium', shift: true }))).not.toBe(rowsSignature('near', quick));
+    });
   });
 
   describe('time until affordable', () => {

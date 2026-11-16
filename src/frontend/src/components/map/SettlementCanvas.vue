@@ -67,6 +67,10 @@ const emit = defineEmits<{
   'waypoint-tap': [index: number];
   // An army's marker was tapped — see HexMapRendererOptions.onArmyTap.
   'army-tap': [armyId: string, screen: { x: number; y: number }];
+  // A press held on the map (only while the renderer's long press is on) and the hold filling up to it — see
+  // HexMapRendererOptions.onLongPress / onLongPressProgress.
+  'long-press': [screen: { x: number; y: number }];
+  'long-press-progress': [state: { screen: { x: number; y: number } } | null];
   // Docs/design/zoom-transition.md: a wheel/pinch zoom crossed the enter- or
   // exit-threshold — see HexMapRendererOptions.onZoomModeChange.
   'zoom-mode-change': [mode: RenderMode];
@@ -97,6 +101,8 @@ const { renderer, loadState, animLoad, mountError, retry: retryMount } = useHexM
   onWaypointMove: (index, coord) => emit('waypoint-move', index, coord),
   onWaypointTap: (index) => emit('waypoint-tap', index),
   onArmyTap: (armyId, screen) => emit('army-tap', armyId, screen),
+  onLongPress: (screen) => emit('long-press', screen),
+  onLongPressProgress: (state) => emit('long-press-progress', state),
   onZoomModeChange: (mode) => emit('zoom-mode-change', mode),
   onCameraChange: () => emit('camera-change'),
 });

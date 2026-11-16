@@ -79,7 +79,12 @@ const tocLinks = computed(() =>
       <section id="risks" class="block">
         <h2>{{ $t('docs.beachCamp.risks.heading') }}</h2>
         <p class="text">{{ $t('docs.beachCamp.risks.attacked') }}</p>
-        <p class="text">{{ $t('docs.beachCamp.risks.empty') }}</p>
+        <p class="text">{{ $t('docs.beachCamp.risks.falls') }}</p>
+        <p class="text">{{ $t('docs.beachCamp.risks.guarded') }}</p>
+        <p class="text">{{ $t('docs.beachCamp.risks.destroyed') }}</p>
+        <p class="text">{{ $t('docs.beachCamp.risks.troopsOut') }}</p>
+        <p class="text">{{ $t('docs.beachCamp.risks.onTheWay') }}</p>
+        <p class="text">{{ $t('docs.beachCamp.risks.withoutHome') }}</p>
       </section>
     </template>
   </DocsPageLayout>

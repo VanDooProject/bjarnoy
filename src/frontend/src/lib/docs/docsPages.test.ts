@@ -38,7 +38,7 @@ describe('docsPages', () => {
   it('keeps the hub order: story, island, building, move, beyond', () => {
     expect(DOCS_GROUPS.map((g) => g.id)).toEqual(['story', 'island', 'building', 'move', 'beyond']);
     expect(DOCS_PAGES.map((p) => p.id)).toEqual([
-      'saga', 'tiles', 'bogLands', 'techTree', 'production', 'shrines', 'walls', 'training', 'founding', 'beachCamp', 'realm', 'landMovement', 'ships', 'wildlifeCamps', 'wastedLands',
+      'saga', 'tiles', 'bogLands', 'techTree', 'production', 'shrines', 'walls', 'realm', 'training', 'founding', 'beachCamp', 'landMovement', 'ships', 'wildlifeCamps', 'wastedLands',
     ]);
   });
 
@@ -82,10 +82,11 @@ describe('docsPages', () => {
     expect(docsPageByPath('/docs')).toBeUndefined();
     expect(docsGroupOf('shrines').id).toBe('building');
     expect(docsNeighbours('shrines')).toMatchObject({ previous: { id: 'production' }, next: { id: 'walls' } });
-    expect(docsNeighbours('walls').next?.id).toBe('training');
-    expect(docsNeighbours('training')).toMatchObject({ previous: { id: 'walls' }, next: { id: 'founding' } });
+    expect(docsNeighbours('walls').next?.id).toBe('realm');
+    expect(docsNeighbours('realm')).toMatchObject({ previous: { id: 'walls' }, next: { id: 'training' } });
+    expect(docsNeighbours('training')).toMatchObject({ previous: { id: 'realm' }, next: { id: 'founding' } });
     expect(docsNeighbours('founding').next?.id).toBe('beachCamp');
-    expect(docsNeighbours('beachCamp')).toMatchObject({ previous: { id: 'founding' }, next: { id: 'realm' } });
+    expect(docsNeighbours('beachCamp')).toMatchObject({ previous: { id: 'founding' }, next: { id: 'landMovement' } });
     expect(docsNeighbours('saga').previous).toBeUndefined();
     expect(docsNeighbours('saga').next?.id).toBe('tiles');
     expect(docsNeighbours('tiles').previous?.id).toBe('saga');

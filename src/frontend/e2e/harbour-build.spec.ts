@@ -8,21 +8,21 @@ import { SettlementPage } from './pages';
  * exercises the new "Water" category (SettlementView.vue's WATER_CATEGORY,
  * offered only on an owned coastal-water sea tile — see `categoriesFor`)
  * end to end: open the ring menu on a coastal-water hex, pick Water, build a
- * Dockyard, and confirm it lands with the right buildingType. Also proves
- * WorldModel.placeBuilding's widened `seaOk` (fishinghut OR dockyard, still
- * gated to `isCoastalWater`) actually lets a Dockyard through.
+ * Harbour, and confirm it lands with the right buildingType. Also proves
+ * WorldModel.placeBuilding's widened `seaOk` (fishinghut OR harbour, still
+ * gated to `isCoastalWater`) actually lets a Harbour through.
  */
-test('building a dockyard from the ring menu on coastal water places it', async ({ page }) => {
+test('building a harbour from the ring menu on coastal water places it', async ({ page }) => {
   // Same budget reasoning as shrine-build.spec.ts's test.
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.found(page);
 
-  // Dockyard unlocks at longhouse 8 (BuildingCatalogue.cs UnlockLevels,
+  // Harbour unlocks at longhouse 5 (BuildingCatalogue.cs UnlockLevels,
   // docs/design/economy.md's ladder) — level the longhouse up first, same
   // approach shrine-build.spec.ts uses for the shrine's own gate.
-  await settlement.setSettlementLevel(8);
-  // ...and stand its prerequisite, a level-5 fishing hut (BuildingCatalogue.cs Prerequisites).
-  await settlement.standBuildings([{ type: 'fishinghut', level: 5 }]);
+  await settlement.setSettlementLevel(5);
+  // ...and stand its prerequisite, a level-3 fishing hut (BuildingCatalogue.cs Prerequisites).
+  await settlement.standBuildings([{ type: 'fishinghut', level: 3 }]);
   // Late buildings cost more than a fresh settlement can hold: fund it (and its storage) so the bubble is affordable.
   await settlement.fund(10_000_000);
 
@@ -41,12 +41,12 @@ test('building a dockyard from the ring menu on coastal water places it', async 
   await settlement.ring.openBuildCategories();
   await settlement.ring.openCategory('Water');
 
-  const dockyardBubble = settlement.ring.child('Dockyard').first();
-  await expect(dockyardBubble).toBeVisible();
-  await expect(dockyardBubble).not.toHaveClass(/locked/);
-  await dockyardBubble.click();
+  const harbourBubble = settlement.ring.child('Harbour').first();
+  await expect(harbourBubble).toBeVisible();
+  await expect(harbourBubble).not.toHaveClass(/locked/);
+  await harbourBubble.click();
 
   await expect.poll(() => settlement.countBuildings(), { timeout: 5_000 }).toBeGreaterThan(before);
 
-  expect(await settlement.buildingTypeAt(target.hex)).toBe('dockyard');
+  expect(await settlement.buildingTypeAt(target.hex)).toBe('harbour');
 });

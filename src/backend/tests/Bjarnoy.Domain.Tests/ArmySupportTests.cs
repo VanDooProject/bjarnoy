@@ -202,10 +202,12 @@ public class ArmySupportTests
         Assert.Equal(tower.Coord, ((ArmyLocation.InTransit)army.Location).Movement.Path[^1]);
         Assert.Equal(tower.Coord, army.TargetBuildingCoord);
 
-        var arrival = Army.SettleSupportArrival(army, ((ArmyLocation.InTransit)army.Location).Movement.ArrivesAt);
+        var arrivesAt = ((ArmyLocation.InTransit)army.Location).Movement.ArrivesAt;
+        var arrival = Army.SettleSupportArrival(army, arrivesAt.AddHours(2));
 
+        // It stands there from the instant it arrived, not from when it was settled.
         var supporting = Assert.IsType<ArmyLocation.Supporting>(arrival.Army.Location);
-        Assert.Equal(new ArmyLocation.Supporting(hostId, tower.Coord), supporting);
+        Assert.Equal(new ArmyLocation.Supporting(hostId, tower.Coord, arrivesAt), supporting);
         Assert.Equal(arrival.Army.Stacks, Army.GuestsAt([arrival.Army], hostId, tower.Coord));
         Assert.Empty(Army.GuestsAt([arrival.Army], hostId, HostHex));
     }

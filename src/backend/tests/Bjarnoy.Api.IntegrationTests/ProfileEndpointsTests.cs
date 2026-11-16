@@ -150,7 +150,7 @@ public sealed class ProfileEndpointsTests(SqliteApiFixture fixture) : IClassFixt
 
         // ASCII art: leading spaces, internal runs of spaces, and newlines
         // must all come back exactly as sent.
-        const string asciiArt = "  /\\_/\\\n ( o.o )   longship\n  > ^ <";
+        const string asciiArt = "  /\\_/\\\n ( o.o )   snekkja\n  > ^ <";
 
         var updated = await client.PutJsonAsync("/api/v1/profiles/me/bio", new UpdateBioRequest(asciiArt), Ct);
         Assert.Equal(HttpStatusCode.OK, updated.StatusCode);

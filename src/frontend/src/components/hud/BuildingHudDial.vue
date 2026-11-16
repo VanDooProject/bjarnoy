@@ -9,10 +9,12 @@ import { computed, onUnmounted, ref, watch, type ComponentPublicInstance } from 
 import type { HudRing } from '../../lib/hud/buildingHud';
 import {
   CONSTRUCTION_DIAL_ELAPSED_COLOR,
+  BLOCKED_DIAL_OPTIONS,
   CONSTRUCTION_DIAL_REJECT_COLOR,
   DIAL_PENDING_SWEEP_MS,
   dialPhase,
   dialProgress,
+  dialRejectFrame,
   hexPerimeterSegment,
   pendingDotFrame,
   polylinePartial,
@@ -37,6 +39,16 @@ const props = defineProps<{
   urgent?: boolean;
   /** The pending dial's centre dots show with the number (not on the far tier, like the canvas dial). */
   labelVisible?: boolean;
+  /**
+   * A glyph in place of the level (the quick upgrade look of a marker): `up` = a gold-filled hex with a dark double chevron (the
+   * upgrade can be ordered now), `wait` = the dark hex with a clock (it cannot yet). Only drawn on the plain state dial.
+   */
+  glyph?: 'up' | 'wait';
+  /**
+   * When a quick upgrade hit this blocked building (the renderer's `flashBlockedMarker`): the refusal animation plays over the
+   * plain dial without the cross and the fade-out, so the marker stays as it was (`BLOCKED_DIAL_OPTIONS`).
+   */
+  blockedAtMs?: number;
 }>();
 
 const RING_COLOR: Record<HudRing, string> = { ready: '#5fd08a', blocked: '#e2705f', upgrading: '#fff', max: '#ffd23f', none: '#fff' };
@@ -72,6 +84,21 @@ const geometry = computed(() => {
   return { sw, size: 2 * c, c, hex: fmt(hex), hexAt, outline, font, unit: sw / 6 };
 });
 
+/** The marks of the glyphs, in the dial's own units (the radius scales them). */
+const glyphMarks = computed(() => {
+  const { c } = geometry.value;
+  const r = props.radius;
+  const w = 0.42 * r;
+  const h = 0.3 * r;
+  const chevron = (apexY: number) => fmt([[c - w, apexY + h], [c, apexY], [c + w, apexY + h]]);
+  return {
+    chevrons: [chevron(c - 0.34 * r), chevron(c + 0.04 * r)],
+    width: Math.max(2, 0.14 * r),
+    clockRadius: 0.38 * r,
+    hands: fmt([[c, c - 0.22 * r], [c, c], [c + 0.16 * r, c + 0.1 * r]]),
+  };
+});
+
 // ---- the elapsed arc --------------------------------------------------------------------------------------------------------
 
 /** The order's own start and end (the canvas dial's `dialProgress`); without them the polled `progress` is all there is. */
@@ -105,8 +132,10 @@ watch(
   { flush: 'post', immediate: true },
 );
 
-const trackColor = computed(() => RING_COLOR[props.ring]);
-const trackOpacity = computed(() => (props.ring === 'upgrading' ? 0.3 : props.ring === 'none' ? 0.2 : 1));
+// While the blocked-upgrade refusal plays, the ring is red whatever the upgrade state says (a full queue blocks a building whose
+// ring is green): the refusal reads as one red signal, the same red as its flash and shockwaves.
+const trackColor = computed(() => (blockedFrame.value !== null ? RED : RING_COLOR[props.ring]));
+const trackOpacity = computed(() => (blockedFrame.value !== null ? 1 : props.ring === 'upgrading' ? 0.3 : props.ring === 'none' ? 0.2 : 1));
 const labelColor = computed(() => (props.urgent ? YELLOW : props.ring === 'max' ? GOLD : '#fff'));
 
 // ---- the order dial's frames ----------------------------------------------------------------------------------------------
@@ -115,8 +144,17 @@ const labelColor = computed(() => (props.urgent ? YELLOW : props.ring === 'max' 
 
 const now = ref(Date.now());
 const phase = computed(() => (props.order ? dialPhase(props.order, now.value, prefersReducedMotion()) : null));
+const blockedFrame = computed(() =>
+  props.blockedAtMs === undefined ? null : dialRejectFrame(now.value - props.blockedAtMs, prefersReducedMotion(), BLOCKED_DIAL_OPTIONS),
+);
+// A new hit starts the animation over from the moment it came in.
+watch(
+  () => props.blockedAtMs,
+  () => (now.value = Date.now()),
+);
 const animated = computed(() => {
   const p = phase.value;
+  if (blockedFrame.value !== null) return true;
   return p !== null && (p.kind === 'finish' || p.kind === 'reject' || (p.kind === 'pending' && !prefersReducedMotion()));
 });
 
@@ -204,6 +242,21 @@ const burst = computed(() => {
   };
 });
 
+/** The blocked-upgrade animation over the plain dial: the shake and pop of the marker, the red flash and the shockwaves. */
+const blocked = computed(() => {
+  const frame = blockedFrame.value;
+  if (!frame) return null;
+  const { c, hexAt } = geometry.value;
+  const r = props.radius;
+  return {
+    transform: `translate(${frame.offsetX.toFixed(2)} 0) translate(${c} ${c}) scale(${frame.scale.toFixed(3)}) translate(${-c} ${-c})`,
+    flash: hexAt(r),
+    flashOpacity: 0.7 * frame.flash,
+    rings: frame.rings.filter((ring) => ring.alpha > 0).map((ring) => ({ points: hexAt(r * ring.scale), opacity: ring.alpha })),
+    ringWidth: 3 * geometry.value.unit,
+  };
+});
+
 /** The pending dial: one orbiting sweep (still segments with reduced motion), and the three bouncing dots. */
 const pending = computed(() => {
   if (phase.value?.kind !== 'pending') return null;
@@ -233,6 +286,7 @@ const pending = computed(() => {
     :viewBox="`0 0 ${geometry.size} ${geometry.size}`"
     style="overflow: visible"
     aria-hidden="true"
+    :data-refused="blocked ? '' : undefined"
   >
     <g v-if="burst" class="hud-dial__burst" :transform="`translate(${burst.shake.toFixed(2)} 0)`">
       <polygon v-for="(ring, i) in burst.rings" :key="i" :points="ring.points" fill="none" :stroke="burst.color" :stroke-opacity="ring.opacity" :stroke-width="burst.ringWidth" stroke-linejoin="round" />
@@ -241,8 +295,9 @@ const pending = computed(() => {
       <polygon :points="burst.body" fill="none" :stroke="burst.color" :stroke-opacity="burst.edgeOpacity" :stroke-width="burst.edgeWidth" stroke-linejoin="round" />
       <polyline v-for="(mark, i) in burst.marks" :key="`m${i}`" :points="mark" fill="none" stroke="#fff" :stroke-opacity="burst.edgeOpacity" :stroke-width="burst.markWidth" stroke-linecap="round" stroke-linejoin="round" />
     </g>
-    <template v-else>
-      <polygon :points="geometry.hex" fill="#0b1720" />
+    <g v-else :transform="blocked?.transform">
+      <polygon v-for="(ring, i) in blocked?.rings ?? []" :key="`b${i}`" :points="ring.points" fill="none" :stroke="RED" :stroke-opacity="ring.opacity" :stroke-width="blocked!.ringWidth" stroke-linejoin="round" />
+      <polygon :points="geometry.hex" :fill="glyph === 'up' ? GOLD : '#0b1720'" />
       <polygon :points="geometry.hex" fill="none" :stroke="trackColor" :stroke-opacity="trackOpacity" :stroke-width="geometry.sw" stroke-linejoin="round" />
       <path v-if="arcShown" :ref="setArcEl" class="hud-dial__arc" :d="geometry.outline" pathLength="1" stroke-dasharray="1 1" :stroke-dashoffset="arcOffset" fill="none" :stroke="YELLOW" :stroke-width="geometry.sw" stroke-linecap="round" stroke-linejoin="round" />
       <template v-if="pending">
@@ -251,6 +306,14 @@ const pending = computed(() => {
           <circle v-for="(dot, i) in pending.dots" :key="`d${i}`" class="hud-dial__dot" :cx="dot.x" :cy="dot.y" :r="dot.r" fill="#fff" :fill-opacity="dot.opacity" />
         </template>
       </template>
+      <polygon v-if="blocked" class="hud-dial__flash" :points="blocked.flash" :fill="RED" :fill-opacity="blocked.flashOpacity" />
+      <g v-if="glyph === 'up'" class="hud-dial__glyph hud-dial__glyph--up">
+        <polyline v-for="(chevron, i) in glyphMarks.chevrons" :key="i" :points="chevron" fill="none" :stroke="DARK" :stroke-width="glyphMarks.width" stroke-linecap="round" stroke-linejoin="round" />
+      </g>
+      <g v-else-if="glyph === 'wait'" class="hud-dial__glyph hud-dial__glyph--wait">
+        <circle :cx="geometry.c" :cy="geometry.c" :r="glyphMarks.clockRadius" fill="none" stroke="#fff" :stroke-width="glyphMarks.width" />
+        <polyline :points="glyphMarks.hands" fill="none" stroke="#fff" :stroke-width="glyphMarks.width" stroke-linecap="round" stroke-linejoin="round" />
+      </g>
       <Transition :css="false" @enter="(el, done) => (labelFade ? labelFade(el, 'in', done) : done())" @leave="(el, done) => (labelFade ? labelFade(el, 'out', done) : done())">
         <text
           v-if="label"
@@ -268,7 +331,7 @@ const pending = computed(() => {
           {{ label }}
         </text>
       </Transition>
-    </template>
+    </g>
   </svg>
 </template>
 

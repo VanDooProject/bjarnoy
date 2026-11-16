@@ -380,6 +380,12 @@ export const api = {
       method: 'POST',
       headers: ownerHeader(ownerId),
     }),
+  // Cancels any order of a building's training queue; the units not trained yet are refunded at 50 %.
+  cancelTraining: (settlementId: string, orderId: string, ownerId?: string) =>
+    request<unknown>(`/settlements/${settlementId}/units/${orderId}/cancel`, {
+      method: 'POST',
+      headers: ownerHeader(ownerId),
+    }),
   // Owner-gated like queueBuild — same X-Owner-Id proof for an unclaimed realm.
   postTradeOffer: (settlementId: string, body: PostTradeOfferRequest, ownerId?: string) =>
     request<TradeOfferResponse>(`/settlements/${settlementId}/trade-offers`, {

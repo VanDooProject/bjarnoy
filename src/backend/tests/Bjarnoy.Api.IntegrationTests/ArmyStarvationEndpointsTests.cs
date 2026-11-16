@@ -147,7 +147,7 @@ public sealed class ArmyStarvationEndpointsTests : IAsyncLifetime
                 winnerSettlement.Id, winnerHome, [(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0)], [(2, 0), (3, 0), (4, 0)], 1_000, UnitType.Axeman, 10);
             var loser = MakeArmy(
                 loserSettlement.Id, loserHome, [(2, 0), (1, 0), (0, 0)], [(0, 0), (-1, 0), (-2, 0)], 100, UnitType.Spearman, 5);
-            db.Armies.AddRange(winner, loser);
+            db.AddArmyRows(winner, loser);
             await db.SaveChangesAsync(Ct);
 
             worldId = world.Id;
@@ -220,7 +220,7 @@ public sealed class ArmyStarvationEndpointsTests : IAsyncLifetime
             fleeing.IsReturning = true;
             fleeing.TurnAroundAt = now;
             fleeing.FieldBattleImmuneUntil = now + TimeSpan.FromHours(6);
-            db.Armies.Add(fleeing);
+            db.AddArmyRows(fleeing);
             await db.SaveChangesAsync(Ct);
             armyId = fleeing.Id;
         }

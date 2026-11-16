@@ -117,6 +117,9 @@ public class CampReportEntity
 
     public double CampPower { get; set; }
 
+    /// <summary>The army's ranged attack in the volley before the fight; zero for older reports.</summary>
+    public double ArmyVolleyPower { get; set; }
+
     public int Seed { get; set; }
 
     public double LootWood { get; set; }
@@ -158,6 +161,7 @@ public class CampReportEntity
             Winner = (int)report.Winner,
             ArmyPower = report.ArmyPower,
             CampPower = report.CampPower,
+            ArmyVolleyPower = report.ArmyVolleyPower,
             Seed = report.Seed,
             LootWood = report.Loot.Wood,
             LootStone = report.Loot.Stone,
@@ -183,6 +187,7 @@ public class CampReportEntity
             Tier = (int)l.Tier,
             Before = l.Before,
             Lost = l.Lost,
+            VolleyLost = l.VolleyLost,
         })];
 
         return entity;
@@ -202,13 +207,14 @@ public class CampReportEntity
         Winner = (CampFightWinner)Winner,
         ArmyPower = ArmyPower,
         CampPower = CampPower,
+        ArmyVolleyPower = ArmyVolleyPower,
         Seed = Seed,
         Loot = new ResourceAmounts(LootWood, LootStone, LootFood, LootIron),
         CampCleared = CampCleared,
         TowerCoord = TowerQ is { } q ? new HexCoord(q, TowerR!.Value) : null,
         TowerBurned = TowerBurned,
         UnitLines = [.. UnitLines.OrderBy(l => l.UnitType).Select(l => new CampReportUnitLine(l.UnitType, l.Sent, l.Lost))],
-        BeastLines = [.. BeastLines.OrderBy(l => l.Tier).Select(l => new CampReportBeastLine((BeastTier)l.Tier, l.Before, l.Lost))],
+        BeastLines = [.. BeastLines.OrderBy(l => l.Tier).Select(l => new CampReportBeastLine((BeastTier)l.Tier, l.Before, l.Lost, l.VolleyLost))],
     };
 }
 
@@ -243,4 +249,7 @@ public class CampReportBeastLineEntity
     public int Before { get; set; }
 
     public int Lost { get; set; }
+
+    /// <summary>The part of <see cref="Lost"/> the army's volley killed; zero for older reports.</summary>
+    public int VolleyLost { get; set; }
 }

@@ -544,6 +544,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         "Resource production",
         "Shrines",
         "Walls",
+        "Extending the realm",
       ]);
       await expect(
         menu.getByRole("menuitem", { name: "Shrines" }),
@@ -669,8 +670,8 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       for (const [group, count] of [
         ["story", 1],
         ["island", 2],
-        ["building", 4],
-        ["move", 6],
+        ["building", 5],
+        ["move", 5],
         ["beyond", 2],
       ] as const) {
         await expect(
@@ -688,10 +689,10 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         "Resource production",
         "Shrines",
         "Walls",
+        "Extending the realm",
         "Training troops",
         "Founding settlements",
         "Beach camp",
-        "Extending the realm",
         "Land movement",
         "Ships and water",
         "Wildlife camps",
@@ -916,33 +917,51 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(page.getByText("planned but not in the game")).toHaveCount(0);
   });
 
-  test("training page lists which building trains which units and hides the admin note", async ({
+  test("training page shows the unit dependency graph, a list per building on phones, and hides the admin note", async ({
     page,
   }) => {
     await page.goto("/docs/training");
-    await expectPlayerPage(page, "Training troops", "training-table");
-    await expect(page.locator('[data-building="barracks"]')).toContainText(
-      "Spearman",
-    );
-    await expect(page.locator('[data-building="dockyard"]')).toContainText(
-      "Longship",
-    );
-    // The Longhouse trains nothing, so it is not a row.
-    await expect(page.locator('[data-building="longhouse"]')).toHaveCount(0);
     await expect(
-      page.locator(
-        '[data-building="barracks"] th [data-building-link="link"]',
+      page.getByRole("heading", { level: 1, name: "Training troops" }),
+    ).toBeVisible();
+    const graph = page.getByTestId("unit-graph");
+    await expect(graph.locator("svg")).toBeVisible();
+    await expect(graph.locator('svg [data-unit="spearman"]')).toBeVisible();
+    await expect(graph.locator('svg [data-unit="snekkja"]')).toBeVisible();
+    // No unit needs another unit, so the graph has no arrows.
+    await expect(graph.locator("[data-edge]")).toHaveCount(0);
+    // The Longhouse trains nothing, so it has no lane.
+    await expect(
+      graph.locator('.lane-label[data-building="longhouse"]'),
+    ).toHaveCount(0);
+    await expect(
+      graph.locator(
+        '.lane-label[data-building="barracks"] [data-building-link="link"]',
       ),
     ).toHaveCount(1);
+    await expect(page.getByTestId("admin-note")).toHaveCount(0);
+    await expect(page.getByTestId("docs-admin-toggle")).toHaveCount(0);
+
+    // On a phone the graph gives way to a list per building, ordered by level, without horizontal overflow.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(graph.locator("svg")).toBeHidden();
+    const barracks = page.locator('.phone-building[data-building="barracks"]');
+    await expect(barracks).toBeVisible();
+    await expect(barracks).toContainText("Spearman");
+    const overflow = await page
+      .locator(".docs-page")
+      .evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
   });
 
-  test("ships page compares the Karve and the Longship and hides the admin note", async ({
+  test("ships page compares the Karve and the Snekkja and hides the admin note", async ({
     page,
   }) => {
     await page.goto("/docs/ships");
     await expectPlayerPage(page, "Ships and water", "ships-table");
-    await expect(page.locator('[data-row="attack"]')).toContainText("60");
-    await expect(page.locator('[data-row="needs"]')).toContainText("Karve");
+    await expect(page.locator('[data-ship="snekkja"] [data-col="attack"]')).toHaveText("60");
+    await expect(page.locator('[data-ship="karve"] [data-col="cost"]')).toContainText("250");
+    await expect(page.locator("#ships").getByRole("link", { name: "Training troops" })).toHaveAttribute("href", "/docs/training");
     await expect(page.getByText("Under investigation")).toHaveCount(0);
   });
 
@@ -1009,12 +1028,12 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       page.getByTestId("wall-movement-legend").locator("li"),
     ).toHaveCount(11);
 
-    // Sieges are player content now: rams take one level per won siege, three levels per wall hex, and a Fire Ship sent at
+    // Sieges are player content now: rams take one level per won siege, three levels per wall hex, and Fire Hulks and Fire Rafts sent at
     // the sea end of a wall takes a level too.
     const sieges = page.locator("#sieges");
     await expect(sieges.getByRole("heading", { name: "Sieges" })).toBeVisible();
     await expect(sieges.locator("li")).toHaveCount(6);
-    await expect(sieges).toContainText("A Fire Ship sent at a wall's sea end");
+    await expect(sieges).toContainText("Fire Hulks (10 per level) and Fire Rafts (50 per level) sent at a wall's sea end");
     await expect(sieges).toContainText("exactly one level");
     await expect(sieges).toContainText("3 levels");
     // The note on what is still not built (fire) stays admin-only.

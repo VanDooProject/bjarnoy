@@ -83,6 +83,8 @@ public sealed record SimulatorResponse(
     string Winner,
     double AttackPower,
     double DefensePower,
+    double AttackerVolleyPower,
+    double DefenderVolleyPower,
     int Seed,
     ResourceAmountsResponse LootTaken,
     IReadOnlyList<BattleReportAttackerLineResponse> AttackerLines,
@@ -100,7 +102,7 @@ public sealed record SimulatorResponse(
 
         var response = BattleReportResponse.From(report);
         return new SimulatorResponse(
-            response.Mission, response.Winner, response.AttackPower, response.DefensePower, response.Seed, response.LootTaken,
+            response.Mission, response.Winner, response.AttackPower, response.DefensePower, response.AttackerVolleyPower, response.DefenderVolleyPower, response.Seed, response.LootTaken,
             response.AttackerLines, response.DefenderLines, response.Siege, response.ShipFight, response.Drowned,
             response.FireShipsBurned, response.FireSiege);
     }

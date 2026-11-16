@@ -188,7 +188,7 @@ public sealed class WallRerouteEndpointsTests : IAsyncLifetime
             IsReturning = returning,
             Stacks = [new ArmyUnitStackEntity { UnitType = UnitType.Spearman, Count = 5 }],
         };
-        db.Armies.Add(army);
+        db.AddArmyRows(army);
         await db.SaveChangesAsync(Ct);
         return new Scene(world.Id, army.Id, start);
     }

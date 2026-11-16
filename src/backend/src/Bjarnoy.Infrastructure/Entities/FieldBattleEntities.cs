@@ -81,6 +81,12 @@ public class FieldBattleReportEntity
 
     public double SideBPower { get; set; }
 
+    /// <summary>Side A's ranged attack in the volley before the fight; zero for older reports.</summary>
+    public double SideAVolleyPower { get; set; }
+
+    /// <summary>Side B's ranged attack in the volley before the fight; zero for older reports.</summary>
+    public double SideBVolleyPower { get; set; }
+
     public bool SideAWasDefending { get; set; }
 
     public bool SideBWasDefending { get; set; }
@@ -124,6 +130,8 @@ public class FieldBattleReportEntity
             Winner = (int)plan.Winner,
             SideAPower = plan.SideAPower,
             SideBPower = plan.SideBPower,
+            SideAVolleyPower = plan.SideAVolleyPower,
+            SideBVolleyPower = plan.SideBVolleyPower,
             SideAWasDefending = plan.SideAWasDefending,
             SideBWasDefending = plan.SideBWasDefending,
             Seed = seed,
@@ -135,9 +143,9 @@ public class FieldBattleReportEntity
 
         entity.Lines =
         [
-            .. Line(entity.Id, FieldBattleReportSide.SideA, isLoss: true, plan.SideALosses),
+            .. Line(entity.Id, FieldBattleReportSide.SideA, isLoss: true, plan.SideALosses, plan.SideAVolleyLosses),
             .. Line(entity.Id, FieldBattleReportSide.SideA, isLoss: false, plan.SideASurvivors),
-            .. Line(entity.Id, FieldBattleReportSide.SideB, isLoss: true, plan.SideBLosses),
+            .. Line(entity.Id, FieldBattleReportSide.SideB, isLoss: true, plan.SideBLosses, plan.SideBVolleyLosses),
             .. Line(entity.Id, FieldBattleReportSide.SideB, isLoss: false, plan.SideBSurvivors),
         ];
 
@@ -145,9 +153,11 @@ public class FieldBattleReportEntity
     }
 
     private static IEnumerable<FieldBattleReportLineEntity> Line(
-        Guid reportId, FieldBattleReportSide side, bool isLoss, IReadOnlyList<UnitStack> stacks) =>
+        Guid reportId, FieldBattleReportSide side, bool isLoss, IReadOnlyList<UnitStack> stacks,
+        IReadOnlyList<UnitStack>? volleyLosses = null) =>
         stacks.Select(s => new FieldBattleReportLineEntity
         {
+            VolleyCount = volleyLosses?.Where(v => v.Type == s.Type).Sum(v => v.Count) ?? 0,
             FieldBattleReportId = reportId,
             Side = side,
             IsLoss = isLoss,
@@ -185,4 +195,7 @@ public class FieldBattleReportLineEntity
     public UnitType UnitType { get; set; }
 
     public int Count { get; set; }
+
+    /// <summary>On a loss line: the part of <see cref="Count"/> the volley took; zero for older reports and survivor lines.</summary>
+    public int VolleyCount { get; set; }
 }

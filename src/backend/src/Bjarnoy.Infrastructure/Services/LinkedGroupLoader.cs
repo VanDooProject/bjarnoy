@@ -60,7 +60,7 @@ public sealed class LinkedGroupSession
     public SettlementEntity Anchor { get; }
 
     /// <summary>Every settlement of the player's island set, oldest first (tracked, full includes).</summary>
-    public IReadOnlyList<SettlementEntity> Members { get; }
+    public IReadOnlyList<SettlementEntity> Members { get; private set; }
 
     public LinkedStore Store { get; }
 
@@ -93,6 +93,16 @@ public sealed class LinkedGroupSession
 
     public void Apply(Guid id, Settlement updated) => Store.Apply(id, updated);
 
+    /// <summary>
+    /// Takes the member <paramref name="id"/> out of the group (a beach camp that was destroyed): <see cref="WriteBackAsync"/> no longer
+    /// writes it, so what its own piles held is lost. Its entity stays tracked for the caller to delete.
+    /// </summary>
+    public void Drop(Guid id)
+    {
+        Members = [.. Members.Where(m => m.Id != id)];
+        _entities.Remove(id);
+    }
+
     /// <summary>The guest armies hosted by <paramref name="id"/> that still hold units.</summary>
     public IReadOnlyList<ArmyEntity> GuestArmiesOf(Guid id) => [.. _guestArmies[id].Where(a => a.Stacks.Count > 0)];
 
@@ -112,7 +122,7 @@ public sealed class LinkedGroupSession
     /// guest deaths of the settle off the hosted armies. Does not save.
     /// </summary>
     /// <remarks>
-    /// The one write path that persists a settlement also finds the garrisons whose Tower or Dockyard is gone
+    /// The one write path that persists a settlement also finds the garrisons whose Tower, Harbour or Shipyard is gone
     /// (<see cref="Settlement.TakeOrphanedGarrisons"/>) and sends them marching to the owner's nearest fitting spot, and gives the
     /// armies that were homed there a new home (<see cref="GarrisonRelocation"/>).
     /// </remarks>
@@ -158,7 +168,7 @@ public sealed class LinkedGroupSession
 
             var spotsNow = outcome.Settlement.GarrisonSpots.Select(s => s.Coord).ToHashSet();
             var lost = member.Buildings
-                .Where(b => b.Type is BuildingType.Tower or BuildingType.Dockyard && b.Level >= 1)
+                .Where(b => b.Type.HoldsGarrison() && b.Level >= 1)
                 .Select(b => new HexCoord(b.Q, b.R))
                 .Where(c => !spotsNow.Contains(c))
                 .ToList();
@@ -188,7 +198,7 @@ public sealed class LinkedGroupSession
 
                 var (army, resources) = GarrisonRelocation.WithWalkFood(found.March, view.Resources, Now);
                 view = view with { Resources = resources };
-                relocation.AddArmy(army);
+                relocation.AddArmy(army, member);
             }
 
             Store.Apply(member.Id, view);

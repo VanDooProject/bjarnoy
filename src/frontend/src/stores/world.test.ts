@@ -3083,6 +3083,18 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
       await done;
     });
 
+    it('two quick upgrades in a row, the first not answered yet, order level n+1 and then n+2', async () => {
+      const store = await setupWithLumberjack(2);
+      queueBuild.mockReturnValue(new Promise<void>(() => {}));
+
+      void store.upgradeBuildingLive(at);
+      void store.upgradeBuildingLive(at);
+
+      // The second one starts from the first one's optimistic entry, not from the built level.
+      expect(store.hud.queue.map((o) => o.targetLevel)).toEqual([3, 4]);
+      expect(queueBuild).toHaveBeenCalledTimes(2);
+    });
+
     it('records the confirmed spend for the resources that really dropped', async () => {
       const store = await setupWithLumberjack(2);
       queueBuild.mockResolvedValue(undefined);
@@ -3779,7 +3791,7 @@ describe('useWorldStore other realms as send sources', () => {
       summary('far-new', 'far', 'Vik'),
     ]);
     getSettlement.mockReset().mockImplementation(async (id: string) => realmResponse(id, 'Vik', [{ unit: 'spearman', count: 4 }]));
-    getSettlementArmies.mockReset().mockResolvedValue([{ id: 'fa' }]);
+    getSettlementArmies.mockReset().mockResolvedValue([{ id: 'fa', settlementId: 'far' }]);
     getArmy.mockReset().mockResolvedValue({ id: 'fa', settlementId: 'far', stacks: [] });
 
     await store.refreshOtherRealms();
@@ -3798,6 +3810,25 @@ describe('useWorldStore other realms as send sources', () => {
       },
     ]);
     expect(store.sendRealms.map((r) => [r.realmId, r.current])).toEqual([['open', true], ['far', false]]);
+  });
+
+  it("does not fetch an other realm's armies without a home: the open realm's list already carries them", async () => {
+    const store = await loadStoreModule(false);
+    await loggedIn();
+    store.worldId = 'w1';
+    store.selectedSettlementId = 'open';
+    listMySettlements.mockReset().mockResolvedValue([summary('open', 'open', 'Bjarnoy'), summary('far', 'far', 'Vik')]);
+    getSettlement.mockReset().mockImplementation(async (id: string) => realmResponse(id, 'Vik', []));
+    getSettlementArmies.mockReset().mockResolvedValue([
+      { id: 'fa', settlementId: 'far' },
+      { id: 'homeless', settlementId: null },
+    ]);
+    getArmy.mockReset().mockImplementation(async (id: string) => ({ id, settlementId: id === 'fa' ? 'far' : null, stacks: [] }));
+
+    await store.refreshOtherRealms();
+
+    expect(getArmy.mock.calls.map((c) => c[0])).toEqual(['fa']);
+    expect(store.otherRealms[0]!.armies.map((a) => a.id)).toEqual(['fa']);
   });
 
   it("keeps a realm's last snapshot when its read fails, and drops a realm the player no longer has", async () => {

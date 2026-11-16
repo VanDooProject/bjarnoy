@@ -57,7 +57,7 @@ public class BattleResolverTests
     public void Land_attack_bonus_percent_scales_only_non_ship_attack_power()
     {
         // 10 Spearmen (Attack 15 each = 150 land) + 2 Longships (Attack 60 each = 120 ship).
-        var attacker = new[] { new UnitStack(UnitType.Spearman, 10), new UnitStack(UnitType.Longship, 2) };
+        var attacker = new[] { new UnitStack(UnitType.Spearman, 10), new UnitStack(UnitType.Snekkja, 2) };
         var defender = new[] { new UnitStack(UnitType.Spearman, 1) };
 
         var noBonus = BattleResolver.Resolve(attacker, defender, defenseBonusPercent: 0, Abundant, seed: 1);
@@ -71,7 +71,7 @@ public class BattleResolverTests
     [Fact]
     public void Ship_attack_bonus_percent_scales_only_ship_attack_power()
     {
-        var attacker = new[] { new UnitStack(UnitType.Spearman, 10), new UnitStack(UnitType.Longship, 2) };
+        var attacker = new[] { new UnitStack(UnitType.Spearman, 10), new UnitStack(UnitType.Snekkja, 2) };
         var defender = new[] { new UnitStack(UnitType.Spearman, 1) };
 
         var withShipBonus = BattleResolver.Resolve(
@@ -151,7 +151,7 @@ public class BattleResolverTests
     [Fact]
     public void Loot_is_capped_by_the_survivors_total_carry_capacity()
     {
-        // 1 Axeman survives with CarryCapacity 30; the settlement holds far
+        // 1 Axeman survives with CarryCapacity 40; the settlement holds far
         // more than that of everything.
         var attacker = new[] { new UnitStack(UnitType.Axeman, 1) };
         IReadOnlyList<UnitStack> defender = [];
@@ -159,21 +159,20 @@ public class BattleResolverTests
         var plan = BattleResolver.Resolve(attacker, defender, defenseBonusPercent: 0, Abundant, seed: 1);
 
         var total = plan.LootTaken.Wood + plan.LootTaken.Stone + plan.LootTaken.Food + plan.LootTaken.Iron;
-        Assert.Equal(30, total, 6);
+        Assert.Equal(40, total, 6);
         // Split evenly across the four resources when all are abundant.
-        Assert.Equal(7.5, plan.LootTaken.Wood, 6);
-        Assert.Equal(7.5, plan.LootTaken.Stone, 6);
-        Assert.Equal(7.5, plan.LootTaken.Food, 6);
-        Assert.Equal(7.5, plan.LootTaken.Iron, 6);
+        Assert.Equal(10, plan.LootTaken.Wood, 6);
+        Assert.Equal(10, plan.LootTaken.Stone, 6);
+        Assert.Equal(10, plan.LootTaken.Food, 6);
+        Assert.Equal(10, plan.LootTaken.Iron, 6);
     }
 
     [Fact]
     public void Loot_is_capped_by_what_is_actually_available_and_the_shortfall_spreads_to_the_others()
     {
-        // Carry capacity 120 (1 Axeman, 30) — wait, use enough units for a
-        // round number: 4 Axemen => capacity 120, so an even split would want
+        // Carry capacity 120 (3 Axemen, 40 each), so an even split would want
         // 30 of each resource, but the settlement holds no wood at all.
-        var attacker = new[] { new UnitStack(UnitType.Axeman, 4) };
+        var attacker = new[] { new UnitStack(UnitType.Axeman, 3) };
         IReadOnlyList<UnitStack> defender = [];
         var available = new ResourceAmounts(Wood: 0, Stone: 1_000_000, Food: 1_000_000, Iron: 1_000_000);
 
@@ -375,10 +374,10 @@ public class BattleResolverTests
     [Fact]
     public void Loot_capacity_is_the_surviving_ships_alone_when_there_are_ships_else_everyones()
     {
-        var withShips = new[] { new UnitStack(UnitType.Longship, 2), new UnitStack(UnitType.Axeman, 50) };
+        var withShips = new[] { new UnitStack(UnitType.Snekkja, 2), new UnitStack(UnitType.Axeman, 50) };
         var landOnly = new[] { new UnitStack(UnitType.Axeman, 50) };
 
-        Assert.Equal(BattleResolver.CarryCapacity([new UnitStack(UnitType.Longship, 2)]), BattleResolver.LootCapacity(withShips));
+        Assert.Equal(BattleResolver.CarryCapacity([new UnitStack(UnitType.Snekkja, 2)]), BattleResolver.LootCapacity(withShips));
         Assert.Equal(BattleResolver.CarryCapacity(landOnly), BattleResolver.LootCapacity(landOnly));
         Assert.True(BattleResolver.LootCapacity(landOnly) > 0);
         Assert.Equal(0, BattleResolver.LootCapacity([]));

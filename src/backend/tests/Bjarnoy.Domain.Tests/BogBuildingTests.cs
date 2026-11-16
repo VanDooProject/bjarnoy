@@ -76,7 +76,7 @@ public class BogBuildingTests
     }
 
     [Fact]
-    public void A_fishing_hut_is_planned_on_an_inland_lake_shore_and_a_dockyard_is_not()
+    public void A_fishing_hut_is_planned_on_an_inland_lake_shore_and_a_harbour_is_not()
     {
         var settlement = Rich(10);
         var coord = new HexCoord(1, 0);
@@ -89,7 +89,7 @@ public class BogBuildingTests
         Assert.Equal(BuildRejection.TerrainNotAllowed, away.Rejection);
 
         var dock = settlement.PlanBuild(
-            BuildingType.Dockyard, coord, Terrain.InlandLake, T0, Guid.CreateVersion7(), isInlandLakeShore: true);
+            BuildingType.Harbour, coord, Terrain.InlandLake, T0, Guid.CreateVersion7(), isInlandLakeShore: true);
         Assert.Equal(BuildRejection.TerrainNotAllowed, dock.Rejection);
     }
 

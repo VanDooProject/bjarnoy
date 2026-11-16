@@ -126,8 +126,8 @@ public sealed class SimulatorEndpointsTests(SqliteApiFixture fixture) : IClassFi
 
         const int seed = 4242;
         var request = new SimulatorRequest(
-            AttackerStacks: [new UnitCountRequest("longship", 5), new UnitCountRequest("axeman", 80)],
-            DefenderStacks: [new UnitCountRequest("longship", 1), new UnitCountRequest("spearman", 10)],
+            AttackerStacks: [new UnitCountRequest("snekkja", 5), new UnitCountRequest("axeman", 80)],
+            DefenderStacks: [new UnitCountRequest("snekkja", 1), new UnitCountRequest("spearman", 10)],
             GuestDefenderStacks: [new UnitCountRequest("spearman", 10)],
             TowerLevel: 2,
             LandAttackBonusPercent: 10,
@@ -139,8 +139,8 @@ public sealed class SimulatorEndpointsTests(SqliteApiFixture fixture) : IClassFi
         var result = await response.ReadStrictAsync<SimulatorResponse>(Ct);
 
         var expected = AttackResolver.Resolve(
-            [new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 80)],
-            [new UnitStack(UnitType.Longship, 1), new UnitStack(UnitType.Spearman, 10)],
+            [new UnitStack(UnitType.Snekkja, 5), new UnitStack(UnitType.Axeman, 80)],
+            [new UnitStack(UnitType.Snekkja, 1), new UnitStack(UnitType.Spearman, 10)],
             [new UnitStack(UnitType.Spearman, 10)],
             Bjarnoy.Domain.Buildings.BuildingCatalogue.TowerDefenseBonusPercent(2), ResourceAmounts.Uniform(1_000_000), seed,
             raid: false, landAttackBonusPercent: 10, shipAttackBonusPercent: 50,

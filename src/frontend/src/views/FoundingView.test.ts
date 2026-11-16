@@ -91,11 +91,11 @@ describe('FoundingView', () => {
     wrapper.unmount();
   });
 
-  it('describes founding by sea: the dockyard, the slots a settler takes and the ships page', async () => {
+  it('describes founding by sea: the harbour, the slots a settler takes and the ships page', async () => {
     const wrapper = await mountPage();
 
     const sea = wrapper.get('#sea').text();
-    expect(sea).toContain('leaves from your Dockyard');
+    expect(sea).toContain('leaves from your Harbour');
     expect(sea).toContain('Each settler takes 1 slot aboard');
     expect(sea).toContain('slowest ship');
     expect(wrapper.find('#sea a[href="/docs/ships"]').exists()).toBe(true);

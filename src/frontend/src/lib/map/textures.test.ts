@@ -499,11 +499,11 @@ describe('classifyFamilyFrames', () => {
         { sparse: true },
       );
       const wrap = (c: typeof level1) =>
-        ({ base: {}, baseIndexed: { dockyard: c.baseIndexed }, top: { dockyard: c.top }, animTop: {}, wastedCoastalBase: emptyOrientationArrayMap(), wastedCoastalTop: emptyOrientationArrayMap(), lavaRiverBase: {}, lavaRiverTop: {}, giants: {}, giantAnims: {} }) as unknown as TileTextures;
+        ({ base: {}, baseIndexed: { harbour: c.baseIndexed }, top: { harbour: c.top }, animTop: {}, wastedCoastalBase: emptyOrientationArrayMap(), wastedCoastalTop: emptyOrientationArrayMap(), lavaRiverBase: {}, lavaRiverTop: {}, giants: {}, giantAnims: {} }) as unknown as TileTextures;
 
       const merged = mergeTileTextures(wrap(level1), wrap(statics));
 
-      expect(merged.baseIndexed.dockyard?.SE).toEqual(['dockyard_SE_level000_base', 'dockyard_SE_level001_base', 'dockyard_SE_level002_base']);
+      expect(merged.baseIndexed.harbour?.SE).toEqual(['dockyard_SE_level000_base', 'dockyard_SE_level001_base', 'dockyard_SE_level002_base']);
     });
   });
 });
@@ -819,6 +819,40 @@ describe('textureKeyFor inland lakes', () => {
 
     expect(baseTextureFor(textures, lake)).toBe(baseTextureFor(textures, sea));
     expect(baseTextureFor(textures, lake)).toBe('coastal-base');
+  });
+});
+
+describe('a building whose own atlas family is not loaded yet', () => {
+  const perRotation = <T>(value: T) => Object.fromEntries(TILE_ORIENTATIONS.map((o) => [o, value]));
+  const textures = {
+    base: { sea: perRotation('sea-base'), wasteland: perRotation('wasteland-base'), grass: perRotation('grass-base') },
+    baseIndexed: { bog: perRotation(['bog-base']) },
+    top: {},
+    animTop: {},
+    coastalBase: perRotation(['coastal-base']),
+    coastalTop: perRotation(['coastal-top']),
+    wastedCoastalBase: perRotation(['wasted-coastal-base']),
+    wastedCoastalTop: perRotation(['wasted-coastal-top']),
+  } as unknown as TileTextures;
+  const tile = (extra: Partial<Tile>): Tile => ({ q: 0, r: 0, terrain: 'grass', variant: 0, orientation: 'NW', ...extra });
+
+  it('draws a Fishing Hut on a coastal inland lake hex with the coastal water base', () => {
+    const hut = tile({ terrain: 'inlandlake', isCoastalWater: true, buildingType: 'fishinghut' });
+    expect(baseTextureFor(textures, hut)).toBe('coastal-base');
+  });
+
+  it('draws a Fishing Hut on an open inland lake hex with the sea base', () => {
+    const hut = tile({ terrain: 'inlandlake', buildingType: 'fishinghut' });
+    expect(baseTextureFor(textures, hut)).toBe('sea-base');
+  });
+
+  it('draws a bog building on the bog moss base, not a missing terrain base', () => {
+    const tower = tile({ buildingType: 'tower', bog: { kind: 'bog' } as Tile['bog'] });
+    expect(baseTextureFor(textures, tower)).toBe('bog-base');
+  });
+
+  it('draws a building on wasted ground with the wasted base', () => {
+    expect(baseTextureFor(textures, tile({ wasted: true, buildingType: 'lumberjack' }))).toBe('wasteland-base');
   });
 });
 

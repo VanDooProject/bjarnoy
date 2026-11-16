@@ -8,7 +8,6 @@ import type { ArmyResponse, BuildOrderResponse, TrainingOrderResponse } from '..
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
-import { DOUBLE_TAP_MS } from '../../lib/map/doubleTap';
 import { ApiError } from '../../api/client';
 
 const { recallArmy } = vi.hoisted(() => ({ recallArmy: vi.fn() }));
@@ -361,10 +360,10 @@ describe('QueueDrawer', () => {
       expect(wrapper.find('.queue-drawer').exists()).toBe(true);
       expect(wrapper.text()).toContain('Armies');
 
-      const etas = wrapper.findAll('.army-row .status-row-time').map((n) => n.text());
+      const etas = wrapper.findAll('[data-testid="army-row-time"]').map((n) => n.text());
       // near (1h out) sorts before far (5h out); the supporting army (no
       // active leg, so no ETA) sorts last regardless.
-      expect(etas).toEqual(['1h 0m', '5h 0m', '—']);
+      expect(etas).toEqual(['arrives in 1h 0m', 'arrives in 5h 0m', 'Supporting']);
     });
 
     it('adds an army row to the handle with the soonest arrival', () => {
@@ -387,19 +386,25 @@ describe('QueueDrawer', () => {
       expect(row.find('.queue-drawer-handle-progress').exists()).toBe(false);
     });
 
+    /** Taps the army's row: its detail opens as the drawer's second level. */
+    async function openDetail(wrapper: ReturnType<typeof mountDrawer>, index = 0) {
+      await wrapper.findAll('[data-testid="army-row-head"]')[index].trigger('click');
+    }
+
     it('Recall calls recallArmyLive', async () => {
       const world = useWorldStore();
       world.armies = [army({ id: 'army-1' })];
 
       const wrapper = mountDrawer({ open: true });
-      await wrapper.get('.army-row .recall').trigger('click');
+      await openDetail(wrapper);
+      await wrapper.get('[data-testid="army-recall"]').trigger('click');
       await Promise.resolve();
       await Promise.resolve();
 
       expect(recallArmy).toHaveBeenCalledWith('army-1', undefined);
     });
 
-    it('a refused recall (409) shows the translated rejection on the clicked row', async () => {
+    it('a refused recall (409) shows the translated rejection in the detail of that army', async () => {
       const world = useWorldStore();
       world.armies = [army({ id: 'army-1' }), army({ id: 'army-2' })];
       recallArmy.mockRejectedValue(
@@ -407,12 +412,11 @@ describe('QueueDrawer', () => {
       );
 
       const wrapper = mountDrawer({ open: true });
-      const rows = wrapper.findAll('.army-row');
-      await rows[1].get('.recall').trigger('click');
-      await vi.waitFor(() => expect(wrapper.find('.recall-refusal').exists()).toBe(true));
+      await openDetail(wrapper, 1);
+      await wrapper.get('[data-testid="army-recall"]').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('[data-testid="army-recall-refusal"]').exists()).toBe(true));
 
-      expect(wrapper.findAll('.recall-refusal')).toHaveLength(1);
-      expect(wrapper.findAll('.army-row')[1].get('.recall-refusal').text()).toBe('The army is already heading home.');
+      expect(wrapper.get('[data-testid="army-recall-refusal"]').text()).toBe('The army is already heading home.');
     });
 
     it('a rate-limited recall (429 RouteRateLimited) shows the translated wait-and-retry text', async () => {
@@ -423,10 +427,11 @@ describe('QueueDrawer', () => {
       );
 
       const wrapper = mountDrawer({ open: true });
-      await wrapper.get('.army-row .recall').trigger('click');
-      await vi.waitFor(() => expect(wrapper.find('.recall-refusal').exists()).toBe(true));
+      await openDetail(wrapper);
+      await wrapper.get('[data-testid="army-recall"]').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('[data-testid="army-recall-refusal"]').exists()).toBe(true));
 
-      expect(wrapper.get('.recall-refusal').text()).toBe('Too many marching orders at once. Wait a moment and try again.');
+      expect(wrapper.get('[data-testid="army-recall-refusal"]').text()).toBe('Too many marching orders at once. Wait a moment and try again.');
     });
 
     it('a recall refused without a rejection code (429) shows the generic recall error', async () => {
@@ -435,10 +440,11 @@ describe('QueueDrawer', () => {
       recallArmy.mockRejectedValue(new ApiError(429, undefined));
 
       const wrapper = mountDrawer({ open: true });
-      await wrapper.get('.army-row .recall').trigger('click');
-      await vi.waitFor(() => expect(wrapper.find('.recall-refusal').exists()).toBe(true));
+      await openDetail(wrapper);
+      await wrapper.get('[data-testid="army-recall"]').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('[data-testid="army-recall-refusal"]').exists()).toBe(true));
 
-      expect(wrapper.get('.recall-refusal').text()).toBe('Recall failed.');
+      expect(wrapper.get('[data-testid="army-recall-refusal"]').text()).toBe('Recall failed.');
     });
 
     it('a new recall clears the previous refusal', async () => {
@@ -447,79 +453,75 @@ describe('QueueDrawer', () => {
       recallArmy.mockRejectedValueOnce(new ApiError(429, undefined));
 
       const wrapper = mountDrawer({ open: true });
-      await wrapper.get('.army-row .recall').trigger('click');
-      await vi.waitFor(() => expect(wrapper.find('.recall-refusal').exists()).toBe(true));
+      await openDetail(wrapper);
+      await wrapper.get('[data-testid="army-recall"]').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('[data-testid="army-recall-refusal"]').exists()).toBe(true));
 
-      await wrapper.get('.army-row .recall').trigger('click');
-      await vi.waitFor(() => expect(wrapper.find('.recall-refusal').exists()).toBe(false));
+      await wrapper.get('[data-testid="army-recall"]').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('[data-testid="army-recall-refusal"]').exists()).toBe(false));
     });
 
-    it('a single row tap selects the army and keeps the drawer open', async () => {
+    it('lists the armies with a chevron and no detail until a row is tapped', () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' }), army({ id: 'army-2' })];
+
+      const wrapper = mountDrawer({ open: true });
+
+      expect(wrapper.findAll('[data-testid="army-row-head"]')).toHaveLength(2);
+      expect(wrapper.findAll('.army-row-chevron')).toHaveLength(2);
+      expect(wrapper.find('[data-testid="army-detail"]').exists()).toBe(false);
+    });
+
+    it('a row tap selects the army and opens its detail as a second level in place of the list', async () => {
       const world = useWorldStore();
       world.armies = [army({ id: 'army-1' })];
 
       const wrapper = mountDrawer({ open: true });
-      await wrapper.get('.army-row .status-row-click').trigger('click');
+      await openDetail(wrapper);
 
       expect(world.selectedArmyId).toBe('army-1');
+      expect(wrapper.find('[data-testid="army-detail"]').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="army-row-head"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="army-events"]').exists()).toBe(true);
       expect(wrapper.emitted('select-army')).toBeUndefined();
       expect(wrapper.emitted('update:open')).toBeUndefined();
     });
 
-    it('a second tap on the same row closes the drawer and emits select-army', async () => {
+    it('the back button returns to the list and keeps the army selected', async () => {
       const world = useWorldStore();
       world.armies = [army({ id: 'army-1' })];
 
       const wrapper = mountDrawer({ open: true });
-      const row = wrapper.get('.army-row .status-row-click');
-      await row.trigger('click');
-      await row.trigger('click');
+      await openDetail(wrapper);
+      await wrapper.get('[data-testid="army-detail-back"]').trigger('click');
+
+      expect(wrapper.find('[data-testid="army-detail"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="army-row-head"]').exists()).toBe(true);
+      expect(world.selectedArmyId).toBe('army-1');
+    });
+
+    it('"Show on map" closes the drawer and emits select-army', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+
+      const wrapper = mountDrawer({ open: true });
+      await openDetail(wrapper);
+      await wrapper.get('[data-testid="army-show-on-map"]').trigger('click');
 
       expect(wrapper.emitted('select-army')).toEqual([['army-1']]);
       expect(wrapper.emitted('update:open')).toEqual([[false]]);
     });
 
-    it('a double tap on an already selected row keeps it selected throughout', async () => {
-      const world = useWorldStore();
-      world.armies = [army({ id: 'army-1' })];
-      world.selectArmy('army-1');
-      const clear = vi.spyOn(world, 'clearSelectedArmy');
-
-      const wrapper = mountDrawer({ open: true });
-      const row = wrapper.get('.army-row .status-row-click');
-      await row.trigger('click');
-      expect(world.selectedArmyId).toBe('army-1');
-      await row.trigger('click');
-      vi.runAllTimers();
-
-      expect(clear).not.toHaveBeenCalled();
-      expect(world.selectedArmyId).toBe('army-1');
-      expect(wrapper.emitted('select-army')).toEqual([['army-1']]);
-    });
-
-    it('a single tap on the selected row deselects it after the double-tap window', async () => {
-      const world = useWorldStore();
-      world.armies = [army({ id: 'army-1' })];
-      world.selectArmy('army-1');
-
-      const wrapper = mountDrawer({ open: true });
-      await wrapper.get('.army-row .status-row-click').trigger('click');
-      expect(world.selectedArmyId).toBe('army-1');
-      vi.advanceTimersByTime(DOUBLE_TAP_MS);
-
-      expect(world.selectedArmyId).toBeNull();
-    });
-
-    it('taps on two different rows are not a double tap', async () => {
+    it('drops back to the list when the army in the detail is gone', async () => {
       const world = useWorldStore();
       world.armies = [army({ id: 'army-1' }), army({ id: 'army-2' })];
 
       const wrapper = mountDrawer({ open: true });
-      const rows = wrapper.findAll('.army-row .status-row-click');
-      await rows[0].trigger('click');
-      await rows[1].trigger('click');
+      await openDetail(wrapper);
+      world.armies = [army({ id: 'army-2' })];
+      await vi.waitFor(() => expect(wrapper.find('[data-testid="army-detail"]').exists()).toBe(false));
 
-      expect(wrapper.emitted('select-army')).toBeUndefined();
+      expect(wrapper.findAll('[data-testid="army-row-head"]')).toHaveLength(1);
     });
 
     it('build and training sections stay unaffected by the Armies section', () => {

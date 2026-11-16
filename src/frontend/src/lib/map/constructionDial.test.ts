@@ -14,6 +14,7 @@ import {
   DIAL_REJECT_MS,
   dialFinishFrame,
   dialRejectFrame,
+  flashBlockedAt,
   dialProgress,
   dialRemainingSeconds,
   hexPerimeterPath,
@@ -309,6 +310,48 @@ describe('retainFinishingDials', () => {
   it('does not duplicate a coord still present in next', () => {
     const next = [dial(1, now + 9000)];
     expect(retainFinishingDials([dial(1, now - 100)], next, now)).toEqual(next);
+  });
+});
+
+describe('flashBlockedAt', () => {
+  it('adds the hex and starts an entry over when it is hit again', () => {
+    const once = flashBlockedAt([], { q: 1, r: 2 }, 1000);
+    expect(once).toEqual([{ key: '1,2', atMs: 1000 }]);
+    expect(flashBlockedAt(once, { q: 1, r: 2 }, 1200)).toEqual([{ key: '1,2', atMs: 1200 }]);
+  });
+  it('keeps other hexes that still play and drops the ones that have played out', () => {
+    const list = [{ key: '0,0', atMs: 1000 }, { key: '3,3', atMs: 2000 }];
+    expect(flashBlockedAt(list, { q: 1, r: 2 }, 2000 + DIAL_REJECT_MS - 1).map((b) => b.key)).toEqual(['3,3', '1,2']);
+  });
+});
+
+describe('dialRejectFrame without the cross and the fade-out (a refused quick upgrade)', () => {
+  const opts = { cross: false, fadeOut: false };
+  it('never draws the cross', () => {
+    for (const s of [0, 150, 300, 450, 1200]) expect(dialRejectFrame(s, false, opts)!.cross).toBe(0);
+  });
+  it('keeps the size and opacity of the marker to the end, with the same shake, pop and shockwaves', () => {
+    for (const s of [1150, 1325, DIAL_REJECT_MS - 0.01]) expect(dialRejectFrame(s, false, opts)).toMatchObject({ scale: 1, alpha: 1 });
+    for (const s of [35, 150, 275, 350, 750]) {
+      const plain = dialRejectFrame(s, false)!;
+      const blocked = dialRejectFrame(s, false, opts)!;
+      expect(blocked.offsetX).toBe(plain.offsetX);
+      expect(blocked.scale).toBe(plain.scale);
+      expect(blocked.rings).toEqual(plain.rings);
+      expect(blocked.flash).toBe(plain.flash);
+    }
+  });
+  it('lets the red flash end instead, so the marker is exactly as before afterwards', () => {
+    expect(dialRejectFrame(1150, false, opts)!.flash).toBeCloseTo(0.35);
+    expect(dialRejectFrame(1325, false, opts)!.flash).toBeCloseTo(0.175);
+    expect(dialRejectFrame(DIAL_REJECT_MS - 0.01, false, opts)!.flash).toBeCloseTo(0, 2);
+  });
+  it('keeps the flash and drops shake, pop and rings under reduced motion; still null outside the window', () => {
+    const f = dialRejectFrame(150, true, opts)!;
+    expect(f).toMatchObject({ offsetX: 0, scale: 1, rings: [], cross: 0 });
+    expect(f.flash).toBeCloseTo(1);
+    expect(dialRejectFrame(-1, false, opts)).toBeNull();
+    expect(dialRejectFrame(DIAL_REJECT_MS, false, opts)).toBeNull();
   });
 });
 

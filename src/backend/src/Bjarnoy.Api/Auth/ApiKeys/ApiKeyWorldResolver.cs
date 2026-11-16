@@ -20,12 +20,11 @@ public sealed class ApiKeyWorldResolver(GameDbContext dbContext)
             .Select(s => s.WorldId)
             .ToListAsync(cancellationToken);
 
-    /// <summary>An army's world is its home settlement's.</summary>
+    /// <summary>An army's world: its own column, so an army without a home has one too.</summary>
     public async Task<IReadOnlyList<Guid>> ForArmyAsync(Guid armyId, CancellationToken cancellationToken) =>
-        await (from a in dbContext.Armies.AsNoTracking()
-               where a.Id == armyId
-               join s in dbContext.Settlements.AsNoTracking() on a.SettlementId equals s.Id
-               select s.WorldId)
+        await dbContext.Armies.AsNoTracking()
+            .Where(a => a.Id == armyId)
+            .Select(a => a.WorldId)
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<Guid>> ForGuildAsync(Guid guildId, CancellationToken cancellationToken) =>
@@ -48,25 +47,19 @@ public sealed class ApiKeyWorldResolver(GameDbContext dbContext)
             .Select(o => o.WorldId)
             .ToListAsync(cancellationToken);
 
-    /// <summary>A battle report's worlds: those of its attacker and defender settlements.</summary>
-    public async Task<IReadOnlyList<Guid>> ForBattleReportAsync(Guid reportId, CancellationToken cancellationToken)
-    {
-        var parties = await dbContext.BattleReports.AsNoTracking()
+    /// <summary>A battle report's world: its own column (its settlements may be gone, a destroyed beach camp, or the attacker had no home).</summary>
+    public async Task<IReadOnlyList<Guid>> ForBattleReportAsync(Guid reportId, CancellationToken cancellationToken) =>
+        await dbContext.BattleReports.AsNoTracking()
             .Where(r => r.Id == reportId)
-            .Select(r => new[] { r.AttackerSettlementId, r.DefenderSettlementId })
-            .FirstOrDefaultAsync(cancellationToken);
-        return parties is null ? [] : await WorldsOfAsync(parties, cancellationToken);
-    }
+            .Select(r => r.WorldId)
+            .ToListAsync(cancellationToken);
 
-    /// <summary>A field battle report's worlds: those of its two sides' settlements.</summary>
-    public async Task<IReadOnlyList<Guid>> ForFieldReportAsync(Guid reportId, CancellationToken cancellationToken)
-    {
-        var parties = await dbContext.FieldBattleReports.AsNoTracking()
+    /// <summary>A field battle report's world: its own column, for the same reason.</summary>
+    public async Task<IReadOnlyList<Guid>> ForFieldReportAsync(Guid reportId, CancellationToken cancellationToken) =>
+        await dbContext.FieldBattleReports.AsNoTracking()
             .Where(r => r.Id == reportId)
-            .Select(r => new[] { r.SideASettlementId, r.SideBSettlementId })
-            .FirstOrDefaultAsync(cancellationToken);
-        return parties is null ? [] : await WorldsOfAsync(parties, cancellationToken);
-    }
+            .Select(r => r.WorldId)
+            .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<Guid>> ForCampReportAsync(Guid reportId, CancellationToken cancellationToken) =>
         await dbContext.CampReports.AsNoTracking()
@@ -78,12 +71,5 @@ public sealed class ApiKeyWorldResolver(GameDbContext dbContext)
         await dbContext.ArmyReports.AsNoTracking()
             .Where(r => r.Id == reportId)
             .Select(r => r.WorldId)
-            .ToListAsync(cancellationToken);
-
-    private async Task<IReadOnlyList<Guid>> WorldsOfAsync(Guid[] settlementIds, CancellationToken cancellationToken) =>
-        await dbContext.Settlements.AsNoTracking()
-            .Where(s => settlementIds.Contains(s.Id))
-            .Select(s => s.WorldId)
-            .Distinct()
             .ToListAsync(cancellationToken);
 }

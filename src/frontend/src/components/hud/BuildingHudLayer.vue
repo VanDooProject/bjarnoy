@@ -14,6 +14,7 @@ import { buildingName } from '../../i18n/catalogueNames';
 import { useAuthStore } from '../../stores/auth';
 import { useBuildingCatalogueStore } from '../../stores/buildingCatalogue';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
+import { useQuickUpgradeStore } from '../../stores/quickUpgrade';
 import { useWorldStore } from '../../stores/world';
 import { builtBuildingLevels, ownBuildings } from '../../composables/useBuildRing';
 import { useIsMobile } from '../../composables/useIsMobile';
@@ -55,6 +56,7 @@ import {
   dialRemainingSeconds,
   nextTapReveal,
   pickTappedDial,
+  type BlockedMarker,
   type ConstructionDial,
 } from '../../lib/map/constructionDial';
 import { circleIntersectsRect, markerFadeStep, type OcclusionCircle } from '../../lib/map/markerOcclusion';
@@ -81,6 +83,8 @@ export interface BuildingHudRenderer {
   readonly markerOcclusionCircle: OcclusionCircle | null;
   /** The construction dials the renderer holds: the queue's, plus finishing and refused ones. Replaced on every change. */
   readonly constructionDialList: readonly ConstructionDial[];
+  /** The markers playing the blocked-upgrade animation (a quick upgrade hit a building that cannot be upgraded now). Replaced on every change. */
+  readonly blockedMarkerList: readonly BlockedMarker[];
 }
 
 const props = withDefaults(
@@ -101,12 +105,19 @@ const world = useWorldStore();
 const auth = useAuthStore();
 const catalogue = useBuildingCatalogueStore();
 const prefs = useHudPrefsStore();
+const quick = useQuickUpgradeStore();
 const isMobile = useIsMobile();
 const hudHidden = useHiddenUnderPhoneLayer();
 const motion = useBuildingHudMotion();
 
+/**
+ * The markers are wanted: the player switched building info on, or the quick upgrade applies (a held Shift, or its mode), whose
+ * glyphs live on them. One switch for both, so the show / hide animation below is the same one.
+ */
+const markersWanted = computed(() => prefs.buildingInfo || quick.applies);
+
 /** The markers are in the DOM: from the moment they are switched on until their hide animation has ended. */
-const rendered = ref(props.buildingMarkers && prefs.buildingInfo);
+const rendered = ref(props.buildingMarkers && markersWanted.value);
 
 /** Every marker's current tier (they differ while one is hovered); the placement loop writes it only when it changes. */
 const tiers = ref<Record<string, HudTier>>({});
@@ -114,6 +125,8 @@ const tierOf = (key: string): HudTier => tiers.value[key] ?? 'mid';
 
 /** Bumped when the renderer's dial list changes (a refusal, a finish, a new order): the markers read their order dial from it. */
 const dialsVersion = ref(0);
+/** When a quick upgrade last hit each blocked building (hex key): the marker's dial plays the refusal from then (`BuildingHudDial`). */
+const blockedAt = ref<Record<string, number>>({});
 
 /** The dial is drawn at the progress dial's default-zoom size; the marker is scaled to the live size factor `zs`. */
 const DIAL_RADIUS = dialRadiusPx(1);
@@ -178,6 +191,7 @@ const baseMarkers = computed<Marker[]>(() => {
         rates: hud.rates,
         construction: hud.construction,
         worldSpeedFactor: world.worldSpeedFactor,
+        wisdomFactor: world.model.wisdomFactor(world.selectedSettlementId!),
         matchingNeighbours: boost.matchingNeighbours,
         onLake: boost.onLake,
         feast,
@@ -270,20 +284,36 @@ const placeables = computed<Placeable[]>(() => [
   ...dialOnly.value,
 ]);
 
+/** The marker the mouse or a tap is on right now (set by the placement loop only when it changes). */
+const hoveredKey = ref<string | null>(null);
+
+type QuickMode = 'premium' | 'locked' | undefined;
+/**
+ * What the hovered marker's box adds for quick upgrade: while it applies, the next level's cost and time; a free account holding
+ * Shift gets the premium line instead (docs/design/premium-gating-ux.md: visible, disabled, explained).
+ */
+function quickModeOf(key: string): QuickMode {
+  if (hoveredKey.value !== key) return undefined;
+  if (quick.applies) return 'premium';
+  return !quick.available && quick.shiftHeld ? 'locked' : undefined;
+}
+
 /** Each marker's rows, worked out again only when its view model, its tier or the premium flag is not what the last ones were made from. */
-const rowMemo = new Map<string, { vm: BuildingHudViewModel; tier: HudTier; premium: boolean; rows: HudRow[] }>();
+const rowMemo = new Map<string, { vm: BuildingHudViewModel; tier: HudTier; premium: boolean; quick: QuickMode; shift: boolean; rows: HudRow[] }>();
 const rowsByKey = computed<Record<string, HudRow[]>>(() => {
   const out: Record<string, HudRow[]> = {};
   const premium = auth.isPremium;
+  const shift = quick.shiftHeld;
   for (const m of markers.value) {
     const tier = tierOf(m.key);
+    const mode = quickModeOf(m.key);
     const hit = rowMemo.get(m.key);
-    if (hit && hit.vm === m.vm && hit.tier === tier && hit.premium === premium) {
+    if (hit && hit.vm === m.vm && hit.tier === tier && hit.premium === premium && hit.quick === mode && hit.shift === shift) {
       out[m.key] = hit.rows;
       continue;
     }
-    const rows = rowsFor(m.vm, tier, { premium });
-    rowMemo.set(m.key, { vm: m.vm, tier, premium, rows });
+    const rows = rowsFor(m.vm, tier, { premium, quick: mode, shift });
+    rowMemo.set(m.key, { vm: m.vm, tier, premium, quick: mode, shift, rows });
     out[m.key] = rows;
   }
   for (const key of rowMemo.keys()) if (!(key in out)) rowMemo.delete(key);
@@ -311,12 +341,33 @@ function boxStyle(currentTier: HudTier) {
 const rowsOf = (m: Marker): HudRow[] => rowsByKey.value[m.key] ?? [];
 
 /**
+ * The quick upgrade look of a marker whose dial shows the plain state: while it applies, a glyph in place of the level - an
+ * upgrade that can be ordered now (`ready`) or one that cannot yet (short of resources, the longhouse, a prerequisite or room in
+ * the stores). Max, running, queued and the other order dials keep what they show; the far tier is the ring only.
+ */
+function glyphOf(m: Marker): 'up' | 'wait' | undefined {
+  if (!quick.applies || tierOf(m.key) === 'far' || m.vm.dial.kind !== 'state') return undefined;
+  switch (m.vm.upgrade.state) {
+    case 'ready':
+      return 'up';
+    case 'short':
+    case 'longhouse':
+    case 'prereq':
+    case 'storage':
+      return 'wait';
+    default:
+      return undefined;
+  }
+}
+
+/**
  * Inside the dial: the countdown of a running upgrade or raze, `#place` of a queued order, else the level; the far tier is the
  * ring only. A pending, refused or finishing dial draws its own symbols instead of a number; an upgrade or raze whose time is up
  * (`settling`, or the finish animation) shows none until the poll brings the new state.
  */
 function labelOf(m: Marker): string {
   if (tierOf(m.key) === 'far') return '';
+  if (glyphOf(m)) return '';
   const { dial } = m.vm;
   switch (dial.kind) {
     case 'upgrading':
@@ -462,6 +513,7 @@ function setMouseHovering(on: boolean) {
   emit('update:hovering', on);
 }
 let lastDialList: readonly ConstructionDial[] | null = null;
+let lastBlockedList: readonly BlockedMarker[] | null = null;
 
 /** Runs from the renderer's own frame (`setFrameObserver`), never from a rAF of its own: the camera it reads is the one just drawn. */
 function tick() {
@@ -477,6 +529,10 @@ function tick() {
     lastDialList = renderer.constructionDialList;
     dialsVersion.value += 1;
   }
+  if (renderer.blockedMarkerList !== lastBlockedList) {
+    lastBlockedList = renderer.blockedMarkerList;
+    blockedAt.value = Object.fromEntries(lastBlockedList.map((b) => [b.key, b.atMs]));
+  }
   if (tapKey !== null && nowMs - tapAtMs >= DIAL_TAP_REVEAL_MS) tapKey = null;
   // Nothing to place (the landing page without an order, building info off and no dial): no layout read in the map's frame.
   if (placeables.value.length === 0) {
@@ -489,6 +545,7 @@ function tick() {
   const height = rootSize?.h ?? window.innerHeight;
   const circle = renderer.markerOcclusionCircle;
   const placed: { key: string; x: number; hovered: boolean }[] = [];
+  let hoveredNow: string | null = null;
   const mouse = renderer.mousePoint;
   // A marker the mouse is directly on wins over the hex under it for every marker.
   const direct = directHit(
@@ -537,6 +594,7 @@ function tick() {
     const byMouse = !occluded && (direct !== null ? direct === marker.key : renderer.hoveredHexKey === marker.hexKey);
     if (byMouse) mouseHovering = true;
     const hovered = byMouse || (!occluded && tapKey === marker.hexKey);
+    if (hovered) hoveredNow = marker.key;
     const t = dialHoverStep(hoverT.get(marker.key) ?? 0, hovered, dtMs, prefersReducedMotion());
     if (t > 0) hoverT.set(marker.key, t);
     else hoverT.delete(marker.key);
@@ -567,6 +625,7 @@ function tick() {
     placed.push({ key: marker.key, x, hovered: t > 0 });
   }
   if (tiersChanged) tiers.value = nextTiers;
+  if (hoveredNow !== hoveredKey.value) hoveredKey.value = hoveredNow;
   setMouseHovering(mouseHovering);
   // Right-most on top, the hovered / tapped one above all.
   stackOrder(placed).forEach((p, i) => {
@@ -633,7 +692,7 @@ function handOverAfter(key: string, ms: number, canvasDraws: boolean) {
 
 // Show / hide: a hide keeps the markers in the DOM until it has ended; a toggle while one runs reverses it.
 watch(
-  () => prefs.buildingInfo,
+  markersWanted,
   async (on) => {
     if (!props.buildingMarkers) return;
     if (on) {
@@ -656,7 +715,7 @@ watch(
       clearHandovers();
       for (const part of parts) if (!notOwned.value.has(part.key)) handOverAfter(part.key, dialGoneAfterMs(part.delayMs, reduced), true);
       await motion.setShown(false, parts);
-      if (!prefs.buildingInfo) {
+      if (!markersWanted.value) {
         rendered.value = false;
         clearHandovers();
         notOwned.value = new Set();
@@ -762,6 +821,8 @@ onUnmounted(() => {
                 :label-fade="labelFade(m.key)"
                 :order="m.vm.dial.order"
                 :label-visible="tierOf(m.key) !== 'far'"
+                :glyph="glyphOf(m)"
+                :blocked-at-ms="blockedAt[m.key]"
               />
             </span>
             <Transition :css="false" @enter="(el, done) => boxHook('in', el, done)" @leave="(el, done) => boxHook('out', el, done)">

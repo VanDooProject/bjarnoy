@@ -337,8 +337,8 @@ public static class ArmyEndpoints
         var own = new List<GuestArmySummary>();
         foreach (var entity in entities)
         {
-            var guestOwnership = await realms.GetOwnershipAsync(entity.SettlementId, cancellationToken);
-            if (guestOwnership is { } ownership && OwnershipGate.Owns(httpContext, ownership.UserId, ownership.OwnerId))
+            // The guest carries its owner itself (it may have no home).
+            if (OwnershipGate.Owns(httpContext, entity.UserId, entity.OwnerId))
             {
                 own.Add(GuestArmySummary.From(entity));
             }
@@ -383,6 +383,13 @@ public static class ArmyEndpoints
             Detail = "The army cannot be recalled: no route home exists from where it currently is.",
             Status = StatusCodes.Status409Conflict,
             Extensions = { ["rejection"] = nameof(RecallOutcome.NoRouteHome) },
+        },
+        RecallOutcome.NoHome => new ProblemDetails
+        {
+            Title = "No home.",
+            Detail = "The army cannot be recalled: it has no home to return to. Send it to one of your garrison spots instead.",
+            Status = StatusCodes.Status409Conflict,
+            Extensions = { ["rejection"] = nameof(RecallOutcome.NoHome) },
         },
         _ => null,
     };

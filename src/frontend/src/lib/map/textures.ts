@@ -87,6 +87,12 @@ export const TILE_ART_NATIVE_H = 300;
 export const TILE_ART_TOPFACE_Y_FRAC = 140 / 200;
 /** Top-face height as a fraction of the tile width (92 / 200). */
 export const TILE_ART_TOPFACE_H_FRAC = 92 / 200;
+/**
+ * How far lower, as a fraction of the tile width, the sea art's top face starts than land's (12 / 200): measured on the art, the
+ * watertile, coastalwatertile and taintedwater top faces start at native y 152, the river and bog art at 140 like land. Realm borders
+ * on a coast use it to sit on the visible waterline (`realmBorderWaterline.ts`).
+ */
+export const TILE_ART_SEA_TOPFACE_DROP_FRAC = 12 / 200;
 
 // 'sawmillriver'/'sawmillbend'/'sawmillbend60' aren't real
 // `Tile['buildingType']` values — a Sawmill's wire building type always
@@ -228,7 +234,9 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   towerbog: 'stavetower_bog',
   // The Longhouse on sand: the same hall with the beach kept round it (3D_assets hextile165).
   longhousesand: 'greathall_sand',
-  dockyard: 'dockyard',
+  // The Harbour is the old Dockyard: it keeps the `dockyard` art family. The Shipyard has its own `shipyard` family (art still to come).
+  harbour: 'dockyard',
+  shipyard: 'shipyard',
   // A Sawmill is never actually on grass (the backend requires a river
   // shape to place one — BuildingCatalogue.SawmillRiverShapes) — there is
   // deliberately no plain 'sawmill' entry here for the grass/inland family
@@ -2035,8 +2043,14 @@ export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: Ri
   // Also reached while `indexed` exists but every one of its rungs is still
   // a hole (only `buildings-level1` loaded, and this particular family's
   // level 1 base frame hasn't resolved either) — same graceful degradation.
-  const base = textures.base[key] ?? textures.base[tile.terrain];
-  return base![orientation];
+  // The building's own family has no base frame loaded (its atlas page is still loading, or the pack never had one): the hex draws what it
+  // would without the building, as the land-wall branch above does. This is what the tile is anyway: coastal water, wasted art, biome
+  // forest, a bog's own base (bog families live in `baseIndexed`, never in `base`, so a terrain lookup here would find nothing).
+  const base = textures.base[key];
+  if (!base && tile.buildingType) {
+    return baseTextureFor(textures, { ...tile, buildingType: undefined, buildingLevel: undefined }, riverArt);
+  }
+  return (base ?? textures.base[tile.terrain])![orientation];
 }
 
 /** A camp's art levels: `level000` cleared (static), `level001` guarded (animated). */

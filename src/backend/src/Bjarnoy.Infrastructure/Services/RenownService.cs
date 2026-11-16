@@ -95,18 +95,23 @@ public sealed class RenownService(GameDbContext dbContext, TimeProvider timeProv
             .SelectMany(s => s.Buildings)
             .SumAsync(b => (int?)b.Level, cancellationToken).ConfigureAwait(false) ?? 0;
 
-    /// <summary>The world's <c>SpeedFactor</c>; 1.0 when the world is not found.</summary>
+    /// <summary>
+    /// The factor building renown is multiplied by: the world's
+    /// <c>SpeedFactor</c> when its <c>RenownFollowsSpeed</c> flag is on, else
+    /// 1.0 (also when the world is not found).
+    /// </summary>
     private async Task<double> GetSpeedFactorAsync(Guid worldId, CancellationToken cancellationToken) =>
         await _dbContext.Worlds.AsNoTracking()
             .Where(w => w.Id == worldId)
-            .Select(w => (double?)w.SpeedFactor)
+            .Select(w => (double?)(w.RenownFollowsSpeed ? w.SpeedFactor : 1.0))
             .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false) ?? 1.0;
 
     /// <summary>
     /// Renown per hour the player currently accrues from buildings in
     /// <paramref name="worldId"/> (total building levels ×
     /// <see cref="RenownAccount.PointsPerLevelPerHour"/> × the world's
-    /// <c>SpeedFactor</c>), feasts excluded.
+    /// <c>SpeedFactor</c> when its <c>RenownFollowsSpeed</c> flag is on),
+    /// feasts excluded.
     /// </summary>
     public async Task<double> GetPerHourAsync(Guid userId, Guid worldId, CancellationToken cancellationToken = default) =>
         await CountBuildingLevelsAsync(userId, worldId, cancellationToken).ConfigureAwait(false)

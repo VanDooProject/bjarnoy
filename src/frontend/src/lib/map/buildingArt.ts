@@ -42,7 +42,8 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   storagehouse: 'storagebuilding',
   archeryrange: 'archeryrange',
   siegeworkshop: 'siegeworkshop',
-  dockyard: 'dockyard',
+  harbour: 'dockyard',
+  shipyard: 'shipyard',
   greatstorehouse: 'bigstoragehouse',
   barracks: 'barracks',
   // Fishing Hut used to fall back to a legacy single-level composite
@@ -78,7 +79,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,stavetower,farm_pumpkin,freyjashrine,storagebuilding,archeryrange,dockyard,bigstoragehouse,barracks,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,stavetower,farm_pumpkin,freyjashrine,storagebuilding,archeryrange,dockyard,shipyard,bigstoragehouse,barracks,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
   { eager: true, import: 'default' },
 ) as Record<string, string>;
 
