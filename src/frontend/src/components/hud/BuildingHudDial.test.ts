@@ -61,6 +61,21 @@ describe('BuildingHudDial arc', () => {
     expect(arc().attributes('stroke-dasharray')).toBe('1 1');
   });
 
+  it('runs the arc clockwise for an upgrade and counter-clockwise for a raze, both from the top vertex', () => {
+    const pts = () => [...arc().attributes('d')!.matchAll(/(-?[\d.]+),(-?[\d.]+)/g)].map((m) => [Number(m[1]), Number(m[2])] as const);
+    mountDial({ progress: 0.4 });
+    const cw = pts();
+    wrapper!.unmount();
+    mountDial({ progress: 0.4, counterClockwise: true });
+    const ccw = pts();
+    // Top vertex: the first point of both, centred horizontally.
+    expect(ccw[0]).toEqual(cw[0]);
+    // Pointy-top hex: the next vertex is to the right (clockwise) or to the left (counter-clockwise) of the centre line.
+    expect(cw[1]![0]).toBeGreaterThan(cw[0]![0]);
+    expect(ccw[1]![0]).toBeLessThan(ccw[0]![0]);
+    expect(ccw[1]![1]).toBeCloseTo(cw[1]![1], 2);
+  });
+
   it('does not restart on the per-second progress updates, but does when the order changes', async () => {
     fake = installFakeAnimate();
     const order = running(NOW - 30_000, NOW + 90_000);

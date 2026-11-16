@@ -831,6 +831,7 @@ onUnmounted(() => {
                 :glyph="glyphOf(m)"
                 :level="m.level"
                 :blocked-at-ms="blockedAt[m.key]"
+                :counter-clockwise="m.vm.dial.kind === 'razing'"
               />
             </span>
             <Transition :css="false" @enter="(el, done) => boxHook('in', el, done)" @leave="(el, done) => boxHook('out', el, done)">
