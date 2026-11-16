@@ -185,6 +185,16 @@ export const router = createRouter({
       beforeEnter: () => startAtlasManifestLoad(),
     },
     {
+      // Admin-only for now: nothing generates frozen land yet. Left out of the hub, menus and previous/next for everyone else
+      // (`adminOnly` in docsPages.ts).
+      path: '/docs/frozen-lands',
+      name: 'frozen-lands-docs',
+      component: () => import('../views/FrozenLandsView.vue'),
+      meta: { requiresAdmin: true },
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => startAtlasManifestLoad(),
+    },
+    {
       path: '/docs/wildlife-camps',
       name: 'wildlife-camps-docs',
       component: () => import('../views/WildlifeCampsView.vue'),

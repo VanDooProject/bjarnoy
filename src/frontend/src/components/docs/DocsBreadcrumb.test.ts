@@ -2,6 +2,7 @@
 //
 // The docs breadcrumb: "Docs > group > page", the page crumb opens the pages of its group, the group crumb the four
 // groups; one menu at a time, Escape and an outside click close it.
+import { createPinia } from 'pinia';
 import { afterEach, describe, expect, it } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
@@ -22,7 +23,7 @@ async function mountCrumb(pageId = 'shrines' as Parameters<typeof docsPageById>[
   wrapper = mount(DocsBreadcrumb, {
     attachTo: document.body,
     props: { page: docsPageById(pageId) },
-    global: { plugins: [createTestI18n({ docs: enDocs }), router] },
+    global: { plugins: [createPinia(), createTestI18n({ docs: enDocs }), router] },
   });
   await flushPromises();
   return { wrapper, router };
@@ -136,7 +137,7 @@ describe('DocsBreadcrumb', () => {
 
   it('shows only the Docs link when the route has no page entry', async () => {
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
-    wrapper = mount(DocsBreadcrumb, { global: { plugins: [createTestI18n({ docs: enDocs }), router] } });
+    wrapper = mount(DocsBreadcrumb, { global: { plugins: [createPinia(), createTestI18n({ docs: enDocs }), router] } });
     expect(wrapper.findAll('button')).toHaveLength(0);
     expect(wrapper.get('a').text()).toBe('Docs');
   });
