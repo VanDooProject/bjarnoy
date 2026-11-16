@@ -112,7 +112,7 @@ export interface RingCard {
   /** Art for the card thumbnail. */
   art?: ArtRef;
   availability?: RingAvailability;
-  /** What holding the bubble does (gold arrows), or, locked, that it needs premium (lock, muted); shown as a chip beside the hovered bubble. */
+  /** The card's last line: what holding the bubble does (gold arrows), or, locked, that it needs premium (lock, muted). */
   holdHint?: { text: string; locked: boolean };
 }
 
@@ -355,13 +355,6 @@ const hintedLane1 = computed(() => {
   return entry;
 });
 
-/** The hovered root bubble whose card carries a hold hint (Upgrade): the hint shows as a chip beside the bubble. */
-const holdHintedLane1 = computed(() => {
-  if (!atRoot.value || hoveredLane1Index.value === null) return null;
-  const entry = lane1.value.find((e) => e.item.id === hoverLane1.value);
-  return entry?.item.card?.holdHint ? entry : null;
-});
-
 const layout = computed(() =>
   layoutRing({
     x: props.x,
@@ -508,6 +501,7 @@ interface CardView {
   statuses: { text: string; tone: Tone }[];
   /** Touch: "Tap X again to build" — only while the shown item is armed and committable. */
   tapHint?: string;
+  holdHint?: { text: string; locked: boolean };
 }
 
 function resourceList(shortfall: Partial<Record<(typeof RESOURCE_KEYS)[number], number>>): string {
@@ -584,6 +578,7 @@ const cardView = computed<CardView | null>(() => {
     warning: card.warning,
     statuses,
     tapHint: tapHint.value,
+    holdHint: card.holdHint,
   };
 });
 
@@ -943,7 +938,8 @@ onUnmounted(() => holdTracker.cancel());
 
 // Where the hint chip of a hovered, disabled root bubble sits: just outside the
 // bubble, away from the tile, anchored so it grows away from the bubble.
-function chipStyleFor(entry: { x: number; y: number } | null) {
+const hintStyle = computed(() => {
+  const entry = hintedLane1.value;
   if (!entry) return null;
   const dx = entry.x - props.x;
   const dy = entry.y - props.y;
@@ -959,9 +955,7 @@ function chipStyleFor(entry: { x: number; y: number } | null) {
     transform: `translate(${tx}, ${ty})`,
     maxWidth: `${NOTE_W}px`,
   };
-}
-const hintStyle = computed(() => chipStyleFor(hintedLane1.value));
-const holdHintStyle = computed(() => chipStyleFor(holdHintedLane1.value));
+});
 
 function onBackdropPointerDown(e: PointerEvent) {
   emit('outsidePointerDown', e);
@@ -1163,7 +1157,12 @@ function onBackdropPointerDown(e: PointerEvent) {
       <p v-if="cardView.tapHint" class="card-tap-hint" data-testid="ring-tap-hint">
         <i class="tap-bubble" aria-hidden="true" />{{ cardView.tapHint }}
       </p>
-      <div v-else-if="!(cardView.statuses.length || error)" class="card-foot" />
+      <div v-else-if="!(cardView.statuses.length || error || cardView.holdHint)" class="card-foot" />
+      <p v-if="cardView.holdHint" class="card-hold-hint" :class="{ locked: cardView.holdHint.locked }" data-testid="ring-hold-hint">
+        <svg v-if="cardView.holdHint.locked" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
+        <svg v-else viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.5 6 3l3.5 3.5M2.5 10 6 6.5 9.5 10" /></svg>
+        {{ cardView.holdHint.text }}
+      </p>
     </div>
 
     <div
@@ -1173,17 +1172,6 @@ function onBackdropPointerDown(e: PointerEvent) {
       :style="hintStyle"
     >
       {{ hintedLane1.item.hint }}
-    </div>
-    <div
-      v-if="holdHintedLane1 && holdHintStyle"
-      class="ring-hint hold"
-      :class="{ locked: holdHintedLane1.item.card?.holdHint?.locked }"
-      data-testid="ring-hold-hint"
-      :style="holdHintStyle"
-    >
-      <svg v-if="holdHintedLane1.item.card?.holdHint?.locked" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
-      <svg v-else viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.5 6 3l3.5 3.5M2.5 10 6 6.5 9.5 10" /></svg>
-      {{ holdHintedLane1.item.card?.holdHint?.text }}
     </div>
 
     <!-- A rejected build / upgrade: the server's message stays visible with the
@@ -1528,6 +1516,30 @@ function onBackdropPointerDown(e: PointerEvent) {
 .card-foot {
   height: 12px;
 }
+.card-hold-hint {
+  margin: 0;
+  padding: 8px 14px 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-top: 1px solid var(--panel-border);
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--gold);
+}
+.card-hold-hint svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.card-hold-hint.locked {
+  color: var(--muted);
+}
 /* The hold ring sits around the bubble, outside its border; the press itself stays on the bubble. */
 .ring-bubble.holdable {
   -webkit-touch-callout: none;
@@ -1702,27 +1714,6 @@ html[data-hud-motion='reduced'] .ring-bubble.glow {
   color: #f0c3ba;
   pointer-events: none;
   width: max-content;
-}
-.ring-hint.hold {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border-color: rgba(240, 192, 64, 0.45);
-  color: var(--gold);
-}
-.ring-hint.hold.locked {
-  border-color: rgba(255, 255, 255, 0.14);
-  color: var(--muted);
-}
-.ring-hint.hold svg {
-  flex: none;
-  width: 12px;
-  height: 12px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 .ring-error {
   border-color: rgba(226, 112, 95, 0.55);

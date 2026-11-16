@@ -1290,7 +1290,7 @@ describe('RingMenu', () => {
       expect(wrapper.emitted('hold')).toEqual([['upgrade']]);
     });
 
-    it('the hold hint is a chip beside the bubble, not a line of the card; locked for a free account', async () => {
+    it('the card carries the hold hint as its last line, locked for a free account', async () => {
       const card = { title: 'Upgrade to level 2', cost: { wood: 10 } };
       const wrapper = ring({
         actions: [{ id: 'upgrade', label: 'Upgrade', card: { ...card, holdHint: { text: 'Hold to keep upgrading', locked: false } } }],
@@ -1299,7 +1299,6 @@ describe('RingMenu', () => {
       const hint = wrapper.get('[data-testid="ring-hold-hint"]');
       expect(hint.text()).toBe('Hold to keep upgrading');
       expect(hint.classes()).not.toContain('locked');
-      expect(wrapper.get('.ring-card').find('[data-testid="ring-hold-hint"]').exists()).toBe(false);
       const locked = ring({
         actions: [{ id: 'upgrade', label: 'Upgrade', card: { ...card, holdHint: { text: 'Premium: hold', locked: true } } }],
       });
