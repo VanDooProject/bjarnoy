@@ -10,10 +10,12 @@ import AtlasSprite from '../components/AtlasSprite.vue';
 import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
 import { buildingLayers } from '../lib/map/buildingArt';
 import { useAnimationClock } from '../composables/useAnimationClock';
-import { DOCS_GROUPS } from '../lib/docs/docsPages';
+import { visibleDocsGroups } from '../lib/docs/docsPages';
+import { useAuthStore } from '../stores/auth';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
-const GROUPS = DOCS_GROUPS;
+const auth = useAuthStore();
+const groups = computed(() => visibleDocsGroups(auth.isAdmin));
 
 // The page scrolls inside its own container, where the browser's hash scrolling does not reach: `/docs#group-island`
 // (the breadcrumb's group menu) scrolls to that group's section here, on arrival and when the hash changes.
@@ -71,7 +73,7 @@ function stillOf(art: string) {
     </section>
 
     <div class="groups">
-      <section v-for="group in GROUPS" :id="`group-${group.id}`" :key="group.id" class="group" :data-group="group.id">
+      <section v-for="group in groups" :id="`group-${group.id}`" :key="group.id" class="group" :data-group="group.id">
         <h2>{{ t(group.titleKey) }}</h2>
         <p class="group-desc">{{ t(group.descriptionKey) }}</p>
         <RouterLink v-for="page in group.pages" :key="page.id" :to="page.to" class="card" :data-page="page.id">

@@ -88,6 +88,11 @@
         "walls": "Deine eigenen Mauern, aus Holz gebaut.",
         "landMovement": "Wie Armeen das Land bis dorthin durchqueren."
       },
+      "frozenLands": {
+        "wastedLands": "Das andere Land am Ende der Welt, aus Asche statt aus Eis.",
+        "tiles": "Die lebendigen Felder der Heimatinseln.",
+        "landMovement": "Wie Armeen das Land durchqueren."
+      },
       "saga": {
         "founding": "Wie deine erste Landung im Spiel abläuft.",
         "realm": "Was das Reich ausmacht, das du für den Sohn des Jarls aufbaust.",
@@ -182,6 +187,10 @@
       "wastedLands": {
         "title": "Ödlande",
         "description": "Das Endspiel: Utgard steigt aus dem Meer, und die Gilden ziehen in den Krieg."
+      },
+      "frozenLands": {
+        "title": "Eislande",
+        "description": "Nur für Admins: die Eisland-Grafiken, Feld für Feld."
       }
     },
     "footer": {
@@ -569,6 +578,53 @@
       "spring": "Quelle"
     },
     "history": "Nach Snorris Gylfaginning ist Naglfar das Schiff aus den ungeschnittenen Nägeln der Toten. Wer mit langen Nägeln stirbt, baut daran mit, darum schneidet man sie, um die Fertigstellung hinauszuzögern. Zu Ragnarök reißt es sich los und trägt die Riesen in die letzte Schlacht, mit dem Riesen Hrym am Steuer. In der Völuspá gehört sein Losreißen zu den Zeichen des Weltendes."
+  },
+  "frozenLands": {
+    "title": "Die Eislande",
+    "intro": "Schnee, Packeis und Gletscher: die gefrorenen Felder, Familie für Familie. Vorerst nur für Admins.",
+    "techNote": "Bisher erzeugt nichts Eisland. Diese Seite zeigt die fertigen Grafiken des Eis-Pakets, das eine Welt lädt, wenn ihr Schalter „Eisinseln aktiv“ an ist (Admin → Welten).",
+    "tiles": {
+      "heading": "Die Felder",
+      "body": "Alle Feldfamilien des Eis-Pakets. Wähl eine Variante, um die anderen zu sehen.",
+      "looks": "Variante",
+      "families": {
+        "snowfield": {
+          "name": "Schneefeld",
+          "body": "Offenes Land unter Schnee."
+        },
+        "snowforest": {
+          "name": "Schneewald",
+          "body": "Kiefern unter schwerem Schnee."
+        },
+        "frostshingle": {
+          "name": "Frostkies",
+          "body": "Ein gefrorener Kiesstrand."
+        },
+        "icecoast": {
+          "name": "Eisküste",
+          "body": "Eis, wo das Land aufs Meer trifft."
+        },
+        "packice": {
+          "name": "Packeis",
+          "body": "Eisschollen, die sich auf dem Wasser ineinanderschieben."
+        },
+        "glacier": {
+          "name": "Gletscher",
+          "body": "Ein Berg aus Eis und die vereiste Quelle, aus der ein Fluss entspringt."
+        },
+        "river": {
+          "name": "Gefrorener Fluss",
+          "body": "Ein Fluss, den das Eis festhält."
+        }
+      },
+      "looksNames": {
+        "glacier": "Gletscher",
+        "glacierSpring": "Gletscherquelle",
+        "straight": "Gerade",
+        "bend": "Biegung",
+        "bend60": "Enge Biegung"
+      }
+    }
   },
   "wildlifeCamps": {
     "title": "Wildtierlager",

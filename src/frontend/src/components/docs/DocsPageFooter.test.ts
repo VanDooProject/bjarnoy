@@ -2,6 +2,7 @@
 //
 // The docs page footer: the related cards with their reason lines, then previous/next in hub order across groups.
 import { afterEach, describe, expect, it } from 'vitest';
+import { createPinia } from 'pinia';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import DocsPageFooter from './DocsPageFooter.vue';
@@ -14,7 +15,7 @@ afterEach(() => wrapper?.unmount());
 
 function mountFooter(id: DocsPageId) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/:p(.*)*', component: { template: '<div />' } }] });
-  wrapper = mount(DocsPageFooter, { props: { page: docsPageById(id) }, global: { plugins: [createTestI18n({ docs: enDocs }), router] } });
+  wrapper = mount(DocsPageFooter, { props: { page: docsPageById(id) }, global: { plugins: [createPinia(), createTestI18n({ docs: enDocs }), router] } });
   return wrapper;
 }
 

@@ -14,6 +14,7 @@ import {
   docsPageById,
   docsPageByPath,
   docsStillFrameName,
+  visibleDocsGroups,
 } from './docsPages';
 
 function lookup(tree: unknown, key: string): unknown {
@@ -38,7 +39,7 @@ describe('docsPages', () => {
   it('keeps the hub order: story, island, building, move, beyond', () => {
     expect(DOCS_GROUPS.map((g) => g.id)).toEqual(['story', 'island', 'building', 'move', 'beyond']);
     expect(DOCS_PAGES.map((p) => p.id)).toEqual([
-      'saga', 'tiles', 'bogLands', 'techTree', 'production', 'shrines', 'walls', 'realm', 'training', 'founding', 'beachCamp', 'landMovement', 'ships', 'wildlifeCamps', 'wastedLands',
+      'saga', 'tiles', 'bogLands', 'techTree', 'production', 'shrines', 'walls', 'realm', 'training', 'founding', 'beachCamp', 'landMovement', 'ships', 'wildlifeCamps', 'wastedLands', 'frozenLands',
     ]);
   });
 
@@ -73,7 +74,7 @@ describe('docsPages', () => {
     const modes = Object.fromEntries(DOCS_PAGES.map((p) => [p.id, p.headerArt]));
     expect(modes).toEqual({
       saga: 'backdrop', tiles: 'icon', bogLands: 'icon', walls: 'icon', shrines: 'icon', production: 'icon', wildlifeCamps: 'icon',
-      techTree: 'backdrop', training: 'backdrop', founding: 'backdrop', beachCamp: 'backdrop', realm: 'backdrop', landMovement: 'backdrop', ships: 'backdrop', wastedLands: 'backdrop',
+      techTree: 'backdrop', training: 'backdrop', founding: 'backdrop', beachCamp: 'backdrop', realm: 'backdrop', landMovement: 'backdrop', ships: 'backdrop', wastedLands: 'backdrop', frozenLands: 'icon',
     });
   });
 
@@ -91,7 +92,23 @@ describe('docsPages', () => {
     expect(docsNeighbours('saga').next?.id).toBe('tiles');
     expect(docsNeighbours('tiles').previous?.id).toBe('saga');
     expect(docsNeighbours('wastedLands').next).toBeUndefined();
+    expect(docsNeighbours('wastedLands', true).next?.id).toBe('frozenLands');
+    expect(docsNeighbours('frozenLands', true).next).toBeUndefined();
     expect(docsPageById('ships').to).toBe('/docs/ships');
+  });
+
+  it('leaves the admin-only pages out for everyone else, and its route is admin-guarded', () => {
+    const adminOnly = DOCS_PAGES.filter((p) => p.adminOnly);
+    expect(adminOnly.map((p) => p.id)).toEqual(['frozenLands']);
+    expect(visibleDocsGroups(false).flatMap((g) => g.pages).map((p) => p.id)).not.toContain('frozenLands');
+    expect(visibleDocsGroups(true).flatMap((g) => g.pages).map((p) => p.id)).toContain('frozenLands');
+    for (const p of adminOnly) {
+      expect(router.getRoutes().find((r) => r.path === p.to)?.meta.requiresAdmin, p.id).toBe(true);
+    }
+    // No player-visible page points at an admin-only one.
+    for (const p of DOCS_PAGES.filter((x) => !x.adminOnly)) {
+      for (const r of p.related) expect(docsPageById(r.page).adminOnly, `${p.id} -> ${r.page}`).toBeFalsy();
+    }
   });
 
   it('resolves animated art to its still showcase frame', () => {

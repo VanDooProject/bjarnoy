@@ -88,6 +88,11 @@
         "walls": "Your own walls, built in wood.",
         "landMovement": "How armies cross the land to get there."
       },
+      "frozenLands": {
+        "wastedLands": "The other end-of-world land, built from ash instead of ice.",
+        "tiles": "The living tiles on the home islands.",
+        "landMovement": "How armies cross the land."
+      },
       "saga": {
         "founding": "How your first landfall works in the game.",
         "realm": "What the realm you build for the jarl's son is made of.",
@@ -182,6 +187,10 @@
       "wastedLands": {
         "title": "Wasted lands",
         "description": "The endgame: Utgard rises from the sea and the guilds go to war."
+      },
+      "frozenLands": {
+        "title": "Frozen lands",
+        "description": "Admin only: the frozen-land art, tile by tile."
       }
     },
     "footer": {
@@ -569,6 +578,53 @@
       "spring": "Spring"
     },
     "history": "Naglfar is the ship built from the uncut nails of the dead, according to Snorri's Gylfaginning. A man who dies with untrimmed nails adds to it, so people trim theirs to delay its completion. At Ragnarök it breaks loose and carries the giants to the last battle, with the giant Hrym as its helmsman. In the Völuspá its loosening is one of the signs of the end."
+  },
+  "frozenLands": {
+    "title": "The Frozen Lands",
+    "intro": "Snow, pack ice and glaciers: the frozen tiles, one family at a time. Admins only for now.",
+    "techNote": "Nothing generates frozen land yet. This page shows the finished art of the frozen pack, which a world loads when its \"Frozen isles enabled\" flag is on (Admin → Worlds).",
+    "tiles": {
+      "heading": "The tiles",
+      "body": "Every tile family of the frozen pack. Pick a look to see the others.",
+      "looks": "Look",
+      "families": {
+        "snowfield": {
+          "name": "Snowfield",
+          "body": "Open ground under snow."
+        },
+        "snowforest": {
+          "name": "Snow forest",
+          "body": "Pines heavy with snow."
+        },
+        "frostshingle": {
+          "name": "Frost shingle",
+          "body": "A frozen pebble shore."
+        },
+        "icecoast": {
+          "name": "Ice coast",
+          "body": "Ice where the land meets the sea."
+        },
+        "packice": {
+          "name": "Pack ice",
+          "body": "Floes jammed together on the water."
+        },
+        "glacier": {
+          "name": "Glacier",
+          "body": "A mountain of ice, and the ice-bound spring a river rises from."
+        },
+        "river": {
+          "name": "Frozen river",
+          "body": "A river locked in ice."
+        }
+      },
+      "looksNames": {
+        "glacier": "Glacier",
+        "glacierSpring": "Glacier spring",
+        "straight": "Straight",
+        "bend": "Bend",
+        "bend60": "Tight bend"
+      }
+    }
   },
   "wildlifeCamps": {
     "title": "Wildlife camps",

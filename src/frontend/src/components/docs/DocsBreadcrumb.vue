@@ -2,7 +2,8 @@
 import { inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { routeLocationKey } from 'vue-router';
 import DocsPageArt from './DocsPageArt.vue';
-import { DOCS_GROUPS, docsGroupOf, type DocsPageEntry } from '../../lib/docs/docsPages';
+import { visibleDocsGroups, type DocsPageEntry } from '../../lib/docs/docsPages';
+import { useAuthStore } from '../../stores/auth';
 
 // "Docs › Building up › Shrines" above a docs page's title. "Docs" is a plain link to the hub; the group and the page
 // crumb each open a menu: the page crumb lists the pages of its group (to jump to a sibling), the group crumb lists
@@ -16,7 +17,10 @@ type MenuId = 'page' | 'group';
 const open = ref<MenuId | null>(null);
 const root = ref<HTMLElement | null>(null);
 
-const group = () => (props.page ? docsGroupOf(props.page.id) : undefined);
+// Admin-only pages are left out of both menus for everyone else.
+const auth = useAuthStore();
+const groups = () => visibleDocsGroups(auth.isAdmin);
+const group = () => (props.page ? groups().find((g) => g.pages.some((p) => p.id === props.page!.id)) : undefined);
 
 function items(menu: MenuId): HTMLElement[] {
   return Array.from(root.value?.querySelectorAll<HTMLElement>(`[data-menu="${menu}"] [role=menuitem]`) ?? []);
@@ -101,7 +105,7 @@ watch(
           {{ $t(group()!.titleKey) }}<span class="chev" aria-hidden="true" />
         </button>
         <ul v-if="open === 'group'" class="menu" role="menu" data-menu="group" :aria-label="$t('docs.nav.groups')" @keydown="onMenuKey($event, 'group')">
-          <li v-for="g in DOCS_GROUPS" :key="g.id" role="none">
+          <li v-for="g in groups()" :key="g.id" role="none">
             <RouterLink
               :to="{ path: '/docs', hash: `#group-${g.id}` }"
               role="menuitem"

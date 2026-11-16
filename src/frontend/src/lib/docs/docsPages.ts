@@ -19,7 +19,8 @@ export type DocsPageId =
   | 'landMovement'
   | 'ships'
   | 'wildlifeCamps'
-  | 'wastedLands';
+  | 'wastedLands'
+  | 'frozenLands';
 
 export type DocsGroupId = 'story' | 'island' | 'building' | 'move' | 'beyond';
 
@@ -48,6 +49,8 @@ export interface DocsPageEntry {
   headerArt: DocsHeaderArtMode;
   /** Up to three pages that go well with this one, most useful first. */
   related: DocsRelated[];
+  /** Only an admin sees the page: the hub, the menus and the previous/next links leave it out for everyone else, and its route is `requiresAdmin`. */
+  adminOnly?: boolean;
 }
 
 export interface DocsGroupEntry {
@@ -63,6 +66,7 @@ function page(
   art: string,
   headerArt: DocsHeaderArtMode,
   related: DocsPageId[],
+  adminOnly = false,
 ): DocsPageEntry {
   return {
     id,
@@ -72,6 +76,7 @@ function page(
     descriptionKey: `docs.hub.pages.${id}.description`,
     headerArt,
     related: related.map((target) => ({ page: target, reasonKey: `docs.related.reasons.${id}.${target}` })),
+    ...(adminOnly ? { adminOnly } : {}),
   };
 }
 
@@ -107,11 +112,18 @@ export const DOCS_GROUPS: DocsGroupEntry[] = [
   group('beyond', [
     page('wildlifeCamps', '/docs/wildlife-camps', 'camp:boarwallow', 'icon', ['landMovement', 'bogLands', 'wastedLands']),
     page('wastedLands', '/docs/wasted-lands', 'jotunwatchtower_SE_level002', 'backdrop', ['wildlifeCamps', 'walls', 'landMovement']),
+    page('frozenLands', '/docs/frozen-lands', 'snowfield_SE', 'icon', ['wastedLands', 'tiles', 'landMovement'], true),
   ]),
 ];
 
 /** Every page in hub order. */
 export const DOCS_PAGES: DocsPageEntry[] = DOCS_GROUPS.flatMap((g) => g.pages);
+
+/** The groups as a reader sees them: an admin-only page is left out for everyone else, and a group left empty with it. */
+export function visibleDocsGroups(isAdmin: boolean): DocsGroupEntry[] {
+  if (isAdmin) return DOCS_GROUPS;
+  return DOCS_GROUPS.map((g) => ({ ...g, pages: g.pages.filter((p) => !p.adminOnly) })).filter((g) => g.pages.length > 0);
+}
 
 export function docsPageById(id: DocsPageId): DocsPageEntry {
   return DOCS_PAGES.find((p) => p.id === id)!;
@@ -126,10 +138,11 @@ export function docsGroupOf(id: DocsPageId): DocsGroupEntry {
   return DOCS_GROUPS.find((g) => g.pages.some((p) => p.id === id))!;
 }
 
-/** The neighbours in hub order across groups; the first page has no previous, the last no next. */
-export function docsNeighbours(id: DocsPageId): { previous?: DocsPageEntry; next?: DocsPageEntry } {
-  const i = DOCS_PAGES.findIndex((p) => p.id === id);
-  return { previous: DOCS_PAGES[i - 1], next: DOCS_PAGES[i + 1] };
+/** The neighbours in hub order across groups, among the pages the reader may see; the first page has no previous, the last no next. */
+export function docsNeighbours(id: DocsPageId, isAdmin = false): { previous?: DocsPageEntry; next?: DocsPageEntry } {
+  const pages = visibleDocsGroups(isAdmin).flatMap((g) => g.pages);
+  const i = pages.findIndex((p) => p.id === id);
+  return { previous: pages[i - 1], next: pages[i + 1] };
 }
 
 /**

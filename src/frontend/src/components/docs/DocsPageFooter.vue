@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import DocsPageArt from './DocsPageArt.vue';
 import { docsNeighbours, docsPageById, type DocsPageEntry } from '../../lib/docs/docsPages';
+import { useAuthStore } from '../../stores/auth';
 
 // The end of a docs page (every page but the hub): up to three "Related" cards, then the previous and next page in
 // hub order across groups. The first page has no previous, the last no next.
 const props = defineProps<{ page: DocsPageEntry }>();
 
+const auth = useAuthStore();
+const neighbours = () => docsNeighbours(props.page.id, auth.isAdmin);
 const related = () => props.page.related.map((r) => ({ ...r, target: docsPageById(r.page) }));
 </script>
 
@@ -24,13 +27,13 @@ const related = () => props.page.related.map((r) => ({ ...r, target: docsPageByI
       </div>
     </section>
     <nav class="pager" :aria-label="$t('docs.nav.pager')">
-      <RouterLink v-if="docsNeighbours(page.id).previous" :to="docsNeighbours(page.id).previous!.to" class="box prev" rel="prev" data-testid="docs-prev">
+      <RouterLink v-if="neighbours().previous" :to="neighbours().previous!.to" class="box prev" rel="prev" data-testid="docs-prev">
         <span class="dir">{{ $t('docs.nav.previous') }}</span>
-        <span class="name">{{ $t(docsNeighbours(page.id).previous!.titleKey) }}</span>
+        <span class="name">{{ $t(neighbours().previous!.titleKey) }}</span>
       </RouterLink>
-      <RouterLink v-if="docsNeighbours(page.id).next" :to="docsNeighbours(page.id).next!.to" class="box next" rel="next" data-testid="docs-next">
+      <RouterLink v-if="neighbours().next" :to="neighbours().next!.to" class="box next" rel="next" data-testid="docs-next">
         <span class="dir">{{ $t('docs.nav.next') }}</span>
-        <span class="name">{{ $t(docsNeighbours(page.id).next!.titleKey) }}</span>
+        <span class="name">{{ $t(neighbours().next!.titleKey) }}</span>
       </RouterLink>
     </nav>
   </footer>
