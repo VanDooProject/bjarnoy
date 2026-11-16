@@ -1544,7 +1544,7 @@
       "delta": "Every river ends in a delta at the sea. Rivers never run along the beach.",
       "bog": "Some rivers run through a bog lake, and some rise from a spring in a bog: see {link}.",
       "bogLink": "Bog lands",
-      "valleys": "A big valley that mountains close in on every side gets a stream that leads out through the mountains, so an army can still walk out of it.",
+      "valleys": "A big valley that mountains close in on every side usually gets a stream that leads out through the mountains, so an army can walk out of it.",
       "courseTechNote": "The generator drains each island through a few outlets to the sea, keeps springs spaced apart and lets the courses meander. A valley enclosed by mountains of 100 or more hexes gets a stream out through the mountains. Details: docs/design/river-generation.md."
     },
     "pieces": {

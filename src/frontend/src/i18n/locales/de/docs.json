@@ -1544,7 +1544,7 @@
       "delta": "Jeder Fluss endet im Meer in einem Delta. Am Strand entlang fließt nie ein Fluss.",
       "bog": "Manche Flüsse fließen durch einen Moorsee, manche entspringen einer Quelle im Moor: siehe {link}.",
       "bogLink": "Moorland",
-      "valleys": "Ein großes Tal, das ringsum von Bergen eingeschlossen ist, bekommt einen Bach, der durch die Berge hinausführt. So kommt eine Armee dort immer heraus.",
+      "valleys": "Ein großes Tal, das ringsum von Bergen eingeschlossen ist, bekommt meist einen Bach, der durch die Berge hinausführt. So kommt eine Armee dort heraus.",
       "courseTechNote": "Der Generator entwässert jede Insel über ein paar Abflüsse ins Meer, hält die Quellen auseinander und lässt die Läufe mäandern. Ein von Bergen eingeschlossenes Tal ab 100 Feldern bekommt einen Bach durch die Berge nach draußen. Details: docs/design/river-generation.md."
     },
     "pieces": {
