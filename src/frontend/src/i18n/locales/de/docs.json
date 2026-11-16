@@ -355,6 +355,14 @@
       "boat": "Kieloben liegendes Boot",
       "sandCastle": "Sandburg"
     },
+    "lookLabel": "Aussehen:",
+    "looks": {
+      "coastalWater": { "plain": "Schlicht", "boat": "Boot", "rock": "Felsen" },
+      "grass": { "plain": "Schlicht", "rocks": "Steine", "shrubs": "Büsche", "birch": "Birke" }
+    },
+    "forestWoodLabel": "Wald:",
+    "forestWoods": { "taiga": "Taiga", "birch": "Birke", "mixed": "Mischwald" },
+    "forestLooks": { "clearing": "Lichtung", "dense": "Dichter Wald", "fairyRing": "Feenring", "tarn": "Waldtümpel" },
     "riverShapes": {
       "spring": "Quelle",
       "straight": "Gerade",
