@@ -4,6 +4,7 @@ import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { WorldMapPage } from './pages';
 import { clickHudMenuEntry, gotoWorldMap } from './helpers';
 import { waitForMapReady } from './support/render';
+import { cameraZoom } from './support/renderer';
 import { DEFAULT_ENTER_SETTLEMENT_ZOOM } from '../src/lib/map/zoomTransition';
 
 // docs/design/zoom-transition.md: a wheel/pinch zoom crossing a threshold
@@ -19,13 +20,6 @@ import { DEFAULT_ENTER_SETTLEMENT_ZOOM } from '../src/lib/map/zoomTransition';
 // navigation here that needs to stay founded uses a real client-side click
 // (HudNav), never `page.goto`, for the same reason gotoWorldMap now does
 // (see helpers.ts).
-async function cameraZoom(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const win = window as unknown as { __settlementRenderer?: () => { cameraZoom: number } };
-    return win.__settlementRenderer!().cameraZoom;
-  });
-}
-
 async function clickNav(page: Page, label: string): Promise<void> {
   await page.locator('.hud-nav a.link', { hasText: label }).click();
 }
@@ -133,9 +127,8 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     const world = await WorldMapPage.open(page);
     const rendererMode = () =>
       page.evaluate(() => {
-        // `options` is private in TS; read at runtime only, as a test probe.
-        const win = window as unknown as { __settlementRenderer?: () => { options: { mode: string } } };
-        return win.__settlementRenderer!().options.mode;
+        // `options` is private in TS; read at runtime only, as a test probe (typed in globals.d.ts).
+        return window.__settlementRenderer().options.mode;
       });
     expect(await rendererMode()).toBe('world');
 

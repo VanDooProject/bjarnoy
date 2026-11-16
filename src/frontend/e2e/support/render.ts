@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { cdpSessionFor } from './cdp';
+import { whenFrameRendered } from './renderer';
 
 /**
  * Waits for the map container's own mount-complete signal (`data-map-ready`,
@@ -34,7 +35,7 @@ export async function waitForMapReady(page: Page): Promise<void> {
 export async function waitForRenderedFrames(page: Page, frames = 2): Promise<void> {
   const read = () =>
     page.evaluate(
-      () => (window as unknown as { __settlementRenderer: () => { renderedFrames: number } }).__settlementRenderer().renderedFrames,
+      () => window.__settlementRenderer().renderedFrames,
     );
   const start = await read();
   await expect.poll(read, { message: `the map never drew ${frames} more frames`, intervals: [100] }).toBeGreaterThanOrEqual(start + frames);
@@ -80,11 +81,7 @@ export async function captureCanvas(
   // canvas last drew: a shot taken right after a pan or a model change can
   // still show the frame from before it, so a before/after compare came out
   // identical although the camera had moved.
-  await page.evaluate(() =>
-    (window as unknown as { __settlementRenderer: () => { whenFrameRendered: () => Promise<void> } })
-      .__settlementRenderer()
-      .whenFrameRendered(),
-  );
+  await whenFrameRendered(page);
   const { data } = await (await cdpSessionFor(page)).send('Page.captureScreenshot', {
     format: 'png',
     clip: { ...box, scale: 1 },

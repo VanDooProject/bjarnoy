@@ -203,7 +203,7 @@ test('onboarding completion leads with the profile nudge, then the completion ba
   // covered by the test above; this one is about what happens once they're
   // both actually down.
   await page.evaluate(() => {
-    const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void } }).__demoWorld();
+    const world = window.__demoWorld() as { model: any; selectedSettlementId: string; syncHud: () => void };
     const settlementModel = world.model.getSettlement(world.selectedSettlementId);
     const dirs: Array<[number, number]> = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
     const guidedTypes = ['reindeerherder', 'lumberjack'];
