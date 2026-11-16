@@ -80,7 +80,7 @@ import { razeBlock, razeRefund, razeSeconds } from '../lib/map/raze';
 import { formatBuildTime, formatMissingResources, longhouseLock, scaledBuildSeconds } from '../lib/map/ringCatalogue';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { ringShapes } from '../lib/map/ringLayout';
-import { buildingEntryId, offersUpgradeAndRaze, primaryActionFirst } from '../lib/map/ringActions';
+import { buildingEntryId, cancellableOrder, offersUpgradeAndRaze, primaryActionFirst } from '../lib/map/ringActions';
 import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
 import { useRingMaxScale } from '../composables/useRingMaxScale';
 import type { Tile } from '../lib/map/types';
@@ -1258,9 +1258,22 @@ function rootActionList(): RingAction[] {
     // hovered — root actions carry no cost/card), Upgrade needs to say up
     // front whether it's even possible: same disabled+hint pattern already
     // used for Raze/Train/Attack above, not a new affordance.
-    const upgrade = upgradeActionFor(tile);
+    // An order still in the queue (under construction or waiting for a slot) takes Upgrade's place: the hex takes no further
+    // order then (one per hex), and Cancel takes it back.
+    const cancellable = cancellableOrder(world.hud.queue, tile);
     const actions: RingAction[] = [
-      upgrade,
+      cancellable
+        ? {
+            id: 'cancel-build',
+            label: t(
+              cancellable.kind === 'raze'
+                ? 'hud.ringMenu.actions.cancelRaze'
+                : cancellable.targetLevel <= 1
+                  ? 'hud.ringMenu.actions.cancelBuild'
+                  : 'hud.ringMenu.actions.cancelUpgrade',
+            ),
+          }
+        : upgradeActionFor(tile),
       razeActionFor(tile),
     ];
     // Training belongs to a building: every building any UnitDefinition.RequiredBuildingType
@@ -1444,6 +1457,9 @@ async function onRingSelect(id: string) {
       ringScreen.value = null;
       trainModalOpen.value = true;
       return;
+    case 'cancel-build':
+      await cancelBuild();
+      return;
     case 'raze':
       // Optimistic too: a raze costs nothing, so there is no spend and no confirmation animation.
       await raze();
@@ -1582,6 +1598,21 @@ async function raze() {
   await sendOptimisticOrder(coord, () => world.razeBuildingLive(coord), {
     fallback: t('hud.ringMenu.errors.couldNotQueueRaze'),
   });
+}
+
+/** Takes back the newest order (build, upgrade or raze) on the selected hex (the cost comes back); a refusal shows in the chip under the hex. */
+async function cancelBuild() {
+  const coord = selectedCoord.value;
+  if (!coord) return;
+  const order = cancellableOrder(world.hud.queue, coord);
+  closeModal();
+  if (!order) return;
+  try {
+    await world.cancelBuildLive(order.id);
+  } catch (err) {
+    console.error('Failed to cancel a build order', err);
+    showBuildRefusal(coord, describeActionError(err, t('hud.ringMenu.errors.couldNotCancelBuild')));
+  }
 }
 
 async function upgrade() {

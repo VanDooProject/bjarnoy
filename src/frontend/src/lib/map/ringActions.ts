@@ -1,9 +1,9 @@
 import { isDockBuilding } from '../units/garrisonSpots';
 
-// Muscle memory: Build (an empty tile) and Upgrade (a built tile) are the ring's primary actions and always sit in
+// Muscle memory: Build (an empty tile) and Upgrade (a built tile; Cancel while it has an order) are the ring's primary actions and always sit in
 // the first slot of the inner lane, straight above the tile (12 o'clock; `fullCircle` in ringLayout.ts puts slot 0
 // at -90 degrees). Whatever else a tile offers (Train, Raze, Hunt, Send army ...) follows after them, in its own order.
-const PRIMARY_IDS = ['build', 'upgrade'];
+const PRIMARY_IDS = ['build', 'upgrade', 'cancel-build'];
 
 export function primaryActionFirst<T extends { id: string }>(actions: T[]): T[] {
   return [...actions.filter((a) => PRIMARY_IDS.includes(a.id)), ...actions.filter((a) => !PRIMARY_IDS.includes(a.id))];
@@ -24,4 +24,9 @@ export function buildingEntryId(buildingType: string, level: number): 'train' | 
   if (TRAINING_BUILDINGS.has(buildingType) || isDockBuilding(buildingType)) return 'train';
   if (buildingType === 'townsquare' && level >= 1) return 'feasts';
   return null;
+}
+
+/** The order the ring's Cancel bubble takes back on a hex: the newest one, since an earlier order stays while a later one builds on it. */
+export function cancellableOrder<T extends { q: number; r: number }>(queue: readonly T[], at: { q: number; r: number }): T | undefined {
+  return queue.filter((o) => o.q === at.q && o.r === at.r).at(-1);
 }
