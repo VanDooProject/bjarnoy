@@ -176,6 +176,24 @@ function playSwitch(direction: 'in' | 'out') {
   anims.forEach((a) => a.addEventListener('finish', done));
 }
 
+/**
+ * The level copy is drawn (the quick look, and every frame of its switch in and out). The dial's own label waits for it: the copy
+ * carries the level the whole way, so the label only comes back once the copy has landed on the dial and is gone.
+ */
+const levelCopyOn = computed(() => shown.value !== undefined && props.level !== undefined);
+/** The label is handing over to / from the level copy in this render: it switches without its fade (the copy sits right on it). */
+let labelHandoff = false;
+watch(levelCopyOn, () => {
+  labelHandoff = true;
+  void nextTick(() => {
+    labelHandoff = false;
+  });
+});
+function fadeLabel(el: Element, direction: 'in' | 'out', done: () => void) {
+  if (labelHandoff || !props.labelFade) return done();
+  props.labelFade(el, direction, done);
+}
+
 watch(
   () => props.glyph,
   async (next, prev) => {
@@ -430,9 +448,10 @@ const pending = computed(() => {
         <circle :cx="geometry.c" :cy="geometry.c" :r="glyphMarks.clockRadius" fill="none" stroke="#fff" :stroke-width="glyphMarks.width" />
         <polyline :points="glyphMarks.hands" fill="none" stroke="#fff" :stroke-width="glyphMarks.width" stroke-linecap="round" stroke-linejoin="round" />
       </g>
-      <Transition :css="false" @enter="(el, done) => (labelFade ? labelFade(el, 'in', done) : done())" @leave="(el, done) => (labelFade ? labelFade(el, 'out', done) : done())">
+      <Transition :css="false" @enter="(el, done) => fadeLabel(el, 'in', done)" @leave="(el, done) => fadeLabel(el, 'out', done)">
         <text
-          v-if="label"
+          v-if="label && !levelCopyOn"
+          class="hud-dial__label"
           :x="geometry.c"
           :y="geometry.c + geometry.font * 0.36"
           text-anchor="middle"
@@ -448,7 +467,7 @@ const pending = computed(() => {
         </text>
       </Transition>
       <!-- The level hex of the quick look: the dial's copy, at rest at the lower right corner point. -->
-      <g v-if="shown && level !== undefined" class="hud-dial__level" :style="{ transform: cornerCopy, transformOrigin: `${geometry.c}px ${geometry.c}px`, transformBox: 'view-box' }">
+      <g v-if="levelCopyOn" class="hud-dial__level" :style="{ transform: cornerCopy, transformOrigin: `${geometry.c}px ${geometry.c}px`, transformBox: 'view-box' }">
         <polygon :points="geometry.hex" :fill="DARK_FILL" />
         <polygon :points="geometry.hex" fill="none" :stroke="RING_COLOR[ring]" :stroke-width="geometry.sw" stroke-linejoin="round" />
         <text

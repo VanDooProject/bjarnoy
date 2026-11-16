@@ -249,6 +249,28 @@ describe('BuildingHudDial quick look: the level hex and the switch', () => {
     expect(wrapper!.find('.hud-dial__glyph').exists()).toBe(false);
   });
 
+  it('keeps the dial\'s own level hidden until the copy has slid back onto it, then shows it without a fade', async () => {
+    fake = installFakeAnimate();
+    const labelFade = vi.fn((_el: Element, _dir: 'in' | 'out', done: () => void) => done());
+    mountDial({ labelFade });
+    const label = () => wrapper!.find('.hud-dial__label');
+    expect(label().text()).toBe('7');
+    // Shift down: the copy takes the level over at once.
+    await wrapper!.setProps({ glyph: 'up', label: '' });
+    expect(label().exists()).toBe(false);
+    fake.finishAll();
+    // Shift up: the layer hands the level back as the label right away, but the copy still carries it on its way back.
+    await wrapper!.setProps({ glyph: undefined, label: '7' });
+    expect(levelHex().exists()).toBe(true);
+    expect(label().exists()).toBe(false);
+    fake.finishAll();
+    await wrapper!.vm.$nextTick();
+    await wrapper!.vm.$nextTick();
+    expect(levelHex().exists()).toBe(false);
+    expect(label().text()).toBe('7');
+    expect(labelFade).not.toHaveBeenCalled();
+  });
+
   it('swaps up and wait without the switch animation', async () => {
     fake = installFakeAnimate();
     mountDial({ glyph: 'up', label: '' });
