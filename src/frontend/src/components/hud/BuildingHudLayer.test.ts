@@ -612,7 +612,9 @@ describe('BuildingHudLayer', () => {
       // The barracks can be upgraded now: the double chevron, and no level number.
       const barracks = wrapper!.get('[data-coord="3,0"]');
       expect(barracks.find('.hud-dial__glyph--up').exists()).toBe(true);
-      expect(barracks.find('text').exists()).toBe(false);
+      // The level moves into the small hex at the dial's corner: it is the only number the dial shows.
+      expect(barracks.findAll('text')).toHaveLength(1);
+      expect(barracks.get('.hud-dial__level text').text()).toBe('2');
       // The tower stands at its maximum: it keeps its level.
       expect(wrapper.get('[data-coord="2,0"] text').text()).toBe('10');
       expect(wrapper.find('[data-coord="2,0"] .hud-dial__glyph').exists()).toBe(false);

@@ -822,6 +822,7 @@ onUnmounted(() => {
                 :order="m.vm.dial.order"
                 :label-visible="tierOf(m.key) !== 'far'"
                 :glyph="glyphOf(m)"
+                :level="m.level"
                 :blocked-at-ms="blockedAt[m.key]"
               />
             </span>
