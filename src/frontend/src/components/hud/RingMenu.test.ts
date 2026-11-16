@@ -1274,6 +1274,15 @@ describe('RingMenu', () => {
       expect(wrapper.emitted('hold')).toBeUndefined();
     });
 
+    it('a card with okBadge null shows no badge (an upgrade is already built)', async () => {
+      const wrapper = ring({
+        actions: [{ id: 'upgrade', label: 'Upgrade', card: { title: 'Upgrade to level 2', cost: { wood: 10 }, okBadge: null } }],
+      });
+      await bubble(wrapper, 'Upgrade').trigger('mouseenter');
+      expect(wrapper.get('.ring-card').text()).not.toContain('BUILDABLE HERE');
+      expect(wrapper.find('.card-badge').exists()).toBe(false);
+    });
+
     it('a disabled holdable bubble can still be held', async () => {
       const wrapper = ring({ actions: [{ id: 'upgrade', label: 'Upgrade', holdable: true, disabled: true, hint: 'Max level' }] });
       await pointer(bubble(wrapper, 'Upgrade'), 'pointerdown');
@@ -1281,7 +1290,7 @@ describe('RingMenu', () => {
       expect(wrapper.emitted('hold')).toEqual([['upgrade']]);
     });
 
-    it('the card carries the hold hint as its last line, locked for a free account', async () => {
+    it('the hold hint is a chip beside the bubble, not a line of the card; locked for a free account', async () => {
       const card = { title: 'Upgrade to level 2', cost: { wood: 10 } };
       const wrapper = ring({
         actions: [{ id: 'upgrade', label: 'Upgrade', card: { ...card, holdHint: { text: 'Hold to keep upgrading', locked: false } } }],
@@ -1290,6 +1299,7 @@ describe('RingMenu', () => {
       const hint = wrapper.get('[data-testid="ring-hold-hint"]');
       expect(hint.text()).toBe('Hold to keep upgrading');
       expect(hint.classes()).not.toContain('locked');
+      expect(wrapper.get('.ring-card').find('[data-testid="ring-hold-hint"]').exists()).toBe(false);
       const locked = ring({
         actions: [{ id: 'upgrade', label: 'Upgrade', card: { ...card, holdHint: { text: 'Premium: hold', locked: true } } }],
       });
