@@ -608,6 +608,50 @@ public class RiverStreamTests
         Assert.True(offenders.Count == 0, $"{offenders.Count} touching pairs, e.g. {string.Join("; ", offenders.Take(5))}");
     }
 
+    /// <summary>A new river mouth never has a tile of another river beside it: every tile beside a mouth drains to that same mouth.</summary>
+    [Fact]
+    public void A_new_river_mouth_never_touches_another_river()
+    {
+        var offenders = new List<string>();
+        var mouths = 0;
+        foreach (var (seed, island, _) in GreenIslands())
+        {
+            var byCoord = island.RiverTiles.ToDictionary(t => t.Coord);
+
+            // The sea end of each tile's course, following the flow downstream (a tributary ends at its trunk's mouth).
+            HexCoord EndOf(HexCoord start)
+            {
+                var c = start;
+                for (var guard = 0; guard < byCoord.Count; guard++)
+                {
+                    if (byCoord[c].OutDirection is not { } o || !byCoord.ContainsKey(Step(c, o)))
+                    {
+                        break;
+                    }
+
+                    c = Step(c, o);
+                }
+
+                return c;
+            }
+
+            foreach (var mouth in island.RiverTiles.Where(t => t.Shape == RiverTileShape.Mouth))
+            {
+                mouths++;
+                foreach (var n in mouth.Coord.Neighbours())
+                {
+                    if (byCoord.ContainsKey(n) && EndOf(n) != mouth.Coord)
+                    {
+                        offenders.Add($"seed {seed} mouth {mouth.Coord} touches {n} of the river ending at {EndOf(n)}");
+                    }
+                }
+            }
+        }
+
+        Assert.True(mouths > 200, $"only {mouths} mouths");
+        Assert.True(offenders.Count == 0, $"{offenders.Count} mouth tiles touching another river, e.g. {string.Join("; ", offenders.Take(5))}");
+    }
+
     [Fact]
     public void Lava_rivers_stay_river_width()
     {

@@ -262,7 +262,7 @@ constants of the same name.
    last two tiles may be touched, and only by the first route steps: the first tile touches the last one, a sharp bend the one
    before it) nor a tile beside an earlier river. The one exception is the final approach tile, which is beside the trunk it
    joins by definition, but it (and the spring) may touch only the trunk tile it joins and the trunk tiles right before and
-   after it; and the finished course (walk, route and the trunk tile after the join) must not touch itself more than two steps
+   after it (a drawable Y needs that; the walk's own direct join onto a trunk tile is held to the same check); and the finished course (walk, route and the trunk tile after the join) must not touch itself more than two steps
    apart, else the route is rejected. So a junction never climbs back up alongside the trunk to reach a drawable Y. A junction into a river-width trunk (downstream of an earlier confluence) with the wide geometry
    gets `RiverStreamBonus` (3) off, because the river-stream Y needs no widening first.
    With no junction near, the walk follows the pointers; it never steps onto a tile beside its own earlier course (the next
@@ -276,7 +276,7 @@ constants of the same name.
    more without the slack (limit infinite, reach still `MergeReach`; right beside an earlier mouth the walk's own
    cost is about 0, so the slack-limited search would reject every junction upstream), else runs on
    alone (`SearchJunction` with `toMouth`: cheapest route to any free coastal tile, tiles beside earlier rivers
-   never enter a tile beside an earlier river or beside the walk's own course; reach `10 * MergeReach`, and the new mouth must be head-on too: sea straight
+   never enter a tile beside an earlier river or beside the walk's own course, and a new mouth tile never has an earlier river beside it; reach `10 * MergeReach`, and the new mouth must be head-on too: sea straight
    ahead of the last step, and at least `MinMouthSpacing` (4) hexes from every existing sea mouth: every outlet
    of the drainage, used or not, and the last tile of every committed river that ends at the sea) and becomes a
    river of its own with a new mouth; if even that fails it is dropped and counted (`DroppedRivers`). Rivers
@@ -337,6 +337,20 @@ the river; seed 1 had a 40 tile U-turn), only ~32 were two separate rivers:
 | sea-mouth pairs closer than 4 hexes | 0 | 0 |
 | merges per island | 5.7 | 5.2 |
 | truncated + dropped (% of rivers) | 38 (1.4%) | 72 (2.7%) |
+| valley streams carved / cut-off valleys | 1 of 2 | 1 of 2 |
+
+Keeping new mouths and the walk's direct joins off other rivers (a new mouth tile may not have an earlier river beside it; the
+walk's direct join and its spring pass the same "touch only the join" check as a junction route), same seeds:
+
+| | before | after |
+|---|---|---|
+| antiparallel adjacent pairs (per 1000 river tiles) | 6 (0.1) | 9 (0.1) |
+| parallel adjacent pairs (per 1000 river tiles) | 142 (2.1) | 170 (2.5) |
+| rivers whose course touches itself more than 2 steps apart | 0 of 2 596 | 0 of 2 592 |
+| rivers with a shore run | 29 of 2 596 (1.1%) | 29 of 2 592 (1.1%) |
+| sea-mouth pairs closer than 4 hexes | 0 | 0 |
+| merges per island | 5.2 | 5.1 |
+| truncated + dropped (% of rivers) | 72 (2.7%) | 76 (2.9%) |
 | valley streams carved / cut-off valleys | 1 of 2 | 1 of 2 |
 
 Acceptance (`scripts/worldgen-preview/river-stats.ts --seeds 1-8 --radius 1000`, and
@@ -509,7 +523,7 @@ bogs are final (including the width pass) and before giants, camps and start pos
    blocks the bogland, the new hexes and their neighbours) to a river, a lake or the sea. The spring is the valley hex and
    flows towards the mountains.
 5. **Skipped (and counted) when it does not fit:** the trace fails (`ValleySkippedTrace`); the layout is wrong
-   (`ValleySkippedLayout`: a hex twice, on the bogland, a run beside itself - a sharp 120 degree bend, where a hex touches the one two steps on, is fine - or beside a river it does not drain into -
+   (`ValleySkippedLayout`: a hex twice, on the bogland, a run beside itself - a sharp bend (a Bend60 tile), where a hex touches the one two steps on, is fine - or beside a river it does not drain into -
    adjacent tiles must reach the same mouth, the preview's "parallel runs" measure); the width pass drops or changes
    what it should keep (`ValleySkippedWidths`: every old river tile and the whole stream must survive, so no truncated
    branch); it breaks a map rule (`ValleySkippedRules`: `BogRules` R1-R12 may not get worse); or it cuts land off

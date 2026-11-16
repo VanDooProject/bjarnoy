@@ -1141,7 +1141,9 @@ internal static partial class RiverGenerator
 
                 if (claims[next] is { } claim)
                 {
-                    if (claim.Joinable && RiverConfluence.IsRepresentable(claim.In1, (outDir + 3) % 6, claim.Out))
+                    if (claim.Joinable && RiverConfluence.IsRepresentable(claim.In1, (outDir + 3) % 6, claim.Out)
+                        && TouchesOnlyJoin(drainage, claims, current, next, claim)
+                        && TouchesOnlyJoin(drainage, claims, drainage.Index[path[0]], next, claim))
                     {
                         path.Add(drainage.Tiles[next]);
                         merged = true;
@@ -1315,7 +1317,7 @@ internal static partial class RiverGenerator
                 if (toMouth)
                 {
                     // Alone to the sea: any free coastal tile with sea straight ahead is a new mouth.
-                    if (claims[n] is not null || onPath[n] || TouchesOwn(n))
+                    if (claims[n] is not null || onPath[n] || TouchesOwn(n) || drainage.ClaimedAround(n, claims) > 0)
                     {
                         continue;
                     }

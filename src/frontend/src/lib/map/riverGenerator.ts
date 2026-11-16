@@ -898,7 +898,7 @@ class Drainage {
 
   /**
    * `bestOut` for the walk: each candidate also pays `WALK_CROWDING_COST` per earlier-river neighbour, so a river that runs on alone
-   * does not drift along another one — mirrors `Drainage.CrowdedOut`. The static field and `bestOut` stay as they are.
+   * does not drift along another one; tiles marked in `beside` (beside the walk's own earlier course) are not offered — mirrors `Drainage.CrowdedOut`. The static field and `bestOut` stay as they are.
    */
   crowdedOut(tile: number, inDir: number, claims: (Claim | null)[], beside: boolean[]): number {
     let best = -1;
@@ -1158,7 +1158,13 @@ function traceDrainageWalk(
       }
 
       const claim = claims[next];
-      if (claim && joinable(claim) && confluenceKind(claim.in1, (outDir + 3) % 6, claim.out) !== null) {
+      if (
+        claim &&
+        joinable(claim) &&
+        confluenceKind(claim.in1, (outDir + 3) % 6, claim.out) !== null &&
+        touchesOnlyJoin(drainage, claims, current, next, claim) &&
+        touchesOnlyJoin(drainage, claims, drainage.index.get(coordKey(path[0]!))!, next, claim)
+      ) {
         path.push(drainage.tiles[next]!);
         return { path, merged: true };
       }
@@ -1282,7 +1288,7 @@ function searchJunction(
       const claim = claims[n];
       if (toMouth) {
         // Alone to the sea: any free coastal tile with sea straight ahead is a new mouth.
-        if (claim || onPath[n] || touchesOwn(n)) continue;
+        if (claim || onPath[n] || touchesOwn(n) || drainage.claimedAround(n, claims) > 0) continue;
         if (!drainage.interior[n]) {
           // A new mouth must be head-on too: the sea straight ahead of the step.
           if (!drainage.seaAt[n * 6 + dir]) continue;
@@ -1335,7 +1341,7 @@ function searchJunction(
   const route: AxialCoord[] = [drainage.tiles[bestJunction]!];
   for (let cur = bestState; cur >= 0 && cur !== startKey; cur = parent.get(cur)!) route.unshift(drainage.tiles[Math.floor(cur / 6)]!);
 
-  // A shortest route in state space can, rarely, cross its own tile in another state, or fold back beside itself.
+  // A shortest route in state space can, rarely, cross its own tile in another state, or fold back beside the walk or itself.
   if (new Set(route.map((c) => coordKey(c))).size !== route.length) return null;
   const along = new Map<string, number>();
   for (const c of [...path, ...route]) along.set(coordKey(c), along.size);
