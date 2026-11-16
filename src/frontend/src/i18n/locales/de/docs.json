@@ -1031,7 +1031,9 @@
     "intro": "Welches Gebäude welche Einheiten ausbildet, wie die Warteschlangen funktionieren und wie du einen Auftrag auf mehrere Gebäude verteilst.",
     "buildings": {
       "heading": "Was jedes Gebäude ausbildet",
-      "body": "Jede Einheit bildest du in einer bestimmten Art von Gebäude aus, die meisten brauchen dafür eine Mindeststufe. Es zählt die Stufe des Gebäudes, in dem du den Auftrag erteilst: Eine zweite Kaserne auf Stufe 2 bildet keinen Speerträger aus, auch wenn deine erste auf Stufe 8 steht. Das Langhaus bildet nichts aus."
+      "body": "Jede Einheit bildest du in einer bestimmten Art von Gebäude aus, die meisten brauchen dafür eine Mindeststufe. Es zählt die Stufe des Gebäudes, in dem du den Auftrag erteilst: Eine zweite Kaserne auf Stufe 2 bildet keinen Speerträger aus, auch wenn deine erste auf Stufe 8 steht. Das Langhaus bildet nichts aus.",
+      "land": "Einheiten, die zu Fuß unterwegs sind. Klick auf eine Einheit zeigt ihre Werte.",
+      "water": "Schiffe bildest du im Hafen und in der Werft aus. Klick auf ein Schiff zeigt seine Werte."
     },
     "graph": {
       "label": "Welche Einheit auf welcher Stufe welches Gebäudes freigeschaltet wird",
@@ -1039,7 +1041,9 @@
       "opensAt": "Langhaus {level}",
       "longhouseShort": "LH {level}",
       "longhouse": "braucht Langhaus {level}",
-      "level": "Stufe {level}"
+      "level": "Stufe {level}",
+      "landHeading": "Landeinheiten",
+      "waterHeading": "Schiffe"
     },
     "queue": {
       "heading": "Warteschlangen und Tempo",
@@ -1403,7 +1407,8 @@
         "food": "Nahrungskapazität",
         "upkeep": "Unterhalt pro Stunde",
         "cost": "Kosten",
-        "time": "Ausbildungszeit"
+        "time": "Ausbildungszeit",
+        "vision": "Sichtweite"
       },
       "training": "Wo und auf welcher Stufe du jedes Schiff ausbildest, steht unter {training}.",
       "trainingLink": "Truppen ausbilden",
@@ -1452,6 +1457,10 @@
       "longship": "„Langschiff“ (langskip) ist der Sammelbegriff für alle langen, schmalen Kriegsschiffe mit Riemen. Die Nordleute ordneten sie nach ihrer Größe in „Räumen“ (rúm), den Abständen zwischen den Ruderbänken. Die Snekkja im Spiel ist das gängige mittelgroßen Raub- und Aufgebotsschiff von etwa 17 m aufwärts mit 13 bis 20 Riemenpaaren. Skuldelev 5 (dänisch, um 1030, 13 Riemenpaare, mit wiederverwendetem Holz ausgebessert) gilt als eine solche, und das Wikingerschiffsmuseum in Roskilde segelt einen Nachbau, die Helge Ask. Auch die größere Skeid und das Drachenschiff waren Langschiffe.",
       "skeid": "Das Skeid (skeið) war die größte Klasse der Langschiffe, mit 30 und mehr Riemenpaaren: das Schiff von Königen und großen Herren, bemannt mit ihrer Gefolgschaft und dem Aufgebot (leiðangr). Skuldelev 2 (bei Dublin gebaut, um 1042, etwa 30 m) ist eines, und sein Nachbau, die Havhingsten fra Glendalough, segelte 2007 und 2008 von Roskilde nach Dublin und zurück. Roskilde 6 (um 1025, etwa 37 m) ist das längste gefundene Wikingerschiff.",
       "fireShip": "Brandschiffe waren bei den Nordleuten keine übliche Waffe. Feuer auf See gehört zu den Byzantinern: Ihr Griechisches Feuer verbrannte 941 vor Konstantinopel die Flotte der Rus unter Fürst Igor. Einen Fall aus der Wikingerzeit gibt es vielleicht doch: Haithabu 1, ein Kriegsschiff von etwa 30 m, wurde verbrannt im Hafen von Haithabu gefunden und auf etwa 985 datiert. Nach einer Lesart der Archäologen in Roskilde wurde es mit Brennstoff gefüllt, angezündet und bei einem Angriff gegen die Hafenanlagen geschickt. Das stützt sich auf einen einzigen Fund und ist eine Deutung, keine Gewissheit."
+    },
+    "graph": {
+      "heading": "Wo du die Schiffe ausbildest",
+      "body": "Welches Schiff auf welcher Stufe von Hafen oder Werft freigeschaltet wird. Klick auf ein Schiff zeigt seine Werte."
     }
   },
   "shrines": {
@@ -1527,5 +1536,38 @@
   "historyNotes": {
     "toggle": "Geschichte zeigen",
     "label": "Geschichte"
+  },
+  "unit": {
+    "unknown": "Diese Einheit gibt es nicht.",
+    "classes": {
+      "civilian": "Zivilist",
+      "infantry": "Infanterie",
+      "siege": "Belagerungsgerät",
+      "ship": "Schiff"
+    },
+    "training": {
+      "heading": "Wo du sie ausbildest",
+      "body": "Wird im {building} ab Stufe {level} ausgebildet.",
+      "longhouse": "Braucht ein {longhouse} auf Stufe {level}.",
+      "more": "Alle Einheiten und ihre Gebäude findest du auf {page}.",
+      "shipsPage": "der Schiffsseite",
+      "trainingPage": "der Seite zur Ausbildung"
+    },
+    "figures": {
+      "heading": "Werte",
+      "attack": "Angriff",
+      "defense": "Verteidigung",
+      "speed": "Tempo",
+      "vision": "Sichtweite",
+      "loot": "Beutekapazität",
+      "food": "Nahrungskapazität",
+      "shipSlots": "Truppenplätze (Platz an Bord)",
+      "cargoSlots": "Truppenplätze (belegt an Bord)",
+      "upkeep": "Unterhalt pro Stunde",
+      "cost": "Kosten",
+      "time": "Ausbildungszeit",
+      "minutes": "{n} Min."
+    },
+    "ranged": "Diese Einheit greift aus der Ferne an."
   }
 }

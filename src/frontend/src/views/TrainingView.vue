@@ -34,7 +34,12 @@ const maxPercent = percentPerLevel * maxLevel;
       <section id="buildings" class="block">
         <h2>{{ $t('docs.training.buildings.heading') }}</h2>
         <p class="text">{{ $t('docs.training.buildings.body') }}</p>
-        <UnitDependencyGraph />
+        <h3>{{ $t('docs.training.graph.landHeading') }}</h3>
+        <p class="text">{{ $t('docs.training.buildings.land') }}</p>
+        <UnitDependencyGraph domain="land" />
+        <h3>{{ $t('docs.training.graph.waterHeading') }}</h3>
+        <p class="text">{{ $t('docs.training.buildings.water') }}</p>
+        <UnitDependencyGraph domain="water" />
       </section>
 
       <section id="queue" class="block">
@@ -91,6 +96,9 @@ const maxPercent = percentPerLevel * maxLevel;
 }
 .block h2 {
   margin: 0 0 10px;
+}
+.block h3 {
+  margin: 24px 0 8px;
 }
 .text {
   margin: 0 0 12px;

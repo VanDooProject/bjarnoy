@@ -248,6 +248,13 @@ export const router = createRouter({
       beforeEnter: () => awaitShowcaseManifests(),
     },
     {
+      path: '/docs/units/:type',
+      name: 'unit-docs',
+      component: () => import('../views/UnitView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
       path: '/docs/ships',
       name: 'ships-docs',
       component: () => import('../views/ShipsView.vue'),

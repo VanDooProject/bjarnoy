@@ -4,6 +4,7 @@
 // layout). Building names link like everywhere in the docs. On phones the graph is too wide, so a list per building,
 // ordered by level, takes its place.
 import { computed } from 'vue';
+import { RouterLink } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { unitName } from '../../i18n/catalogueNames';
@@ -20,12 +21,16 @@ import {
   unitsByLevel,
 } from '../../lib/docs/unitGraph';
 
+// `domain` picks the graph: `land` is every unit that walks, `water` the ships (class `ship`).
+const props = defineProps<{ domain: 'land' | 'water' }>();
+
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const units = useUnitCatalogueStore();
 const buildings = useBuildingCatalogueStore();
 
+const definitions = computed(() => units.definitions.filter((d) => (d.class === 'ship') === (props.domain === 'water')));
 const layout = computed(() =>
-  layoutUnitGraph(units.definitions, (building) => buildings.byType[building]?.[0]?.requiredLonghouseLevel ?? null),
+  layoutUnitGraph(definitions.value, (building) => buildings.byType[building]?.[0]?.requiredLonghouseLevel ?? null),
 );
 const nodeByType = computed(() => Object.fromEntries(layout.value.nodes.map((n) => [n.type, n])));
 const levels = Array.from({ length: GRAPH_MAX_LEVEL }, (_, i) => i + 1);
@@ -35,13 +40,13 @@ const LABEL_W = 156;
 const lists = computed(() =>
   layout.value.lanes.map((lane) => ({
     lane,
-    levels: unitsByLevel(units.definitions, lane.building),
+    levels: unitsByLevel(definitions.value, lane.building),
   })),
 );
 </script>
 
 <template>
-  <div class="unit-graph" data-testid="unit-graph">
+  <div class="unit-graph" :data-testid="`unit-graph-${domain}`" :data-domain="domain">
     <div class="graph-scroll">
       <div class="graph" :style="{ paddingLeft: `${LABEL_W}px`, height: `${layout.height}px` }">
         <div
@@ -84,7 +89,14 @@ const lists = computed(() =>
             :y2="lane.top"
             class="lane-line"
           />
-          <g v-for="node in layout.nodes" :key="node.type" class="node" :data-unit="node.type">
+          <RouterLink
+            v-for="node in layout.nodes"
+            :key="node.type"
+            v-slot="{ href, navigate }"
+            :to="`/docs/units/${node.type}`"
+            custom
+          >
+          <a :href="href" class="node" :data-unit="node.type" @click="navigate">
             <rect
               :x="node.x - GRAPH_NODE_W / 2"
               :y="node.y - GRAPH_NODE_H / 2"
@@ -96,13 +108,14 @@ const lists = computed(() =>
             <text v-if="node.longhouseBadge" :x="node.x + GRAPH_NODE_W / 2 + 4" :y="node.y + 4" class="badge">
               {{ t('docs.training.graph.longhouseShort', { level: node.longhouseBadge }) }}
             </text>
-          </g>
+          </a>
+          </RouterLink>
         </svg>
       </div>
     </div>
     <p class="axis-note">{{ t('docs.training.graph.axis') }}</p>
 
-    <div class="phone-list" data-testid="unit-list">
+    <div class="phone-list" :data-testid="`unit-list-${domain}`">
       <section v-for="entry in lists" :key="entry.lane.building" class="phone-building" :data-building="entry.lane.building">
         <h3><BuildingLink :type="entry.lane.building" always /></h3>
         <p v-if="entry.lane.unlockLonghouse" class="lane-sub">
@@ -113,7 +126,7 @@ const lists = computed(() =>
             <span class="lvl">{{ t('docs.training.graph.level', { level: row.level }) }}</span>
             <ul>
               <li v-for="u in row.units" :key="u.type">
-                {{ unitName(u.type) }}
+                <RouterLink :to="`/docs/units/${u.type}`" class="unit-link">{{ unitName(u.type) }}</RouterLink>
                 <span v-if="nodeByType[u.type]?.longhouseBadge" class="req">
                   · {{ t('docs.training.graph.longhouse', { level: nodeByType[u.type]!.longhouseBadge }) }}
                 </span>
@@ -156,6 +169,18 @@ const lists = computed(() =>
 }
 svg {
   display: block;
+}
+a.node {
+  cursor: pointer;
+}
+a.node:hover rect,
+a.node:focus-visible rect {
+  stroke: var(--gold);
+}
+.unit-link {
+  color: inherit;
+  text-decoration: underline dotted var(--gold);
+  text-underline-offset: 3px;
 }
 .level-no {
   fill: var(--muted);
