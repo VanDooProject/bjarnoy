@@ -5,7 +5,7 @@ import { DEFAULT_GENERATION, enumerateIslands } from '../map/worldGenerator';
 import { maxLevelFor } from '../map/buildingEconomy';
 import { buildShowcaseVillage, DECORATED_BOG_VARIANTS, diversifyLooks, SHOWCASE_PREVIEW_RADIUS, SHOWCASE_RENDER_RADIUS, SHOWCASE_VILLAGE_OWNER, SHOWCASE_WORLD_SEA_MARGIN, showcaseWorldFrame } from './showcaseVillage';
 
-// The showcase page's own default seed (ShowcaseView.vue DEFAULT_SEED): its village site has shore for the dockyard.
+// The showcase page's own default seed (ShowcaseView.vue DEFAULT_SEED): its village site has shore for the harbour.
 const SEED = 20261831;
 
 function build() {
@@ -30,15 +30,17 @@ describe('buildShowcaseVillage', () => {
     expect(built.settlement.ownerId).toBe(SHOWCASE_VILLAGE_OWNER);
     const types = new Set(buildingsOf(built.model, built.settlement.id, built.center).map((t) => t.buildingType));
     expect(types.has('longhouse')).toBe(true);
-    expect(types.size).toBeGreaterThanOrEqual(20);
+    // Every building stands on the ground the backend allows it (the catalogue's `allowedTerrain`); this seed's claim has less grass than the old
+    // loose client rule let it use.
+    expect(types.size).toBeGreaterThanOrEqual(18);
   });
 
-  it('raises a bigger village: dozens of buildings, three towers, a dockyard and the coast', () => {
+  it('raises a bigger village: dozens of buildings, three towers, a harbour and the coast', () => {
     const own = buildingsOf(built.model, built.settlement.id, built.center);
-    expect(own.length).toBeGreaterThanOrEqual(30);
+    expect(own.length).toBeGreaterThanOrEqual(26);
     expect(own.filter((t) => t.buildingType === 'tower')).toHaveLength(3);
     expect(own.filter((t) => t.buildingType === 'hut').length).toBeGreaterThanOrEqual(5);
-    expect(own.some((t) => t.buildingType === 'dockyard')).toBe(true);
+    expect(own.some((t) => t.buildingType === 'harbour')).toBe(true);
   });
 
   it('draws a wider island than the camera fits, so the crop edge lies outside the frame', () => {

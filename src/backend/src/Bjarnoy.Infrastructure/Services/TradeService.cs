@@ -120,7 +120,7 @@ public sealed class TradeService(
 
         var paid = TradeOffer.Post(settled, decision.Offer!, now);
         session.Apply(settlementId, paid);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
 
         var entity = new TradeOfferEntity
         {
@@ -180,7 +180,7 @@ public sealed class TradeService(
             Resources = settled.Resources.Deposit(offerEntity.OfferedResource.Only(offerEntity.OfferedAmount), now),
         };
         session.Apply(settlementId, refunded);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
 
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -235,10 +235,10 @@ public sealed class TradeService(
 
         if (!decision.Accepted)
         {
-            var changed = posterSession.WriteBack();
+            var changed = await posterSession.WriteBackAsync(cancellationToken).ConfigureAwait(false);
             if (!ReferenceEquals(posterSession, acceptorSession))
             {
-                changed |= acceptorSession.WriteBack();
+                changed |= await acceptorSession.WriteBackAsync(cancellationToken).ConfigureAwait(false);
             }
 
             if (changed)
@@ -253,10 +253,10 @@ public sealed class TradeService(
 
         posterSession.Apply(offerEntity.PosterSettlementId, settledPoster);
         acceptorSession.Apply(acceptorSettlementId, paidAcceptor);
-        posterSession.WriteBack();
+        await posterSession.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         if (!ReferenceEquals(posterSession, acceptorSession))
         {
-            acceptorSession.WriteBack();
+            await acceptorSession.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         }
 
         offerEntity.State = TradeOfferState.Accepted;
@@ -339,14 +339,14 @@ public sealed class TradeService(
         return [.. offers.OrderByDescending(o => o.PostedAt)];
     }
 
-    /// <summary>Completed trade reports touching this settlement either way, most recently completed first.</summary>
-    public async Task<IReadOnlyList<TradeReportEntity>> ListReportsAsync(
-        Guid settlementId, CancellationToken cancellationToken = default)
+    /// <summary>Completed trade reports of this player in the world, as poster or acceptor, most recently completed first.</summary>
+    public async Task<IReadOnlyList<TradeReportEntity>> ListReportsForOwnerAsync(
+        Guid worldId, string ownerId, CancellationToken cancellationToken = default)
     {
         // Ordered client-side: SQLite's EF provider doesn't support
         // DateTimeOffset in ORDER BY — same workaround as ListMineAsync above.
         var reports = await _dbContext.TradeReports
-            .Where(r => r.PosterSettlementId == settlementId || r.AcceptorSettlementId == settlementId)
+            .Where(r => r.WorldId == worldId && (r.PosterOwnerId == ownerId || r.AcceptorOwnerId == ownerId))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         return [.. reports.OrderByDescending(r => r.CompletedAt)];
     }
@@ -408,7 +408,7 @@ public sealed class TradeService(
         }
 
         session.Apply(settlementId, settled);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
 
         // Touch every offer whose shipment lands here, in the same save. The
         // poster's and the acceptor's settlements deliver in separate requests;
@@ -476,8 +476,13 @@ public sealed class TradeService(
             Guid.CreateVersion7(), domainOffer, toAcceptor.ToDomain(), toPoster.ToDomain(),
             guildTrade: domainOffer.GuildOnly);
 
+        var posterOwner = await ReportOwners.OfAsync(_dbContext, report.PosterSettlementId, cancellationToken).ConfigureAwait(false);
+        var acceptorOwner = await ReportOwners.OfAsync(_dbContext, report.AcceptorSettlementId, cancellationToken).ConfigureAwait(false);
         _dbContext.TradeReports.Add(new TradeReportEntity
         {
+            WorldId = posterOwner.WorldId,
+            PosterOwnerId = posterOwner.OwnerId,
+            AcceptorOwnerId = acceptorOwner.OwnerId,
             Id = report.Id,
             OfferId = report.OfferId,
             CompletedAt = report.CompletedAt,
@@ -533,7 +538,7 @@ public sealed class TradeService(
         }
 
         session.Apply(settlementId, settled);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -566,7 +571,7 @@ public sealed class TradeService(
     /// <summary>Writes the session back and saves when settling changed anything: a real change worth keeping even if the request was refused.</summary>
     private async Task SaveIfChangedAsync(LinkedGroupSession session, CancellationToken cancellationToken)
     {
-        if (session.WriteBack())
+        if (await session.WriteBackAsync(cancellationToken).ConfigureAwait(false))
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }

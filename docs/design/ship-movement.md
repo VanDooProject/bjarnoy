@@ -9,6 +9,9 @@ flag-marker-vs-ship-marker rendering question.
 
 ## 1. A dock is the existing Dockyard, not a new entity
 
+> Update (2026-11): the Dockyard is split into the **Harbour** and the **Shipyard** ([units-and-ships.md](units-and-ships.md)).
+> Both are docks in the sense of this section: every ship can lie at either one. "Dockyard" below means either building.
+
 There is no new `Dock` building or table. `BuildingType.Dockyard` (coastal-water,
 already required to train `Karve`/`Longship`) *is* the dock. Any settlement with a
 Dockyard is a valid port for that owner's fleets. This removes an entire layer of
@@ -18,28 +21,21 @@ like every other settlement, so it rides whatever the general settlement-visibil
 fix in [#214](https://github.com/VanDooProject/bjarnoy/issues/214) provides, with
 nothing dock-specific to add on top.
 
-## 2. Home = last owned Dockyard settlement docked at
+## 2. Home
 
-Today, `ArmyService.FoldHome` dissolves an army back into its **origin**
-settlement's garrison when it returns (the army row is deleted, its stacks merge
-into `Settlement`'s garrison — there is no persisted "at home" army state to update
-in place). Land armies only ever fold back into the settlement they departed from.
-
-The one genuinely new behaviour this design needs: **a fleet that reaches a
-different settlement it owns — as long as that settlement has a Dockyard — folds
-into that settlement's garrison the same way**, not just its settlement of origin.
-From that point on, that settlement is the fleet's home: future dispatches for
-those units originate from there, using the existing settlement-dispatch path
-unchanged (`Settlement.PlanDispatch`). No new "home" field is needed on the army —
-folding into a settlement's garrison already *is* changing its home, exactly as it
-does today for a returning army, just generalized to any owned Dockyard settlement
-instead of only the original one.
+A fleet's home is the garrison spot it last folded into: a dock or a beach camp. Rules: [garrison.md](garrison.md).
 
 Arrival at a Dockyard settlement **not** owned by the fleet's player resolves
 through the existing attack/support mission handling for settlement targets —
 the same path used when any army's destination is an enemy or allied settlement.
 A fleet cannot use a foreign dock as a passive waypoint; reaching it always means
 attack or support, never a free stop.
+
+**Sand.** Fleets can enter sand, but only a hex with a beach camp or a wildlife camp, or the hex where its camp builders set up a
+beach camp or its settlers found a settlement, or its home longhouse on sand next to the sea. A settlement can be founded from
+the sea only on a sand hex. They cannot travel over it: from a sand hex a fleet can only leave again. A sand
+hex costs a fleet 2, like bog for a land army; water costs 1. Docks stand in the water, not on
+sand. Who garrisons where: [garrison.md](garrison.md).
 
 ## 3. Refuel is not a separate mechanic
 

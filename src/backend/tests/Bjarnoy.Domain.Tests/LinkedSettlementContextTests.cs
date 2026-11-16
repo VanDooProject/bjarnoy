@@ -46,8 +46,8 @@ public sealed class LinkedSettlementContextTests
     {
         var s = Found(10);
 
-        Assert.Equal(3, s.OwnConstructionSlots);
-        Assert.Equal(3, s.ConstructionSlots);
+        Assert.Equal(6, s.OwnConstructionSlots);
+        Assert.Equal(6, s.ConstructionSlots);
     }
 
     [Fact]
@@ -62,14 +62,14 @@ public sealed class LinkedSettlementContextTests
     }
 
     [Fact]
-    public void A_longhouse_upgrade_occupies_every_slot_of_the_group()
+    public void A_longhouse_upgrade_occupies_90_percent_of_the_slots_of_the_group()
     {
         var upgrade = Order(BuildingType.Longhouse, Centre, level: 2);
         var s = Found() with { Linked = Context(slots: 2, queue: [upgrade]) };
 
         Assert.Equal(4, s.ConstructionSlots);
-        Assert.Equal(4, s.UsedSlots);
-        Assert.Equal(0, s.FreeSlots);
+        Assert.Equal(3, s.UsedSlots);
+        Assert.Equal(1, s.FreeSlots);
     }
 
     [Fact]
@@ -187,27 +187,26 @@ public sealed class LinkedSettlementContextTests
     }
 
     [Fact]
-    public void PlanBuild_counts_the_storage_houses_of_the_whole_group_for_an_extra_one()
+    public void PlanBuild_counts_the_maxed_storage_houses_and_great_storehouses_of_the_whole_group()
     {
         var coord = new HexCoord(1, 0);
         var ownHouse = new PlacedBuilding(new HexCoord(3, 0), BuildingType.StorageHouse, 25);
         var own = Found(25) with { Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, 25), ownHouse] };
-        var lowOther = new PlacedBuilding(new HexCoord(4, 0), BuildingType.StorageHouse, 1);
-        var highOther = new PlacedBuilding(new HexCoord(4, 0), BuildingType.StorageHouse, 25);
+        var otherHouse = new PlacedBuilding(new HexCoord(4, 0), BuildingType.StorageHouse, 25);
+        var otherGreat = new PlacedBuilding(new HexCoord(4, 1), BuildingType.GreatStorehouse, 1);
 
-        // Alone, one maxed house is enough for a second. With a second one standing in the group a third needs two high ones.
-        var alone = own.PlanBuild(BuildingType.StorageHouse, coord, Terrain.Grass, T0, Guid.CreateVersion7());
-        var withLow = (own with { Linked = Context(lh: 25, buildings: [lowOther]) })
-            .PlanBuild(BuildingType.StorageHouse, coord, Terrain.Grass, T0, Guid.CreateVersion7());
-        var withHigh = (own with { Linked = Context(lh: 25, buildings: [highOther]) })
-            .PlanBuild(BuildingType.StorageHouse, coord, Terrain.Grass, T0, Guid.CreateVersion7());
-        var withQueued = (own with { Linked = Context(lh: 25, queue: [Order(BuildingType.StorageHouse, new HexCoord(4, 1))]) })
-            .PlanBuild(BuildingType.StorageHouse, coord, Terrain.Grass, T0, Guid.CreateVersion7());
+        BuildDecision Plan(Settlement s) => s.PlanBuild(BuildingType.GreatStorehouse, coord, Terrain.Grass, T0, Guid.CreateVersion7());
 
-        Assert.NotEqual(BuildRejection.StorageHouseTooLow, alone.Rejection);
-        Assert.Equal(BuildRejection.StorageHouseTooLow, withLow.Rejection);
-        Assert.NotEqual(BuildRejection.StorageHouseTooLow, withHigh.Rejection);
-        Assert.Equal(BuildRejection.StorageHouseTooLow, withQueued.Rejection);
+        // Alone, one maxed house is enough for the first one. A great storehouse standing in the group makes the next need a second maxed house.
+        var alone = Plan(own);
+        var withGreat = Plan(own with { Linked = Context(lh: 25, buildings: [otherGreat]) });
+        var withGreatAndHouse = Plan(own with { Linked = Context(lh: 25, buildings: [otherGreat, otherHouse]) });
+        var withQueued = Plan(own with { Linked = Context(lh: 25, queue: [Order(BuildingType.GreatStorehouse, new HexCoord(4, 1))]) });
+
+        Assert.NotEqual(BuildRejection.GreatStorehouseNeedsStorageHouses, alone.Rejection);
+        Assert.Equal(BuildRejection.GreatStorehouseNeedsStorageHouses, withGreat.Rejection);
+        Assert.NotEqual(BuildRejection.GreatStorehouseNeedsStorageHouses, withGreatAndHouse.Rejection);
+        Assert.Equal(BuildRejection.GreatStorehouseNeedsStorageHouses, withQueued.Rejection);
     }
 
     [Fact]
@@ -230,11 +229,7 @@ public sealed class LinkedSettlementContextTests
     {
         var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
         var pool = ResourcePool.Create(ResourceAmounts.Zero, production, capacity, T0).WithRate(new ResourceAmounts { Food = -50 }, capacity, T0);
-        var s = Found() with
-        {
-            Resources = pool,
-            Garrison = [new UnitStack(UnitType.Spearman, 1000)],
-        };
+        var s = (Found() with { Resources = pool }).WithGarrison([new UnitStack(UnitType.Spearman, 1000)]);
 
         var alone = s.SettleTo(T0.AddHours(10));
         Assert.NotEmpty(alone.Deaths);
@@ -303,8 +298,8 @@ public sealed class LinkedSettlementContextTests
         Assert.Null(Settlement.NextPromotable([.. busy, first], 2));
 
         var upgrade = Order(BuildingType.Longhouse, Centre, level: 2, waiting: true);
-        var oneBusy = Order(BuildingType.Farm, new HexCoord(8, 0));
-        Assert.Null(Settlement.NextPromotable([oneBusy, upgrade, other], 2));
+        var twoBusy = new[] { Order(BuildingType.Farm, new HexCoord(8, 0)), Order(BuildingType.Farm, new HexCoord(9, 0)) };
+        Assert.Null(Settlement.NextPromotable([.. twoBusy, upgrade, other], 3));
     }
 
     [Fact]
@@ -337,7 +332,7 @@ public sealed class LinkedSettlementContextTests
     [Fact]
     public void GrossTotals_are_the_boosted_totals_times_speed_and_WithHomeDeaths_reduces_the_garrison()
     {
-        var s = Found() with { Garrison = [new UnitStack(UnitType.Spearman, 5)] };
+        var s = Found().WithGarrison([new UnitStack(UnitType.Spearman, 5)]);
 
         var (prod1, cap1) = s.GrossTotals(1.0, null);
         var (prod2, cap2) = s.GrossTotals(3.0, null);

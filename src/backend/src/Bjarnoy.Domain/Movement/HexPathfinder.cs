@@ -44,7 +44,7 @@ public static class HexPathfinder
         [Terrain.Forest] = 1.3,
         [Terrain.Mountain] = 2.0,
 
-        // Bogland: twice grass. A Lake is deliberately absent (impassable to armies and ships).
+        // Bogland: twice grass. A Lake and an InlandLake are deliberately absent (impassable to armies and ships).
         [Terrain.Bog] = 2.0,
     };
 
@@ -191,19 +191,29 @@ public static class HexPathfinder
         Func<HexCoord, double?>? bridgeCost = null) =>
         LandStepCost(hex, terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost, leaving: true);
 
-    /// <summary>The leave price of a fleet's hex: the sea table, with the land-endpoint 1.0 fallback (a harbour or beaching hex).</summary>
+    /// <summary>The price of a fleet's land endpoint (a harbour or beaching hex): 1.0, except sand, which a fleet runs up onto at <see cref="FleetSandCost"/>.</summary>
+    private static double FleetLandEndpointCost(Terrain terrain) => terrain == Terrain.Sand ? FleetSandCost : 1.0;
+
+    /// <summary>What a fleet pays for a sand hex at either end of its route (a beach to land on or push off from): twice a sea hex.</summary>
+    public const double FleetSandCost = 2.0;
+
+    /// <summary>The leave price of a fleet's hex: the sea table, with the land-endpoint fallback (<see cref="FleetLandEndpointCost"/>).</summary>
     private static double SeaLeaveCost(IReadOnlyDictionary<Terrain, double> costTable, Terrain terrain) =>
-        costTable.TryGetValue(terrain, out var cost) ? cost : 1.0;
+        costTable.TryGetValue(terrain, out var cost) ? cost : FleetLandEndpointCost(terrain);
 
     /// <summary>
-    /// Hard cap on nodes a single search may expand. A world is unbounded, so
+    /// Hard cap on nodes the route searches of one order may expand in total (a single
+    /// <see cref="Search"/> uses it as its default budget; an order with several legs shares it, see
+    /// <c>Army.PlanDispatch</c>). A world is unbounded, so
     /// without this, "no route exists" (e.g. an island cut off by sea) would
     /// otherwise search forever outward looking for one. Combined with the
     /// bounding box in <see cref="FindPath"/>, this is a belt-and-braces
-    /// bound, not the primary defence — a plausible in-game dispatch is at
-    /// most a few hundred hexes.
+    /// bound, not the primary defence. A plausible dispatch is a few hundred
+    /// hexes, but a long sea route that has to detour around land can need
+    /// ~100k expansions (a 534-hex fleet route against a 345-hex straight
+    /// distance took 93k), so the cap sits well above that.
     /// </summary>
-    private const int MaxExpandedNodes = 20_000;
+    public const int MaxExpandedNodes = 250_000;
 
     /// <summary>
     /// Finds the cheapest route from <paramref name="from"/> to
@@ -269,13 +279,30 @@ public static class HexPathfinder
     /// </param>
     /// <returns>
     /// The route, or <see langword="null"/> when there is none — which, for a land army, now
-    /// includes a target walled in by mountains or wide rivers.
+    /// includes a target walled in by mountains or wide rivers. The route is smoothed afterwards: stretches are replaced by the straight
+    /// hex line where it is fully passable and costs no more, so it is never dearer than the plain A* route.
     /// </returns>
     public static IReadOnlyList<HexCoord>? FindPath(
         HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt, bool isLandUnit,
         Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null,
         Func<HexCoord, bool>? blocked = null, Func<HexCoord, bool>? friendlyGate = null,
-        Func<HexCoord, bool>? halfOpen = null, Func<HexCoord, double?>? bridgeCost = null)
+        Func<HexCoord, bool>? halfOpen = null, Func<HexCoord, double?>? bridgeCost = null) =>
+        Search(from, to, terrainAt, isLandUnit, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost).Path;
+
+    /// <summary>
+    /// <see cref="FindPath"/> with the reason for a missing route: <see cref="PathSearch.LimitReached"/> is
+    /// <see langword="true"/> when the search gave up at <see cref="MaxExpandedNodes"/> instead of proving that
+    /// no route exists, i.e. the trip is too long to plan rather than cut off. <paramref name="maxExpandedNodes"/> is
+    /// the expansion budget of this search (default <see cref="MaxExpandedNodes"/>); <see cref="PathSearch.Expanded"/>
+    /// reports what it used, so a caller running several searches for one order can share one budget. The route is
+    /// smoothed (<see cref="Smooth"/>).
+    /// </summary>
+    public static PathSearch Search(
+        HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt, bool isLandUnit,
+        Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null,
+        Func<HexCoord, bool>? blocked = null, Func<HexCoord, bool>? friendlyGate = null,
+        Func<HexCoord, bool>? halfOpen = null, Func<HexCoord, double?>? bridgeCost = null,
+        int maxExpandedNodes = MaxExpandedNodes)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
@@ -288,12 +315,12 @@ public static class HexPathfinder
         // endpoints are deliberately exempt from the sea-only rule.
         if (isLandUnit && (!costTable.ContainsKey(terrainAt(from)) || !costTable.ContainsKey(terrainAt(to))))
         {
-            return null;
+            return new PathSearch(null, false, 0);
         }
 
         if (from == to)
         {
-            return [from];
+            return new PathSearch([from], false, 0);
         }
 
         // A bounding box around the two endpoints, padded generously — the
@@ -305,14 +332,49 @@ public static class HexPathfinder
         var rMin = Math.Min(from.R, to.R) - padding;
         var rMax = Math.Max(from.R, to.R) + padding;
 
+        // The one step pricing A* and Smooth share. The final hop onto the goal is always allowed for a fleet even when the goal itself
+        // is land (a beaching/harbor hex, see the isLandUnit remarks above); every other hex still has to pass the ordinary cost-table
+        // check. A step is billed half at the hex it leaves, half at the hex it enters; null when it is impassable.
+        double? StepCost(HexCoord current, HexCoord neighbour)
+        {
+            double enterCost;
+            double leaveCost;
+            if (isLandUnit)
+            {
+                if (LandStepCost(neighbour, terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost) is not { } landCost
+                    || LandLeaveCost(current, terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost) is not { } landLeave)
+                {
+                    return null;
+                }
+
+                enterCost = landCost;
+                leaveCost = landLeave;
+            }
+            else
+            {
+                if (neighbour == to)
+                {
+                    enterCost = costTable.TryGetValue(terrainAt(neighbour), out var seaCost) ? seaCost : FleetLandEndpointCost(terrainAt(neighbour));
+                }
+                else if (!costTable.TryGetValue(terrainAt(neighbour), out enterCost))
+                {
+                    return null;
+                }
+
+                leaveCost = SeaLeaveCost(costTable, terrainAt(current));
+            }
+
+            return (leaveCost + enterCost) / 2.0;
+        }
+
         bool InBounds(HexCoord c) => c.Q >= qMin && c.Q <= qMax && c.R >= rMin && c.R <= rMax;
 
-        var open = new PriorityQueue<HexCoord, double>();
+        var open = new PriorityQueue<HexCoord, OpenKey>();
         var gScore = new Dictionary<HexCoord, double> { [from] = 0 };
         var cameFrom = new Dictionary<HexCoord, HexCoord>();
         var closed = new HashSet<HexCoord>();
 
-        open.Enqueue(from, Heuristic(from, to));
+        open.Enqueue(from, OpenKey.For(from, 0, from, to));
         var expanded = 0;
 
         while (open.TryDequeue(out var current, out _))
@@ -324,12 +386,12 @@ public static class HexPathfinder
 
             if (current == to)
             {
-                return Reconstruct(cameFrom, current);
+                return new PathSearch(Smooth(Reconstruct(cameFrom, current), StepCost), false, expanded);
             }
 
-            if (++expanded > MaxExpandedNodes)
+            if (++expanded > maxExpandedNodes)
             {
-                return null;
+                return new PathSearch(null, true, maxExpandedNodes);
             }
 
             foreach (var neighbour in current.Neighbours())
@@ -339,39 +401,10 @@ public static class HexPathfinder
                     continue;
                 }
 
-                // The final hop onto the goal is always allowed for a fleet
-                // even when the goal itself is land (a beaching/harbor hex —
-                // see the isLandUnit remarks above); every other hex still
-                // has to pass the ordinary cost-table check.
-                // A step is billed half at the hex it leaves, half at the hex it enters.
-                double enterCost;
-                double leaveCost;
-                if (isLandUnit)
+                if (StepCost(current, neighbour) is not { } stepCost)
                 {
-                    if (LandStepCost(neighbour, terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost) is not { } landCost
-                        || LandLeaveCost(current, terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost) is not { } landLeave)
-                    {
-                        continue;
-                    }
-
-                    enterCost = landCost;
-                    leaveCost = landLeave;
+                    continue;
                 }
-                else
-                {
-                    if (neighbour == to)
-                    {
-                        enterCost = costTable.TryGetValue(terrainAt(neighbour), out var seaCost) ? seaCost : 1.0;
-                    }
-                    else if (!costTable.TryGetValue(terrainAt(neighbour), out enterCost))
-                    {
-                        continue;
-                    }
-
-                    leaveCost = SeaLeaveCost(costTable, terrainAt(current));
-                }
-
-                var stepCost = (leaveCost + enterCost) / 2.0;
 
                 var tentativeG = gScore[current] + stepCost;
                 if (gScore.TryGetValue(neighbour, out var existingG) && tentativeG >= existingG)
@@ -381,11 +414,11 @@ public static class HexPathfinder
 
                 gScore[neighbour] = tentativeG;
                 cameFrom[neighbour] = current;
-                open.Enqueue(neighbour, tentativeG + Heuristic(neighbour, to));
+                open.Enqueue(neighbour, OpenKey.For(neighbour, tentativeG, from, to));
             }
         }
 
-        return null;
+        return new PathSearch(null, false, expanded);
     }
 
     /// <summary>
@@ -395,6 +428,107 @@ public static class HexPathfinder
     /// distance never overestimates the cheapest possible route.
     /// </summary>
     private static double Heuristic(HexCoord a, HexCoord b) => a.DistanceTo(b);
+
+    /// <summary>
+    /// Open-set order, ascending: f = g + h, then h (of two equal-f hexes the one further along
+    /// the route goes first, which stops a uniform-cost sea from expanding every tied hex side by
+    /// side), then the hex's distance from the straight start-to-goal line (axial cross product,
+    /// so open-water routes follow that line), then q and r so the order never depends on heap
+    /// internals. The TS twin (<c>findPath</c> in hexPath.ts) uses the same order.
+    /// </summary>
+    private readonly record struct OpenKey(double F, double H, long LineDeviation, int Q, int R) : IComparable<OpenKey>
+    {
+        public static OpenKey For(HexCoord n, double g, HexCoord from, HexCoord to)
+        {
+            double h = Heuristic(n, to);
+            long deviation = Math.Abs(
+                ((long)(n.Q - from.Q) * (to.R - from.R)) - ((long)(n.R - from.R) * (to.Q - from.Q)));
+            return new OpenKey(g + h, h, deviation, n.Q, n.R);
+        }
+
+        public int CompareTo(OpenKey other)
+        {
+            int c = F.CompareTo(other.F);
+            if (c != 0) return c;
+            c = H.CompareTo(other.H);
+            if (c != 0) return c;
+            c = LineDeviation.CompareTo(other.LineDeviation);
+            if (c != 0) return c;
+            c = Q.CompareTo(other.Q);
+            return c != 0 ? c : R.CompareTo(other.R);
+        }
+    }
+
+    /// <summary>
+    /// Straightens an A* route (twin of <c>smooth</c> in hexPath.ts): from each hex it takes the furthest later hex whose straight hex
+    /// line (<see cref="HexCoord.Line"/>) is fully passable and costs no more (by <paramref name="step"/>, 1e-9 slack) than the stretch
+    /// of the route it replaces, and walks that line instead. The result is still hex by hex, never dearer than <paramref name="path"/>,
+    /// and on open sea one straight line instead of two legs with a corner. Stops at the first later hex that fails.
+    /// </summary>
+    private static IReadOnlyList<HexCoord> Smooth(IReadOnlyList<HexCoord> path, Func<HexCoord, HexCoord, double?> step)
+    {
+        var n = path.Count;
+        if (n < 3)
+        {
+            return path;
+        }
+
+        var prefix = new double[n];
+        for (var k = 1; k < n; k++)
+        {
+            prefix[k] = prefix[k - 1] + (step(path[k - 1], path[k]) ?? 0);
+        }
+
+        var result = new List<HexCoord> { path[0] };
+        var i = 0;
+        while (i < n - 1)
+        {
+            var best = i + 1;
+            List<HexCoord>? bestLine = null;
+            for (var j = i + 2; j < n; j++)
+            {
+                var line = HexCoord.Line(path[i], path[j]);
+                double c = 0;
+                var ok = true;
+                for (var k = 1; k < line.Count; k++)
+                {
+                    if (step(line[k - 1], line[k]) is not { } s)
+                    {
+                        ok = false;
+                        break;
+                    }
+
+                    c += s;
+                }
+
+                if (ok && c <= prefix[j] - prefix[i] + 1e-9)
+                {
+                    best = j;
+                    bestLine = line;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            if (bestLine is null)
+            {
+                result.Add(path[i + 1]);
+            }
+            else
+            {
+                for (var k = 1; k < bestLine.Count; k++)
+                {
+                    result.Add(bestLine[k]);
+                }
+            }
+
+            i = best;
+        }
+
+        return result;
+    }
 
     private static IReadOnlyList<HexCoord> Reconstruct(Dictionary<HexCoord, HexCoord> cameFrom, HexCoord current)
     {
@@ -504,7 +638,7 @@ public static class HexPathfinder
         {
             // Mirrors FindPath's own beaching/harbor exemption: a fleet's land endpoint (its home
             // settlement's centre, an Attack/Support target's centre) charges the flat 1.0 fallback on
-            // both the leave and the enter side, rather than the double.PositiveInfinity every other
+            // both the leave and the enter side (2.0 on sand, see FleetSandCost), rather than the double.PositiveInfinity every other
             // impassable hex gets.
             double enterCost;
             double leaveCost;
@@ -517,10 +651,10 @@ public static class HexPathfinder
             {
                 enterCost = costTable.TryGetValue(terrainAt(path[i]), out var cost)
                     ? cost
-                    : i == path.Count - 1 ? 1.0 : double.PositiveInfinity;
+                    : i == path.Count - 1 ? FleetLandEndpointCost(terrainAt(path[i])) : double.PositiveInfinity;
                 leaveCost = costTable.TryGetValue(terrainAt(path[i - 1]), out var leave)
                     ? leave
-                    : i == 1 ? 1.0 : double.PositiveInfinity;
+                    : i == 1 ? FleetLandEndpointCost(terrainAt(path[i - 1])) : double.PositiveInfinity;
             }
 
             edges[i] = hours[i - 1] + (leaveCost / 2.0 / effectiveHexesPerHour);
@@ -530,3 +664,11 @@ public static class HexPathfinder
         return (hours, edges);
     }
 }
+
+/// <summary>The outcome of <see cref="HexPathfinder.Search"/>: the route, or why there is none.</summary>
+/// <param name="Path">The route, or <see langword="null"/> when none was found.</param>
+/// <param name="LimitReached">
+/// <see langword="true"/> when the search stopped because its expansion budget ran out, so a route may exist but is too long to plan.
+/// </param>
+/// <param name="Expanded">How many nodes the search expanded (the budget itself when <paramref name="LimitReached"/>).</param>
+public readonly record struct PathSearch(IReadOnlyList<HexCoord>? Path, bool LimitReached, int Expanded);

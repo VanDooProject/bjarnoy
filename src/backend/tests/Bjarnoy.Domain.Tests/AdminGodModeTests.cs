@@ -57,12 +57,12 @@ public sealed class AdminGodModeTests
         Assert.True(decision.Accepted);
 
         var queued = settlement.Enqueue(decision.Order!, Start);
-        var oneMinuteIn = Start + TimeSpan.FromMinutes(1);
+        var halfAMinuteIn = Start + TimeSpan.FromSeconds(30);
 
-        // Nothing is due a minute in — the ordinary settle leaves the queue alone.
-        Assert.False(queued.SettleTo(oneMinuteIn).Changed);
+        // Nothing is due half a minute in — the ordinary settle leaves the queue alone.
+        Assert.False(queued.SettleTo(halfAMinuteIn).Changed);
 
-        var settled = queued.WithQueuesDueAt(oneMinuteIn).SettleTo(oneMinuteIn);
+        var settled = queued.WithQueuesDueAt(halfAMinuteIn).SettleTo(halfAMinuteIn);
 
         Assert.True(settled.Changed);
         Assert.Empty(settled.Settlement.Queue);
@@ -358,6 +358,7 @@ public sealed class AdminGodModeTests
         {
             Id = Guid.CreateVersion7(),
             SettlementId = Guid.CreateVersion7(),
+            HomeSpot = new HexCoord(0, 0),
             Stacks = [new UnitStack(UnitType.Thrall, 5)],
             Location = new ArmyLocation.InTransit(movement),
             Provisions = 1_000,

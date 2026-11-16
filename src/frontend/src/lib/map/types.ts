@@ -1,4 +1,12 @@
-export type Terrain = 'sea' | 'sand' | 'grass' | 'forest' | 'mountain' | 'bog' | 'lake';
+export type Terrain = 'sea' | 'sand' | 'grass' | 'forest' | 'mountain' | 'bog' | 'lake' | 'inlandlake';
+
+/**
+ * Whether a hex is drawn like the sea: the sea itself, and an inland lake (water an island encloses that the bog did not fill —
+ * same art and shader as the sea at the same place). Rules code asks the terrain itself, not this.
+ */
+export function drawsAsSea(terrain: Terrain): boolean {
+  return terrain === 'sea' || terrain === 'inlandlake';
+}
 
 /**
  * Which of the tile art pack's six camera rotations a hex renders with.
@@ -311,7 +319,7 @@ export interface Tile {
   q: number;
   r: number;
   terrain: Terrain;
-  /** Sea that borders land — the ring a coastal-water sprite belongs on. */
+  /** Sea or inland lake that borders land — the ring a coastal-water sprite belongs on (rules check `terrain` first). */
   isCoastalWater?: boolean;
   /**
    * This hex is (or borders) a wasted island — hidden as sea until the
@@ -351,7 +359,8 @@ export interface Tile {
     | 'quarry'
     | 'storagehouse'
     | 'archeryrange'
-    | 'dockyard'
+    | 'harbour'
+    | 'shipyard'
     | 'greatstorehouse'
     | 'barracks'
     | 'sawmill'
@@ -371,7 +380,8 @@ export interface Tile {
     | 'palisade'
     | 'palisadegate'
     | 'bridge'
-    | 'siegeworkshop';
+    | 'siegeworkshop'
+    | 'beachcamp';
   buildingLevel?: number;
   /**
    * The building on this hex stands outside its owner's realm (`PlacedBuildingResponse.outsideRealmSince` is set): it has no
@@ -480,6 +490,12 @@ export interface Settlement {
   islandId?: string;
   /** Live mode: how the owner stands to the player when not the player (`guild` = same guild, `treaty` = guild with an active peace treaty). Absent = own or rival, decided by `ownerId`. */
   relation?: 'guild' | 'treaty';
+  /**
+   * Live mode: the hex the server says the label goes on (the centre for an own settlement and a rival whose centre is explored,
+   * else the explored building of a rival closest to its centre). Absent (demo, docs examples) = the centre. Read through
+   * `WorldModel.labelHexOf`.
+   */
+  labelAt?: { q: number; r: number };
 }
 
 /**

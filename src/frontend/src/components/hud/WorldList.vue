@@ -8,6 +8,7 @@
 import { onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
+import { useJoinBlockedLabel } from '../../composables/useJoinBlockedLabel';
 import { api, ApiError } from '../../api/client';
 import type { JoinableWorldResponse } from '../../api/types';
 import { useWorldStore } from '../../stores/world';
@@ -16,7 +17,8 @@ import type { MessageSchema } from '../../i18n/schema';
 
 withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
 
-const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const joinBlockedLabel = useJoinBlockedLabel();
 const router = useRouter();
 const world = useWorldStore();
 const player = usePlayerStore();
@@ -75,20 +77,8 @@ function hasRealm(w: JoinableWorldResponse): boolean {
   return !!membership[w.id];
 }
 
-// Reuses `landing.joinBlocked`'s existing copy where the reason strings
-// match — see WorldContracts.cs's `JoinableWorldResponse.From`, which
-// mirrors `WorldResponse.From`'s own `joinability.Reason.ToString()
-// .ToLowerInvariant()` (so the wire values are e.g. `notstartedyet`,
-// `joinsclosed`, not the PascalCase enum names) — rather than a second copy
-// of the same messages under the new `worlds` namespace.
 function blockedLabel(w: JoinableWorldResponse): string {
-  if (w.joinableReason === 'notstartedyet' && w.startsAt) {
-    return t('landing.joinBlocked.opensAt', { date: d(new Date(w.startsAt), 'long') });
-  }
-  if (w.joinableReason === 'joinsclosed') {
-    return t('landing.joinBlocked.joinsClosed');
-  }
-  return t('landing.joinBlocked.notAcceptingPlayers');
+  return joinBlockedLabel(w.joinableReason, w.startsAt);
 }
 
 async function joinOrReturn(w: JoinableWorldResponse) {

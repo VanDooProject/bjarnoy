@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportsModal from './ReportsModal.vue';
 import type { BattleReportResponse } from '../../api/types';
 import { usePlayerStore } from '../../stores/player';
+import { useWorldStore } from '../../stores/world';
 import { createTestI18n } from '../../test/i18n';
 import enReports from '../../i18n/locales/en/reports.json';
 import enHud from '../../i18n/locales/en/hud.json';
@@ -20,18 +21,19 @@ vi.mock('../../config', async (importOriginal) => {
   return { ...actual, DEMO_MODE: false };
 });
 
-const { getSettlementReports, getSettlementTradeReports, getSettlementFieldReports, getSettlementCampReports } = vi.hoisted(() => ({
-  getSettlementReports: vi.fn(),
-  getSettlementTradeReports: vi.fn(),
-  getSettlementFieldReports: vi.fn(),
-  getSettlementCampReports: vi.fn(),
+const { getWorldReports, getWorldTradeReports, getWorldFieldReports, getWorldCampReports, getWorldArmyReports } = vi.hoisted(() => ({
+  getWorldReports: vi.fn(),
+  getWorldArmyReports: vi.fn(),
+  getWorldTradeReports: vi.fn(),
+  getWorldFieldReports: vi.fn(),
+  getWorldCampReports: vi.fn(),
 }));
 
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
   return {
     ...actual,
-    api: { getSettlementReports, getSettlementTradeReports, getSettlementFieldReports, getSettlementCampReports },
+    api: { getWorldReports, getWorldTradeReports, getWorldFieldReports, getWorldCampReports, getWorldArmyReports },
   };
 });
 
@@ -46,11 +48,18 @@ function battleReport(overrides: Partial<BattleReportResponse> = {}): BattleRepo
     winner: 'attacker',
     attackPower: 100,
     defensePower: 50,
+    attackerVolleyPower: 0,
+    defenderVolleyPower: 0,
     seed: 1,
     lootTaken: { wood: 0, stone: 0, food: 0, iron: 0 },
     attackerLines: [],
     defenderLines: [],
     siege: null,
+    shipFight: null,
+    drowned: [],
+    fireShipsBurned: 0,
+    fireSiege: null,
+    viewerSide: 'attacker',
     ...overrides,
   };
 }
@@ -90,12 +99,14 @@ beforeEach(() => {
   setActivePinia(createPinia());
   vi.clearAllMocks();
   setIsMobile(false);
-  getSettlementReports.mockResolvedValue([battleReport()]);
-  getSettlementTradeReports.mockResolvedValue([]);
-  getSettlementFieldReports.mockResolvedValue([]);
-  getSettlementCampReports.mockResolvedValue([]);
+  getWorldReports.mockResolvedValue([battleReport()]);
+  getWorldTradeReports.mockResolvedValue([]);
+  getWorldFieldReports.mockResolvedValue([]);
+  getWorldCampReports.mockResolvedValue([]);
+  getWorldArmyReports.mockResolvedValue([]);
   const player = usePlayerStore();
   player.settlementId = 'settlement-1';
+  useWorldStore().worldId = 'world-1';
 });
 
 afterEach(() => {
@@ -128,26 +139,60 @@ describe('ReportsModal', () => {
     expect(wrapper.find('.mobile-title').text()).toBe('Reports');
   });
 
-  it('clicking a row navigates to the detail, keeping the stashed backgroundView', async () => {
+  it('clicking a row expands its report in place, without leaving the list or touching the URL', async () => {
     const router = testRouter();
     await router.push('/settlement');
     await router.push({ path: '/reports', state: { backgroundView: '/settlement' } });
     await router.isReady();
 
     const wrapper = await mountModal(router);
-    await wrapper.find('[data-testid="report-row"]').trigger('click');
-    await flushPromises();
+    expect(wrapper.find('[data-testid="report-detail"]').exists()).toBe(false);
 
-    expect(router.currentRoute.value.path).toBe('/reports/battle-1');
-    expect((router.options.history.state as { backgroundView?: unknown }).backgroundView).toBe('/settlement');
+    await wrapper.find('[data-testid="report-row"]').trigger('click');
+
+    expect(router.currentRoute.value.path).toBe('/reports');
+    expect(wrapper.find('[data-testid="report-row"]').attributes('aria-expanded')).toBe('true');
     expect(wrapper.find('[data-testid="report-detail"]').exists()).toBe(true);
+
+    await wrapper.find('[data-testid="report-row"]').trigger('click');
+    expect(wrapper.find('[data-testid="report-detail"]').exists()).toBe(false);
   });
 
-  it('on mobile, the chevron on a detail returns to the list rather than closing the modal', async () => {
+  it('keeps several reports open at once', async () => {
+    getWorldReports.mockResolvedValue([
+      battleReport({ id: 'battle-1' }),
+      battleReport({ id: 'battle-2', occurredAt: '2026-01-16T00:00:00Z' }),
+    ]);
+    const router = testRouter();
+    await router.push('/reports');
+    await router.isReady();
+
+    const wrapper = await mountModal(router);
+    const rows = wrapper.findAll('[data-testid="report-row"]');
+    await rows[0].trigger('click');
+    await rows[1].trigger('click');
+
+    expect(wrapper.findAll('[data-testid="report-detail"]')).toHaveLength(2);
+  });
+
+  it('a deep link to a report opens that row', async () => {
+    getWorldReports.mockResolvedValue([battleReport({ id: 'battle-1' }), battleReport({ id: 'battle-2' })]);
+    const router = testRouter();
+    await router.push('/reports/battle-2');
+    await router.isReady();
+
+    const wrapper = await mountModal(router);
+
+    const items = wrapper.findAll('.item');
+    expect(items.find((i) => i.attributes('data-report-id') === 'battle-2')?.find('[data-testid="report-detail"]').exists()).toBe(true);
+    expect(items.find((i) => i.attributes('data-report-id') === 'battle-1')?.find('[data-testid="report-detail"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="reports-back-to-list"]').exists()).toBe(false);
+  });
+
+  it('on mobile, the chevron closes the modal even with a report open', async () => {
     setIsMobile(true);
     const router = testRouter();
     await router.push('/settlement');
-    await router.push({ path: '/reports', state: { backgroundView: '/settlement' } });
     await router.push({ path: '/reports/battle-1', state: { backgroundView: '/settlement' } });
     await router.isReady();
 
@@ -155,8 +200,7 @@ describe('ReportsModal', () => {
     await wrapper.find('.back-button').trigger('click');
     await flushPromises();
 
-    // Back to the list, not out to the background route.
-    expect(router.currentRoute.value.path).toBe('/reports');
+    expect(router.currentRoute.value.path).toBe('/settlement');
   });
 
   it('Escape closes the whole modal, going back to the stashed backgroundView, even from a detail', async () => {

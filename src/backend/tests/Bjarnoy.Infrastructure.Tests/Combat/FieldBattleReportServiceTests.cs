@@ -31,7 +31,21 @@ public sealed class FieldBattleReportServiceTests : IDisposable
         _connection.Dispose();
     }
 
-    private static FieldBattleReportEntity MakeReport(Guid sideASettlementId, Guid sideBSettlementId) =>
+    private static readonly Guid WorldId = Guid.NewGuid();
+
+    /// <summary>A report between two settlements whose players are named after them ("owner-of-" + the settlement id).</summary>
+    private static FieldBattleReportEntity MakeReport(Guid sideASettlementId, Guid sideBSettlementId)
+    {
+        var report = BuildReport(sideASettlementId, sideBSettlementId);
+        report.WorldId = WorldId;
+        report.SideAOwnerId = OwnerOf(sideASettlementId);
+        report.SideBOwnerId = OwnerOf(sideBSettlementId);
+        return report;
+    }
+
+    private static string OwnerOf(Guid settlementId) => $"owner-of-{settlementId}";
+
+    private static FieldBattleReportEntity BuildReport(Guid sideASettlementId, Guid sideBSettlementId) =>
         FieldBattleReportEntity.FromDomain(
             Guid.CreateVersion7(),
             DateTimeOffset.UtcNow,
@@ -81,7 +95,7 @@ public sealed class FieldBattleReportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetForSettlementAsync_finds_reports_from_either_side_newest_first()
+    public async Task GetForOwnerAsync_finds_reports_from_either_side_newest_first()
     {
         var settlementA = Guid.NewGuid();
         var settlementB = Guid.NewGuid();
@@ -96,10 +110,42 @@ public sealed class FieldBattleReportServiceTests : IDisposable
         await _dbContext.SaveChangesAsync(Ct);
 
         var service = new FieldBattleReportService(_dbContext);
-        var results = await service.GetForSettlementAsync(settlementB, Ct);
+        var results = await service.GetForOwnerAsync(WorldId, OwnerOf(settlementB), Ct);
 
         Assert.Equal(2, results.Count);
         Assert.Equal(newer.Id, results[0].Id);
         Assert.Equal(older.Id, results[1].Id);
+
+        // Another world's inbox of the same player stays separate.
+        Assert.Empty(await service.GetForOwnerAsync(Guid.NewGuid(), OwnerOf(settlementB), Ct));
+    }
+
+    [Fact]
+    public async Task GetSideNamesAsync_names_both_sides_and_skips_a_settlement_that_is_gone()
+    {
+        var world = new WorldEntity { Name = "Test", MaxPlayers = 100 };
+        var user = new UserEntity { UserName = "u", NormalizedUserName = "U", PasswordHash = "hash" };
+        var island = new IslandEntity
+        {
+            WorldId = world.Id, Index = 0, Name = "Isle", CentreQ = 0, CentreR = 0, StartPositions = [new HexPoint(0, 0)],
+        };
+        SettlementEntity Settle(string name, string owner, int centreQ) => new()
+        {
+            WorldId = world.Id, IslandId = island.Id, Name = name, OwnerName = owner,
+            OwnerId = user.Id.ToString(), UserId = user.Id, CentreQ = centreQ, CentreR = 0,
+        };
+        var alpha = Settle("Alpha", "Ann", 0);
+        var beta = Settle("Beta", "Ben", 5);
+        _dbContext.AddRange(world, user, island, alpha, beta);
+        var report = MakeReport(alpha.Id, beta.Id);
+        var orphan = MakeReport(alpha.Id, Guid.NewGuid());
+        _dbContext.FieldBattleReports.AddRange(report, orphan);
+        await _dbContext.SaveChangesAsync(Ct);
+
+        var names = await new FieldBattleReportService(_dbContext).GetSideNamesAsync([report, orphan], Ct);
+
+        Assert.Equal(new FieldBattleSideName("Alpha", "Ann"), names[alpha.Id]);
+        Assert.Equal(new FieldBattleSideName("Beta", "Ben"), names[beta.Id]);
+        Assert.Equal(2, names.Count);
     }
 }

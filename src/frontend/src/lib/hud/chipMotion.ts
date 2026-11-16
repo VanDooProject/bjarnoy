@@ -19,3 +19,18 @@ export function fadeChip(chip: Element, direction: 'in' | 'out'): Promise<void> 
     fill: 'both',
   });
 }
+
+/**
+ * A small popover hanging under its trigger (the top bar's settlement menu and rename card) opening or closing: a short
+ * fade with a slight scale from the trigger's corner. Same motion gate as `fadeChip`: with motion off it resolves at once.
+ */
+export function fadePopover(popover: Element, direction: 'in' | 'out'): Promise<void> {
+  if (!motionEnabled()) return Promise.resolve();
+  const away = { opacity: 0, transform: 'scale(0.96)' };
+  const rest = { opacity: 1, transform: 'none' };
+  return animate(popover, direction === 'out' ? [rest, away] : [away, rest], {
+    duration: CHIP_FADE_MS,
+    easing: direction === 'out' ? 'ease-in' : 'ease-out',
+    fill: 'both',
+  });
+}

@@ -68,6 +68,15 @@ public sealed record BuildingDefinition
     public IReadOnlySet<Terrain> AllowedTerrain { get; init; } = new HashSet<Terrain>();
 
     /// <summary>
+    /// The build ring's category this building is offered under (<see cref="BuildingRingCategory"/>); <see langword="null"/> for the
+    /// buildings the ring never lists (the Longhouse, which only founding places). Served to the client, which builds its ring from it.
+    /// </summary>
+    public BuildingRingCategory? RingCategory { get; init; }
+
+    /// <summary>Where the building sits within its <see cref="RingCategory"/> in the ring (ascending).</summary>
+    public int RingOrder { get; init; }
+
+    /// <summary>
     /// Placed on shallow (coastal) water rather than land — a sea hex with at
     /// least one land neighbour (<see cref="World.TerrainSampler.IsCoastalWater"/>).
     /// A settlement's <see cref="Buildings.Settlement.PlanBuild"/> checks this
@@ -83,6 +92,12 @@ public sealed record BuildingDefinition
     /// (it must touch exactly one wall, it is never a gate) is <see cref="Palisades.PalisadeRules"/>'s.
     /// </summary>
     public bool AlsoOnCoastalWater { get; init; }
+
+    /// <summary>
+    /// Alongside <see cref="RequiresCoastalWater"/>: this building may also stand on an inland-lake hex (<see cref="Terrain.InlandLake"/>)
+    /// that has a land neighbour (<see cref="World.TerrainSampler.IsInlandLakeShore"/>). The Fishing Hut.
+    /// </summary>
+    public bool AlsoOnInlandLakeShore { get; init; }
 
     /// <summary>
     /// Alongside <see cref="AllowedTerrain"/>: bog tile kinds (<see cref="World.BogTileKind"/>) this building may also stand on. The
@@ -171,30 +186,32 @@ public sealed record BuildingDefinition
     /// <summary>
     /// How many construction slots one order for this building occupies while
     /// it is actively building (issue #158). Ignored when
-    /// <see cref="OccupiesAllSlots"/> is set.
+    /// <see cref="OccupiesMostSlots"/> is set.
     /// </summary>
     public int SlotCost { get; init; } = 1;
 
     /// <summary>
-    /// When set, a building order for this level always occupies every slot
-    /// the settlement currently has (<see cref="Settlement.ConstructionSlots"/>),
-    /// rather than <see cref="SlotCost"/> — the Longhouse's rule: an upgrade
-    /// can only start with every slot free, and blocks everything else queued
-    /// behind it while it runs.
+    /// When set, a building order for this level occupies 90 % (rounded down, at
+    /// least 1) of the slots the settlement currently has
+    /// (<see cref="Settlement.ConstructionSlots"/>), rather than
+    /// <see cref="SlotCost"/> — the Longhouse's rule: an upgrade can only start
+    /// with that many slots free, and leaves at most ~10 % for other
+    /// construction while it runs.
     /// </summary>
-    public bool OccupiesAllSlots { get; init; }
+    public bool OccupiesMostSlots { get; init; }
 
     /// <summary>
     /// Whether this building may stand on one hex, from everything that can decide it: the terrain, whether it is coastal water,
-    /// and the bog kind of the hex (<see langword="null"/> when it is not a bog tile, or the caller cannot say). River shape
+    /// whether it is an inland-lake shore, and the bog kind of the hex (<see langword="null"/> when it is not a bog tile, or the caller cannot say). River shape
     /// rules are separate (<see cref="RequiresRiverShape"/>).
     /// </summary>
-    public bool AllowsHex(Terrain terrain, bool isCoastalWater, World.BogTileKind? bogKind)
+    public bool AllowsHex(Terrain terrain, bool isCoastalWater, World.BogTileKind? bogKind, bool isInlandLakeShore = false)
     {
         bool terrainOk;
         if (RequiresCoastalWater)
         {
             terrainOk = isCoastalWater
+                || (AlsoOnInlandLakeShore && isInlandLakeShore && terrain == Terrain.InlandLake)
                 || (terrain == Terrain.Bog && bogKind is { } shore && LakeShoreKinds?.Contains(shore) == true);
         }
         else
@@ -222,4 +239,15 @@ public sealed record BuildingDefinition
 
         return AllowedTerrain.Count == 0 || AllowedTerrain.Contains(terrain);
     }
+}
+
+/// <summary>The build ring's groups; the wire name is the lower-cased member name.</summary>
+public enum BuildingRingCategory
+{
+    Resource,
+    Military,
+    Logistics,
+    Defense,
+    Religion,
+    Water,
 }

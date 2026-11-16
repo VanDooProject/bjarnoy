@@ -7,7 +7,9 @@
   "claiming": "Claiming…",
   "ready": "Ready to claim",
   "alsoReady": "Also ready",
+  "nextUp": "Up next",
   "rewardLabel": "Reward",
+  "premiumReward": "{n} days of Premium",
   "overflowNote": "Some of this reward won't fit in storage.",
   "claimError": "Couldn't claim that reward. Try again.",
   "more": "More",
@@ -38,6 +40,10 @@
       "title": "Upgrade your Longhouse to level 3",
       "hint": "Open the Longhouse and choose Upgrade again."
     },
+    "register": {
+      "title": "Name your jarl",
+      "hint": "Create an account with the name your jarl at the top. It keeps your island on every device."
+    },
     "tower3": {
       "title": "Build a Tower to level 3",
       "hint": "Place your Tower at the edge of your realm, facing the land you want to claim next: each level claims one more ring around it. Level 3 unlocks the Barracks."
@@ -52,7 +58,7 @@
     },
     "hunt1": {
       "title": "Hunt a wildlife camp",
-      "hint": "Click a camp on your island, choose Hunt and send land troops. Weak camps (hares, deer, seals) are the easy first prey."
+      "hint": "Click a camp on your island, choose Hunt and send land troops. To get back to your settlement afterwards, tap its name at the top. Weak camps (hares, deer, seals) are the easy first prey."
     }
   }
 }

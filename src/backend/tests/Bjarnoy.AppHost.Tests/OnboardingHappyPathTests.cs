@@ -57,6 +57,7 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
         // check. Emulating the media feature stills it without touching app
         // code or the DOM under test.
         var page = await browser.NewPageAsync(new BrowserNewPageOptions { ReducedMotion = ReducedMotion.Reduce });
+        await LiveFrontendTestHelpers.TurnSmoothEdgesOffAsync(page);
         var consoleErrors = page.CollectConsoleErrors();
 
         await LiveFrontendTestHelpers.FoundStartingSettlementAsync(page, frontendUrl);
@@ -78,19 +79,14 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
         var settlement = Assert.Single(settlements!);
 
         // The two guided buildings the tray tracks (reindeerherder, lumberjack — see
-        // LandingView.vue's GUIDED_BUILD_TERRAIN) each need their own
-        // terrain, both guaranteed adjacent to any start position (see
-        // LandingBuildQueueTests's own comment on WorldGenerator's
-        // guarantee) and so within ClaimRadius 2 at level 1.
+        // LandingView.vue's GUIDED_BUILD_TERRAIN), each on the nearest hex of its terrain
+        // in the level-1 claim that the backend accepts (FindGuidedBuildHexAsync: not a
+        // river or camp hex).
         var centre = new HexCoord(settlement.Q, settlement.R);
-        var chunk = await apiClient.GetFromJsonAsync<TileChunkResponse>(
-            $"/api/v1/worlds/{world.Id}/tiles?qMin={centre.Q - 1}&qMax={centre.Q + 1}"
-            + $"&rMin={centre.R - 1}&rMax={centre.R + 1}",
-            cancellationToken);
-        var grassTile = chunk!.Tiles.First(t =>
-            t.Terrain == "grass" && centre.DistanceTo(new HexCoord(t.Q, t.R)) == 1);
-        var forestTile = chunk!.Tiles.First(t =>
-            t.Terrain == "forest" && centre.DistanceTo(new HexCoord(t.Q, t.R)) == 1);
+        var grassTile = await LiveFrontendTestHelpers.FindGuidedBuildHexAsync(
+            apiClient, world.Id, centre, "grass", cancellationToken);
+        var forestTile = await LiveFrontendTestHelpers.FindGuidedBuildHexAsync(
+            apiClient, world.Id, centre, "forest", cancellationToken);
 
         // --- Admin: speed the world up so both builds resolve quickly —
         // same technique/tuning as LandingOnboardingCompletionTests's own bump.

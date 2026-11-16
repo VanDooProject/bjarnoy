@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   fieldBattleLossCount,
+  fieldBattleOpponent,
   fieldBattleOutcomeLabel,
-  fieldBattleSideFor,
   fieldBattleSummaryLine,
   fieldBattleSurvivorCount,
   groupFieldBattleLinesByUnit,
@@ -17,9 +17,9 @@ const baseReport = {
   sideBSettlementId: 'b-settlement',
   winner: 'sidea',
   lines: [
-    { side: 'sidea' as const, isLoss: true, unit: 'axeman', count: 2 },
-    { side: 'sidea' as const, isLoss: false, unit: 'axeman', count: 8 },
-    { side: 'sideb' as const, isLoss: true, unit: 'spearman', count: 5 },
+    { side: 'sidea' as const, isLoss: true, unit: 'axeman', count: 2, volleyCount: 0 },
+    { side: 'sidea' as const, isLoss: false, unit: 'axeman', count: 8, volleyCount: 0 },
+    { side: 'sideb' as const, isLoss: true, unit: 'spearman', count: 5, volleyCount: 0 },
   ],
   lootTaken: { wood: 10, stone: 0, food: 0, iron: 0 },
 };
@@ -81,32 +81,28 @@ describe('fieldBattleSummaryLine', () => {
 describe('groupFieldBattleLinesByUnit', () => {
   it('merges a unit type\'s loss and survivor lines into one row', () => {
     const lines = [
-      { side: 'sidea' as const, isLoss: true, unit: 'axeman', count: 2 },
-      { side: 'sidea' as const, isLoss: false, unit: 'axeman', count: 8 },
-      { side: 'sidea' as const, isLoss: true, unit: 'spearman', count: 1 },
-      { side: 'sideb' as const, isLoss: true, unit: 'axeman', count: 9 },
+      { side: 'sidea' as const, isLoss: true, unit: 'axeman', count: 2, volleyCount: 0 },
+      { side: 'sidea' as const, isLoss: false, unit: 'axeman', count: 8, volleyCount: 0 },
+      { side: 'sidea' as const, isLoss: true, unit: 'spearman', count: 1, volleyCount: 0 },
+      { side: 'sideb' as const, isLoss: true, unit: 'axeman', count: 9, volleyCount: 0 },
     ];
     expect(groupFieldBattleLinesByUnit(lines, 'sidea')).toEqual([
-      { unit: 'axeman', lost: 2, survived: 8 },
-      { unit: 'spearman', lost: 1, survived: 0 },
+      { unit: 'axeman', lost: 2, volleyLost: 0, survived: 8 },
+      { unit: 'spearman', lost: 1, volleyLost: 0, survived: 0 },
     ]);
-    expect(groupFieldBattleLinesByUnit(lines, 'sideb')).toEqual([{ unit: 'axeman', lost: 9, survived: 0 }]);
+    expect(groupFieldBattleLinesByUnit(lines, 'sideb')).toEqual([{ unit: 'axeman', lost: 9, volleyLost: 0, survived: 0 }]);
+  });
+
+  it('carries the volley part of a loss line into the row', () => {
+    const lines = [
+      { side: 'sideb' as const, isLoss: true, unit: 'axeman', count: 7, volleyCount: 3 },
+      { side: 'sideb' as const, isLoss: false, unit: 'axeman', count: 3, volleyCount: 0 },
+    ];
+    expect(groupFieldBattleLinesByUnit(lines, 'sideb')).toEqual([{ unit: 'axeman', lost: 7, volleyLost: 3, survived: 3 }]);
   });
 
   it('returns an empty array for a side with no lines', () => {
     expect(groupFieldBattleLinesByUnit([], 'sidea')).toEqual([]);
-  });
-});
-
-describe('fieldBattleSideFor', () => {
-  it('identifies side A', () => {
-    expect(fieldBattleSideFor(baseReport, 'a-settlement')).toBe('sidea');
-  });
-  it('identifies side B', () => {
-    expect(fieldBattleSideFor(baseReport, 'b-settlement')).toBe('sideb');
-  });
-  it('returns null for an unrelated settlement', () => {
-    expect(fieldBattleSideFor(baseReport, 'someone-else')).toBeNull();
   });
 });
 
@@ -124,5 +120,21 @@ describe('isFieldBattleReportUnread', () => {
 
   it('a report after the last-seen timestamp is unread', () => {
     expect(isFieldBattleReportUnread(later, '2026-08-29T11:00:00.000Z')).toBe(true);
+  });
+});
+
+describe('fieldBattleOpponent', () => {
+  const named = { sideAName: 'Alpha', sideAOwnerName: 'Ann', sideBName: 'Beta', sideBOwnerName: 'Ben' };
+
+  it("returns the other side's owner and settlement name", () => {
+    expect(fieldBattleOpponent(named, 'sidea')).toEqual({ ownerName: 'Ben', settlementName: 'Beta' });
+    expect(fieldBattleOpponent(named, 'sideb')).toEqual({ ownerName: 'Ann', settlementName: 'Alpha' });
+  });
+
+  it('is null for a side whose settlement is gone', () => {
+    expect(fieldBattleOpponent({ ...named, sideBName: null, sideBOwnerName: null }, 'sidea')).toEqual({
+      ownerName: null,
+      settlementName: null,
+    });
   });
 });

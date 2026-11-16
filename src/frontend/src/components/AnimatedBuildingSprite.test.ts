@@ -10,6 +10,7 @@ import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import AnimatedBuildingSprite from './AnimatedBuildingSprite.vue';
 import { buildingLayers } from '../lib/map/buildingArt';
+import { animationPreference } from '../lib/perf/animationPreference';
 
 describe('AnimatedBuildingSprite', () => {
   it('renders both layers for a static-only building (no clip)', () => {
@@ -102,6 +103,39 @@ describe('AnimatedBuildingSprite', () => {
     wrapper.unmount();
     expect(clearSpy).toHaveBeenCalled();
     clearSpy.mockRestore();
+    vi.useRealTimers();
+  });
+
+  // Regression: without a caller's clock (tech tree, wall pieces) the sprite ran its own timer
+  // regardless of the building-animation setting.
+  it("holds its own timer while building animations are off, and plays once they are switched on", async () => {
+    vi.useFakeTimers();
+    animationPreference.setting = 'off';
+    const layers = buildingLayers('sawmillriver', 3);
+    const wrapper = mount(AnimatedBuildingSprite, { props: { layers } });
+    await nextTick();
+    const frameStyle = () => wrapper.findAll('.layer')[2]!.attributes('style');
+    const still = frameStyle();
+    const step = 1000 / layers.clip!.fps;
+    const seen = new Set<string | undefined>();
+    for (let i = 0; i < layers.clip!.frameRects.length; i++) {
+      vi.advanceTimersByTime(step);
+      await nextTick();
+      seen.add(frameStyle());
+    }
+    expect([...seen]).toEqual([still]);
+
+    animationPreference.setting = 'on';
+    await nextTick();
+    for (let i = 0; i < layers.clip!.frameRects.length; i++) {
+      vi.advanceTimersByTime(step);
+      await nextTick();
+      seen.add(frameStyle());
+    }
+    expect(seen.size).toBeGreaterThan(1);
+
+    wrapper.unmount();
+    animationPreference.setting = 'auto';
     vi.useRealTimers();
   });
 });

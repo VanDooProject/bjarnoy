@@ -107,6 +107,7 @@ public sealed class LinkedStore
         do
         {
             var next = target;
+            var razeRefunds = new List<(Slot Slot, BuildOrder Order)>();
             if (++iterations <= MaxIterations)
             {
                 foreach (var slot in _slots)
@@ -147,6 +148,11 @@ public sealed class LinkedStore
                 slot.Settlement = result.Settlement;
                 slot.Changed |= result.Changed;
                 slot.Completed.AddRange(result.Completed);
+                if (slot.Settlement.Linked is not null)
+                {
+                    razeRefunds.AddRange(result.Completed.Where(o => o.IsRaze).Select(o => (slot, o)));
+                }
+
                 slot.CompletedTraining.AddRange(result.TrainingCompleted);
                 slot.Deaths.AddRange(result.Deaths);
                 slot.GuestDeaths.AddRange(result.GuestDeaths);
@@ -154,6 +160,14 @@ public sealed class LinkedStore
 
             Cursor = next;
             Normalize(next);
+
+            // A finished raze pays its refund into the pooled stock, capped by the pool's capacity after the level dropped.
+            foreach (var (slot, order) in razeRefunds)
+            {
+                var view = PooledViewAt(slot, next);
+                ApplyCore(slot, view with { Resources = view.Resources.Deposit(order.Refund, next) }, next);
+                Normalize(next);
+            }
         }
         while (Cursor < target);
     }
@@ -200,6 +214,10 @@ public sealed class LinkedStore
     /// <summary>The member whose build queue holds <paramref name="orderId"/>, or <see langword="null"/>.</summary>
     public Guid? MemberOwningOrder(Guid orderId) =>
         _slots.FirstOrDefault(s => s.Settlement.Queue.Any(o => o.Id == orderId))?.Id;
+
+    /// <summary>The member whose training queue holds <paramref name="orderId"/>, or null when none does.</summary>
+    public Guid? MemberOwningTrainingOrder(Guid orderId) =>
+        _slots.FirstOrDefault(s => s.Settlement.TrainingQueue.Any(o => o.Id == orderId))?.Id;
 
     /// <summary>
     /// Replaces the guest stacks <paramref name="id"/> hosts (after a battle took some of them) and re-splits the pool, so the

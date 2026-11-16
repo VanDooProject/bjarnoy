@@ -237,30 +237,74 @@ public class BogGenerationTests
     }
 
     [Fact]
-    public void Bog_never_touches_the_sea_or_the_coast_sand_except_the_sand_ring_of_an_enclosed_pocket()
+    public void Bog_never_touches_the_sea_or_sand()
     {
         foreach (var (seed, sampler, island) in GreenIslands().Where(i => i.Island.BogTiles.Count > 0))
         {
             var bog = island.BogTiles.Select(t => t.Coord).ToHashSet();
-            var pocketWater = island.BogTiles
-                .Where(t => t.Kind == BogTileKind.Lake && sampler.TerrainAt(t.Coord) == Terrain.Sea)
-                .Select(t => t.Coord)
-                .ToList();
             foreach (var tile in island.BogTiles.Where(t => t.Kind != BogTileKind.Lake))
             {
-                var inPocketRing = pocketWater.Any(w => HexCoord.Distance(w, tile.Coord) <= 6);
                 foreach (var n in tile.Coord.Neighbours().Where(n => !bog.Contains(n)))
                 {
                     var terrain = sampler.TerrainAt(n);
                     Assert.NotEqual(Terrain.Sea, terrain);
-                    if (terrain == Terrain.Sand)
-                    {
-                        // Inside an island's own pocket the beach turns to bog with the ring; nowhere else may a bog touch sand.
-                        Assert.True(inPocketRing, $"seed {seed}: bog {tile.Coord} touches sand at {n} away from any pocket");
-                    }
+                    Assert.True(terrain != Terrain.Sand, $"seed {seed}: bog {tile.Coord} touches sand at {n}");
                 }
             }
         }
+    }
+
+    [Fact]
+    public void Every_enclosed_pocket_is_a_bog_lake_or_an_inland_lake()
+    {
+        var inland = 0;
+        foreach (var (seed, sampler, island) in GreenIslands())
+        {
+            var bogLakes = island.BogTiles.Where(t => t.Kind == BogTileKind.Lake).Select(t => t.Coord).ToHashSet();
+            var inlandLakes = island.InlandLakeTiles.ToHashSet();
+            var pockets = EnclosedWater.Pockets(island.Tiles, sampler.IsLand);
+            foreach (var pocket in pockets)
+            {
+                var allBog = pocket.All(bogLakes.Contains);
+                var allInland = pocket.All(inlandLakes.Contains);
+                Assert.True(allBog || allInland, $"seed {seed} island {island.Index}: pocket at {pocket[0]} is neither a bog lake nor an inland lake");
+                Assert.False(allBog && allInland);
+                inland += allInland ? 1 : 0;
+            }
+
+            // Nothing but enclosed water is an inland lake.
+            var enclosed = pockets.SelectMany(p => p).ToHashSet();
+            Assert.All(island.InlandLakeTiles, t => Assert.Contains(t, enclosed));
+            Assert.Equal(island.InlandLakeTiles.Count, inlandLakes.Count);
+        }
+
+        Assert.True(inland >= 1, "no inland lake in eight worlds");
+    }
+
+    [Fact]
+    public void Every_enclosed_pocket_of_a_wasted_island_is_an_inland_lake()
+    {
+        foreach (var seed in Seeds)
+        {
+            var world = TestWorlds.Default(seed);
+            var sampler = new TerrainSampler(world.Options);
+            foreach (var island in world.Islands.Where(i => i.IsWasted))
+            {
+                Assert.Empty(island.BogTiles);
+                var expected = EnclosedWater.Tiles(island.Tiles, c => sampler.TerrainAt(c).IsLand() || sampler.WastedTerrainAt(c).IsLand());
+                Assert.Equal(expected, island.InlandLakeTiles);
+            }
+        }
+    }
+
+    [Fact]
+    public void Terrain_InlandLake_is_neither_sea_nor_land()
+    {
+        Assert.False(Terrain.InlandLake.IsLand());
+        Assert.False(Terrain.InlandLake.IsSea());
+        Assert.False(Terrain.InlandLake.IsTraversable(isLandUnit: true));
+        Assert.False(Terrain.InlandLake.IsTraversable(isLandUnit: false));
+        Assert.Equal("inlandlake", Terrain.InlandLake.ToWireName());
     }
 
     [Fact]
@@ -401,6 +445,10 @@ public class BogGenerationTests
         var sandy = new List<BogTile> { T(0, 0, BogTileKind.Bog) };
         Terrain Terrain0(HexCoord c) => c == new HexCoord(1, 0) ? Terrain.Sand : Terrain.Grass;
         Assert.True(BogRules.Check(sandy, [], Terrain0).R7 > 0);
+
+        // A bog with a sand neighbour breaks R7 even inside a pocket (a pocket bog may stand on what was beach).
+        var inPocket = new List<BogTile> { T(0, 0, BogTileKind.Bog), T(-1, 0, BogTileKind.Lake) };
+        Assert.True(BogRules.Check(inPocket, [], c => c == new HexCoord(-1, 0) ? Terrain.Sea : Terrain0(c)).R7 > 0);
     }
 
     [Fact]
@@ -473,6 +521,21 @@ public class BogGenerationTests
         Assert.True(overlaid.IsLand(moss.Coord));
         Assert.False(overlaid.IsShoreline(moss.Coord));
         Assert.NotEqual(Terrain.Bog, sampler.TerrainAt(moss.Coord));
+    }
+
+    [Fact]
+    public void An_inland_lake_is_water_that_is_not_coastal_water_but_its_shore_is_an_inland_lake_shore()
+    {
+        var lake = new HexCoord(5000, 5000);
+        var bank = lake.Neighbours()[0];
+        var sampler = new TerrainSampler(TestWorlds.Options(1)).WithBogOverlay(
+            new Dictionary<HexCoord, Terrain> { [lake] = Terrain.InlandLake, [bank] = Terrain.Grass });
+
+        Assert.Equal(Terrain.InlandLake, sampler.TerrainAt(lake));
+        Assert.False(sampler.IsCoastalWater(lake));
+        Assert.True(sampler.IsInlandLakeShore(lake));
+        // A land hex is never an inland-lake shore.
+        Assert.False(sampler.IsInlandLakeShore(bank));
     }
 
     [Fact]

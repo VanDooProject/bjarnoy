@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, scaledBuildSeconds, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
+import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, hexOccupant, cropAllowedHere, formatBuildTime, formatMissingResources, scaledBuildSeconds, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, greatStorehouseLock, towerLimitLock } from './ringCatalogue';
 
 describe('scaledBuildSeconds', () => {
   it('divides the catalogue time by the world speed factor and applies Odin\'s Wisdom', () => {
@@ -50,26 +50,17 @@ describe('longhouseLock', () => {
   });
 });
 
-describe('storageHouseLock', () => {
-  it('states the requirement: 1 at L10, 2 at L15, 3 at L20, 4 at L25', () => {
-    expect(storageHouseLock(1, [1])).toBe('Needs 1 Storehouse at level 10');
-    expect(storageHouseLock(2, [15, 14])).toBe('Needs 2 Storehouses at level 15');
-    expect(storageHouseLock(3, [20, 20, 19])).toBe('Needs 3 Storehouses at level 20');
-    expect(storageHouseLock(4, [25, 25, 25, 24])).toBe('Needs 4 Storehouses at level 25');
-    expect(storageHouseLock(7, [25, 25, 25, 24, 1, 1, 1])).toBe('Needs 4 Storehouses at level 25');
+describe('greatStorehouseLock', () => {
+  it('states the requirement: the n-th Great Storehouse needs n Storehouses at level 25', () => {
+    expect(greatStorehouseLock(0, [24])).toBe('Needs 1 Storehouse at level 25');
+    expect(greatStorehouseLock(1, [25, 24])).toBe('Needs 2 Storehouses at level 25');
+    expect(greatStorehouseLock(2, [25, 25, 1, 1])).toBe('Needs 3 Storehouses at level 25');
   });
 
-  it('never locks the first storage house, nor once the requirement is met', () => {
-    expect(storageHouseLock(0, [])).toBeUndefined();
-    expect(storageHouseLock(1, [10])).toBeUndefined();
-    expect(storageHouseLock(2, [15, 15])).toBeUndefined();
-    expect(storageHouseLock(3, [25, 20, 20])).toBeUndefined();
-    expect(storageHouseLock(5, [25, 25, 25, 25, 1])).toBeUndefined();
-  });
-
-  it('counts a queued (not yet standing) house as held but not as meeting the level', () => {
-    // two held (one standing L10, one queued): the third needs two at L15
-    expect(storageHouseLock(2, [10])).toBe('Needs 2 Storehouses at level 15');
+  it('is open once enough Storehouses stand at level 25', () => {
+    expect(greatStorehouseLock(0, [25])).toBeUndefined();
+    expect(greatStorehouseLock(1, [25, 25])).toBeUndefined();
+    expect(greatStorehouseLock(3, [25, 25, 25, 25, 1])).toBeUndefined();
   });
 });
 
@@ -190,7 +181,7 @@ describe('formatMissingResources', () => {
 });
 
 describe('isWaterOnlyBuilding / tileIsBuildable', () => {
-  it.each(['fishinghut', 'dockyard', 'shrineofnjord'])('treats %s as a coastal-water building', (type) => {
+  it.each(['fishinghut', 'harbour', 'shrineofnjord'])('treats %s as a coastal-water building', (type) => {
     expect(isWaterOnlyBuilding(type)).toBe(true);
     expect(tileIsBuildable({ terrain: 'sea', buildingType: type })).toBe(true);
   });
@@ -273,8 +264,22 @@ describe('buildingAllowedOnHex', () => {
     expect(buildingAllowedOnHex('fishinghut', { terrain: 'grass' })).toBe(false);
   });
 
+  it('only the Fishing Hut stands on an inland-lake hex, and only one beside land', () => {
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'inlandlake', isCoastalWater: true })).toBe(true);
+    for (const type of ['harbour', 'shrineofnjord', 'palisade', 'palisadegate', 'farm', 'tower']) {
+      expect(buildingAllowedOnHex(type, { terrain: 'inlandlake', isCoastalWater: true }), type).toBe(false);
+    }
+    // An interior inland-lake hex takes nothing, the Fishing Hut included.
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'inlandlake' })).toBe(false);
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'inlandlake', isCoastalWater: false })).toBe(false);
+  });
+
+  it('is not buildable as an empty inland-lake hex', () => {
+    expect(tileIsBuildable({ terrain: 'inlandlake' })).toBe(false);
+  });
+
   it('the other water buildings never stand on the bog', () => {
-    for (const type of ['dockyard', 'shrineofnjord']) {
+    for (const type of ['harbour', 'shrineofnjord']) {
       expect(buildingAllowedOnHex(type, { terrain: 'sea', isCoastalWater: true })).toBe(true);
       for (const kind of ALL_KINDS) expect(buildingAllowedOnHex(type, bogHex(kind)), `${type} on ${kind}`).toBe(false);
     }
@@ -375,5 +380,63 @@ describe('newPlacementDisabled', () => {
     expect(newPlacementDisabled('quarry')).toBe(true);
     for (const type of ['lumberjack', 'claybrickworks', 'bogoreworks', 'farm', 'tower']) expect(newPlacementDisabled(type), type).toBe(false);
     expect(buildingAllowedOnHex('quarry', { terrain: 'mountain' })).toBe(true);
+  });
+});
+
+describe('buildingAllowedOnHex — the catalogue\'s terrain per building', () => {
+  it('puts the military buildings on grass only; sand takes the tower and the walls', () => {
+    for (const type of ['siegeworkshop', 'barracks', 'archeryrange', 'smithy']) {
+      expect(buildingAllowedOnHex(type, { terrain: 'grass' }), type).toBe(true);
+      expect(buildingAllowedOnHex(type, { terrain: 'sand' }), type).toBe(false);
+    }
+    for (const type of ['tower', 'palisade', 'palisadegate']) expect(buildingAllowedOnHex(type, { terrain: 'sand' }), type).toBe(true);
+  });
+
+  it('keeps the lake Fishing Hut on a bog lake\'s half shore only', () => {
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'bog', bog: { kind: 'half' } })).toBe(true);
+    for (const kind of ['bog', 'lake', 'inlet', 'shore', 'mouth', 'creek', 'creekspring'] as const) {
+      expect(buildingAllowedOnHex('fishinghut', { terrain: 'bog', bog: { kind } }), kind).toBe(false);
+    }
+  });
+});
+
+describe('riverBuildingAllowedHere — no ordinary building on a river hex', () => {
+  it('refuses everything but the river buildings and the bridge on a river tile of any width or shape', () => {
+    for (const shape of ['straight', 'bend', 'bend60', 'spring', 'confluence', 'mouth']) {
+      for (const width of ['river', 'stream', 'widen', 'riverstream']) {
+        for (const type of ['farm', 'tower', 'storagehouse', 'palisade', 'palisadegate', 'smithy']) {
+          expect(riverBuildingAllowedHere(type, shape, 'plain', width), `${type} on ${shape}/${width}`).toBe(false);
+        }
+      }
+    }
+    expect(riverBuildingAllowedHere('farm', undefined)).toBe(true);
+    expect(riverBuildingAllowedHere('tower', undefined)).toBe(true);
+  });
+
+  it('gives a stream, a widening or a spring none of the river buildings either', () => {
+    for (const width of ['stream', 'widen', 'riverstream']) {
+      for (const type of ['sawmill', 'cropmill', 'bridge']) expect(riverBuildingAllowedHere(type, 'straight', 'plain', width), `${type}/${width}`).toBe(false);
+    }
+    expect(riverBuildingAllowedHere('sawmill', 'spring', 'plain', 'river')).toBe(false);
+  });
+});
+
+describe('hexOccupant', () => {
+  const camp = (family: string, empty?: boolean) => ({ camp: { family, empty } });
+  it('names what holds a hex against every building', () => {
+    expect(hexOccupant({})).toBeUndefined();
+    expect(hexOccupant({ giant: {} })).toBe('giant');
+    expect(hexOccupant(camp('wolfden'))).toBe('camp');
+    expect(hexOccupant(camp('wolfden', true))).toBeUndefined();
+    expect(hexOccupant(camp('fenrirbrood'))).toBe('fenrirBrood');
+    expect(hexOccupant(camp('fenrirbrood', true))).toBe('fenrirBrood');
+    expect(hexOccupant({ utgardWall: {} })).toBe('endgameSite');
+    expect(hexOccupant({ jotunTower: {} })).toBe('endgameSite');
+  });
+
+  it('keeps the building modal off an empty giant or endgame hex, but not off a building standing there', () => {
+    expect(tileIsBuildable({ terrain: 'grass', giant: {} })).toBe(false);
+    expect(tileIsBuildable({ terrain: 'grass', jotunTower: {} })).toBe(false);
+    expect(tileIsBuildable({ terrain: 'grass', camp: { family: 'wolfden', empty: true }, buildingType: 'farm' })).toBe(true);
   });
 });

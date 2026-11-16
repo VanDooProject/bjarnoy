@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { api } from '../api/client';
 import type { BuildingDefinitionResponse } from '../api/types';
 import { DEMO_MODE } from '../config';
+import { setPlacementRules } from '../lib/map/placementRules';
 
 // The catalogue is currently identical for every world (BuildingCatalogue.cs
 // is static, not per-world data), so this store fetches it once and caches
@@ -48,6 +49,7 @@ export const useBuildingCatalogueStore = defineStore('buildingCatalogue', {
           return;
         }
         this.definitions = await api.getBuildingCatalogue();
+        setPlacementRules(this.definitions);
         this.source = 'live';
       } catch {
         await this.loadFallback();
@@ -60,6 +62,7 @@ export const useBuildingCatalogueStore = defineStore('buildingCatalogue', {
       // reached (demo mode, or a live fetch failure) rather than always.
       const module = await import('../data/building-catalogue.json');
       this.definitions = module.default.data as BuildingDefinitionResponse[];
+      setPlacementRules(this.definitions);
       this.generatedAt = module.default._meta.generatedAt;
       this.source = 'fallback';
     },

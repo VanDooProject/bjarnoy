@@ -18,15 +18,24 @@ const over = computed(() => !!usage.value && usage.value.needed > usage.value.of
 </script>
 
 <template>
-  <div v-if="usage" class="dispatch-slots" :class="{ over }" data-testid="ship-slots">
-    <p class="slots-line">{{ t('hud.armyPanel.shipSlots', { used: usage.needed, offered: usage.offered }) }}</p>
-    <p v-if="over" class="slots-over" role="alert">{{ t('hud.armyPanel.shipSlotsOver') }}</p>
+  <!-- The wrapper always renders and keeps room for both lines, so picking the first ship (0 of N used) or tipping into
+       "over" never moves the fields below it. -->
+  <div class="dispatch-slots-slot">
+    <div v-if="usage" class="dispatch-slots" :class="{ over }" data-testid="ship-slots">
+      <p class="slots-line">{{ t('hud.armyPanel.shipSlots', { used: usage.needed, offered: usage.offered }) }}</p>
+      <p v-if="over" class="slots-over" role="alert">{{ t('hud.armyPanel.shipSlotsOver') }}</p>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.dispatch-slots-slot {
+  /* two 12px lines at line-height 1.4 (the "over" warning may wrap on a phone, hence a third) */
+  min-height: calc(12px * 1.4 * 3);
+}
 .dispatch-slots {
   font-size: 12px;
+  line-height: 1.4;
 }
 .dispatch-slots p {
   margin: 0;

@@ -62,6 +62,7 @@ public static class ApiKeyEndpoints
         var key = await dbContext.ApiKeys.AsNoTracking()
             .Include(k => k.OwnerUser)
             .Include(k => k.CreatedByUser)
+            .Include(k => k.Accounts).ThenInclude(a => a.User)
             .FirstOrDefaultAsync(k => k.Id == keyId, cancellationToken);
         return key is null
             ? TypedResults.Unauthorized()

@@ -4,6 +4,9 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "types": ["vite/client"],
     "allowArbitraryExtensions": true,
+    /* Set here, not only inherited from @vue/tsconfig: if that extends fails to resolve (no `npm ci` yet),
+       an inherited flag is lost and `vue-tsc -b` writes .js files next to every source file. */
+    "noEmit": true,
 
     /* Linting */
     "noUnusedLocals": true,

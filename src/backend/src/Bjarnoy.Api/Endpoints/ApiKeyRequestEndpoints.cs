@@ -64,7 +64,8 @@ public static class ApiKeyRequestEndpoints
         var result = await requests.CreateAsync(
             new NewApiKeyRequest(
                 body.Name, body.Purpose, body.Description, body.ContextUrl, body.OwnerUserName,
-                body.Features, body.AllWorlds, body.WorldIds, body.LifetimeMinutes, body.RequestsPerMinute),
+                body.Features, body.AllWorlds, body.WorldIds, body.LifetimeMinutes, body.RequestsPerMinute,
+                body.AdditionalUserNames),
             http.Connection.RemoteIpAddress?.ToString(),
             http.Request.Headers.UserAgent.ToString(),
             cancellationToken);

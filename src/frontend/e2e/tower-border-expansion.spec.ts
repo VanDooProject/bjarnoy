@@ -41,14 +41,7 @@ test.describe('tower border expansion (realm borders)', { tag: '@g2' }, () => {
     // change between the two screenshots (level 1 -> 4) for a reason
     // unrelated to what this test checks.
     const setup = await page.evaluate(() => {
-      const win = window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string };
-        __settlementRenderer: () => {
-          hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number };
-          forceRebuild: () => void;
-        };
-      };
-      const world = win.__demoWorld();
+      const world = window.__demoWorld() as { model: any; selectedSettlementId: string };
       const model = world.model;
       const settlement = model.getSettlement(world.selectedSettlementId);
       // The Tower unlocks at longhouse 3, and a longhouse below that allows
@@ -89,7 +82,7 @@ test.describe('tower border expansion (realm borders)', { tag: '@g2' }, () => {
 
       const placed = model.placeBuilding(world.selectedSettlementId, towerAt, 'tower');
       if (!placed) throw new Error('failed to place the level-1 tower at the border edge');
-      win.__settlementRenderer().forceRebuild();
+      window.__settlementRenderer().forceRebuild();
 
       // The first direction (of the same six) that, continued two more
       // steps from the tower, lands outside the centre disc — not
@@ -101,7 +94,7 @@ test.describe('tower border expansion (realm borders)', { tag: '@g2' }, () => {
         ([dq, dr]) => hexDistance(at, { q: towerAt!.q + dq * 2, r: towerAt!.r + dr * 2 }) > radius,
       )!;
       const farHex = { q: towerAt.q + farDir[0] * 2, r: towerAt.r + farDir[1] * 2 };
-      const farScreen = win.__settlementRenderer().hexCenterScreen(farHex);
+      const farScreen = window.__settlementRenderer().hexCenterScreen(farHex);
 
       return { towerAt, farHex, farScreen, settlementId: world.selectedSettlementId as string };
     });
@@ -115,7 +108,7 @@ test.describe('tower border expansion (realm borders)', { tag: '@g2' }, () => {
     // assertion below actually reaching further than the level-1 one did.
     const farClaimedAfterPlacingOnly = await page.evaluate(
       ({ farHex, settlementId }) => {
-        const world = (window as unknown as { __demoWorld: () => { model: any } }).__demoWorld();
+        const world = window.__demoWorld() as { model: any };
         return world.model.getTile(farHex.q, farHex.r).ownerId === settlementId;
       },
       { farHex: setup.farHex, settlementId: setup.settlementId },
@@ -146,11 +139,7 @@ test.describe('tower border expansion (realm borders)', { tag: '@g2' }, () => {
     // camera-triggered rebuild.
     const farClaimedAfterSnapshot = await page.evaluate(
       ({ towerAt, farHex, settlementId }) => {
-        const win = window as unknown as {
-          __demoWorld: () => { model: any; selectedSettlementId: string };
-          __settlementRenderer: () => { forceRebuild: () => void };
-        };
-        const world = win.__demoWorld();
+        const world = window.__demoWorld() as { model: any; selectedSettlementId: string };
         const model = world.model;
         const settlement = model.getSettlement(settlementId);
 
@@ -161,7 +150,7 @@ test.describe('tower border expansion (realm borders)', { tag: '@g2' }, () => {
           capacity: settlement.capacity ?? { wood: 0, stone: 0, food: 0, iron: 0 },
           buildings: [{ q: towerAt.q, r: towerAt.r, type: 'tower', level: 4 }],
         });
-        win.__settlementRenderer().forceRebuild();
+        window.__settlementRenderer().forceRebuild();
 
         return model.getTile(farHex.q, farHex.r).ownerId === settlementId;
       },
@@ -173,9 +162,7 @@ test.describe('tower border expansion (realm borders)', { tag: '@g2' }, () => {
     // enough: the render loop is paced when its frames are expensive (framePacing.ts), so two of them need not
     // include a render. Then the double-rAF waitForMapReady uses, for that frame to reach the screen.
     await page.evaluate(async () => {
-      await (window as unknown as { __settlementRenderer: () => { whenFrameRendered: () => Promise<void> } })
-        .__settlementRenderer()
-        .whenFrameRendered();
+      await window.__settlementRenderer().whenFrameRendered();
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined))));
     });
     const after = await page.screenshot({ clip });

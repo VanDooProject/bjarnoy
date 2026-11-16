@@ -52,7 +52,7 @@ import {
   type GiantTextureMap,
 } from './giantTiles';
 import { PALISADE_FAMILY, isRefusal, palisadeTileFor, type PalisadePiece } from './palisadeTiles';
-import type { BogTile, ForestKind, RiverTile, Terrain, Tile, TileOrientation } from './types';
+import { drawsAsSea, type BogTile, type ForestKind, type RiverTile, type Terrain, type Tile, type TileOrientation } from './types';
 import type { RiverVariant } from './worldGenerator';
 import {
   bend60OrientationOf,
@@ -87,6 +87,12 @@ export const TILE_ART_NATIVE_H = 300;
 export const TILE_ART_TOPFACE_Y_FRAC = 140 / 200;
 /** Top-face height as a fraction of the tile width (92 / 200). */
 export const TILE_ART_TOPFACE_H_FRAC = 92 / 200;
+/**
+ * How far lower, as a fraction of the tile width, the sea art's top face starts than land's (12 / 200): measured on the art, the
+ * watertile, coastalwatertile and taintedwater top faces start at native y 152, the river and bog art at 140 like land. Realm borders
+ * on a coast use it to sit on the visible waterline (`realmBorderWaterline.ts`).
+ */
+export const TILE_ART_SEA_TOPFACE_DROP_FRAC = 12 / 200;
 
 // 'sawmillriver'/'sawmillbend'/'sawmillbend60' aren't real
 // `Tile['buildingType']` values — a Sawmill's wire building type always
@@ -148,6 +154,8 @@ export type TextureKey =
   | 'towersand'
   | 'towerforest'
   | 'towerbog'
+  // The Longhouse on sand (3D_assets hextile165): a texture-lookup key, the wire type is `longhouse`.
+  | 'longhousesand'
   // The palisade's six pieces (`palisadeArtFor`): which one a wall hex draws is decided by its wall neighbours, so these are
   // texture-lookup keys, not wire building types (the wire types are `palisade` and `palisadegate`).
   | 'palisadestraight'
@@ -224,7 +232,11 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   towersand: 'stavetower_sand',
   towerforest: 'stavetower_forest',
   towerbog: 'stavetower_bog',
-  dockyard: 'dockyard',
+  // The Longhouse on sand: the same hall with the beach kept round it (3D_assets hextile165).
+  longhousesand: 'greathall_sand',
+  // The Harbour is the old Dockyard: it keeps the `dockyard` art family. The Shipyard has its own `shipyard` family (art still to come).
+  harbour: 'dockyard',
+  shipyard: 'shipyard',
   // A Sawmill is never actually on grass (the backend requires a river
   // shape to place one — BuildingCatalogue.SawmillRiverShapes) — there is
   // deliberately no plain 'sawmill' entry here for the grass/inland family
@@ -246,6 +258,8 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   druidhut: 'druidhut',
   cartworkshop: 'cartworkshop',
   claybrickworks: 'claybrickworks',
+  // The beach camp (a one-hex settlement on a sand shore): its tile art is not in the pack yet.
+  beachcamp: 'beachcamp',
   wasteland: 'wasteland',
   deadforest: 'deadforest',
   blacksand: 'blacksand',
@@ -858,10 +872,24 @@ export function classifyFamilyFrames<T>(frames: FamilyFrame<T>[], opts?: { spars
   const baseByOrientation = emptyOrientationMap<Map<number, T>>(() => new Map());
   const topByOrientation = emptyOrientationMap<Map<number, T>>(() => new Map());
 
+  // The packer's shared `<family>_<O>_base` carries no level or variant. It is the family's base only where no leveled base exists:
+  // a family with per-level bases (the dockyard's) owns index 0 through `level000_base`, and a shared base parked there would never
+  // be replaced by it, because a later load fills only the holes of an earlier one (`mergeIndexedArray`).
+  const sharedBase = emptyOrientationMap<T | undefined>(() => undefined);
+  const hasLeveledBase = emptyOrientationMap(() => false);
   for (const { name, layer, value } of frames) {
     const orientation = orientationOf(name);
-    const index = explicitIndexOf(name) ?? 0;
-    (layer === 'top' ? topByOrientation : baseByOrientation)[orientation].set(index, value);
+    const explicit = explicitIndexOf(name);
+    if (layer !== 'top' && explicit === null) {
+      sharedBase[orientation] = value;
+      continue;
+    }
+    if (layer !== 'top' && LEVEL_RE.test(name)) hasLeveledBase[orientation] = true;
+    (layer === 'top' ? topByOrientation : baseByOrientation)[orientation].set(explicit ?? 0, value);
+  }
+  for (const orientation of TILE_ORIENTATIONS) {
+    const shared = sharedBase[orientation];
+    if (shared !== undefined && !hasLeveledBase[orientation]) baseByOrientation[orientation].set(0, shared);
   }
 
   const toIndexedMap = (byOrientation: OrientationMap<Map<number, T>>): OrientationMap<T[]> => {
@@ -889,7 +917,8 @@ export function classifyFamilyFrames<T>(frames: FamilyFrame<T>[], opts?: { spars
     result.top = toIndexedMap(topByOrientation);
   }
   if (hasAny(baseByOrientation)) {
-    const isIndexed = TILE_ORIENTATIONS.some((o) => baseByOrientation[o].size > 1);
+    // A leveled base marks the base as indexed even when only one rung has loaded (the buildings-level1 atlas alone holds just `level001_base`).
+    const isIndexed = TILE_ORIENTATIONS.some((o) => baseByOrientation[o].size > 1 || hasLeveledBase[o]);
     if (isIndexed) {
       result.baseIndexed = toIndexedMap(baseByOrientation);
     } else {
@@ -1759,17 +1788,22 @@ export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
     return bogTextureKey(tile.bog) === 'bogcreek' ? 'hammerschmiede' : 'hammerschmiedebend';
   }
   // A tower replaces the tile it stands on, so its art depends on the ground: sand, forest and plain bog moss have their own, grass is `tower`.
+  // A Longhouse on sand has its own art too (the same hall, the beach kept round it); on grass it is `longhouse`.
   if (tile.buildingType === 'tower' && tile.bog?.kind === 'bog') return 'towerbog';
   if (tile.buildingType === 'tower' && tile.terrain === 'forest') return 'towerforest';
   if (tile.buildingType === 'tower' && tile.terrain === 'sand') return 'towersand';
+  if (tile.buildingType === 'longhouse' && tile.terrain === 'sand') return 'longhousesand';
   if (tile.buildingType) return tile.buildingType;
-  if (tile.wasted) return WASTED_TEXTURE_KEY[tile.terrain] ?? tile.terrain;
+  if (tile.wasted) return WASTED_TEXTURE_KEY[seaArt(tile.terrain)] ?? seaArt(tile.terrain);
   if (tile.bog) return bogTextureKey(tile.bog);
   if (tile.terrain === 'mountain') return MOUNTAIN_SHAPE_KEY[tile.variant ?? 0] ?? 'mountain';
   // A living forest draws its biome's art; a forest the generator hasn't given a kind (older saves, hand-built islands) is the mixed one.
   if (tile.terrain === 'forest') return BIOME_FOREST_KEY[tile.forestKind ?? 'mixed'];
-  return tile.terrain;
+  return seaArt(tile.terrain);
 }
+
+/** An inland lake is drawn with the sea's art (same place, same look); every other terrain has its own. */
+const seaArt = (terrain: Terrain): Terrain => (drawsAsSea(terrain) ? 'sea' : terrain);
 
 /**
  * `textureKeyFor`, except that a biome forest key whose family has no frames in `textures` yet (the vendored atlas predates
@@ -1949,7 +1983,7 @@ function pickIndexed<T>(arr: (T | undefined)[] | undefined, index: number): T | 
  * shore end of an Utgard wall, brings its own base like the palisade's sea end.
  */
 function drawsCoastalWater(tile: Tile, riverArt?: RiverArt): boolean {
-  return tile.terrain === 'sea' && tile.isCoastalWater === true && !tile.buildingType && !(riverArt && ENDGAME_KEYS.has(riverArt.key));
+  return drawsAsSea(tile.terrain) && tile.isCoastalWater === true && !tile.buildingType && !(riverArt && ENDGAME_KEYS.has(riverArt.key));
 }
 
 /** Coastal water's base and prop frames by variant: a split pack's `baseIndexed` and `top`, an unsplit one's single indexed bucket as the base. */
@@ -2009,8 +2043,14 @@ export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: Ri
   // Also reached while `indexed` exists but every one of its rungs is still
   // a hole (only `buildings-level1` loaded, and this particular family's
   // level 1 base frame hasn't resolved either) — same graceful degradation.
-  const base = textures.base[key] ?? textures.base[tile.terrain];
-  return base![orientation];
+  // The building's own family has no base frame loaded (its atlas page is still loading, or the pack never had one): the hex draws what it
+  // would without the building, as the land-wall branch above does. This is what the tile is anyway: coastal water, wasted art, biome
+  // forest, a bog's own base (bog families live in `baseIndexed`, never in `base`, so a terrain lookup here would find nothing).
+  const base = textures.base[key];
+  if (!base && tile.buildingType) {
+    return baseTextureFor(textures, { ...tile, buildingType: undefined, buildingLevel: undefined }, riverArt);
+  }
+  return (base ?? textures.base[tile.terrain])![orientation];
 }
 
 /** A camp's art levels: `level000` cleared (static), `level001` guarded (animated). */
@@ -2249,7 +2289,7 @@ function oppositeOf(direction: TileOrientation): TileOrientation {
  * Sawmill/Crop Mill's channel lines up with its river neighbours (the same
  * shape is what a real placement is built on, per `BuildingCatalogue`'s
  * `SawmillRiverShapes`/`CropMillRiverShapes` and `ringCatalogue.ts`'s
- * `RIVER_SHAPES_BY_TYPE` — see that map's own doc comment for the
+ * the catalogue's `requiresRiverShapes` (`placementRules.ts`) — see `riverBuildingAllowedHere`'s doc comment for the
  * shape-matches-the-hex's-river-art rule this mirrors). `seaDirection`/
  * `springShape` are never needed here: neither building is ever placed on a
  * `mouth` or `spring` tile, the only shapes `riverArtFor` would otherwise

@@ -306,14 +306,10 @@ Playtesting the shipped defaults surfaced three more fixes:
   layer are stage siblings of `this.world`, not children (see mount()'s own
   layering comment), so they're untouched by this — fog keeps rendering
   continuously through the fade, per §1's original requirement.
-- **TopBar's title duplicated the in-scene settlement badge.** Settlement
-  mode already floats the settlement's own name over the longhouse hex
-  (`HexMapRenderer.rebuildSettlementLabels`); `TopBar.vue`'s settlement-name
-  + island-name caption showed the same information a second time once
-  zoomed all the way in. `TopBar` now takes a `hideTitle` prop, and
-  `MapView.vue` passes `mode === 'settlement'` — the title stays visible in
-  world mode (no in-scene badge there) and disappears once past the
-  transition into settlement mode.
+- **TopBar title stays in settlement mode.** The in-scene badge
+  (`HexMapRenderer.rebuildSettlementLabels`) is a map object, so panning
+  away from the settlement left the name nowhere on screen. `TopBar` shows
+  the settlement name + caption in both modes (no `hideTitle` prop).
 
 ### 9.2 Mobile pinch-to-zoom — shipped
 

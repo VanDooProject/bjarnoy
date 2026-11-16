@@ -7,6 +7,7 @@
 // burst, the mockup's own keyframe only repeats because it's a static
 // preview frame.
 import { useI18n } from 'vue-i18n';
+import { useHiddenUnderPhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import type { ResourceKind } from '../../lib/map/types';
 import { resourceName } from '../../i18n/catalogueNames';
 import type { MessageSchema } from '../../i18n/schema';
@@ -23,12 +24,14 @@ export interface ResourceTick {
 defineProps<{ ticks: ResourceTick[] }>();
 const emit = defineEmits<{ expire: [id: number] }>();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const hudHidden = useHiddenUnderPhoneLayer();
 </script>
 
 <template>
   <div
     v-for="tick in ticks"
     :key="tick.id"
+    v-phone-hidden="hudHidden"
     class="tick"
     :style="{ left: `${tick.x}px`, top: `${tick.y}px`, '--tint': `var(--${tick.resource})` }"
     @animationend="emit('expire', tick.id)"

@@ -64,7 +64,7 @@ public sealed class TerrainSampler
     }
 
     /// <summary>
-    /// A sampler that answers <see cref="Terrain.Bog"/> or <see cref="Terrain.Lake"/> for the hexes in <paramref name="overlay"/>
+    /// A sampler that answers <see cref="Terrain.Bog"/>, <see cref="Terrain.Lake"/> or <see cref="Terrain.InlandLake"/> for the hexes in <paramref name="overlay"/>
     /// (an island's persisted bog, see <see cref="BogTerrain"/>) and the seed's own terrain for everything else. World generation
     /// always runs on the plain sampler; this is for the game rules that read terrain afterwards.
     /// </summary>
@@ -1171,13 +1171,13 @@ public sealed class TerrainSampler
     public bool IsShoreline(HexCoord coord) => Shoreline.IsShoreline(coord, TerrainAt);
 
     /// <summary>A sea hex with at least one land neighbour — the coastal-water ring around every island.</summary>
-    public bool IsCoastalWater(HexCoord coord)
-    {
-        if (TerrainAt(coord) != Terrain.Sea)
-        {
-            return false;
-        }
+    public bool IsCoastalWater(HexCoord coord) => TerrainAt(coord) == Terrain.Sea && BordersLand(coord);
 
+    /// <summary>An inland-lake hex with at least one land neighbour: the only inland-lake hex a Fishing Hut may stand on.</summary>
+    public bool IsInlandLakeShore(HexCoord coord) => TerrainAt(coord) == Terrain.InlandLake && BordersLand(coord);
+
+    private bool BordersLand(HexCoord coord)
+    {
         foreach (var neighbour in coord.Neighbours())
         {
             if (IsLand(neighbour))
@@ -1206,7 +1206,7 @@ public sealed class TerrainSampler
             return forced;
         }
 
-        return IsCoastalWater(coord) ? CoastalOrientation(coord) : DefaultOrientation(coord);
+        return IsCoastalWater(coord) || IsInlandLakeShore(coord) ? CoastalOrientation(coord) : DefaultOrientation(coord);
     }
 
     /// <summary>

@@ -70,19 +70,14 @@ public class LandingOnboardingCompletionTests(AppHostFixture fixture)
         var settlement = Assert.Single(settlements!);
 
         // The two guided buildings the tray tracks (reindeerherder, lumberjack — see
-        // LandingView.vue's GUIDED_BUILD_TERRAIN) each need their own
-        // terrain, both guaranteed adjacent to any start position (see
-        // LandingBuildQueueTests's own comment on WorldGenerator's
-        // guarantee) and so within ClaimRadius 2 at level 1.
+        // LandingView.vue's GUIDED_BUILD_TERRAIN), each on the nearest hex of its terrain
+        // in the level-1 claim that the backend accepts (FindGuidedBuildHexAsync: not a
+        // river or camp hex).
         var centre = new HexCoord(settlement.Q, settlement.R);
-        var chunk = await apiClient.GetFromJsonAsync<TileChunkResponse>(
-            $"/api/v1/worlds/{world.Id}/tiles?qMin={centre.Q - 1}&qMax={centre.Q + 1}"
-            + $"&rMin={centre.R - 1}&rMax={centre.R + 1}",
-            cancellationToken);
-        var grassTile = chunk!.Tiles.First(t =>
-            t.Terrain == "grass" && centre.DistanceTo(new HexCoord(t.Q, t.R)) == 1);
-        var forestTile = chunk!.Tiles.First(t =>
-            t.Terrain == "forest" && centre.DistanceTo(new HexCoord(t.Q, t.R)) == 1);
+        var grassTile = await LiveFrontendTestHelpers.FindGuidedBuildHexAsync(
+            apiClient, world.Id, centre, "grass", cancellationToken);
+        var forestTile = await LiveFrontendTestHelpers.FindGuidedBuildHexAsync(
+            apiClient, world.Id, centre, "forest", cancellationToken);
 
         // --- Admin: speed the world up so both builds resolve quickly —
         // same technique/tuning as LandingBuildQueueTests's own bump (see its
@@ -121,13 +116,13 @@ public class LandingOnboardingCompletionTests(AppHostFixture fixture)
             $"/api/v1/settlements/{settlement.Id}/builds",
             new QueueBuildRequest("reindeerherder", grassTile.Q, grassTile.R),
             cancellationToken);
-        queuedFarm.EnsureSuccessStatusCode();
+        await LiveFrontendTestHelpers.EnsureSuccessWithBodyAsync(queuedFarm, cancellationToken);
 
         var queuedLumberjack = await apiClient.PostAsJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/builds",
             new QueueBuildRequest("lumberjack", forestTile.Q, forestTile.R),
             cancellationToken);
-        queuedLumberjack.EnsureSuccessStatusCode();
+        await LiveFrontendTestHelpers.EnsureSuccessWithBodyAsync(queuedLumberjack, cancellationToken);
 
         // startHudSync()'s poll (already running since founding) picks both
         // orders up with no reload/click. Farm and Lumberjack share the same

@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import AnimatedBuildingSprite from '../components/AnimatedBuildingSprite.vue';
+import BuildingLink from '../components/docs/BuildingLink.vue';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import TechTreeGraph from '../components/docs/TechTreeGraph.vue';
 import type { AtlasFrameRect } from '../lib/map/atlas';
@@ -267,6 +268,23 @@ function formatAmount(value: number): string {
       </div>
     </nav>
 
+    <section id="razing" class="razing" data-testid="docs-razing">
+      <h2 class="category-title">{{ $t('docs.techTree.razing.title') }}</h2>
+      <p>{{ $t('docs.techTree.razing.intro') }}</p>
+      <ul class="razing-rules">
+        <li>{{ $t('docs.techTree.razing.oneLevel') }}</li>
+        <li>{{ $t('docs.techTree.razing.time') }}</li>
+        <li>{{ $t('docs.techTree.razing.refund') }}</li>
+        <li>{{ $t('docs.techTree.razing.works') }}</li>
+        <li>{{ $t('docs.techTree.razing.cancel') }}</li>
+        <i18n-t keypath="docs.techTree.razing.longhouse" tag="li" scope="global">
+          <template #longhouse><BuildingLink type="longhouse" /></template>
+        </i18n-t>
+        <li>{{ $t('docs.techTree.razing.gone') }}</li>
+        <li>{{ $t('docs.techTree.razing.oneOrder') }}</li>
+      </ul>
+    </section>
+
     <div v-for="cat in categories" :key="cat.id" class="category">
       <h2 :id="cat.id" class="category-title">{{ cat.label }}</h2>
 
@@ -437,6 +455,12 @@ function formatAmount(value: number): string {
 /* Clears the docked TopBar (64px) plus a gap, so a link from the graph or
    the table of contents doesn't land underneath it. Only works because
    the docs page layout is the scroll container the sticky bar is measured against. */
+.razing {
+  margin-top: 32px;
+}
+.razing-rules {
+  padding-left: 20px;
+}
 .category-title {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--panel-border);

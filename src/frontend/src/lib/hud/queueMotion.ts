@@ -18,7 +18,6 @@ export const COUNT_BUMP_MS = 360;
 export const PEEK_OUT_MS = 220;
 export const PEEK_HOLD_MS = 1500;
 export const PEEK_BACK_MS = 200;
-export const COUNT_POP_MS = 320;
 export const HANDLE_PULSE_MS = 500;
 
 const GOLD = '#ffc55c';
@@ -96,13 +95,6 @@ export async function peek(panel: HTMLElement): Promise<void> {
   await animate(panel, [{ transform: 'none', opacity: 1 }, { transform: 'translateX(-100%)', opacity: 0 }], {
     duration: PEEK_BACK_MS,
     fill: 'both',
-  });
-}
-
-/** P4: the handle's count chip pops (scale .6 -> 1.5 -> 1). */
-export function popCount(chip: Element): Promise<void> {
-  return animate(chip, [{ transform: 'scale(.6)' }, { transform: 'scale(1.5)', offset: 0.55 }, { transform: 'scale(1)' }], {
-    duration: COUNT_POP_MS,
   });
 }
 

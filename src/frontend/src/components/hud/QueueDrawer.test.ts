@@ -8,6 +8,7 @@ import type { ArmyResponse, BuildOrderResponse, TrainingOrderResponse } from '..
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
+import { ApiError } from '../../api/client';
 
 const { recallArmy } = vi.hoisted(() => ({ recallArmy: vi.fn() }));
 vi.mock('../../api/client', async (importOriginal) => {
@@ -28,6 +29,7 @@ function buildOrder(overrides: Partial<BuildOrderResponse> = {}): BuildOrderResp
     q: 1,
     r: 2,
     building: 'farm',
+    kind: 'build',
     targetLevel: 1,
     state: 'building',
     slotCost: 1,
@@ -66,6 +68,7 @@ function army(overrides: Partial<ArmyResponse> = {}): ArmyResponse {
     position: { q: 1, r: 1 },
     provisions: 10,
     totalSpeed: 4,
+    visionRadius: 2,
     totalUpkeepPerHour: 2,
     stacks: [{ unit: 'spearman', count: 10 }],
     movement: {
@@ -80,7 +83,10 @@ function army(overrides: Partial<ArmyResponse> = {}): ArmyResponse {
       turnAroundAt: '2026-01-01T02:00:00Z',
       returnArrivesAt: '2026-01-01T04:00:00Z',
       isReturning: false,
+      isStranded: false,
+      isFleeing: false,
     },
+    starvesAt: null,
     ...overrides,
   };
 }
@@ -98,7 +104,7 @@ describe('QueueDrawer', () => {
     expect(wrapper.find('.queue-drawer').exists()).toBe(false);
   });
 
-  it('shows one row per non-empty category with the soonest remaining time and a count chip', () => {
+  it('shows one row per non-empty category with the soonest remaining time', () => {
     const world = useWorldStore();
     world.hud.queueFetchedAt = Date.now();
     world.hud.queue = [
@@ -114,11 +120,9 @@ describe('QueueDrawer', () => {
 
     const buildRow = rows.find((r) => r.classes('is-build'))!;
     expect(buildRow.get('.queue-drawer-handle-time').text()).toBe('0:50');
-    expect(buildRow.get('.queue-drawer-handle-count').text()).toBe('2');
 
     const trainRow = rows.find((r) => r.classes('is-train'))!;
     expect(trainRow.get('.queue-drawer-handle-time').text()).toBe('0:20');
-    expect(trainRow.find('.queue-drawer-handle-count').exists()).toBe(false);
   });
 
   it('shows a muted dash and no progress bar when every build order is waiting', () => {
@@ -356,13 +360,13 @@ describe('QueueDrawer', () => {
       expect(wrapper.find('.queue-drawer').exists()).toBe(true);
       expect(wrapper.text()).toContain('Armies');
 
-      const etas = wrapper.findAll('.army-row .status-row-time').map((n) => n.text());
+      const etas = wrapper.findAll('[data-testid="army-row-time"]').map((n) => n.text());
       // near (1h out) sorts before far (5h out); the supporting army (no
       // active leg, so no ETA) sorts last regardless.
-      expect(etas).toEqual(['1h 0m', '5h 0m', '—']);
+      expect(etas).toEqual(['arrives in 1h 0m', 'arrives in 5h 0m', 'Supporting']);
     });
 
-    it('adds an army row to the handle with the soonest arrival and a count chip', () => {
+    it('adds an army row to the handle with the soonest arrival', () => {
       const world = useWorldStore();
       world.armies = [
         army({ id: 'far', movement: { ...army().movement!, arrivesAt: '2026-01-01T05:00:00Z' } }),
@@ -371,7 +375,6 @@ describe('QueueDrawer', () => {
 
       const row = mountDrawer().get('.queue-drawer-handle-row.is-army');
       expect(row.get('.queue-drawer-handle-time').text()).toBe('1h00');
-      expect(row.get('.queue-drawer-handle-count').text()).toBe('2');
     });
 
     it('shows a muted dash on the army handle row when every army is supporting', () => {
@@ -383,27 +386,142 @@ describe('QueueDrawer', () => {
       expect(row.find('.queue-drawer-handle-progress').exists()).toBe(false);
     });
 
+    /** Taps the army's row: its detail opens as the drawer's second level. */
+    async function openDetail(wrapper: ReturnType<typeof mountDrawer>, index = 0) {
+      await wrapper.findAll('[data-testid="army-row-head"]')[index].trigger('click');
+    }
+
     it('Recall calls recallArmyLive', async () => {
       const world = useWorldStore();
       world.armies = [army({ id: 'army-1' })];
 
       const wrapper = mountDrawer({ open: true });
-      await wrapper.get('.army-row .recall').trigger('click');
+      await openDetail(wrapper);
+      await wrapper.get('[data-testid="army-recall"]').trigger('click');
       await Promise.resolve();
       await Promise.resolve();
 
       expect(recallArmy).toHaveBeenCalledWith('army-1', undefined);
     });
 
-    it('a row tap closes the drawer and emits select-army', async () => {
+    it('a refused recall (409) shows the translated rejection in the detail of that army', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' }), army({ id: 'army-2' })];
+      recallArmy.mockRejectedValue(
+        new ApiError(409, { title: 'Nothing to recall.', detail: 'The army is already heading home.', status: 409, rejection: 'NothingToRecall' }),
+      );
+
+      const wrapper = mountDrawer({ open: true });
+      await openDetail(wrapper, 1);
+      await wrapper.get('[data-testid="army-recall"]').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('[data-testid="army-recall-refusal"]').exists()).toBe(true));
+
+      expect(wrapper.get('[data-testid="army-recall-refusal"]').text()).toBe('The army is already heading home.');
+    });
+
+    it('a rate-limited recall (429 RouteRateLimited) shows the translated wait-and-retry text', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+      recallArmy.mockRejectedValue(
+        new ApiError(429, { title: 'Too many requests.', status: 429, rejection: 'RouteRateLimited' }),
+      );
+
+      const wrapper = mountDrawer({ open: true });
+      await openDetail(wrapper);
+      await wrapper.get('[data-testid="army-recall"]').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('[data-testid="army-recall-refusal"]').exists()).toBe(true));
+
+      expect(wrapper.get('[data-testid="army-recall-refusal"]').text()).toBe('Too many marching orders at once. Wait a moment and try again.');
+    });
+
+    it('a recall refused without a rejection code (429) shows the generic recall error', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+      recallArmy.mockRejectedValue(new ApiError(429, undefined));
+
+      const wrapper = mountDrawer({ open: true });
+      await openDetail(wrapper);
+      await wrapper.get('[data-testid="army-recall"]').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('[data-testid="army-recall-refusal"]').exists()).toBe(true));
+
+      expect(wrapper.get('[data-testid="army-recall-refusal"]').text()).toBe('Recall failed.');
+    });
+
+    it('a new recall clears the previous refusal', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+      recallArmy.mockRejectedValueOnce(new ApiError(429, undefined));
+
+      const wrapper = mountDrawer({ open: true });
+      await openDetail(wrapper);
+      await wrapper.get('[data-testid="army-recall"]').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('[data-testid="army-recall-refusal"]').exists()).toBe(true));
+
+      await wrapper.get('[data-testid="army-recall"]').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('[data-testid="army-recall-refusal"]').exists()).toBe(false));
+    });
+
+    it('lists the armies with a chevron and no detail until a row is tapped', () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' }), army({ id: 'army-2' })];
+
+      const wrapper = mountDrawer({ open: true });
+
+      expect(wrapper.findAll('[data-testid="army-row-head"]')).toHaveLength(2);
+      expect(wrapper.findAll('.army-row-chevron')).toHaveLength(2);
+      expect(wrapper.find('[data-testid="army-detail"]').exists()).toBe(false);
+    });
+
+    it('a row tap selects the army and opens its detail as a second level in place of the list', async () => {
       const world = useWorldStore();
       world.armies = [army({ id: 'army-1' })];
 
       const wrapper = mountDrawer({ open: true });
-      await wrapper.get('.army-row .status-row-click').trigger('click');
+      await openDetail(wrapper);
+
+      expect(world.selectedArmyId).toBe('army-1');
+      expect(wrapper.find('[data-testid="army-detail"]').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="army-row-head"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="army-events"]').exists()).toBe(true);
+      expect(wrapper.emitted('select-army')).toBeUndefined();
+      expect(wrapper.emitted('update:open')).toBeUndefined();
+    });
+
+    it('the back button returns to the list and keeps the army selected', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+
+      const wrapper = mountDrawer({ open: true });
+      await openDetail(wrapper);
+      await wrapper.get('[data-testid="army-detail-back"]').trigger('click');
+
+      expect(wrapper.find('[data-testid="army-detail"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="army-row-head"]').exists()).toBe(true);
+      expect(world.selectedArmyId).toBe('army-1');
+    });
+
+    it('"Show on map" closes the drawer and emits select-army', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+
+      const wrapper = mountDrawer({ open: true });
+      await openDetail(wrapper);
+      await wrapper.get('[data-testid="army-show-on-map"]').trigger('click');
 
       expect(wrapper.emitted('select-army')).toEqual([['army-1']]);
       expect(wrapper.emitted('update:open')).toEqual([[false]]);
+    });
+
+    it('drops back to the list when the army in the detail is gone', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' }), army({ id: 'army-2' })];
+
+      const wrapper = mountDrawer({ open: true });
+      await openDetail(wrapper);
+      world.armies = [army({ id: 'army-2' })];
+      await vi.waitFor(() => expect(wrapper.find('[data-testid="army-detail"]').exists()).toBe(false));
+
+      expect(wrapper.findAll('[data-testid="army-row-head"]')).toHaveLength(1);
     });
 
     it('build and training sections stay unaffected by the Armies section', () => {

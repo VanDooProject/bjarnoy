@@ -6,8 +6,7 @@ using Bjarnoy.Domain.World;
 namespace Bjarnoy.Domain.Settlers;
 
 /// <summary>
-/// Settlement expansion (issue #55): the settler unit, its escalating
-/// training cost, the minimum-spacing rule a new settlement's hex must clear,
+/// Settlement expansion (issue #55): the settler unit, the minimum-spacing rule a new settlement's hex must clear,
 /// and the pure "how many settlers does founding need" constant every
 /// other piece of this feature (dispatch validation, arrival resolution)
 /// shares.
@@ -23,22 +22,6 @@ public static class Founding
     /// so arrival never has to decide what to do with a leftover settler.
     /// </summary>
     public const int RequiredSettlers = 5;
-
-    /// <summary>
-    /// Settler training cost multiplier for a player who already holds
-    /// <paramref name="existingSettlementCount"/> settlements (issue #55 §4):
-    /// roughly doubles per settlement already held, Travian-style. Owning
-    /// just the starting settlement (1) costs the catalogue's base price (×1)
-    /// to train settlers for a 2nd; owning 2 costs ×2 for a 3rd; owning 3 costs
-    /// ×4 for a 4th; and so on. <paramref name="existingSettlementCount"/> of
-    /// 0 (defensive only — every player who can train anything already has a
-    /// first settlement) is also ×1, not a division by zero.
-    /// </summary>
-    public static double CostMultiplier(int existingSettlementCount) =>
-        Math.Pow(2, Math.Max(0, existingSettlementCount - 1));
-
-    public static ResourceAmounts ScaledSettlerCost(int existingSettlementCount) =>
-        UnitCatalogue.Get(UnitType.Settler).TrainingCost * CostMultiplier(existingSettlementCount);
 
     /// <summary>
     /// Whether <paramref name="target"/> clears the minimum-spacing rule

@@ -7,6 +7,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests.ApiKeys;
 
@@ -93,7 +94,8 @@ internal sealed class ApiKeyHarness(BjarnoyApiFactory factory)
         TimeSpan? lifetime = null,
         int? requestsPerMinute = null,
         DateTimeOffset? autoRenewUntil = null,
-        string? name = null)
+        string? name = null,
+        IReadOnlyList<Guid>? additionalUserIds = null)
     {
         var response = await admin.PostJsonAsync(
             "/api/v1/admin/api-keys",
@@ -106,7 +108,8 @@ internal sealed class ApiKeyHarness(BjarnoyApiFactory factory)
                 worldIds,
                 Factory.Time.GetUtcNow() + (lifetime ?? TimeSpan.FromHours(1)),
                 requestsPerMinute,
-                autoRenewUntil),
+                autoRenewUntil,
+                additionalUserIds),
             Ct);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return await response.ReadStrictAsync<ApiKeyTokenResponse>(Ct);
@@ -120,8 +123,7 @@ internal sealed class ApiKeyHarness(BjarnoyApiFactory factory)
     public async Task<SettlementResponse> FoundSettlementAsync(Guid worldId, Guid ownerUserId)
     {
         using var client = Factory.CreateClient();
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -141,6 +143,39 @@ internal sealed class ApiKeyHarness(BjarnoyApiFactory factory)
         });
         return settlement;
     }
+
+    /// <summary>Founds an anonymous settlement (no account; owned by the Abandoned system user) and returns it with its client-local owner id.</summary>
+    public async Task<(SettlementResponse Settlement, string OwnerId)> FoundAnonymousSettlementAsync(Guid worldId, string? jarlName = null)
+    {
+        using var client = Factory.CreateClient();
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
+        var island = islands!.First(i => i.StartPositions.Count > 0);
+        var plot = island.StartPositions[0];
+        var ownerId = Unique("anon");
+        client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/worlds/{worldId}/settlements",
+            new FoundSettlementRequest(island.Id, plot.Q, plot.R, Unique("v"), jarlName ?? Unique("Jarl"), ownerId),
+            Ct);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.ReadStrictAsync<SettlementResponse>(Ct), ownerId);
+    }
+
+    /// <summary>Grants <paramref name="keyId"/> an anonymous identity directly in the database (the admin API for it comes later).</summary>
+    public async Task GrantAnonymousAsync(Guid keyId, string ownerId, string label, bool primary = false) =>
+        await WithDbAsync(async db =>
+        {
+            db.ApiKeyAnonymousAccounts.Add(new ApiKeyAnonymousAccountEntity
+            {
+                ApiKeyId = keyId,
+                OwnerId = ownerId,
+                Label = label,
+                IsPrimary = primary,
+            });
+            await db.SaveChangesAsync(Ct);
+            return 0;
+        });
 
     public async Task SetStatusAsync(Guid userId, UserStatus status) => await WithDbAsync(async db =>
     {

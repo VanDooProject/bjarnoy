@@ -10,12 +10,31 @@ import { clearStoredRefreshToken, readStoredRefreshToken, storeRefreshToken } fr
 // api/client.ts: that module's `request()` attaches the access token and
 // retries once on 401 via this store's hooks, which login/register/refresh
 // themselves must not do (a failed login is not an expired token).
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+// A caller may pass `timeoutMs`: login does, so a dead server doesn't leave
+// "Checking your account…" hanging forever.
+const LOGIN_TIMEOUT_MS = 30_000;
+
+/** The request never reached the server (offline, DNS, refused): fetch itself rejected with a TypeError. */
+export class AuthNetworkError extends Error {
+  constructor(cause: unknown) {
+    super('Could not reach the server', { cause });
+    this.name = 'AuthNetworkError';
+  }
+}
+
+async function post<T>(path: string, body: unknown, opts: { timeoutMs?: number } = {}): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: opts.timeoutMs !== undefined ? AbortSignal.timeout(opts.timeoutMs) : undefined,
+    });
+  } catch (err) {
+    if (err instanceof TypeError) throw new AuthNetworkError(err);
+    throw err;
+  }
   if (!res.ok) {
     const problem = await res.json().catch(() => undefined);
     throw new ApiError(res.status, problem);
@@ -34,6 +53,9 @@ async function getMe(accessToken: string): Promise<UserResponse> {
   }
   return (await res.json()) as UserResponse;
 }
+
+// Module-level, not store state: it is a promise, not something to serialise or devtools-inspect.
+let refreshInFlight: Promise<boolean> | null = null;
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -83,7 +105,7 @@ export const useAuthStore = defineStore('auth', {
       this.applyAuthResponse(response);
     },
     async login(userName: string, password: string) {
-      const response = await post<AuthResponse>('/auth/login', { userName, password });
+      const response = await post<AuthResponse>('/auth/login', { userName, password }, { timeoutMs: LOGIN_TIMEOUT_MS });
       this.applyAuthResponse(response);
     },
     /**
@@ -112,18 +134,52 @@ export const useAuthStore = defineStore('auth', {
      * Trades the stored refresh token for a fresh access token (and a new,
      * rotated refresh token). Used both at startup (`ensureInitialized`) and
      * by the API client's one-shot retry-after-401 (see `authHooks` below).
+     *
+     * Single-flight: the server revokes a refresh token the moment it is used,
+     * so concurrent callers (every parallel request that hits the expired
+     * access token) must share one `/auth/refresh` call. A second call with the
+     * same token would be rejected and — worse — wipe the session the first one
+     * just restored.
+     *
+     * Only a server verdict that the token is no good (401/403) ends the
+     * session. A network error or 5xx leaves the stored token alone so the next
+     * call can retry it. A rejection while another tab has meanwhile replaced
+     * the stored token is retried once with that token (the single-flight
+     * promise is per tab; the token in localStorage is shared across tabs).
      */
-    async tryRefresh(): Promise<boolean> {
-      const refreshToken = readStoredRefreshToken();
+    tryRefresh(): Promise<boolean> {
+      if (!refreshInFlight) {
+        refreshInFlight = this.performRefresh().finally(() => {
+          refreshInFlight = null;
+        });
+      }
+      return refreshInFlight;
+    },
+    async performRefresh(): Promise<boolean> {
+      let refreshToken = readStoredRefreshToken();
       if (!refreshToken) return false;
 
-      try {
-        const response = await post<AuthResponse>('/auth/refresh', { refreshToken });
-        this.applyAuthResponse(response);
-        return true;
-      } catch {
-        this.clearSession();
-        return false;
+      // At most one retry: see the comment on `tryRefresh` for why.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const response = await post<AuthResponse>('/auth/refresh', { refreshToken });
+          this.applyAuthResponse(response);
+          return true;
+        } catch (err) {
+          if (!(err instanceof ApiError) || (err.status !== 401 && err.status !== 403)) return false;
+
+          // Another tab shares this localStorage token. If it rotated the token
+          // while our call was in flight, ours was rejected only because it was
+          // already spent — the stored one is the live one, so try that
+          // instead of ending a session that is still good.
+          const stored = readStoredRefreshToken();
+          if (attempt === 0 && stored && stored !== refreshToken) {
+            refreshToken = stored;
+            continue;
+          }
+          this.clearSession();
+          return false;
+        }
       }
     },
     async fetchMe() {

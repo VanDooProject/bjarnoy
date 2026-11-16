@@ -13,7 +13,9 @@ import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { useCoversMap } from '../../composables/useMapCover';
+import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import { MOBILE_MODAL_QUERY } from '../../lib/breakpoints';
+import { closeModalRoute } from '../../lib/modalRoute';
 import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{
@@ -27,6 +29,13 @@ const props = defineProps<{
    * straight through to the background route.
    */
   onBack?: () => void;
+  /** `wide` is the two-pane dialog (rail + content, ~980px by ~700px); `default` is the ~720px reading column. */
+  size?: 'default' | 'wide';
+  /**
+   * The content draws its own title and × on desktop (a wide dialog whose rail carries the heading). It gets `close`
+   * as a slot prop so there is still exactly one close action. Phones always get the shared header bar.
+   */
+  contentHeader?: boolean;
 }>();
 
 const router = useRouter();
@@ -36,26 +45,15 @@ const isMobile = useMediaQuery(MOBILE_MODAL_QUERY);
 // The mobile panel fills the screen opaque, so the map behind it is hidden;
 // the desktop panel floats over a translucent backdrop with the map visible.
 useCoversMap(isMobile);
+// A layer on the phone stack: hides while a nested dialog (teleported report /
+// found-guild dialog) is open above it.
+const layer = usePhoneLayer();
 
 const panelEl = ref<HTMLElement | null>(null);
 
-// Closing: if we got here from an in-app navigation (history.state.
-// backgroundView set, and it's genuinely the page we came from — history.
-// state.back matches it), going back lands exactly where the player was,
-// scroll position and all. Otherwise (direct load, reload, a link opened in
-// a new tab) there is nothing to go "back" to, so replace with the
-// background view instead of leaving a stray modal-route entry in history.
+// Closing is lib/modalRoute.ts's closeModalRoute: history-back when we came from the background view, else a replace.
 function close() {
-  // Via the router's own history object, not the global `window.history` —
-  // works the same way against a `createMemoryHistory` router in tests. See
-  // lib/modalRoute.ts's own comment.
-  const state = router.options.history.state as { backgroundView?: unknown; back?: unknown };
-  const backgroundView = typeof state.backgroundView === 'string' ? state.backgroundView : null;
-  if (backgroundView && state.back === backgroundView) {
-    router.back();
-  } else {
-    router.replace(backgroundView ?? '/settlement');
-  }
+  closeModalRoute(router);
 }
 
 defineExpose({ close });
@@ -84,11 +82,16 @@ const closeLabel = computed(() => t('profile.close'));
 </script>
 
 <template>
-  <div class="modal-backdrop" :class="{ 'modal-backdrop--mobile': isMobile }" @click.self="close">
+  <div
+    v-phone-hidden="layer.hidden.value"
+    class="modal-backdrop"
+    :class="{ 'modal-backdrop--mobile': isMobile }"
+    @click.self="close"
+  >
     <div
       ref="panelEl"
       class="modal-panel"
-      :class="{ 'modal-panel--mobile': isMobile }"
+      :class="{ 'modal-panel--mobile': isMobile, 'modal-panel--wide': props.size === 'wide' }"
       role="dialog"
       aria-modal="true"
       :aria-label="props.title || undefined"
@@ -102,11 +105,11 @@ const closeLabel = computed(() => t('profile.close'));
         </button>
         <span class="mobile-title">{{ props.title }}</span>
       </div>
-      <button v-else type="button" class="close-button" :aria-label="closeLabel" @click="close">
+      <button v-else-if="!props.contentHeader" type="button" class="close-button" :aria-label="closeLabel" @click="close">
         <span aria-hidden="true">×</span>
       </button>
       <div class="modal-content">
-        <slot />
+        <slot :close="close" />
       </div>
     </div>
   </div>
@@ -161,6 +164,21 @@ const closeLabel = computed(() => t('profile.close'));
   color: var(--gold);
 }
 
+/* Wide: a fixed-height two-pane dialog; the content scrolls inside its own panes, not the panel. */
+.modal-panel--wide {
+  max-width: 980px;
+  height: min(700px, calc(100vh - 32px));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.modal-panel--wide .modal-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Mobile: the panel fills the screen instead of floating over the backdrop,
    with a header bar (back chevron + title) replacing the floating × —
    there's no backdrop left visible to click through to anyway. */
@@ -207,6 +225,7 @@ const closeLabel = computed(() => t('profile.close'));
 }
 .modal-panel--mobile .modal-content {
   flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
 }
 </style>

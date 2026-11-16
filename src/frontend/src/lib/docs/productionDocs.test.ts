@@ -3,10 +3,10 @@ import {
   BASE_STORAGE,
   MILLS,
   PRODUCER_TYPES,
+  buildableProducerTypes,
   boostTerrainsOf,
   millBoostAt,
   neighbourBoost,
-  storageHouseSteps,
 } from './productionDocs';
 import { RADIUS_BOOST_RESOURCE, buildingStatsFor, type BuildingKind } from '../map/buildingEconomy';
 import catalogue from '../../data/building-catalogue.json';
@@ -14,6 +14,14 @@ import catalogue from '../../data/building-catalogue.json';
 const level1 = (type: string) => catalogue.data.find((d) => d.type === type && d.level === 1)!;
 
 describe('productionDocs', () => {
+  it('leaves out the producers the loaded catalogue switches off for new placement (the Quarry), and none before it says so', () => {
+    const byType = Object.fromEntries(PRODUCER_TYPES.map((type) => [type, [level1(type)]]));
+    expect(buildableProducerTypes(byType)).not.toContain('quarry');
+    expect(buildableProducerTypes(byType)).toHaveLength(PRODUCER_TYPES.length - 1);
+    // Not loaded yet: nothing is known to be disabled.
+    expect(buildableProducerTypes({})).toEqual([...PRODUCER_TYPES]);
+  });
+
   it('lists producers that the catalogue gives exactly one resource each, at the tabled level-1 rates', () => {
     const rates = Object.fromEntries(
       PRODUCER_TYPES.map((type) => {
@@ -24,14 +32,14 @@ describe('productionDocs', () => {
       }),
     );
     expect(rates).toEqual({
-      lumberjack: ['wood', 40],
-      quarry: ['stone', 40],
-      reindeerherder: ['food', 40],
-      farm: ['food', 40],
-      pumpkinfarm: ['food', 44],
-      fishinghut: ['food', 40],
-      claybrickworks: ['stone', 36],
-      bogoreworks: ['iron', 20],
+      lumberjack: ['wood', 8],
+      quarry: ['stone', 8],
+      reindeerherder: ['food', 8],
+      farm: ['food', 12],
+      pumpkinfarm: ['food', 13],
+      fishinghut: ['food', 16],
+      claybrickworks: ['stone', 8],
+      bogoreworks: ['iron', 4],
     });
   });
 
@@ -66,20 +74,11 @@ describe('productionDocs', () => {
   it('adds 10% per matching neighbour up to 50%, only for the four terrain producers', () => {
     expect(neighbourBoost()).toEqual({ perNeighbour: 10, max: 50 });
     expect(boostTerrainsOf('lumberjack')).toEqual(['forest']);
-    expect(boostTerrainsOf('fishinghut')).toEqual(['sea', 'lake']);
+    expect(boostTerrainsOf('fishinghut')).toEqual(['sea', 'lake', 'inlandlake']);
     expect(boostTerrainsOf('bogoreworks')).toEqual(['bog', 'lake']);
     for (const none of ['farm', 'pumpkinfarm', 'reindeerherder', 'claybrickworks'] as const) {
       expect(boostTerrainsOf(none), none).toEqual([]);
     }
-  });
-
-  it('asks for one more storehouse at a higher level each time, up to four at level 25', () => {
-    expect(storageHouseSteps()).toEqual([
-      { nth: 2, later: false, count: 1, level: 10 },
-      { nth: 3, later: false, count: 2, level: 15 },
-      { nth: 4, later: false, count: 3, level: 20 },
-      { nth: 5, later: true, count: 4, level: 25 },
-    ]);
   });
 
   it('starts every resource at a storage floor of 500', () => {

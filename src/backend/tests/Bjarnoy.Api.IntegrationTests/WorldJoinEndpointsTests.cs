@@ -7,6 +7,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -54,8 +55,7 @@ public sealed class WorldJoinEndpointsTests(SqliteApiFixture fixture) : IClassFi
     /// <summary>Founds a settlement (one longhouse) on <paramref name="world"/>'s first usable plot, under <paramref name="ownerId"/>.</summary>
     private async Task<SettlementResponse> FoundSettlementAsync(HttpClient client, WorldEntity world, string ownerId)
     {
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 

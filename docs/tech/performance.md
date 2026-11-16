@@ -154,11 +154,33 @@ for exactly this reason).
 In a live world the client computes only the per-hex terrain itself (`terrainAt`/`generateTile`: sea, sand, grass,
 forest, mountain, plus each hex's look) from the world seed and its generation constants. Everything built per island
 (rivers, bogs, giants, camps, endgame sites) is generated once by the server when the world is created, stored, and
-sent with `GET /worlds/{id}/islands`. The cost of those passes lands on world creation, not on the player's device.
+sent with the world's island endpoints (see "Island data on the wire" below). The cost of those passes lands on world creation, not on the player's device.
 Per-hex terrain costs about 1 µs per hex on a desktop CPU (spine chains and groves, measured 2026-11-01; 0.6 µs before).
 
 Demo mode is a dev tool, not a target for performance work. It has no server, so it runs the per-island passes on the
 client when you land; a large island can take seconds there, and that is accepted.
+
+### Island data on the wire
+
+A large world (radius 4000, about 1,300 islands) has about 550,000 bog tiles, 230,000 river tiles and 300,000 start
+positions: 77 MB of JSON if one response carries them all, which is what `GET /worlds/{id}/islands` used to do on every
+call (reading every island's bog, river and start columns from the database, materializing about a million objects and
+serializing them again). Under many simultaneous landing-page loads that saturated the database, the connection pool and
+the garbage collector, and even a login took seconds.
+
+These parts only change when a world is reseeded, so they are served from memory instead:
+
+- `/islands` keeps only labels, giants, camps, walls and towers (about 0.3 MB at that size) and does not read the big
+  columns.
+- `/terrain-chunks` (river and bog tiles) is cut into 64-island chunks, each serialized and gzipped once per world and
+  sent as the stored bytes with an `ETag` (a chunk request still reads the world row by primary key, nothing from the islands); the client reads the manifest and then all chunks in parallel. The 77 MB of
+  tiles and plots shrink to about 4.6 MB on the wire (3.6 MB of terrain, 1 MB of start positions), and a revisit costs
+  `304`s.
+- `/start-positions` is the same for the founding plots. The player client does not need them (it founds on the plots the
+  plot suggestion offers), so it never fetches them.
+- The river index that army orders, field battles and bridge placement ask for is cached per world too, instead of reading
+  all river tiles for every order. The cache also keeps which river hexes lie on wasted islands, so a bridge placement
+  does not read any island row either.
 
 ## Possible next steps
 

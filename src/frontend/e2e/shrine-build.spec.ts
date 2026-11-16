@@ -30,10 +30,12 @@ test('building a shrine from the ring menu places it without a rendering error',
   await settlement.setSettlementLevel(25);
   // The Shrine of Thor also needs a level-5 smithy standing (BuildingCatalogue.cs Prerequisites).
   await settlement.standBuildings([{ type: 'smithy', level: 5 }]);
+  // Late buildings cost more than a fresh settlement can hold: fund it (and its storage) so the bubble is affordable.
+  await settlement.fund(10_000_000);
 
   // Same approach as settlement-interactions.spec.ts's build test: ask the
   // model for a real empty, owned, grass hex (grass is what carries the new
-  // "Shrines" category — see BUILD_CATEGORIES in SettlementView.vue) rather
+  // "Shrines" category — the catalogue's ringCategory) rather
   // than guess a pixel offset that only happens to land on one at whatever
   // zoom/camera framing this run's settlement got.
   const target = await settlement.findHex({ terrain: 'grass' });

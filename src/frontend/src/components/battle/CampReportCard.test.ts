@@ -20,11 +20,12 @@ const base: CampReportResponse = {
   winner: 'army',
   armyPower: 400,
   campPower: 255,
+  armyVolleyPower: 0,
   units: [{ type: 'axeman', sent: 20, lost: 6 }],
   beasts: [
-    { tier: 'young', before: 4, lost: 4 },
-    { tier: 'adult', before: 9, lost: 9 },
-    { tier: 'alpha', before: 1, lost: 1 },
+    { tier: 'young', before: 4, lost: 4, volleyLost: 0 },
+    { tier: 'adult', before: 9, lost: 9, volleyLost: 0 },
+    { tier: 'alpha', before: 1, lost: 1, volleyLost: 0 },
   ],
   loot: { wood: 100, stone: 0, food: 250, iron: 0 },
   campCleared: true,
@@ -37,6 +38,34 @@ function mountCard(report: CampReportResponse) {
 }
 
 describe('CampReportCard', () => {
+  it('shows no volley figures and keeps the single Lost column without ranged units', () => {
+    const w = mountCard(base);
+    expect(w.find('[data-testid="camp-report-volley"]').exists()).toBe(false);
+    expect(w.find('[data-testid="lost-volley"]').exists()).toBe(false);
+    expect(w.findAll('[data-testid="camp-report-beasts"] th').map((th) => th.text())).toContain('Lost');
+    w.unmount();
+  });
+
+  it('shows the army\'s volley power and splits the beast losses into volley and fight', () => {
+    const w = mountCard({
+      ...base,
+      armyVolleyPower: 600,
+      beasts: [
+        { tier: 'young', before: 4, lost: 4, volleyLost: 1 },
+        { tier: 'adult', before: 9, lost: 9, volleyLost: 3 },
+        { tier: 'alpha', before: 1, lost: 1, volleyLost: 0 },
+      ],
+    });
+
+    expect(w.get('[data-testid="camp-report-volley"]').text()).toContain('600');
+    expect(w.findAll('[data-testid="camp-report-beasts"] th').map((th) => th.text())).toEqual(
+      expect.arrayContaining(['Lost (volley)', 'Lost (fight)']),
+    );
+    expect(w.findAll('[data-testid="lost-volley"]').map((td) => td.text())).toEqual(['1', '3', '0']);
+    expect(w.findAll('[data-testid="lost-fight"]').map((td) => td.text())).toEqual(['3', '6', '1']);
+    w.unmount();
+  });
+
   it('shows a won hunt: title, units, named beasts per tier, loot and the cleared note', () => {
     const w = mountCard(base);
     expect(w.find('.banner').text()).toBe('Won');

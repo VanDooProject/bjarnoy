@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
@@ -79,6 +80,27 @@ public sealed record SiegeOutcome(
 public static class SiegeResolver
 {
     /// <summary>
+    /// Whether a beach camp falls to this fight (<c>docs/design/skirmish/beach-camp.md</c>): <paramref name="target"/> is a beach camp
+    /// (<see cref="Settlement.IsBeachCamp"/>), the army came to <see cref="ArmyMission.Attack"/> (a raid only plunders it), it still
+    /// has troops left (<paramref name="attackerSurvivors"/>; a mutual wipe leaves the camp standing), and no unit, land or ship, is
+    /// left in the camp (<paramref name="defendersAfterFight"/>: its garrison and the guests that fought with it). It needs no siege
+    /// engine for that, and siege engines alone never bring it down (<see cref="CanDamage"/>). No other settlement falls this way.
+    /// A pure helper for attack resolution; destroying the camp itself is the caller's job.
+    /// </summary>
+    public static bool CampFalls(
+        Settlement target, ArmyMission mission, IReadOnlyList<UnitStack> attackerSurvivors, IReadOnlyList<UnitStack> defendersAfterFight)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(attackerSurvivors);
+        ArgumentNullException.ThrowIfNull(defendersAfterFight);
+
+        return target.IsBeachCamp
+            && mission == ArmyMission.Attack
+            && attackerSurvivors.Any(s => s.Count > 0)
+            && defendersAfterFight.All(s => s.Count <= 0);
+    }
+
+    /// <summary>
     /// <c>max(1, floor(sqrt(survivingSiegePower / 2)))</c> when
     /// <paramref name="survivingSiegePower"/> is positive, else 0 — the
     /// design doc's levels-destroyed formula.
@@ -107,13 +129,17 @@ public static class SiegeResolver
 
     /// <summary>
     /// Whether <paramref name="unit"/>'s siege power counts against a <paramref name="type"/> building: rams breach walls and towers,
-    /// catapults burn towers and every other building, ships hit whatever shore building they are sent at (<c>docs/design/economy.md</c> section 5). The one place the split lives, as
+    /// catapults burn towers and every other building (<c>docs/design/economy.md</c> section 5); ships do no siege damage. The one place the split lives, as
     /// <see cref="UnitDefinition.SiegeTargets"/> data.
     /// </summary>
     public static bool CanDamage(UnitDefinition unit, BuildingType type)
     {
         ArgumentNullException.ThrowIfNull(unit);
-        return unit.SiegePower > 0 && (unit.SiegeTargets & KindOf(type)) != 0;
+
+        // A beach camp falls only to an attack that empties it (CampFalls); while troops guard it nothing destroys it, and an
+        // unguarded one falls to the attack anyway, so siege engines never take levels off it.
+        return type != BuildingType.BeachCamp
+            && unit.SiegePower > 0 && (unit.SiegeTargets & KindOf(type)) != 0;
     }
 
     /// <summary>The siege power of the <paramref name="stacks"/> that can damage a <paramref name="type"/> building.</summary>
@@ -132,7 +158,7 @@ public static class SiegeResolver
     /// </summary>
     /// <param name="attackerSurvivors">
     /// The attacking army's stacks that survived the battle (<see cref="BattlePlan.AttackerSurvivors"/>).
-    /// Only siege engines and ships that can damage the target contribute (<see cref="CanDamage"/>); call this only
+    /// Only siege engines that can damage the target contribute (<see cref="CanDamage"/>); call this only
     /// when the attacker actually won — an attacker that lost contributes no
     /// siege damage regardless of what it brought, and this method does not
     /// check the battle's winner itself (the caller already knows).
@@ -206,6 +232,70 @@ public static class SiegeResolver
             return SiegeOutcome.None;
         }
 
+        return LowerBuilding(buildings, index, levelsDestroyed);
+    }
+
+    /// <summary>
+    /// The fire damage of the surviving fire craft (<see cref="UnitDefinition.FireCraftPerLevel"/>: 10 Fire Hulks or 50 Fire Rafts
+    /// take one level) against the building standing on <paramref name="targetCoord"/>. Each craft type counts on its own:
+    /// <c>floor(count / craftPerLevel)</c> levels, summed, then <see cref="LevelsTakenFrom"/> (a wall hex loses one at most),
+    /// clamped to the building's level. Only a building standing on a <see cref="Terrain.Sea"/> hex burns; no target, a target
+    /// that is gone or on land, or too few craft burn nothing.
+    /// </summary>
+    /// <returns>
+    /// The outcome (<see cref="SiegeOutcome.None"/> when nothing burned) and the craft burned by it: per type the levels it
+    /// paid for times its craft-per-level, the cheapest craft (most per level) first. The rest sail home.
+    /// </returns>
+    public static (SiegeOutcome Outcome, IReadOnlyList<UnitStack> Burned) Burn(
+        IReadOnlyList<UnitStack> survivingFireCraft,
+        IReadOnlyList<PlacedBuilding> defenderBuildings,
+        HexCoord? targetCoord,
+        Func<HexCoord, Terrain> terrainAt)
+    {
+        ArgumentNullException.ThrowIfNull(survivingFireCraft);
+        ArgumentNullException.ThrowIfNull(defenderBuildings);
+        ArgumentNullException.ThrowIfNull(terrainAt);
+
+        var craft = survivingFireCraft
+            .Where(s => s.Count > 0 && UnitCatalogue.Get(s.Type).FireCraftPerLevel > 0)
+            .GroupBy(s => s.Type)
+            .Select(g => (Type: g.Key, Count: g.Sum(s => s.Count), PerLevel: UnitCatalogue.Get(g.Key).FireCraftPerLevel))
+            .OrderByDescending(c => c.PerLevel)
+            .ToList();
+        var levelsOffered = craft.Sum(c => c.Count / c.PerLevel);
+        if (targetCoord is not { } coord || levelsOffered < 1 || terrainAt(coord) != Terrain.Sea)
+        {
+            return (SiegeOutcome.None, []);
+        }
+
+        var buildings = defenderBuildings.ToList();
+        var index = buildings.FindIndex(b => b.Coord == coord);
+
+        // Fire craft do not bring a beach camp down either (see CanDamage).
+        if (index < 0 || buildings[index].Type == BuildingType.BeachCamp)
+        {
+            return (SiegeOutcome.None, []);
+        }
+
+        var outcome = LowerBuilding(buildings, index, levelsOffered);
+        var remaining = outcome.LevelBefore - outcome.LevelAfter;
+        var burned = new List<UnitStack>();
+        foreach (var (type, count, perLevel) in craft)
+        {
+            var levels = Math.Min(remaining, count / perLevel);
+            if (levels > 0)
+            {
+                burned.Add(new UnitStack(type, levels * perLevel));
+                remaining -= levels;
+            }
+        }
+
+        return (outcome, burned);
+    }
+
+    /// <summary>Takes <see cref="LevelsTakenFrom"/> levels off the building at <paramref name="index"/>, removing it at level 0.</summary>
+    private static SiegeOutcome LowerBuilding(List<PlacedBuilding> buildings, int index, int levelsDestroyed)
+    {
         var target = buildings[index];
         var levelAfter = Math.Max(0, target.Level - LevelsTakenFrom(target.Type, levelsDestroyed));
 

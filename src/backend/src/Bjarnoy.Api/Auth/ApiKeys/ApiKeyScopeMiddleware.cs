@@ -1,4 +1,5 @@
 using Bjarnoy.Infrastructure.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Routing;
 
 namespace Bjarnoy.Api.Auth.ApiKeys;
@@ -34,6 +35,12 @@ public sealed class ApiKeyScopeMiddleware(RequestDelegate next)
             return;
         }
 
+        if (context.Items.TryGetValue(ApiKeyContext.ForbiddenItemKey, out var forbidden))
+        {
+            await Refuse(context, StatusCodes.Status403Forbidden, forbidden as string ?? "Account not allowed for this API key.");
+            return;
+        }
+
         if (context.Items.TryGetValue(ApiKeyContext.FailureItemKey, out var failure))
         {
             await Refuse(context, StatusCodes.Status401Unauthorized, failure as string ?? "Invalid API key.");
@@ -51,6 +58,16 @@ public sealed class ApiKeyScopeMiddleware(RequestDelegate next)
         if (endpoint is null || marker is null || marker.Kind == ApiKeyEndpointKind.Forbidden)
         {
             await Refuse(context, StatusCodes.Status403Forbidden, "Not available to API keys.");
+            return;
+        }
+
+        // An account-less identity has no user id: anything that needs a signed-in account is closed to it, and so is
+        // every admin feature, whatever the key's owner is.
+        if (context.User.IsAnonymousApiKey()
+            && (endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>().Count > 0
+                || (marker.Feature is not null && ApiKeyFeature.Find(marker.Feature)?.Admin == true)))
+        {
+            await Refuse(context, StatusCodes.Status403Forbidden, "This needs a user account; the key is acting as an anonymous settlement.");
             return;
         }
 
@@ -126,6 +143,10 @@ public sealed class ApiKeyScopeMiddleware(RequestDelegate next)
         else if (pattern.StartsWith("/api/v1/camp-reports/", StringComparison.Ordinal))
         {
             await Consider("reportId", id => resolver.ForCampReportAsync(id, cancellationToken));
+        }
+        else if (pattern.StartsWith("/api/v1/army-reports/", StringComparison.Ordinal))
+        {
+            await Consider("reportId", id => resolver.ForArmyReportAsync(id, cancellationToken));
         }
 
         if (endpoint.Metadata.GetMetadata<ApiKeyWorldFromQueryMarker>() is not null

@@ -15,7 +15,54 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.14");
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAccountEntity", b =>
+                {
+                    b.Property<Guid>("ApiKeyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ApiKeyId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("api_key_accounts", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAnonymousAccountEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ApiKeyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("SourceSettlementId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApiKeyId", "Label")
+                        .IsUnique();
+
+                    b.ToTable("api_key_anonymous_accounts", (string)null);
+                });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
                 {
@@ -54,6 +101,11 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("OwnerCanAct")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
 
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("TEXT");
@@ -103,8 +155,16 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid?>("ApiKeyId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ApprovedAdditionalUserIds")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<bool?>("ApprovedAllWorlds")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("ApprovedAnonymousAccounts")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ApprovedFeatures")
                         .IsRequired()
@@ -113,6 +173,11 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<int?>("ApprovedLifetimeMinutes")
                         .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ApprovedOwnerCanAct")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
 
                     b.Property<int?>("ApprovedRequestsPerMinute")
                         .HasColumnType("INTEGER");
@@ -178,6 +243,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid?>("RenewsApiKeyId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("RequestedAdditionalUserNames")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("RequestedOwnerUserName")
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
@@ -235,7 +304,25 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("FieldBattleImmuneUntil")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("GatherDepartAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("GatheringId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("HomeSpotQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HomeSpotR")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("IsReturning")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsStranded")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsSupporting")
@@ -256,15 +343,17 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("Mission")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Path")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<double>("Provisions")
                         .HasColumnType("REAL");
-
-                    b.Property<bool>("RetreatImmune")
-                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ReturnCumulativeHours")
                         .IsRequired()
@@ -278,7 +367,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid>("SettlementId")
+                    b.Property<DateTimeOffset?>("RoutePlannedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("SettlementId")
                         .HasColumnType("TEXT");
 
                     b.Property<int?>("TargetBuildingQ")
@@ -299,7 +391,15 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<DateTimeOffset>("TurnAroundAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("GatheringId");
 
                     b.HasIndex("SettlementId");
 
@@ -307,7 +407,71 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.HasIndex("TargetSettlementId", "IsSupporting");
 
+                    b.HasIndex("WorldId", "OwnerId");
+
                     b.ToTable("armies", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyReportEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ArmyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Mission")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Q")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("R")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorldId", "OwnerId");
+
+                    b.ToTable("army_reports", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyReportUnitLineEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ArmyReportId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("UnitType")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArmyReportId");
+
+                    b.ToTable("army_report_unit_lines", (string)null);
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyUnitStackEntity", b =>
@@ -339,6 +503,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("BattleReportId")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("Fight")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Lost")
                         .HasColumnType("INTEGER");
 
@@ -349,6 +516,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("UnitType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("VolleyLost")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
@@ -366,6 +536,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("BattleReportId")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("Fight")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Lost")
                         .HasColumnType("INTEGER");
 
@@ -373,6 +546,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("UnitType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("VolleyLost")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
@@ -393,14 +569,51 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("AttackerArmyId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("AttackerOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("AttackerSettlementId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("AttackerVolleyPower")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("DefenderOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("DefenderSettlementId")
                         .HasColumnType("TEXT");
 
+                    b.Property<double>("DefenderVolleyPower")
+                        .HasColumnType("REAL");
+
                     b.Property<double>("DefensePower")
                         .HasColumnType("REAL");
+
+                    b.Property<int>("FireShipsBurned")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("FireSiegeLevelAfter")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("FireSiegeLevelBefore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool?>("FireSiegeSettlementRazed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("FireSiegeTargetQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("FireSiegeTargetR")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("FireSiegeTargetType")
+                        .HasColumnType("INTEGER");
 
                     b.Property<double>("LootFood")
                         .HasColumnType("REAL");
@@ -418,6 +631,15 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Seed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("ShipFightAttackPower")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("ShipFightDefensePower")
+                        .HasColumnType("REAL");
+
+                    b.Property<int?>("ShipFightWinner")
                         .HasColumnType("INTEGER");
 
                     b.Property<int?>("SiegeLevelAfter")
@@ -444,11 +666,18 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("Winner")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AttackerSettlementId");
 
                     b.HasIndex("DefenderSettlementId");
+
+                    b.HasIndex("WorldId", "AttackerOwnerId");
+
+                    b.HasIndex("WorldId", "DefenderOwnerId");
 
                     b.ToTable("battle_reports", (string)null);
                 });
@@ -463,6 +692,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<DateTimeOffset?>("CompletesAt")
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("Q")
                         .HasColumnType("INTEGER");
@@ -510,6 +742,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("Tier")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("VolleyLost")
+                        .HasColumnType("INTEGER");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CampReportId");
@@ -526,6 +761,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<double>("ArmyPower")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("ArmyVolleyPower")
                         .HasColumnType("REAL");
 
                     b.Property<bool>("CampCleared")
@@ -566,6 +804,11 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<DateTimeOffset>("OccurredAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Seed")
                         .HasColumnType("INTEGER");
 
@@ -589,9 +832,7 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SettlementId");
-
-                    b.HasIndex("WorldId");
+                    b.HasIndex("WorldId", "OwnerId");
 
                     b.ToTable("camp_reports", (string)null);
                 });
@@ -714,16 +955,29 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("SideAArmyId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("SideAOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
                     b.Property<double>("SideAPower")
                         .HasColumnType("REAL");
 
                     b.Property<Guid>("SideASettlementId")
                         .HasColumnType("TEXT");
 
+                    b.Property<double>("SideAVolleyPower")
+                        .HasColumnType("REAL");
+
                     b.Property<bool>("SideAWasDefending")
                         .HasColumnType("INTEGER");
 
                     b.Property<Guid>("SideBArmyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SideBOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
                     b.Property<double>("SideBPower")
@@ -732,17 +986,27 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("SideBSettlementId")
                         .HasColumnType("TEXT");
 
+                    b.Property<double>("SideBVolleyPower")
+                        .HasColumnType("REAL");
+
                     b.Property<bool>("SideBWasDefending")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("Winner")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("SideASettlementId");
 
                     b.HasIndex("SideBSettlementId");
+
+                    b.HasIndex("WorldId", "SideAOwnerId");
+
+                    b.HasIndex("WorldId", "SideBOwnerId");
 
                     b.ToTable("field_battle_reports", (string)null);
                 });
@@ -767,11 +1031,86 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("UnitType")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("VolleyCount")
+                        .HasColumnType("INTEGER");
+
                     b.HasKey("Id");
 
                     b.HasIndex("FieldBattleReportId");
 
                     b.ToTable("field_battle_report_lines", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GatheringEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("BoardingQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("BoardingR")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("DepartAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("HexQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HexR")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HomeSpotQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HomeSpotR")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsFleet")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Mission")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("ParentGatheringId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SettlementId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Stops")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("TargetBuildingQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("TargetBuildingR")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("TargetCampQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("TargetCampR")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("TargetSettlementId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DepartAt");
+
+                    b.HasIndex("ParentGatheringId");
+
+                    b.HasIndex("SettlementId");
+
+                    b.ToTable("gatherings", (string)null);
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GuildBoardPostEntity", b =>
@@ -965,6 +1304,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<int>("Index")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("InlandLakeTiles")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("IsWasted")
                         .HasColumnType("INTEGER");
@@ -1167,6 +1510,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<Guid>("SettlementId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("StandingSince")
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Type")
@@ -1555,6 +1901,11 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("AcceptorOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("AcceptorSettlementId")
                         .HasColumnType("TEXT");
 
@@ -1573,6 +1924,11 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("OfferedResource")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("PosterOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("PosterSettlementId")
                         .HasColumnType("TEXT");
 
@@ -1585,6 +1941,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<double>("TravelHours")
                         .HasColumnType("REAL");
 
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AcceptorSettlementId");
@@ -1593,6 +1952,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsUnique();
 
                     b.HasIndex("PosterSettlementId");
+
+                    b.HasIndex("WorldId", "AcceptorOwnerId");
+
+                    b.HasIndex("WorldId", "PosterOwnerId");
 
                     b.ToTable("trade_reports", (string)null);
                 });
@@ -1641,12 +2004,18 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("SettlementId")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("SpotQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SpotR")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("UnitType")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SettlementId", "UnitType")
+                    b.HasIndex("SettlementId", "SpotQ", "SpotR", "UnitType")
                         .IsUnique();
 
                     b.ToTable("unit_stacks", (string)null);
@@ -1727,6 +2096,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<string>("PreferredLocale")
                         .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("PremiumUntil")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("RenownSettledAt")
@@ -1950,6 +2322,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("Radius")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("RenownFollowsSpeed")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("RunState")
                         .HasColumnType("INTEGER");
 
@@ -1978,6 +2353,36 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.ToTable("worlds", (string)null);
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAccountEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", "ApiKey")
+                        .WithMany("Accounts")
+                        .HasForeignKey("ApiKeyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ApiKey");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAnonymousAccountEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", "ApiKey")
+                        .WithMany("AnonymousAccounts")
+                        .HasForeignKey("ApiKeyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ApiKey");
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "CreatedByUser")
@@ -1999,20 +2404,54 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyEntity", b =>
                 {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.GatheringEntity", "Gathering")
+                        .WithMany()
+                        .HasForeignKey("GatheringId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
                         .WithMany()
                         .HasForeignKey("SettlementId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "TargetSettlement")
                         .WithMany()
                         .HasForeignKey("TargetSettlementId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", "World")
+                        .WithMany()
+                        .HasForeignKey("WorldId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Gathering");
+
                     b.Navigation("Settlement");
 
                     b.Navigation("TargetSettlement");
+
+                    b.Navigation("World");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyReportEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", null)
+                        .WithMany()
+                        .HasForeignKey("WorldId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyReportUnitLineEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.ArmyReportEntity", "ArmyReport")
+                        .WithMany("UnitLines")
+                        .HasForeignKey("ArmyReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ArmyReport");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyUnitStackEntity", b =>
@@ -2072,12 +2511,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.CampReportEntity", b =>
                 {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
-                        .WithMany()
-                        .HasForeignKey("SettlementId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", null)
                         .WithMany()
                         .HasForeignKey("WorldId")
@@ -2116,6 +2549,24 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired();
 
                     b.Navigation("FieldBattleReport");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GatheringEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.GatheringEntity", "ParentGathering")
+                        .WithMany()
+                        .HasForeignKey("ParentGatheringId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
+                        .WithMany()
+                        .HasForeignKey("SettlementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ParentGathering");
+
+                    b.Navigation("Settlement");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GuildBoardPostEntity", b =>
@@ -2390,15 +2841,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TradeReportEntity", b =>
-                {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", null)
-                        .WithMany()
-                        .HasForeignKey("OfferId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TrainingOrderEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
@@ -2462,9 +2904,21 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("World");
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
+                {
+                    b.Navigation("Accounts");
+
+                    b.Navigation("AnonymousAccounts");
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyEntity", b =>
                 {
                     b.Navigation("Stacks");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyReportEntity", b =>
+                {
+                    b.Navigation("UnitLines");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.BattleReportEntity", b =>

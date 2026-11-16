@@ -2,7 +2,8 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS, MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { WorldMapPage, SettlementPage } from './pages';
-import { pinch, touchDrag } from './helpers';
+import { pinch, touchDrag } from './support/gestures';
+import { cameraZoom } from './support/renderer';
 
 // docs/design/zoom-transition.md §9.2: two-finger pinch zooms (and pans) the
 // map on touch, through the exact same zoomBy() seam mouse-wheel zoom always
@@ -11,17 +12,9 @@ import { pinch, touchDrag } from './helpers';
 // CDP (see helpers.ts's `pinch`), not a synthetic dispatchEvent, since the
 // renderer's pinch handling is keyed on genuinely distinct pointerIds
 // reaching the canvas.
-async function cameraZoom(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const win = window as unknown as { __settlementRenderer?: () => { cameraZoom: number } };
-    return win.__settlementRenderer!().cameraZoom;
-  });
-}
-
 async function cameraView(page: Page): Promise<{ coord: { q: number; r: number }; zoom: number }> {
   return page.evaluate(() => {
-    const win = window as unknown as { __settlementRenderer?: () => { cameraView: { coord: { q: number; r: number }; zoom: number } } };
-    return win.__settlementRenderer!().cameraView;
+    return window.__settlementRenderer().cameraView;
   });
 }
 
@@ -48,7 +41,7 @@ test.describe('pinch-to-zoom on touch', { tag: '@g3' }, () => {
     const world = await WorldMapPage.open(page);
     const centre = await world.centre();
 
-    await expect(page).toHaveURL(/\/settlement#world$/);
+    await expect(page).toHaveURL(/\/settlement#world(&.*)?$/);
     // Bounded loop rather than a fixed gap: this only needs to prove the
     // transition fires on a sustained pinch gesture, not pin the exact gap
     // it takes to cross DEFAULT_ENTER_SETTLEMENT_ZOOM.

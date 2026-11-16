@@ -162,6 +162,13 @@ public class WorldEntity
     public bool FrozenIslesEnabled { get; set; }
 
     /// <summary>
+    /// Whether the renown that buildings earn follows <see cref="SpeedFactor"/>
+    /// (economy.md, world speed). Off: renown runs per real hour on every
+    /// world. One of the per-world flags for what the speed factor covers.
+    /// </summary>
+    public bool RenownFollowsSpeed { get; set; }
+
+    /// <summary>
     /// The world is left out of every public world listing for non-admins
     /// (<c>GET /worlds</c> and <c>GET /worlds/joinable</c>). Admins always see
     /// every world.

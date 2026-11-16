@@ -35,7 +35,7 @@ const townSquare = (level = 3): Tile => ({ q: 2, r: 1, terrain: 'grass', buildin
 
 function mountModal(tile: Tile = townSquare()) {
   return mount(BuildingModal, {
-    props: { tile, mine: true, ownerLabel: null, busy: false },
+    props: { tile, mine: true, ownerLabel: null },
     global: {
       plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue, apiErrors: enApiErrors })],
       stubs: { AtlasSprite: true },
@@ -124,7 +124,7 @@ describe('BuildingModal Town Square feast', () => {
     const renownOf = (over: Partial<RenownResponse> = {}): RenownResponse => ({
       total: 12340,
       settlementCount: 1,
-      requiredForNextSettlement: 55000,
+      requiredForNextSettlement: 80000,
       canFoundAnother: false,
       perHour: 48,
       pendingFeastRenown: 0,
@@ -137,18 +137,18 @@ describe('BuildingModal Town Square feast', () => {
       world.hud.renown = renownOf();
       const wrapper = mountModal();
 
-      expect(wrapper.get('[data-testid="renown-line"]').text()).toBe('Renown 12,340 / 55,000 for settlement no. 2');
+      expect(wrapper.get('[data-testid="renown-line"]').text()).toBe('Renown 12,340 / 80,000 for settlement no. 2');
       expect(wrapper.get('[data-testid="renown-rate"]').text()).toContain('+48 renown per hour');
-      expect(wrapper.get('[data-testid="renown-missing"]').text()).toContain('42,660');
-      // 42 660 / 48 = 888.75 h = 37 d 0 h 45 min
-      expect(wrapper.get('[data-testid="renown-eta"]').text()).toBe('About 37 d 0 h at this rate (without feasts)');
+      expect(wrapper.get('[data-testid="renown-missing"]').text()).toContain('67,660');
+      // 67 660 / 48 = 1409.6 h = 58 d 17 h
+      expect(wrapper.get('[data-testid="renown-eta"]').text()).toBe('About 58 d 17 h at this rate (without feasts)');
       expect(wrapper.find('[data-testid="renown-eta-feast"]').exists()).toBe(false);
     });
 
     it('uses hours and minutes for a near target', () => {
       const world = useWorldStore();
       rich(world);
-      world.hud.renown = renownOf({ total: 54000 });
+      world.hud.renown = renownOf({ total: 79000 });
       const wrapper = mountModal();
 
       expect(wrapper.get('[data-testid="renown-eta"]').text()).toContain('20 h 50 min');
@@ -167,7 +167,7 @@ describe('BuildingModal Town Square feast', () => {
     it('adds the running feast to the outlook', () => {
       const world = useWorldStore();
       rich(world);
-      world.hud.renown = renownOf({ total: 52000, pendingFeastRenown: 4629 });
+      world.hud.renown = renownOf({ total: 77000, pendingFeastRenown: 4629 });
       world.hud.feast = {
         startedAtGameTime: '2026-01-01T00:00:00Z',
         endsAtGameTime: '2026-01-01T12:00:00Z',
@@ -211,14 +211,20 @@ describe('BuildingModal actions', () => {
     expect(wrapper.find('button.primary').exists()).toBe(false);
   });
 
-  it('still offers the upgrade action on a built tile', async () => {
+  it('offers no upgrade on a built tile: upgrading lives in the ring menu', () => {
     rich(useWorldStore());
     const wrapper = mountModal({ q: 1, r: 1, terrain: 'grass', buildingType: 'farm', buildingLevel: 1 } as Tile);
 
-    const button = wrapper.get('button.primary');
-    expect(button.text()).toContain('Upgrade to level 2');
-    await button.trigger('click');
-    expect(wrapper.emitted('upgrade')).toHaveLength(1);
+    expect(wrapper.text()).not.toMatch(/upgrade/i);
+    expect(wrapper.find('button.primary').exists()).toBe(false);
+  });
+
+  it('says what holds an empty hex (a guarded camp, an endgame site), not "open water"', () => {
+    const camp = mountModal({ q: 1, r: 1, terrain: 'grass', camp: { family: 'wolfden', level: 1, orientation: 'NE', strong: false, guardRange: 1 } } as Tile);
+    expect(camp.find('[data-testid="occupied-lock"]').text()).toBe('Wild beasts hold this hex: clear their camp first');
+    expect(camp.text()).not.toContain('Open water');
+    const tower = mountModal({ q: 1, r: 1, terrain: 'grass', jotunTower: { orientation: 'NE', level: 2 } } as Tile);
+    expect(tower.find('[data-testid="occupied-lock"]').text()).toBe('An Utgard wall or a Jötunn watchtower stands here');
   });
 });
 
@@ -265,7 +271,6 @@ describe('BuildingModal outside the realm', () => {
     const wrapper = mountModal(farm());
 
     expect(wrapper.find('[data-testid="outside-realm"]').exists()).toBe(false);
-    expect(wrapper.find('.actions').exists()).toBe(true);
   });
 
   it('hides the Town Square feast while the square is outside the realm', () => {

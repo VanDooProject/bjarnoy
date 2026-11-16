@@ -64,9 +64,11 @@ public sealed record PlaceBuildingRequest(
     [property: Required, Range(1, int.MaxValue)] int Level);
 
 /// <param name="Unit">Wire name of the unit type, e.g. <c>"spearman"</c>.</param>
+/// <param name="Spot">The garrison spot (longhouse, tower or dock hex) whose units change; it must be able to hold that unit type.</param>
 /// <param name="Count">Signed: positive creates units, negative removes them. Zero is refused.</param>
 public sealed record AdjustGarrisonRequest(
     [property: Required] string Unit,
+    [property: Required] HexPointRequest Spot,
     int Count);
 
 /// <summary>

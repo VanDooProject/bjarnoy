@@ -51,6 +51,7 @@ function settlementResponse(stock: ReturnType<typeof resourceLine>) {
     buildings: [],
     queue: [],
     garrison: [],
+    garrisonSpots: [{ kind: 'longhouse', q: 0, r: 0, stacks: [], guests: [], holdsLand: true, holdsShips: false }],
     trainingQueue: [],
     world: { state: 'Running', running: true, acceptsCommands: true, gameTime: '2026-08-30T00:00:00Z' },
   };

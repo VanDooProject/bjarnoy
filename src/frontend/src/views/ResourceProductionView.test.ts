@@ -14,6 +14,7 @@ import buildingCatalogue from '../data/building-catalogue.json';
 import unitCatalogue from '../data/unit-catalogue.json';
 import type { BuildingDefinitionResponse, UnitDefinitionResponse, UserResponse } from '../api/types';
 import { createTestI18n } from '../test/i18n';
+import { setPlacementRules } from '../lib/map/placementRules';
 import enDocs from '../i18n/locales/en/docs.json';
 
 async function mountPage() {
@@ -42,6 +43,18 @@ beforeEach(() => {
 });
 
 describe('ResourceProductionView', () => {
+  it('reads the switched-off Quarry from the loaded catalogue, not from the placement registry (empty until a catalogue loads, as on a direct visit)', async () => {
+    setPlacementRules([]);
+    try {
+      const wrapper = await mountPage();
+      expect(wrapper.findAll('[data-testid=producers-table] tbody tr')).toHaveLength(8);
+      expect(wrapper.find('[data-producer=quarry]').exists()).toBe(false);
+      expect(wrapper.find('[data-boost=quarry]').exists()).toBe(false);
+    } finally {
+      setPlacementRules(buildingCatalogue.data as BuildingDefinitionResponse[]);
+    }
+  });
+
   it('lists the producers a player can still place (no Quarry) and the Longhouse with their level 1 and level 10 output', async () => {
     const wrapper = await mountPage();
 
@@ -57,10 +70,10 @@ describe('ResourceProductionView', () => {
       'longhouse',
     ]);
     const cells = (type: string) => wrapper.get(`[data-producer=${type}]`).findAll('td').map((td) => td.text());
-    expect(cells('lumberjack').slice(0, 3)).toEqual(['Wood', '40', '206']);
-    expect(cells('pumpkinfarm').slice(0, 3)).toEqual(['Food', '44', '227']);
-    expect(cells('bogoreworks').slice(0, 3)).toEqual(['Iron', '20', '103']);
-    expect(cells('longhouse').slice(0, 3)).toEqual(['Wood / Brick / Food / Iron', '15 / 12 / 15 / 2', '150 / 120 / 150 / 20']);
+    expect(cells('lumberjack').slice(0, 3)).toEqual(['Wood', '8', '208']);
+    expect(cells('pumpkinfarm').slice(0, 3)).toEqual(['Food', '13', '337']);
+    expect(cells('bogoreworks').slice(0, 3)).toEqual(['Iron', '4', '104']);
+    expect(cells('longhouse').slice(0, 3)).toEqual(['Wood / Food', '15 / 15', '150 / 150']);
     wrapper.unmount();
   });
 
@@ -102,16 +115,15 @@ describe('ResourceProductionView', () => {
     wrapper.unmount();
   });
 
-  it('shows the storage buildings and the storehouse steps', async () => {
+  it('shows the storage buildings and the Great Storehouse count rule', async () => {
     const wrapper = await mountPage();
 
     const longhouse = wrapper.get('[data-storage=longhouse]').text();
     expect(longhouse).toContain('Level 1: 250');
     expect(longhouse).toContain('Level 30: 7,500');
     expect(wrapper.get('#storage').text()).toContain('the limit is 500 of each resource');
-    const steps = wrapper.findAll('[data-testid=storehouse-steps] tbody tr').map((r) => r.findAll('td').map((td) => td.text()));
-    expect(steps[0]).toEqual(['No. 2', '1 storehouse at level 10']);
-    expect(steps[3]).toEqual(['No. 5 and every one after', '4 storehouses at level 25']);
+    expect(wrapper.get('#storage').text()).toContain('needs a Storehouse at level 25');
+    expect(wrapper.find('[data-testid=storehouse-steps]').exists()).toBe(false);
     wrapper.unmount();
   });
 

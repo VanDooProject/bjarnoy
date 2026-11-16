@@ -18,6 +18,8 @@ on:
 jobs:
   aspire-e2e:
     runs-on: ubuntu-latest
+    # Normally 9-16 min; see frontend-ci.yml's e2e job for why this is capped.
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
 
@@ -60,6 +62,7 @@ jobs:
 
       - name: Install Playwright's browser
         run: pwsh bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+        timeout-minutes: 10
         working-directory: src/backend/tests/Bjarnoy.AppHost.Tests
 
       # Runs the real orchestration (Postgres, the API, the Vue dev server —

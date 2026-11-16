@@ -56,12 +56,12 @@ public class CampGenerationTests
     [InlineData(0, 0, 0, 0)]
     [InlineData(59, 0, 0, 0)]
     [InlineData(60, 0, 0, 1)]
-    [InlineData(224, 0, 0, 1)]
+    [InlineData(224, 0, 1, 1)]
     [InlineData(300, 0, 1, 1)]
     [InlineData(900, 1, 2, 3)]
-    [InlineData(4_500, 3, 8, 11)]
-    [InlineData(24_000, 16, 24, 40)]
-    [InlineData(40_000, 16, 24, 40)]
+    [InlineData(4_500, 3, 11, 14)]
+    [InlineData(24_000, 16, 36, 52)]
+    [InlineData(40_000, 16, 36, 52)]
     public void Camp_budgets_are_the_island_land_over_the_tiles_per_camp_clamped_per_kind(int landTiles, int strong, int weak, int total)
     {
         Assert.Equal(strong, CampGenerator.StrongCountFor(landTiles));

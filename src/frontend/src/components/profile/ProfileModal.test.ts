@@ -48,7 +48,8 @@ function testRouter() {
 
 async function mountModal(router: Router) {
   const wrapper = mount(ProfileModal, {
-    global: { plugins: [router, createTestI18n({ profile: enProfile })] },
+    // The report dialog is teleported to body; stubbed, it renders in place so the wrapper can reach it.
+    global: { plugins: [router, createTestI18n({ profile: enProfile })], stubs: { teleport: true } },
   });
   await flushPromises();
   return wrapper;

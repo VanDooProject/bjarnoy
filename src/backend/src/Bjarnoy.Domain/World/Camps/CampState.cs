@@ -87,7 +87,7 @@ public sealed record CampState(
         }
 
         var pool = CampRules.LootPool(camp, next.EffectiveLevel(camp));
-        var rest = (plan.LootAvailable - plan.Loot).ClampToZero();
+        var rest = (plan.LootAvailable - plan.Taken).ClampToZero();
         return next with { Leftover = rest.ClampTo(pool) };
     }
 

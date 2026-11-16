@@ -1,4 +1,5 @@
-// The target-building picker of a dispatch draft, shared by ArmyPanel.vue and MobileDispatchSheet.vue so both
+// The target-building picker of the order being composed (a dispatch draft from home, or a field army's order in the send picker),
+// shared by ArmyPanel.vue, MobileDispatchSheet.vue and SendArmyPicker.vue so all
 // surfaces offer the same rows and apply the same rule: a fleet attack must name one building on the target's
 // shore (only shore buildings are offered), a land attack may name one for its siege engines, and
 // then only the buildings the selected engines can damage can be picked.
@@ -9,13 +10,27 @@ import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import type { MessageSchema } from '../i18n/schema';
 import { buildingLabel } from '../lib/units/battleReports';
 import { canSiegeDamage, classifyUnitSelection, shoreBuildings, targetBuildingPickerMode } from '../lib/units/armyDispatch';
+import { stackCounts } from '../lib/units/fieldOrderFeasibility';
 
 export function useDispatchTargetBuilding(hasTargetSettlement: ComputedRef<boolean>) {
   const world = useWorldStore();
   const catalogue = useUnitCatalogueStore();
   const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-  const draft = computed(() => world.dispatchDraft);
+  // The order being composed, in the one shape the picker needs: the home dispatch draft, else the field order of an open send picker.
+  const draft = computed(() => {
+    const dispatch = world.dispatchDraft;
+    if (dispatch) return dispatch;
+    const field = world.fieldOrderDraft;
+    if (!field || !world.sendPicker) return null;
+    const army = world.armies.find((a) => a.id === field.armyId);
+    return {
+      mission: field.mission,
+      targetSettlementId: field.targetSettlementId,
+      targetBuildingCoord: field.targetBuildingCoord,
+      unitCounts: field.units ?? (army ? stackCounts(army.stacks) : {}),
+    };
+  });
   const mode = computed(() =>
     targetBuildingPickerMode(
       draft.value?.mission,
@@ -38,8 +53,15 @@ export function useDispatchTargetBuilding(hasTargetSettlement: ComputedRef<boole
       label: buildingLabel(b.type),
       level: b.level,
       // Whether the selected engines can damage this kind of building: rams breach walls and towers, catapults burn towers
-      // and the rest, ships whatever shore building they are sent at.
+      // and the rest (never a beach camp).
       damageable: canSiegeDamage(draft.value?.unitCounts ?? {}, catalogue.byType, b.type),
+    })).map((row) => ({
+      ...row,
+      // A fleet is sent at a shore building to fight there, whatever its engines can damage (a beach camp, say): it can always be
+      // picked. A land attack's pick only aims the engines, so one they cannot damage is not offered.
+      pickable: isRequired.value || row.damageable,
+      // "Cannot damage" only matters for a land attack's aim; a fleet's pick is where it fights.
+      outOfReach: !isRequired.value && !row.damageable,
     }));
   });
   const selectedLabel = computed(() => {
@@ -56,16 +78,16 @@ export function useDispatchTargetBuilding(hasTargetSettlement: ComputedRef<boole
     const coord = draft.value?.targetBuildingCoord;
     if (!coord) return false;
     const row = rows.value.find((b) => b.q === coord.q && b.r === coord.r);
-    return !!row && !row.damageable;
+    return !!row && row.outOfReach;
   });
   /** A fleet cannot be sent without a building: the dispatch button waits for the pick. */
   const isMissingRequiredPick = computed(() => isRequired.value && !draft.value?.targetBuildingCoord);
 
   function pick(q: number, r: number) {
-    world.setDispatchTargetBuilding({ q, r });
+    world.setActiveTargetBuilding({ q, r });
   }
   function clear() {
-    world.setDispatchTargetBuilding(null);
+    world.setActiveTargetBuilding(null);
   }
 
   return { showPicker, isRequired, rows, selectedLabel, selectedUnreachable, isMissingRequiredPick, pick, clear };

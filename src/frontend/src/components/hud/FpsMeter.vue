@@ -17,6 +17,7 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import DebugPanel from './DebugPanel.vue';
+import DebugPanelLegend from './DebugPanelLegend.vue';
 import type { MessageSchema } from '../../i18n/schema';
 import { FRAME_WINDOW_MS, STUTTER_THRESHOLD_MS, useFrameRate } from '../../composables/useFrameRate';
 
@@ -47,6 +48,9 @@ const spark = computed(() =>
   })),
 );
 
+// Same fixed ceiling as the bars, so the line sits where a bar of that length would end.
+const avgHeight = computed(() => Math.max(0, Math.min(100, (frame.avgMs / SPARK_CEILING_MS) * 100)));
+
 // Green while every frame is arriving on time, amber once frames are merely
 // late, red once the window contains a real stall.
 const health = computed(() => {
@@ -72,8 +76,16 @@ const health = computed(() => {
         :class="{ bad: bar.bad }"
         :style="{ height: bar.height + '%' }"
       />
+      <span v-if="spark.length" class="avg-line" :style="{ bottom: avgHeight + '%' }" />
     </div>
 
+    <div class="row">
+      <span class="avg-label">{{ t('hud.fpsMeter.average', { n: spark.length }) }}</span>
+      <span class="value">
+        {{ t('hud.fpsMeter.ms', { n: frame.avgMs.toFixed(1) }) }}
+        <span class="ago">{{ t('hud.fpsMeter.fpsValue', { n: frame.avgMs > 0 ? (1000 / frame.avgMs).toFixed(0) : '0' }) }}</span>
+      </span>
+    </div>
     <div class="row">
       <span>{{ t('hud.fpsMeter.worstFrame', { seconds: windowS }) }}</span>
       <span class="value" :class="{ bad: frame.worstMs > STALL_MS }">
@@ -86,7 +98,7 @@ const health = computed(() => {
       <span class="value" :class="{ bad: frame.stutters > 0 }">{{ frame.stutters }}</span>
     </div>
 
-    <div class="legend">{{ t('hud.fpsMeter.legend', { ceiling: SPARK_CEILING_MS }) }}</div>
+    <DebugPanelLegend>{{ t('hud.fpsMeter.legend', { ceiling: SPARK_CEILING_MS }) }}</DebugPanelLegend>
   </DebugPanel>
 </template>
 
@@ -129,6 +141,7 @@ const health = computed(() => {
   color: var(--muted);
 }
 .spark {
+  position: relative;
   display: flex;
   align-items: flex-end;
   gap: 1px;
@@ -148,6 +161,16 @@ const health = computed(() => {
 .spark .bar.bad {
   background: #f28b82;
 }
+/* Inside the strip's 2px padding, so `bottom: n%` of the padded box lines up
+   with a bar of the same percentage height. */
+.spark .avg-line {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  height: 0;
+  border-top: 1px dashed #f2c661;
+  pointer-events: none;
+}
 .row {
   display: flex;
   justify-content: space-between;
@@ -166,13 +189,5 @@ const health = computed(() => {
 .ago {
   color: var(--muted);
   margin-left: 4px;
-}
-.legend {
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  font-size: 10px;
-  line-height: 1.4;
-  color: var(--muted);
 }
 </style>

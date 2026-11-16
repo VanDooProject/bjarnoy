@@ -13,11 +13,14 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App.vue';
+import { useDisplayedRoute } from './composables/useDisplayedRoute';
 
 const settlementMounted = vi.fn();
+// Shows the hash it renders for, the way MapView derives world/settlement mode from it.
 const SettlementStub = {
   name: 'SettlementStub',
-  template: '<div class="settlement-stub" />',
+  setup: () => ({ displayed: useDisplayedRoute() }),
+  template: '<div class="settlement-stub" :data-hash="displayed.hash" />',
   mounted: settlementMounted,
 };
 const WorldStub = { name: 'WorldStub', template: '<div class="world-stub" />' };
@@ -191,6 +194,20 @@ describe('App background-route pattern', () => {
     await wrapper.vm.$nextTick();
 
     expect(wrapper.findComponent({ name: 'ReportsModal' }).exists()).toBe(false);
+    expect(settlementMounted).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the world map (its #world hash) behind the reports modal', async () => {
+    const router = testRouter('/settlement#world');
+    await router.isReady();
+    const wrapper = mountApp(router);
+    expect(wrapper.find('.settlement-stub').attributes('data-hash')).toBe('#world');
+
+    await router.push({ path: '/reports', state: { backgroundView: '/settlement#world' } });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.findComponent({ name: 'ReportsModal' }).exists()).toBe(true);
+    expect(wrapper.find('.settlement-stub').attributes('data-hash')).toBe('#world');
     expect(settlementMounted).toHaveBeenCalledTimes(1);
   });
 

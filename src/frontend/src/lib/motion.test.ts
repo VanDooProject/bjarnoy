@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { animationPreference } from './perf/animationPreference';
 import { motionPreferences } from './perf/motionPreferences';
 import { installHudMotionAttribute } from './perf/hudMotionAttribute';
 import { REDUCED_MAX_MS, animate, motionEnabled, play, prefersReducedMotion } from './motion';
 
+/** The device's reduce-motion flag as `animationPreference.reducedMotion` (the live media query, read there once and on change) reports it. */
 function stubMatchMedia(reduce: boolean) {
-  vi.stubGlobal('matchMedia', (query: string) => ({ matches: reduce && query.includes('reduce'), media: query }));
-  window.matchMedia = globalThis.matchMedia;
+  vi.spyOn(animationPreference, 'reducedMotion', 'get').mockReturnValue(reduce);
 }
 
 function stubAnimate() {
@@ -20,14 +21,12 @@ function stubAnimate() {
 
 describe('motion helper', () => {
   const original = Element.prototype.animate;
-  const originalMatchMedia = window.matchMedia;
   beforeEach(() => {
     delete (Element.prototype as { animate?: unknown }).animate;
   });
   afterEach(() => {
     Element.prototype.animate = original;
-    window.matchMedia = originalMatchMedia;
-    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it('is a no-op without the Web Animations API (jsdom) and says motion is off', async () => {
@@ -86,12 +85,10 @@ describe('motion helper', () => {
 
 describe('HUD motion setting', () => {
   const original = Element.prototype.animate;
-  const originalMatchMedia = window.matchMedia;
   afterEach(() => {
     motionPreferences.hud = 'auto';
     Element.prototype.animate = original;
-    window.matchMedia = originalMatchMedia;
-    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     delete document.documentElement.dataset.hudMotion;
   });
 
@@ -116,6 +113,17 @@ describe('HUD motion setting', () => {
     expect(prefersReducedMotion()).toBe(true);
     stubMatchMedia(false);
     expect(prefersReducedMotion()).toBe(false);
+  });
+
+  it('is the one check of the building HUD and the ring menus: the resolved HUD setting, for every combination', () => {
+    for (const setting of ['auto', 'on', 'off'] as const) {
+      for (const device of [true, false]) {
+        stubMatchMedia(device);
+        motionPreferences.hud = setting;
+        expect(prefersReducedMotion()).toBe(!motionPreferences.hudEnabled);
+        expect(prefersReducedMotion()).toBe(setting === 'off' || (setting === 'auto' && device));
+      }
+    }
   });
 
   it('mirrors the setting onto <html data-hud-motion>', async () => {

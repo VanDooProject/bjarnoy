@@ -81,7 +81,7 @@ export class FogCoverage {
   /**
    * Whether the mist over this hex is provably fully opaque — so nothing drawn there can show. False when the hex's own
    * texel or any neighbouring hex's is below `OPAQUE_R`: bilinear filtering and sprite overhang make a hex beside
-   * non-opaque mist partially visible, and server history ground has a hard 0 -> 255 edge. Outside the mask is opaque.
+   * non-opaque mist partially visible, and sprite overhang reaches past a hex's own texel. Outside the mask is opaque.
    */
   isOpaque(q: number, r: number): boolean {
     const texel = this.texelIndex(q, r);

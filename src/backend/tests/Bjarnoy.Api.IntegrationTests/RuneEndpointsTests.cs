@@ -6,6 +6,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -68,8 +69,7 @@ public sealed class RuneEndpointsTests : IAsyncLifetime
     {
         var world = await _factory.CreateWorldAsync(Unique("w"), seed: 21, radius: 60, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -101,6 +101,17 @@ public sealed class RuneEndpointsTests : IAsyncLifetime
             $"/api/v1/admin/settlements/{founded.Id}/buildings/{smithyHex.Q}/{smithyHex.R}",
             new PlaceBuildingRequest("smithy", 5), Ct);
         Assert.Equal(HttpStatusCode.OK, placedSmithy.StatusCode);
+
+        // A shrine costs more than a fresh settlement can hold: stand a level-10 Great Storehouse and fill the stock.
+        var storeHex = layout.Hexes.Where(h => !h.IsCentre && h.Building is null && h.Terrain == "grass").Skip(1).First();
+        var placedStore = await client.PutJsonAsync(
+            $"/api/v1/admin/settlements/{founded.Id}/buildings/{storeHex.Q}/{storeHex.R}",
+            new PlaceBuildingRequest("greatstorehouse", 10), Ct);
+        Assert.Equal(HttpStatusCode.OK, placedStore.StatusCode);
+        var funded = await client.PostJsonAsync(
+            $"/api/v1/admin/settlements/{founded.Id}/resources",
+            new GrantResourcesRequest(Wood: 1_000_000, Stone: 1_000_000, Food: 1_000_000, Iron: 0), Ct);
+        Assert.Equal(HttpStatusCode.OK, funded.StatusCode);
 
         var leveled = await client.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{founded.Id}", SqliteApiFixture.StrictJson, Ct);

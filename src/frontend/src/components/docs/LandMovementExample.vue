@@ -22,7 +22,7 @@ import {
   landExampleWorld,
   type LandExampleKind,
 } from '../../lib/docs/landMovementExample';
-import { formatMinutes, minutesPerHex } from '../../lib/docs/landMovementDocs';
+import { ARMY_VISION_RINGS, formatMinutes, minutesPerHex } from '../../lib/docs/landMovementDocs';
 import { buildingName, terrainName, unitName } from '../../i18n/catalogueNames';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 
@@ -58,7 +58,9 @@ watch(
   renderer,
   (r) =>
     r?.setArmyOverlay({
-      armies: [{ id: 'docs', position: LAND_EXAMPLE_START, selected: true, returning: false, isFleet: false }],
+      armies: [
+        { id: 'docs', position: LAND_EXAMPLE_START, selected: true, returning: false, isFleet: false, visionRadius: ARMY_VISION_RINGS },
+      ],
       route: route.path,
       draftWaypoints: [],
     }),

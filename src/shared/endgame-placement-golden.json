@@ -233,7 +233,7 @@
         {"q": -684, "r": 329, "family": "giantutgard"}
       ],
       "camps": [
-        [-686, 332]
+
       ],
       "walls": [
         {"q": -688, "r": 333, "ring": "inner", "piece": "end", "dir": "SE", "gate": false, "level": 2},
@@ -11100,7 +11100,7 @@
         {"q": -168, "r": -402, "family": "giantutgard"}
       ],
       "camps": [
-        [-170, -399]
+
       ],
       "walls": [
         {"q": -174, "r": -396, "ring": "inner", "piece": "bend120", "dir": "NW", "gate": false, "level": 2},

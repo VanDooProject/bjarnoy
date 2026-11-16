@@ -27,6 +27,16 @@ export interface FrameRateSample {
   stutters: number;
   /** The last `SPARK_FRAMES` intervals, oldest first, for the sparkline. */
   recent: number[];
+  /** Mean of `recent` — the sparkline's average line. Longer than `frameMs`, so it moves slower than the headline. */
+  avgMs: number;
+}
+
+/** Mean of a list of frame intervals; 0 for none. */
+export function meanInterval(intervals: readonly number[]): number {
+  if (!intervals.length) return 0;
+  let sum = 0;
+  for (const d of intervals) sum += d;
+  return sum / intervals.length;
 }
 
 /** The window "right now" is averaged over. Short enough to track a gesture, long enough not to jitter. */
@@ -48,6 +58,7 @@ export function useFrameRate(): FrameRateSample {
     worstAgoS: 0,
     stutters: 0,
     recent: [],
+    avgMs: 0,
   });
 
   // Parallel arrays of interval and the timestamp it ended at, trimmed to
@@ -97,6 +108,7 @@ export function useFrameRate(): FrameRateSample {
     sample.worstAgoS = (now - worstAt) / 1000;
     sample.stutters = stutters;
     sample.recent = intervals.slice(-SPARK_FRAMES);
+    sample.avgMs = meanInterval(sample.recent);
   };
 
   raf = requestAnimationFrame(tick);

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ResourceIcon from '../ResourceIcon.vue';
+import ResourceCost from '../ResourceCost.vue';
 // Issue #16 "ring menu on click of tile", second pass — the "2a" design
 // (Claude Design's `Tile Menu 2a`, chosen over four other directions).
 //
@@ -30,6 +30,7 @@ import ResourceIcon from '../ResourceIcon.vue';
 import { computed, nextTick, onMounted, onUnmounted, onUpdated, ref, shallowRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AtlasSprite from '../AtlasSprite.vue';
+import HoldProgress from './HoldProgress.vue';
 import type { ArtRef } from '../../lib/map/buildingArt';
 import type { MessageSchema } from '../../i18n/schema';
 import { resourceName } from '../../i18n/catalogueNames';
@@ -37,8 +38,10 @@ import { formatBuildTime } from '../../lib/map/ringCatalogue';
 import { hyphenate, loadHyphenation, SOFT_HYPHEN } from '../../lib/hyphenation';
 import { isActionable, type RingAvailability, type RingAvailabilityState } from '../../lib/map/ringAvailability';
 import { tapArm, type RingDock } from '../../lib/map/ringDock';
+import { LongPressTracker } from '../../lib/map/longPress';
 import { ringFootprint } from '../../lib/map/markerOcclusion';
 import { motionEnabled, supportsWaapi } from '../../lib/motion';
+import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import * as ringMotion from '../../lib/map/ringMotion';
 import {
   BUB1,
@@ -74,6 +77,11 @@ export interface RingAction {
   state?: RingAvailabilityState;
   /** Read-out card shown while this root action is hovered (Upgrade). */
   card?: RingCard;
+  /**
+   * A root bubble that can also be held (LONG_PRESS_MS): the hold fills a ring around it and emits `hold` with its id instead
+   * of `select`. A disabled bubble stays holdable. Releasing early is the bubble's normal click.
+   */
+  holdable?: boolean;
 }
 
 /** What a detail card for a buildable thing (a building, or an upgrade) shows. */
@@ -85,6 +93,14 @@ export interface RingCard {
   cost?: { wood?: number; stone?: number; food?: number; iron?: number };
   /** Formatted build duration, e.g. "4:00" (BuildingCatalogue's BuildDuration). */
   time?: string;
+  /** Label of the `time` row when it is not a build time (a raze: "Raze time"). */
+  timeLabel?: string;
+  /** Resources the action pays back when it completes (a raze), rendered as chips under "Refund". */
+  refund?: { wood?: number; stone?: number; food?: number; iron?: number };
+  /** Touch: what a second tap on this root action does ("Tap Raze again to raze"); defaults to the upgrade wording. */
+  tapHint?: string;
+  /** The badge shown while nothing blocks the action; defaults to "buildable here" (a raze: "can be razed"). */
+  okBadge?: string;
   /** One-line summary of what it produces. */
   gives?: string;
   /** For an upgrade, the building's new total next to the gain in `gives` ("90 total"); shown on wide screens only. */
@@ -96,6 +112,8 @@ export interface RingCard {
   /** Art for the card thumbnail. */
   art?: ArtRef;
   availability?: RingAvailability;
+  /** The card's last line: what holding the bubble does (gold arrows), or, locked, that it needs premium (lock, muted). */
+  holdHint?: { text: string; locked: boolean };
 }
 
 export interface RingBuilding extends RingAction, Omit<RingCard, 'title'> {
@@ -181,8 +199,13 @@ const props = withDefaults(
 
 const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
+// A layer on the phone stack while mounted (GuidancePointer reads the 'ring' id to keep pointing into the bubbles).
+const layer = usePhoneLayer(true, 'ring');
+
 const emit = defineEmits<{
   select: [id: string];
+  /** A holdable root bubble was held for the full LONG_PRESS_MS; no `select` follows from that press. */
+  hold: [id: string];
   close: [];
   // A mousedown on the backdrop (not a bubble) hands the same PointerEvent
   // back so the caller can turn that one gesture straight into a map drag —
@@ -466,13 +489,19 @@ interface CardView {
   art?: ArtRef;
   badge?: { text: string; tone: 'ok' | Tone };
   chips: { key: ResourceKey; amount: number; short: boolean }[];
+  cost: Partial<Record<ResourceKey, number>>;
+  shortKeys: Partial<Record<ResourceKey, boolean>>;
   time?: string;
+  timeLabel?: string;
+  refundChips: { key: ResourceKey; amount: number }[];
+  refundCost: Partial<Record<ResourceKey, number>>;
   gives?: string;
   givesTotal?: string;
   warning?: string;
   statuses: { text: string; tone: Tone }[];
   /** Touch: "Tap X again to build" — only while the shown item is armed and committable. */
   tapHint?: string;
+  holdHint?: { text: string; locked: boolean };
 }
 
 function resourceList(shortfall: Partial<Record<(typeof RESOURCE_KEYS)[number], number>>): string {
@@ -496,7 +525,14 @@ const cardView = computed<CardView | null>(() => {
   const statuses: CardView['statuses'] = locks.map((text) => ({ text, tone: 'lock' as const }));
   const resourcesShort = !!a && Object.keys(a.shortfall).length > 0;
   if (a && resourcesShort) {
-    statuses.push({ text: t('hud.ringMenu.card.needResources', { resources: resourceList(a.shortfall) }), tone: 'wait' });
+    const resources = resourceList(a.shortfall);
+    statuses.push({
+      text:
+        a.resourcesReadyInSeconds === null
+          ? t('hud.ringMenu.card.needResources', { resources })
+          : t('hud.ringMenu.card.needResourcesIn', { resources, time: formatBuildTime(a.resourcesReadyInSeconds) }),
+      tone: 'wait',
+    });
   }
   if (a?.slots.short) {
     if (a.queue.hasRoom && !resourcesShort) {
@@ -523,7 +559,7 @@ const cardView = computed<CardView | null>(() => {
   if (locks.length) badge = { text: locks[0].toUpperCase(), tone: 'lock' };
   else if (resourcesShort) badge = { text: t('hud.ringMenu.card.badgeNoResources').toUpperCase(), tone: 'wait' };
   else if (a?.state === 'waiting') badge = { text: t('hud.ringMenu.card.badgeNoSlot').toUpperCase(), tone: 'wait' };
-  else badge = { text: t('hud.ringMenu.buildableHere'), tone: 'ok' };
+  else badge = { text: card.okBadge ?? t('hud.ringMenu.buildableHere'), tone: 'ok' };
 
   return {
     title: card.title,
@@ -531,12 +567,18 @@ const cardView = computed<CardView | null>(() => {
     art: card.art,
     badge,
     chips,
+    cost: card.cost ?? {},
+    shortKeys: Object.fromEntries(chips.map((c) => [c.key, c.short])),
     time: card.time,
+    timeLabel: card.timeLabel,
+    refundCost: card.refund ?? {},
+    refundChips: RESOURCE_KEYS.filter((key) => !!card.refund?.[key]).map((key) => ({ key, amount: Math.floor(card.refund![key]!) })),
     gives: card.gives,
     givesTotal: card.givesTotal,
     warning: card.warning,
     statuses,
     tapHint: tapHint.value,
+    holdHint: card.holdHint,
   };
 });
 
@@ -555,7 +597,7 @@ const tapHint = computed<string | undefined>(() => {
   }
   const item = hoveredLane1Index.value === null ? null : laneItems.value[hoveredLane1Index.value];
   if (!item || item.id !== id || item.disabled) return undefined;
-  return t('hud.ringMenu.tap.upgrade', { name: item.label });
+  return item.card?.tapHint ?? t('hud.ringMenu.tap.upgrade', { name: item.label });
 });
 
 /** Whether the card (floating or docked) is on screen. */
@@ -776,6 +818,10 @@ async function onBackClick(e: MouseEvent) {
 // Navigation is click-only: Build opens its categories, a category opens its
 // buildings, exactly as going back already needed a click. Hover only previews.
 function onLaneClick(e: MouseEvent, item: RingAction) {
+  if (swallowClick) {
+    swallowClick = false;
+    return;
+  }
   if (item.disabled) {
     // A blocked root action (Raze on the longhouse, Send army without units ...) shakes and flashes its reason.
     blockedFeedback(e.currentTarget as HTMLElement);
@@ -845,6 +891,51 @@ function onLaneTouchStart(e: TouchEvent, item: RingAction) {
   hoverLane1.value = item.id;
   hover.value = null;
 }
+// Holding a holdable root bubble (Upgrade, for the quick upgrade mode): the press fills a ring around the bubble over
+// LONG_PRESS_MS, then `hold` fires and the click the release would bring is swallowed. A release (or leaving the bubble, or
+// drifting off it) before that cancels the hold and leaves the ordinary click alone. A disabled bubble is holdable too: it
+// reads its refusal in the caller. The same tracker the map's long press uses (lib/map/longPress.ts).
+const HOLD_SLOP_PX = 10;
+/** The bubble whose hold ring is filling. */
+const holdingId = ref<string | null>(null);
+let holdId: string | null = null;
+/** Set when a hold fired: the click that follows its release is not a tap on the bubble. */
+let swallowClick = false;
+const holdTracker = new LongPressTracker(
+  {
+    onStart: () => {
+      holdingId.value = holdId;
+    },
+    onCancel: () => {
+      holdingId.value = null;
+    },
+    onFire: () => {
+      const id = holdId;
+      holdingId.value = null;
+      swallowClick = true;
+      armed.value = null;
+      if (id) emit('hold', id);
+    },
+  },
+  { slopPx: HOLD_SLOP_PX },
+);
+function onLanePointerDown(e: PointerEvent, item: RingAction) {
+  swallowClick = false;
+  if (!atRoot.value || !item.holdable || swapping.value || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  holdId = item.id;
+  holdTracker.start({ x: e.clientX, y: e.clientY });
+}
+function onLanePointerMove(e: PointerEvent) {
+  holdTracker.move({ x: e.clientX, y: e.clientY });
+}
+// The long press of a touch also asks for the browser's context menu, which would reach the backdrop's own and close the ring.
+function onLaneContextMenu(e: Event) {
+  if (!holdTracker.holding && !swallowClick) return;
+  e.preventDefault();
+  e.stopPropagation();
+}
+onUnmounted(() => holdTracker.cancel());
+
 // Where the hint chip of a hovered, disabled root bubble sits: just outside the
 // bubble, away from the tile, anchored so it grows away from the bubble.
 const hintStyle = computed(() => {
@@ -874,7 +965,7 @@ function onBackdropPointerDown(e: PointerEvent) {
 <template>
   <!-- `data-swapping`: a layer change is mid-flight (old layer leaving, new one arriving), so the bubbles on screen
        are not yet the final set. -->
-  <div ref="rootEl" class="ring-backdrop" :style="{ '--ring-scale': scale }" :data-swapping="swapping || undefined" @pointerdown.self="onBackdropPointerDown" @contextmenu.prevent="emit('close')">
+  <div ref="rootEl" v-phone-hidden="layer.hidden.value" class="ring-backdrop" :style="{ '--ring-scale': scale }" :data-swapping="swapping || undefined" @pointerdown.self="onBackdropPointerDown" @contextmenu.prevent="emit('close')">
     <div
       v-if="layout.showLane1Track"
       class="ring-track"
@@ -937,6 +1028,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         category: entry.category,
         armed: armed === entry.item.id,
         'no-commit': entry.item.disabled,
+        holdable: entry.item.holdable,
       }"
       :style="{
         left: `${entry.x}px`,
@@ -951,6 +1043,12 @@ function onBackdropPointerDown(e: PointerEvent) {
       :aria-description="entry.item.disabled ? entry.item.hint : undefined"
       :aria-label="entry.item.label"
       @touchstart="onLaneTouchStart($event, entry.item)"
+      @pointerdown="onLanePointerDown($event, entry.item)"
+      @pointermove="onLanePointerMove"
+      @pointerup="holdTracker.cancel()"
+      @pointercancel="holdTracker.cancel()"
+      @pointerleave="holdTracker.cancel()"
+      @contextmenu="onLaneContextMenu"
       @click="onLaneClick($event, entry.item)"
       @mouseenter="hoverLane1 = entry.item.id"
       @mouseleave="hoverLane1 = null"
@@ -962,7 +1060,8 @@ function onBackdropPointerDown(e: PointerEvent) {
         <svg v-else-if="entry.state === 'waiting'" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" /><path d="M6 3.4V6l1.8 1.1" /></svg>
         <svg v-else viewBox="0 0 12 12"><path d="M3 6h6" /></svg>
       </span><span
-        v-if="armed === entry.item.id && !entry.item.disabled" class="arm-badge" data-testid="ring-arm-badge" aria-hidden="true" />
+        v-if="armed === entry.item.id && !entry.item.disabled" class="arm-badge" data-testid="ring-arm-badge" aria-hidden="true" /><span
+        v-if="holdingId === entry.item.id" class="hold-ring" :style="{ '--hold-pad': `${px(9)}px` }"><HoldProgress :size="px(BUB1) + px(18)" tone="gold" /></span>
     </button>
 
     <button
@@ -1030,19 +1129,22 @@ function onBackdropPointerDown(e: PointerEvent) {
         <template v-if="cardView.chips.length">
           <dt>{{ t('hud.ringMenu.cost') }}</dt>
           <dd class="cost">
-            <span v-for="chip in cardView.chips" :key="chip.key" class="chip">
-              <ResourceIcon :kind="chip.key" :size="12" />
-              <b :class="{ short: chip.short }">{{ chip.amount }}</b>
-            </span>
+            <ResourceCost :cost="cardView.cost" :short="cardView.shortKeys" round="ceil" />
           </dd>
         </template>
         <template v-if="cardView.time">
-          <dt>{{ t('hud.ringMenu.buildTime') }}</dt>
+          <dt>{{ cardView.timeLabel ?? t('hud.ringMenu.buildTime') }}</dt>
           <dd>{{ cardView.time }}</dd>
+        </template>
+        <template v-if="cardView.refundChips.length">
+          <dt>{{ t('hud.ringMenu.refund') }}</dt>
+          <dd class="cost" data-testid="ring-card-refund">
+            <ResourceCost :cost="cardView.refundCost" round="floor" />
+          </dd>
         </template>
         <template v-if="cardView.gives">
           <dt>{{ t('hud.ringMenu.gives') }}</dt>
-          <dd class="nowrap">
+          <dd>
             {{ cardView.gives }}<span v-if="cardView.givesTotal" class="gives-total" data-testid="ring-card-total"> · {{ cardView.givesTotal }}</span>
           </dd>
         </template>
@@ -1055,7 +1157,12 @@ function onBackdropPointerDown(e: PointerEvent) {
       <p v-if="cardView.tapHint" class="card-tap-hint" data-testid="ring-tap-hint">
         <i class="tap-bubble" aria-hidden="true" />{{ cardView.tapHint }}
       </p>
-      <div v-else-if="!(cardView.statuses.length || error)" class="card-foot" />
+      <div v-else-if="!(cardView.statuses.length || error || cardView.holdHint)" class="card-foot" />
+      <p v-if="cardView.holdHint" class="card-hold-hint" :class="{ locked: cardView.holdHint.locked }" data-testid="ring-hold-hint">
+        <svg v-if="cardView.holdHint.locked" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
+        <svg v-else viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.5 6 3l3.5 3.5M2.5 10 6 6.5 9.5 10" /></svg>
+        {{ cardView.holdHint.text }}
+      </p>
     </div>
 
     <div
@@ -1193,8 +1300,9 @@ function onBackdropPointerDown(e: PointerEvent) {
      piece that has none, so nothing runs out of the circle. */
   overflow-wrap: anywhere;
   background: rgba(8, 18, 26, 0.9);
-  border: 1px solid color-mix(in oklab, var(--tint) 50%, transparent);
-  color: var(--tint);
+  /* White label, the category colour only in the rim: a tinted label on the dark bubble is too faint for some tints. */
+  border: 1px solid var(--tint);
+  color: #fff;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
 .ring-bubble:hover:not(.disabled):not(.is-locked):not(.is-waiting) {
@@ -1220,10 +1328,11 @@ function onBackdropPointerDown(e: PointerEvent) {
   color: var(--text);
   background: rgba(8, 18, 26, 0.9);
 }
+/* Locked by the tech tree: neutral grey, not red — red is kept for "not possible here" (.disabled). */
 .ring-bubble.is-locked {
   cursor: not-allowed;
-  border: 1.5px dashed rgba(226, 112, 95, 0.55);
-  color: rgba(240, 163, 150, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #a3b0b8;
 }
 .ring-bubble.is-locked.category {
   /* All its buildings are locked, but it still opens to show them. */
@@ -1258,8 +1367,8 @@ function onBackdropPointerDown(e: PointerEvent) {
   stroke-linejoin: round;
 }
 .ring-badge.locked {
-  background: #7d2e24;
-  color: #ffd9d2;
+  background: #3a4852;
+  color: #e8f0f5;
 }
 .ring-badge.ban {
   background: #4a2a26;
@@ -1271,8 +1380,8 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .ring-bubble.back {
   background: rgba(8, 18, 26, 0.92);
-  border: 1px solid rgba(255, 197, 92, 0.6);
-  color: var(--gold);
+  border: 1px solid var(--gold);
+  color: #fff;
   font-size: calc(8.6px * var(--ring-scale, 1));
   font-weight: 700;
   white-space: nowrap;
@@ -1287,8 +1396,8 @@ function onBackdropPointerDown(e: PointerEvent) {
   font-weight: 700;
 }
 .ring-bubble.child.locked {
-  border: 1.5px dashed rgba(226, 112, 95, 0.55);
-  color: rgba(240, 163, 150, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #a3b0b8;
   background: rgba(14, 24, 20, 0.94);
   cursor: not-allowed;
 }
@@ -1308,7 +1417,7 @@ function onBackdropPointerDown(e: PointerEvent) {
   color: rgba(232, 240, 245, 0.55);
 }
 .ring-bubble.child.locked.hot {
-  color: rgba(240, 163, 150, 0.85);
+  color: #a3b0b8;
 }
 .ring-card {
   position: absolute;
@@ -1317,22 +1426,24 @@ function onBackdropPointerDown(e: PointerEvent) {
      click on the bubble itself. The card carries no button of its own. */
   pointer-events: none;
   overflow: hidden;
-  border-radius: 11px;
-  background: rgba(10, 20, 27, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.6);
+  /* Same look as the map's hover tooltip (HexTooltip.vue): .panel colours,
+     square edges, the light shadow. */
+  border-radius: 0;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);
   color: var(--text);
 }
 .card-art {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  background: radial-gradient(90% 80% at 50% 40%, #1a3d4d, #0d1f29);
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--panel-border);
 }
 .card-art-img {
-  width: 50px;
-  max-height: 78px;
+  width: 40px;
+  max-height: 64px;
   object-fit: contain;
   flex: none;
 }
@@ -1343,24 +1454,24 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .card-name {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .card-sub {
   margin-top: 2px;
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 400;
   color: var(--muted);
 }
 .card-badge {
-  margin-top: 6px;
-  font-size: 9px;
+  margin-top: 4px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--food);
 }
 .card-warning {
-  margin: 8px 12px 0;
-  font-size: 10px;
+  margin: 8px 14px 0;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--gold);
 }
@@ -1375,12 +1486,12 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .card-rows {
   margin: 0;
-  padding: 11px 12px 0;
+  padding: 8px 14px 0;
   display: grid;
-  grid-template-columns: auto 1fr;
-  row-gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr);
+  row-gap: 4px;
   column-gap: 10px;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 .card-rows dt {
   color: var(--muted);
@@ -1391,36 +1502,64 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .card-rows dd {
   margin: 0;
-  font-weight: 600;
+  color: var(--text);
+  font-weight: 500;
   text-align: right;
 }
-.card-rows dd.nowrap {
-  white-space: nowrap;
-}
+/* Four resources must not run past the card's edge: the chips wrap instead. */
 .card-rows dd.cost {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 10px;
-}
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.chip b.short {
-  color: var(--rival);
+  gap: 2px 10px;
 }
 .card-foot {
   height: 12px;
 }
-.card-tap-hint {
+.card-hold-hint {
   margin: 0;
-  padding: 9px 12px 11px;
+  padding: 8px 14px 10px;
   display: flex;
   align-items: center;
   gap: 7px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 10.5px;
+  border-top: 1px solid var(--panel-border);
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--gold);
+}
+.card-hold-hint svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.card-hold-hint.locked {
+  color: var(--muted);
+}
+/* The hold ring sits around the bubble, outside its border; the press itself stays on the bubble. */
+.ring-bubble.holdable {
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.hold-ring {
+  position: absolute;
+  inset: calc(var(--hold-pad, 9px) * -1);
+  pointer-events: none;
+  display: block;
+}
+.card-tap-hint {
+  margin: 0;
+  padding: 8px 14px 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-top: 1px solid var(--panel-border);
+  font-size: 12px;
   font-weight: 600;
   color: var(--gold);
 }
@@ -1516,14 +1655,11 @@ html[data-hud-motion='reduced'] .ring-bubble.glow {
 /* Phone layout: the card docks to a screen edge (lib/map/ringDock.ts). The
    --hud-inset-* variables come from MapView's root and keep it clear of the
    HUD bar wherever it is docked; env() keeps it clear of notches. */
-.ring-card.docked {
-  border-radius: 12px;
-}
 .ring-card.docked-bottom {
   left: calc(8px + env(safe-area-inset-left, 0px));
   right: calc(8px + env(safe-area-inset-right, 0px));
   bottom: calc(var(--hud-inset-bottom, 0px) + 8px + env(safe-area-inset-bottom, 0px));
-  max-height: 236px;
+  max-height: 260px;
 }
 .ring-card.docked-left,
 .ring-card.docked-right {
@@ -1540,11 +1676,11 @@ html[data-hud-motion='reduced'] .ring-bubble.glow {
 .card-status {
   list-style: none;
   margin: 0;
-  padding: 10px 12px 11px;
+  padding: 8px 14px 10px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  font-size: 10.5px;
+  gap: 4px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.35;
 }

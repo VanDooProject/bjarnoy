@@ -25,11 +25,10 @@ public class ArmyFoundingTests
             Name = "Bjornstad",
             Centre = Home,
             Buildings = [new PlacedBuilding(Home, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = garrison ?? [new UnitStack(UnitType.Settler, 5)],
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: 1_000_000, Iron: 1_000_000),
                 production, capacity, T0),
-        };
+        }.WithGarrison(garrison ?? [new UnitStack(UnitType.Settler, 5)]);
     }
 
     private static DispatchDecision DispatchFound(
@@ -45,7 +44,7 @@ public class ArmyFoundingTests
         Func<HexCoord, Terrain>? terrainAt = null,
         Func<HexCoord, bool>? isHexFoundable = null,
         bool renownAndSlotAllowed = true) =>
-        Army.PlanDispatch(
+        TestArmy.PlanDispatch(
             settlement,
             requested ?? [new UnitStack(UnitType.Settler, 5)],
             provisions,
@@ -109,12 +108,12 @@ public class ArmyFoundingTests
         var settlement = Found(garrison:
         [
             new UnitStack(UnitType.Settler, 5),
-            new UnitStack(UnitType.Longship, 1),
+            new UnitStack(UnitType.Snekkja, 1),
         ]);
 
         var decision = DispatchFound(
             settlement, new HexCoord(5, 0),
-            requested: [new UnitStack(UnitType.Settler, 5), new UnitStack(UnitType.Longship, 1)],
+            requested: [new UnitStack(UnitType.Settler, 5), new UnitStack(UnitType.Snekkja, 1)],
             // A sea convoy is a fleet — needs a route over open water, same
             // as any other fleet dispatch test (see ArmyTests's
             // Fleet_dispatch_accepted_over_open_sea); the destination's own
@@ -165,12 +164,12 @@ public class ArmyFoundingTests
         var settlement = Found(garrison:
         [
             new UnitStack(UnitType.Settler, 5),
-            new UnitStack(UnitType.Longship, 1),
+            new UnitStack(UnitType.Snekkja, 1),
         ]);
 
         var decision = DispatchFound(
             settlement, new HexCoord(5, 0),
-            requested: [new UnitStack(UnitType.Settler, 5), new UnitStack(UnitType.Longship, 1)],
+            requested: [new UnitStack(UnitType.Settler, 5), new UnitStack(UnitType.Snekkja, 1)],
             terrainAt: _ => Terrain.Sea);
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
@@ -212,7 +211,7 @@ public class ArmyFoundingTests
     [Fact]
     public void Sea_founding_convoy_needs_exactly_five_settlers_even_with_free_slots()
     {
-        var requested = new[] { new UnitStack(UnitType.Settler, 4), new UnitStack(UnitType.Longship, 1) };
+        var requested = new[] { new UnitStack(UnitType.Settler, 4), new UnitStack(UnitType.Snekkja, 1) };
         var settlement = Found(garrison: requested);
 
         var decision = DispatchFound(settlement, new HexCoord(5, 0), requested: requested, terrainAt: _ => Terrain.Sea);
@@ -324,7 +323,7 @@ public class ArmyFoundingTests
         // 5 Spearmen carry at most 5 * 10 = 50 food (FoodCarryCapacity) —
         // must stay at or under that or the dispatch itself is rejected
         // before RetargetFounding is even reached.
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Spearman, 5)], 40, [], new HexCoord(10, 0),
             T0, Guid.CreateVersion7(), AllGrass());
 

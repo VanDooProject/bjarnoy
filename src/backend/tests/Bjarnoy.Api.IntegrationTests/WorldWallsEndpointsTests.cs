@@ -7,12 +7,13 @@ using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
 /// <summary>
 /// <c>GET /worlds/{id}/walls</c>: the rival wall hexes a live client needs to draw, hit-test and route around other players' palisades.
-/// Same fog rule as the settlement list (a rival's walls are listed only when its centre hex is explored), the caller's own walls
+/// Same fog rule as the settlement list (a rival's wall is listed only when its own hex is explored), the caller's own walls
 /// excluded, a foundation (level 0) not a wall yet.
 /// </summary>
 public sealed class WorldWallsEndpointsTests : IAsyncLifetime
@@ -37,8 +38,7 @@ public sealed class WorldWallsEndpointsTests : IAsyncLifetime
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 80, cancellationToken: Ct);
         var owner = Unique("owner");
         client.DefaultRequestHeaders.Add("X-Owner-Id", owner);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
         var response = await client.PostJsonAsync(
@@ -141,7 +141,7 @@ public sealed class WorldWallsEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Hides_the_walls_of_a_rival_whose_centre_is_unexplored()
+    public async Task Hides_a_rivals_wall_whose_own_hex_is_unexplored()
     {
         var (worldId, own, _, client) = await SetUpAsync();
         using var _ = client;
@@ -149,6 +149,23 @@ public sealed class WorldWallsEndpointsTests : IAsyncLifetime
             worldId, own.IslandId, SystemUserIds.Abandoned, own.Q + 20, own.R, (own.Q + 19, own.R, BuildingType.Palisade, 1));
 
         Assert.Empty((await WallsAsync(client, worldId))!);
+    }
+
+    [Fact]
+    public async Task Lists_a_wall_on_an_explored_hex_although_its_settlements_centre_is_unexplored()
+    {
+        var (worldId, own, owner, client) = await SetUpAsync();
+        using var _ = client;
+        var seen = new HexCoord(own.Q + 19, own.R);
+        await PlantAsync(
+            worldId, own.IslandId, SystemUserIds.Abandoned, own.Q + 20, own.R,
+            (seen.Q, seen.R, BuildingType.Palisade, 1),
+            (own.Q + 26, own.R, BuildingType.Palisade, 1));
+        await _factory.SeedExploredHexesAsync(worldId, owner, [seen], Ct);
+
+        var wall = Assert.Single((await WallsAsync(client, worldId))!);
+
+        Assert.Equal((seen.Q, seen.R), (wall.Q, wall.R));
     }
 
     [Fact]

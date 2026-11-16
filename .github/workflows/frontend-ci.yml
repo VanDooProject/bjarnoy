@@ -80,6 +80,9 @@ jobs:
   # significantly (e.g. a new consistently-slow spec file).
   e2e:
     runs-on: ubuntu-latest
+    # Shards normally take 5-25 min; GitHub's 6 h default let a hung apt-get
+    # inside the browser install burn a whole job.
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -114,6 +117,7 @@ jobs:
 
       - name: Install Playwright's browser
         run: npx playwright install --with-deps chromium
+        timeout-minutes: 10
 
       - run: npm run build
 

@@ -30,7 +30,7 @@ Decisions taken up front (asked and answered before writing this):
 | Question | Decision |
 | --- | --- |
 | Where do the toggles live? | The `?debug=1` panel, same pattern as `FogDebugPanel`/`fogDebugFlags`. No player-facing settings menu exists today and this feature is not the place to invent one. |
-| World map sea | The shader draws **both** the sea body and the mid-water waves. The existing Graphics wave squiggles are **kept**, behind their own flag, so the new look can be A/B'd against the prototype rather than deleted sight-unseen. |
+| World map sea | The shader draws **both** the sea body and the mid-water waves. The existing wave squiggle sprites are **kept**, behind their own flag, so the new look can be A/B'd against the prototype rather than deleted sight-unseen. |
 | Settlement sea | The shader draws **over** the hand-painted water tile art (`watertile_*`, `coastalwatertile_*`), it does not replace it. Reaffirmed during implementation against reference art with a bright cyan sea: if the settlement's water should be cyan, that is new `watertile_*` art, not a shader tint. |
 | Surface pattern | **Two idioms, one per view**: caustic ribbons close up (settlement), the prototype's scattered wave arcs from orbit (world map). Decided during implementation, against reference art — §4.2b. The close-up idiom is three layers — a coarse net, a finer brighter one, and drifting shadow blobs under both — §4.2c. |
 
@@ -56,8 +56,10 @@ drives most of §3.
   (`HexMapRenderer.rebuildTerrainFlat`, `WORLD_TERRAIN_FILL`). Open sea is
   skipped outright: `if (tile.terrain === 'sea') continue;`
   (`HexMapRenderer.ts:1867`) — "open sea is just the background".
-- Waves are **Graphics squiggles**: `waveLayer`, placed by `rebuildWaves` and
-  re-stroked every frame by `drawWaves` (`HexMapRenderer.ts:1900`, `:1955`).
+- Waves are **squiggle sprites**: `waveLayer` holds pooled Sprites that all
+  share one baked squiggle texture (`bakeWaveTexture`); `rebuildWaves` picks the
+  wave points and `drawWaves` only repositions, sizes and fades the sprites each
+  frame (`HexMapRenderer.ts`).
   They are a port of the zip 7 prototype's `sea()` method
   (`prototypes/worldmap/Viking Realm.dc.html`, the look in
   `docs/design/img/worldmap.png`) — short scattered arcs that swell in place
@@ -92,7 +94,7 @@ Inside `world` (one camera-transformed container), in `addChild` order
 ```
 world
  ├─ terrainBase.container   sprites: ground art  (settlement only)
- ├─ waveLayer               Graphics squiggles   (world only)
+ ├─ waveLayer               pooled squiggle sprites, one shared texture (world only)
  ├─ terrainFlat             Graphics island hexes (world only)
  ├─ borderLayer
  ├─ hoverLayer
@@ -216,6 +218,8 @@ client-side with no round trip. So:
    request (`WorldModel.seaBogHexKeys`, `BakeRequest.landHexes`) and rebakes
    when the bog changes (`WorldModel.waterMaskRevision`).
 
+   An inland lake (enclosed water the bog did not take) is not land here: it is drawn like the sea, the shader and its foam included, and both bake paths see it as water (the seed calls it sea).
+
    This must be `isoPixelToAxial`, and **not** anything derived from sprite
    bounds. `isoPixelToAxial` is defined in terms of the `isoTopPoints`
    hexagon — the tile's flat top face, which "abuts its neighbours with no
@@ -290,7 +294,7 @@ camera change — free — and it buys three things:
 world
  ├─ waterLayer.mesh   ← NEW: sea body + waves + foam
  ├─ terrainBase       (empty in world mode)
- ├─ waveLayer         Graphics squiggles, now behind a flag
+ ├─ waveLayer         pooled squiggle sprites, now behind a flag
  ├─ terrainFlat       island hexes — opaque, drawn over the water
  └─ ...
 ```
@@ -477,6 +481,38 @@ of the water-side reach for that reason.
   expensive thing on screen.
 - The mesh keeps `eventMode = 'none'`, like the fog quads, so it never eats a
   hex click.
+
+### 3.7 The mesh covers only water and the shore ring
+
+The mesh is not one quad over the mask's rect. A full-rect quad makes the
+rasteriser and blender touch every pixel, land included, only for the fragment
+shader to `discard` there; in the software renderer that alone is ~150 ms a
+frame, and in settlement view most of the screen is land. The shader can only
+draw in two places, so the mesh is the hexagons of exactly those
+(`waterCoverage.ts`):
+
+- **sea hexes**, read off the mask (`R` at the hex centre is above 0.5);
+- **the shore ring**: every land hex touching a sea hex. Foam reaches onto the
+  beach by `uFoamWidth * uFoamLandReach` tile widths: 0.036 at the defaults,
+  and at the slider's highest (`FOAM_WIDTH_RANGE.max = 1.5`) 1.5 * 0.12 = 0.18.
+  A land hex that touches no sea is at least a hex across the flats (~0.87
+  tile) from it, so one ring is enough (a unit test pins the inequality).
+
+Only hexes overlapping the mask's rect are emitted, and both shaders discard
+where the mask UV is outside 0..1 (one shared GLSL snippet), so nothing is drawn
+past the baked rect. The `showWaterMask` debug view therefore shows only over the
+covered hexes.
+
+Rivers are not part of it: `RiverFlowMesh` draws them on its own quad over the river rect (§4.4e), so an
+inland river hex has no water mesh under it.
+
+Each hexagon is the tile's exact top face (`isoTopPoints`) with UVs taken from
+world position against the mask rect, so the fragment shader sees the same
+inputs it saw on the quad. Corners are computed from integer lattice
+coordinates, so neighbours share bit-identical vertices: no cracks, and no
+margin to overdraw, which matters because the blend is not idempotent. The
+mesh is rebuilt with each mask bake, in reused buffers; the cost scales with the hex count: ~0.3 ms in settlement view, ~5 ms for ~40k hexes on a world map zoomed far out. World mode uses the same rule; there the sea covers most of
+the viewport, so the mesh is simply large.
 
 ---
 
@@ -681,26 +717,18 @@ On a GPU a blended full-screen quad is a fraction of a millisecond, so this is a
 software-rasteriser figure and not a shipping one. The only lever with the right
 magnitude is *fewer fragments*.
 
-**And the obvious way to get them does not work here — measured, not assumed.**
-Covering the water with geometry instead of the viewport (a coarse grid over the
-mask region, emitting only the cells that hold water) is exactly the right shape
-of fix: those land fragments discard today, so dropping their cells changes
-nothing on screen. Built and measured, at one tile per cell, it dropped **2-3% of
-cells** — 640 of 660, 351 of 357 — and moved the frame by nothing.
+**Covering the water with geometry instead of the viewport does pay, when the cover is hex-exact.** An earlier attempt used a
+coarse grid over the mask region (one tile per cell) and dropped a cell only when it and all eight neighbours were pure land. That
+kept a ring one tile wide around every coastline, so the saving was the land's *area minus its perimeter* — and this game's islands
+are about six to eight tiles across, which is nearly all perimeter. It dropped **2-3% of cells** — 640 of 660, 351 of 357 — and
+moved the frame by nothing.
 
-The reason is the safety margin, and it is structural rather than a tuning
-problem. A cell can only be dropped when it and all eight neighbours are pure
-land, because the foam licks onto the beach and the mask's own filtering reaches
-a texel past the coast. That keeps a ring one tile wide around every coastline,
-so the saving is the land's *area minus its perimeter* — and this game's islands
-are about six to eight tiles across, which is nearly all perimeter. It would pay
-on a continent and does not pay on an archipelago. Finer cells do not rescue it:
-the ring is one cell wide either way, so shrinking cells shrinks the ring and the
-dropped interior together.
-
-What is left, then, is not an optimisation but a choice about the feature: accept
-that the settlement view costs a full-screen blended pass on a software
-rasteriser (free on any GPU), or do not draw water there.
+The shipped mesh (§3.7) is not that attempt. It is the exact top-face hexagon of every sea hex plus **one ring of land hexes**, and
+the ring is as thin as it can be: the foam reaches at most 0.18 tile onto the beach, far less than a hex. Together with moving the
+river flow out of the water shader into its own mesh (§4.4e), measured in settlement view on the Chromium software renderer at
+1280x800: **~700 ms to ~530 ms per frame**. Separately, the tight mesh alone is about -15% and the river split alone about -28%.
+These are software-renderer numbers; on a GPU the full-screen pass was already a fraction of a millisecond (see above), so they
+show where the software renderer's cost went, not a shipping gain.
 
 #### The breakdown is a button now
 
@@ -1090,6 +1118,17 @@ default cartoon bands with faint flow streaks over them (§ Looks below). Covere
 the creek mouth of a bog lake. Not covered: lava streams (`wasted` rivers), frozen rivers, plain bog lakes (§4.4d) and the world
 map (it binds 1x1 textures of zeros). Which way the water runs comes from the tile data and the art; the marks come from the shader.
 
+**Own mesh and shader.** The river marks are not part of the water shader. `RiverFlowMesh` (`riverFlowMesh.ts`, owned by `WaterLayer`
+as `river`) draws them with their own fragment shader (`RIVER_FRAGMENT`, `riverShader.ts`) on a quad over the river flow texture's world
+rect only, as the layer `riverFlow` directly after `water` in `worldLayerOrder`. Why: the river code (the looks, the phase and psi
+lookups) is large, and inside the water shader every water and land pixel of the screen paid for it, although river pixels are a small
+share. In the software renderer, leaving the river call out of the water shader cut the frame time by about 30 %. The river shader reads the water
+mask itself (same texture, with the mask's rect as `uMaskRect`) and draws only where the mask says land, as before; it shares `hash`/`noise`
+(`NOISE_LATTICE_GLSL`) and `fbm` (`WATER_FBM_GLSL`) with the water shader, and runs on the water layer's clock, flags, suppression and
+freeze. The water mesh does not know rivers and does not cover inland river hexes at all (§3.7); only where a river hex touches the sea does it cover that
+hex as shore ring, and there it draws the beach foam within its short land reach, which the river-mouth no-foam field already clears around a mouth.
+The river overlay is drawn over that.
+
 **Water pixels: by colour, at build time.** `build/waterDryMasks.ts` (`buildRiverWaterMasks`, packed by `packMaskAtlas`) serves
 `virtual:river-water-masks`: one half-resolution mask cell per frame, one grey+alpha PNG, the data shape of §4.4b.
 `riverMaskCore.ts` decides per full-resolution pixel: opaque and `b > r + 40 && b >= g`. River and creek water is navy (about
@@ -1207,7 +1246,7 @@ edge), so the lake end of the hex is still.
 - Motion. Dashes ride the fast phase, so they move at the crests' speed by construction. Specks and patches are carried by a
   drift (`riverDrift`, `riverLobes`): two layers of a hashed grid half a cycle apart, each shifted along the flow and faded by a triangle that is
   zero when it resets (a continuous noise field cross-faded this way shows no net motion). Speed in world units per second =
-  `shift * rate / (grid * uRiverScale)`, `RIVER_DRIFT` in `waterShader.ts`; `gain` is the factor the recorded clips needed on top of
+  `shift * rate / (grid * uRiverScale)`, `RIVER_DRIFT` in `riverShader.ts`; `gain` is the factor the recorded clips needed on top of
   the ripples' `0.8 * 12 texels * 1.68` so the visible marks match the crests, checked in `WaterLayer.test.ts`.
 
 **Debug views.** `showRiverFlow` colours the river by the static ripple phase (hue `theta`, brightness the intensity): it shows
@@ -1233,12 +1272,13 @@ sampler2D uWaterMask
 sampler2D uWaterTaint              taint field (§4.4c), single channel
 sampler2D uWaterNoFoam             river-mouth no-foam field, single channel; foam *= 1 - it
 sampler2D uWaterDry                art dry mask (§4.4b), render texture over the mask's rect; alpha is the mask; caustics and foam *= 1 - it
+(river shader, `RIVER_FRAGMENT`, own mesh: the uniforms below up to `uRiverScale`, plus `uWaterMask`, `uMaskRect` (the mask's rect, as `uRiverRect`), `uNearSpan`, `uGroundSquash`, `uTime`)
 sampler2D uRiverFlow               river flow field (§4.4e), render texture over the river cells' own rect; rg cos/sin of the ripple phase, b distance to the bank, a where the hex has flow
 sampler2D uRiverPsi                stream function (§4.4e), same rect and UVs as uRiverFlow; b psi, r g the cell's lane mapping, a where the hex has flow
 vec4  uRiverRect                   the river textures' world rect: (minX, minY, 1 / width, 1 / height)
 float uRiverStyle                  0 ripple arcs, 1 toon strands, 2 cartoon bands, 3 flow streaks, 4 bands + streaks (the default)
 float uRiverStreakMix              style 4: the streaks' alpha over the bands (0.25)
-float uRiverFlowOn, uShowRiverFlow 0/1: the river overlay; debug: colour the river by ripple phase
+float uShowRiverFlow               0/1 debug: colour the river by ripple phase (the river overlay itself is on while its mesh is visible: `riverFlow`)
 float uRiverSpeed, uRiverArc       ripple phase rotation, radians per second; periods the crests lag at the banks (style 0)
 float uRiverAlpha, uRiverScale;  vec3 uRiverColor   overlay opacity; noise cells per world unit; crest colour
 vec3  uTaintShallowColor, uTaintDeepColor, uTaintFoamColor
@@ -1302,10 +1342,10 @@ export interface WaterDebugFlags {
   shorelineFoam: boolean;       // default true
   /** Shader sea body under the world map (§4.1); off → the CSS gradient shows through. */
   seaBody: boolean;             // default true
-  /** The world map's Graphics wave squiggles (waveLayer) — its surface pattern of record. */
+  /** The world map's wave squiggle sprites (waveLayer) — its surface pattern of record. */
   legacyWaveSquiggles: boolean; // default true
   /** Debug: render the water mask's channels instead of water. */
-  showWaterMask: boolean;       // default false
+  showWaterMask: boolean;       // default false; shows only over the hexes the mesh covers (§3.7), not over inland land
   /** The moving marks on river, stream and bog-creek water (§4.4e). */
   riverFlow: boolean;           // default true
   /** Debug: colour river pixels by the static ripple phase (hue) and intensity (brightness). */
@@ -1374,7 +1414,7 @@ export interface WaterDebugTuning {
 ```
 
 `legacyWaveSquiggles` defaults **on**, and it is the world map's surface pattern:
-the squiggles are crisp Graphics strokes on their own layer, which
+the squiggles are sprites of one baked, crisp stroke texture on their own layer, which
 `worldLayerOrder` places *above* the water mesh, so they draw over the shader's
 sea body and foam rather than under them. The two wave systems never
 double-draw — with this on, `WaterLayer.tick` stops the shader drawing its own
@@ -1397,7 +1437,7 @@ navigation, which is the whole reason it exists — see its header).
   are `isLand` true, so no foam appears along a riverbank and no waves appear
   on a river. Correct by construction, and deliberately so — the river water
   itself is painted. The only thing the shader adds to it is the moving ripples
-  of §4.4e, drawn in the land branch of the fragment shader.
+  of §4.4e, drawn by their own mesh over the land (§4.4e).
 - **Coastal water tiles** keep their painted shoreline in the settlement view;
   the shader's foam animates *over* it, anchored to the same coastline,
   because both derive from the same `isCoastalWater`/`isLand` terrain.

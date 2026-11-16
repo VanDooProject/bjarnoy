@@ -5,6 +5,7 @@ import {
   missingPrerequisites,
   nextSlotFreeInSeconds,
   resourceShortfall,
+  resourcesReadyInSeconds,
   slotsNeeded,
   type RingAvailabilityInput,
 } from './ringAvailability';
@@ -26,12 +27,14 @@ function input(overrides: Partial<RingAvailabilityInput> = {}): RingAvailability
 describe('slotsNeeded', () => {
   it('defaults to one slot and honours slotCost', () => {
     expect(slotsNeeded(undefined, 3)).toBe(1);
-    expect(slotsNeeded({ slotCost: 1, occupiesAllSlots: false }, 3)).toBe(1);
-    expect(slotsNeeded({ slotCost: 2, occupiesAllSlots: false }, 3)).toBe(2);
+    expect(slotsNeeded({ slotCost: 1, occupiesMostSlots: false }, 3)).toBe(1);
+    expect(slotsNeeded({ slotCost: 2, occupiesMostSlots: false }, 3)).toBe(2);
   });
 
-  it('takes every slot the settlement has for an occupiesAllSlots level, whatever slotCost says', () => {
-    expect(slotsNeeded({ slotCost: 1, occupiesAllSlots: true }, 4)).toBe(4);
+  it('takes 90 % of the slots (rounded down) for an occupiesMostSlots level, whatever slotCost says', () => {
+    expect(slotsNeeded({ slotCost: 1, occupiesMostSlots: true }, 2)).toBe(1);
+    expect(slotsNeeded({ slotCost: 1, occupiesMostSlots: true }, 4)).toBe(3);
+    expect(slotsNeeded({ slotCost: 1, occupiesMostSlots: true }, 10)).toBe(9);
   });
 });
 
@@ -64,6 +67,40 @@ describe('nextSlotFreeInSeconds', () => {
   it('is null when nothing reports a time', () => {
     expect(nextSlotFreeInSeconds([])).toBeNull();
     expect(nextSlotFreeInSeconds([{ state: 'waiting', completesInSeconds: 10 }])).toBeNull();
+  });
+});
+
+describe('resourcesReadyInSeconds', () => {
+  const rates = { wood: 60, stone: 30, food: 0, iron: 10 };
+  const cap = { wood: 1000, stone: 1000, food: 1000, iron: 1000 };
+
+  it('is null when nothing is short', () => {
+    expect(resourcesReadyInSeconds({}, rates, { wood: 5 }, cap)).toBeNull();
+  });
+
+  it('divides the shortfall by the hourly rate', () => {
+    // 30 wood at 60/h = 30 min
+    expect(resourcesReadyInSeconds({ wood: 30 }, rates, { wood: 100 }, cap)).toBe(1800);
+  });
+
+  it('waits for the slowest short resource', () => {
+    // wood 30 / 60 per h = 1800s; stone 30 / 30 per h = 3600s
+    expect(resourcesReadyInSeconds({ wood: 30, stone: 30 }, rates, { wood: 100, stone: 100 }, cap)).toBe(3600);
+  });
+
+  it('is null when a short resource has no production', () => {
+    expect(resourcesReadyInSeconds({ food: 5 }, rates, { food: 50 }, cap)).toBeNull();
+    expect(resourcesReadyInSeconds({ wood: 5 }, undefined, { wood: 50 }, cap)).toBeNull();
+  });
+
+  it('is null when the cost exceeds the storage cap', () => {
+    expect(resourcesReadyInSeconds({ wood: 5 }, rates, { wood: 2000 }, cap)).toBeNull();
+  });
+
+  it('is carried by computeAvailability only while resources are short', () => {
+    const short = computeAvailability(input({ available: { ...RICH, wood: 70 }, rates, storageCap: cap }));
+    expect(short.resourcesReadyInSeconds).toBe(1800);
+    expect(computeAvailability(input({ rates, storageCap: cap })).resourcesReadyInSeconds).toBeNull();
   });
 });
 

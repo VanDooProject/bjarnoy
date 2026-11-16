@@ -1,6 +1,9 @@
 // See RingMenuComponent.ts for why `expect` comes from here, not `../fixtures`.
 import { expect, type Locator, type Page } from '@playwright/test';
-import { captureCanvas, claimLandfall, foundSettlement, placeGuidedBuildings, waitForMapReady } from '../helpers';
+import { claimLandfall, foundSettlement, placeGuidedBuildings } from '../helpers';
+import { captureCanvas, waitForMapReady } from '../support/render';
+import { hexCenterScreen } from '../support/renderer';
+import { BuildingHudComponent } from './BuildingHudComponent';
 import { RingMenuComponent } from './RingMenuComponent';
 
 export interface HexCoord {
@@ -45,6 +48,13 @@ export interface HexQuery {
    * spec gets back — is unchanged.
    */
   reach?: number;
+  /** A hex no settlement claims (the ring's Send settlers / Land here) instead of one of the realm's own. */
+  unclaimed?: boolean;
+  /**
+   * `true`: only a shoreline hex (land with an open-sea neighbour, where the ring offers Land here); `false`: never one
+   * (the ring offers Send settlers). Unset: either.
+   */
+  shoreline?: boolean;
   /**
    * Of the matching hexes, the one drawn closest to this canvas point rather
    * than the first in scan order — for a spec that needs the ring opened at a
@@ -64,11 +74,9 @@ export interface HexQuery {
  * screen point — which is what `findHex` used to be a copy-pasted
  * `page.evaluate` block for in ten places.
  *
- * The hooks are read through local `window as unknown as {...}` casts rather
- * than a `declare global`: several specs declare their own, mutually
- * inconsistent `Window` augmentations (`fog-drift.spec.ts` and
- * `water-shader.spec.ts` disagree about `__fogDebug`'s shape), and a global
- * one here would collide with them.
+ * The renderer hook is typed once in `globals.d.ts`; `__demoWorld` is declared
+ * there untyped, so each method narrows it to the slice of the store it reads
+ * (`window.__demoWorld() as { model: any; selectedSettlementId: string }`).
  */
 export class SettlementPage {
   readonly canvas: Locator;
@@ -79,6 +87,8 @@ export class SettlementPage {
   /** The onboarding quest tray (QuestTray.vue) shown in the settlement view. */
   readonly questTray: Locator;
   readonly ring: RingMenuComponent;
+  /** The building HUD: markers over the own buildings and its toggle. */
+  readonly hud: BuildingHudComponent;
   /** Design handoff "2a": the animated next-step arrow (GuidancePointer.vue). */
   readonly guidancePointer: Locator;
   /** The guided-onboarding checklist tray (OnboardingChecklist.vue). */
@@ -117,6 +127,7 @@ export class SettlementPage {
     this.statusCard = page.locator('.status-card');
     this.questTray = page.getByTestId('quest-tray');
     this.ring = new RingMenuComponent(page);
+    this.hud = new BuildingHudComponent(page);
     this.guidancePointer = page.getByTestId('guidance-pointer');
     this.checklist = page.getByTestId('onboarding-checklist');
     this.banner = page.getByTestId('onboarding-banner');
@@ -185,25 +196,27 @@ export class SettlementPage {
    */
   findHex(query: HexQuery = {}): Promise<HexTarget> {
     return this.page.evaluate((q) => {
-      const win = window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string };
-        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
-      };
-      const world = win.__demoWorld();
+      const world = window.__demoWorld() as { model: any; selectedSettlementId: string };
       const settlement = world.model.getSettlement(world.selectedSettlementId);
       const radius = q.reach ?? world.model.borderRadius(settlement);
-      const renderer = win.__settlementRenderer();
+      const renderer = window.__settlementRenderer();
       let best: { hex: { q: number; r: number }; screen: { x: number; y: number }; d: number } | null = null;
       for (let dq = -radius; dq <= radius; dq++) {
         for (let dr = -radius; dr <= radius; dr++) {
           if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
           const at = { q: settlement.q + dq, r: settlement.r + dr };
           const tile = world.model.getTile(at.q, at.r);
-          if (tile.ownerId !== world.selectedSettlementId) continue;
+          if (q.unclaimed ? tile.ownerId : tile.ownerId !== world.selectedSettlementId) continue;
           if (tile.buildingType) continue;
           if (q.terrain !== undefined && tile.terrain !== q.terrain) continue;
           if (q.notTerrain !== undefined && tile.terrain === q.notTerrain) continue;
           if (q.coastalWater && !tile.isCoastalWater) continue;
+          if (q.shoreline !== undefined) {
+            const sides = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+            const land = tile.terrain !== 'sea' && tile.terrain !== 'lake';
+            const shore = land && sides.some(([sq, sr]) => world.model.terrainOf(at.q + sq, at.r + sr) === 'sea');
+            if (shore !== q.shoreline) continue;
+          }
           if (q.nearest) {
             const screen = renderer.hexCenterScreen(at);
             const d = Math.hypot(screen.x - q.nearest.x, screen.y - q.nearest.y);
@@ -225,7 +238,7 @@ export class SettlementPage {
         return { hex: best.hex, screen: best.screen };
       }
       throw new Error(
-        `no empty, owned hex matching ${JSON.stringify(q)} found inside the realm — pick a different demo seed`,
+        `no empty ${q.unclaimed ? 'unclaimed' : 'owned'} hex matching ${JSON.stringify(q)} found inside the realm — pick a different demo seed`,
       );
     }, query);
   }
@@ -243,9 +256,7 @@ export class SettlementPage {
    */
   async standTowerTowardCoast(): Promise<number> {
     return this.page.evaluate(() => {
-      const world = (window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
-      }).__demoWorld();
+      const world = window.__demoWorld() as { model: any; selectedSettlementId: string; syncHud: () => void };
       const id = world.selectedSettlementId;
       const settlement = world.model.getSettlement(id);
       const distance = (a: { q: number; r: number }, b: { q: number; r: number }) =>
@@ -280,17 +291,18 @@ export class SettlementPage {
     });
   }
 
+  /** Where a hex is drawn on the canvas right now (canvas px, like `findHex`'s `screen`). */
+  screenOf(hex: HexCoord): Promise<ScreenPoint> {
+    return hexCenterScreen(this.page, hex);
+  }
+
   /** The longhouse's own hex, and where it is on screen. */
   centreHex(): Promise<HexTarget> {
     return this.page.evaluate(() => {
-      const win = window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string };
-        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
-      };
-      const world = win.__demoWorld();
+      const world = window.__demoWorld() as { model: any; selectedSettlementId: string };
       const settlement = world.model.getSettlement(world.selectedSettlementId);
       const at = { q: settlement.q, r: settlement.r };
-      return { hex: at, screen: win.__settlementRenderer().hexCenterScreen(at) };
+      return { hex: at, screen: window.__settlementRenderer().hexCenterScreen(at) };
     });
   }
 
@@ -301,11 +313,24 @@ export class SettlementPage {
     await this.page.mouse.click(box.x + screen.x, box.y + screen.y);
   }
 
+  /**
+   * Sets the camera zoom with one real wheel gesture at the canvas centre (the renderer zooms by `exp(-deltaY * 0.001)`), then
+   * parks the mouse in the canvas corner so no hover grows a marker or hides the tier the zoom gives it.
+   */
+  async zoomTo(target: number): Promise<void> {
+    const box = await this.canvasBox();
+    const centre = await this.canvasCentre();
+    const current = await this.hud.cameraZoom();
+    await this.page.mouse.move(centre.x, centre.y);
+    await this.page.mouse.wheel(0, -Math.log(target / current) * 1000);
+    await expect.poll(() => this.hud.cameraZoom()).toBeCloseTo(target, 1);
+    await this.page.mouse.move(box.x + 5, box.y + 5);
+  }
+
   /** How many buildings this settlement has — the deterministic "did the build land" signal. */
   countBuildings(): Promise<number> {
     return this.page.evaluate(() => {
-      const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
-        .__demoWorld();
+      const world = window.__demoWorld() as { model: any; selectedSettlementId: string };
       return world.model.countBuildings(world.selectedSettlementId) as number;
     });
   }
@@ -314,7 +339,7 @@ export class SettlementPage {
   buildingTypeAt(hex: HexCoord): Promise<string | undefined> {
     return this.page.evaluate(
       (at) => {
-        const world = (window as unknown as { __demoWorld: () => { model: any } }).__demoWorld();
+        const world = window.__demoWorld() as { model: any };
         return world.model.getTile(at.q, at.r).buildingType as string | undefined;
       },
       hex,
@@ -324,8 +349,7 @@ export class SettlementPage {
   /** The longhouse tile's own building level (what an Upgrade actually moves). */
   longhouseBuildingLevel(): Promise<number> {
     return this.page.evaluate(() => {
-      const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
-        .__demoWorld();
+      const world = window.__demoWorld() as { model: any; selectedSettlementId: string };
       const s = world.model.getSettlement(world.selectedSettlementId);
       return world.model.getTile(s.q, s.r).buildingLevel as number;
     });
@@ -338,9 +362,7 @@ export class SettlementPage {
    */
   async setSettlementLevel(level: number): Promise<void> {
     await this.page.evaluate((value) => {
-      const world = (window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
-      }).__demoWorld();
+      const world = window.__demoWorld() as { model: any; selectedSettlementId: string; syncHud: () => void };
       const settlement = world.model.getSettlement(world.selectedSettlementId);
       settlement.level = value;
       // Border radius grows with level (WorldModel.borderRadius) — re-claim
@@ -364,9 +386,7 @@ export class SettlementPage {
    */
   async standBuildings(buildings: { type: string; level: number }[]): Promise<void> {
     await this.page.evaluate((wanted) => {
-      const world = (window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
-      }).__demoWorld();
+      const world = window.__demoWorld() as { model: any; selectedSettlementId: string; syncHud: () => void };
       const settlement = world.model.getSettlement(world.selectedSettlementId);
       const radius = world.model.borderRadius(settlement);
       const free: { q: number; r: number }[] = [];
@@ -394,9 +414,7 @@ export class SettlementPage {
   /** Sets the settlement's stock outright — for the affordability gates. */
   async setResources(resources: { wood: number; stone: number; food: number; iron: number }): Promise<void> {
     await this.page.evaluate((r) => {
-      const world = (window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
-      }).__demoWorld();
+      const world = window.__demoWorld() as { model: any; selectedSettlementId: string; syncHud: () => void };
       world.model.getSettlement(world.selectedSettlementId).resources = r;
       world.syncHud();
     }, resources);
@@ -411,20 +429,26 @@ export class SettlementPage {
    */
   async setStorageCaps(caps: { wood: number; stone: number; food: number; iron: number }): Promise<void> {
     await this.page.evaluate((c) => {
-      const world = (window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
-      }).__demoWorld();
+      const world = window.__demoWorld() as { model: any; selectedSettlementId: string; syncHud: () => void };
       world.model.getSettlement(world.selectedSettlementId).capacity = c;
       world.syncHud();
     }, caps);
+  }
+
+  /**
+   * Funds the settlement for a late building: raises the storage caps and fills the stock to `amount` of wood, stone and food
+   * (stock is clamped to capacity, so the cap goes first).
+   */
+  async fund(amount: number): Promise<void> {
+    await this.setStorageCaps({ wood: amount, stone: amount, food: amount, iron: amount });
+    await this.setResources({ wood: amount, stone: amount, food: amount, iron: 0 });
   }
 
   /** The HUD's current resource read-out. */
   hudResources(): Promise<{ wood: number; iron: number }> {
     return this.page.evaluate(
       () =>
-        (window as unknown as { __demoWorld: () => { hud: { resources: { wood: number; iron: number } } } })
-          .__demoWorld().hud.resources,
+        (window.__demoWorld() as { hud: { resources: { wood: number; iron: number } } }).hud.resources,
     );
   }
 

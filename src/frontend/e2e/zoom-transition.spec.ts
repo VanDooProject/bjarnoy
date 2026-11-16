@@ -2,7 +2,9 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { WorldMapPage } from './pages';
-import { clickHudMenuEntry, gotoWorldMap, waitForMapReady } from './helpers';
+import { clickHudMenuEntry, gotoWorldMap } from './helpers';
+import { waitForMapReady } from './support/render';
+import { cameraZoom } from './support/renderer';
 import { DEFAULT_ENTER_SETTLEMENT_ZOOM } from '../src/lib/map/zoomTransition';
 
 // docs/design/zoom-transition.md: a wheel/pinch zoom crossing a threshold
@@ -18,13 +20,6 @@ import { DEFAULT_ENTER_SETTLEMENT_ZOOM } from '../src/lib/map/zoomTransition';
 // navigation here that needs to stay founded uses a real client-side click
 // (HudNav), never `page.goto`, for the same reason gotoWorldMap now does
 // (see helpers.ts).
-async function cameraZoom(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const win = window as unknown as { __settlementRenderer?: () => { cameraZoom: number } };
-    return win.__settlementRenderer!().cameraZoom;
-  });
-}
-
 async function clickNav(page: Page, label: string): Promise<void> {
   await page.locator('.hud-nav a.link', { hasText: label }).click();
 }
@@ -37,7 +32,7 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     const world = await WorldMapPage.open(page);
     await world.moveTo(await world.centre());
 
-    await expect(page).toHaveURL(/\/settlement#world$/);
+    await expect(page).toHaveURL(/\/settlement#world(&.*)?$/);
     const zoomBefore = await cameraZoom(page);
 
     // Zoom in until the enter-settlement threshold is crossed (the shipped
@@ -69,7 +64,7 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
       await page.waitForTimeout(15);
       if (page.url().includes('#world')) break;
     }
-    await expect(page).toHaveURL(/\/settlement#world$/, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/settlement#world(&.*)?$/, { timeout: 10_000 });
 
     const zoomAfterOut = await cameraZoom(page);
     expect(zoomAfterOut).toBeLessThan(zoomAfterIn);
@@ -124,7 +119,30 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     // (enabled) transition would react to...
     expect(await cameraZoom(page)).toBeGreaterThan(DEFAULT_ENTER_SETTLEMENT_ZOOM);
     // ...and yet, with the panel's checkbox unchecked, no transition fired.
-    await expect(page).toHaveURL(/\/settlement\?debug=1#world$/);
+    await expect(page).toHaveURL(/\/settlement\?debug=1#world(&.*)?$/);
+  });
+
+  test('opening Reports from the world map keeps the world map behind the modal', async ({ page }) => {
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
+    const world = await WorldMapPage.open(page);
+    const rendererMode = () =>
+      page.evaluate(() => {
+        // `options` is private in TS; read at runtime only, as a test probe (typed in globals.d.ts).
+        return window.__settlementRenderer().options.mode;
+      });
+    expect(await rendererMode()).toBe('world');
+
+    await clickHudMenuEntry(page, 'Reports');
+    await expect(page).toHaveURL(/\/reports$/);
+    await expect(page.getByTestId('reports-modal')).toBeVisible();
+    // Give a wrong mode switch the frames it would need to happen.
+    await page.waitForTimeout(500);
+    expect(await rendererMode()).toBe('world');
+    await expect(world.canvas).toHaveCount(1);
+
+    await page.keyboard.press('Escape');
+    await expect(page).toHaveURL(/\/settlement#world(&.*)?$/);
+    expect(await rendererMode()).toBe('world');
   });
 
   test('leaving both map routes tears down the renderer instead of leaking a second canvas', async ({ page }) => {

@@ -20,6 +20,12 @@ describe('apiErrors', () => {
     }
   });
 
+  it('shows the rate-limit text for a 429 from the route-planning endpoints', () => {
+    const err = new ApiError(429, { detail: 'limited', rejection: 'RouteRateLimited' });
+    expect(rejectionCodeOf(err)).toBe('RouteRateLimited');
+    expect(apiErrorMessage(err, 'fallback text')).toBe(apiErrorsEn.rejections.RouteRateLimited);
+  });
+
   it('reads the rejection code off an ApiError problem', () => {
     expect(rejectionCodeOf(apiError('NotEnoughResources'))).toBe('NotEnoughResources');
   });

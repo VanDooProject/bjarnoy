@@ -1,5 +1,4 @@
 {
-  "backToList": "← Berichte",
   "demoModeHint": "Berichte benötigen das echte Backend und sind im Demo-Modus nicht verfügbar.",
   "noSettlement": "Gründe zuerst eine Siedlung, um Berichte zu erhalten.",
   "trade": {
@@ -16,9 +15,20 @@
     "battle": "Kampf",
     "field": "Feldschlacht",
     "trade": "Handel",
-    "camp": "Lager"
+    "camp": "Lager",
+    "army": "Armeen"
   },
   "noReports": "Noch keine Berichte.",
   "simulatorHint": "Willst du einen Kampf testen, ohne echte Truppen zu riskieren?",
-  "simulatorLink": "Kampfsimulator ausprobieren →"
+  "simulatorLink": "Kampfsimulator ausprobieren →",
+  "army": {
+    "kind": {
+      "stuck": "Armee steckt fest",
+      "starved": "Armee verhungert"
+    },
+    "stuck": "Armee steckt fest: Eine Mauer versperrt den Weg. Sie hat bei {hex} angehalten.",
+    "starved": "Armee bei {hex} verhungert. Ihr ging die Nahrung aus, und sie fand keinen Weg nach Hause.",
+    "lost": "Verlorene Truppen",
+    "inArmy": "Truppen der Armee"
+  }
 }

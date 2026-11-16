@@ -86,14 +86,14 @@ public sealed class CutOffLandCheck : IWorldReviewCheck
 
         walkableCount = walkable.Count;
 
-        // Start from every walkable hex on the open sea (a bog lake, pocket lakes included, is not a shore) and every landing spot.
+        // Start from every walkable hex on the open sea (a bog lake or inland lake is not a shore) and every landing spot.
         var reached = new HashSet<HexCoord>();
         var stack = new Stack<HexCoord>();
         foreach (var coord in walkable)
         {
             foreach (var n in coord.Neighbours())
             {
-                if (!island.Land.ContainsKey(n) && !island.BogLakes.Contains(n))
+                if (!island.Land.ContainsKey(n) && !island.BogLakes.Contains(n) && !island.InlandLakes.Contains(n))
                 {
                     if (reached.Add(coord))
                     {

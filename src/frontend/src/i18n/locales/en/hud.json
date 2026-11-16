@@ -1,4 +1,20 @@
 {
+  "focusHome": "Back to your settlement",
+  "settlementMenu": {
+    "toggle": "Settlement menu",
+    "goTo": "Go to {name}",
+    "rename": "Rename…",
+    "realms": "Your realms",
+    "longhouse": "Longhouse {level}"
+  },
+  "settlementRename": {
+    "label": "Settlement name",
+    "tooShort": "At least {min} characters",
+    "tooLong": "At most {max} characters",
+    "failed": "The settlement could not be renamed.",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
   "nav": {
     "settlement": "Settlement",
     "leaderboards": "Leaderboards",
@@ -32,7 +48,7 @@
     "toggle": "Show more"
   },
   "realmPanel": {
-    "levelHexesShort": "Lv {level} · {count} hexes"
+    "levelShort": "Lv {level}"
   },
   "hoverTooltip": {
     "level": "LEVEL {level}",
@@ -93,7 +109,13 @@
   },
   "ringMenu": {
     "shrineLimitLock": "Your realm already has a shrine",
-    "storageHouseLock": "Needs {count} Storehouse at level {level} | Needs {count} Storehouses at level {level}",
+    "greatStorehouseLock": "Needs {count} Storehouse at level {level} | Needs {count} Storehouses at level {level}",
+    "occupiedLock": {
+      "giant": "Occupied by a giant landmark",
+      "camp": "Wild beasts hold this hex: clear their camp first",
+      "fenrirBrood": "Fenrir's brood always regrows: nothing can be built here",
+      "endgameSite": "An Utgard wall or a Jötunn watchtower stands here"
+    },
     "palisadeLock": {
       "branch": "A wall never branches: this hex would get three wall neighbours",
       "gateNotStraight": "A gate only stands between two opposite wall hexes, in a straight wall",
@@ -101,6 +123,9 @@
       "seaEnd": "The sea end needs exactly one land wall beside it",
       "occupied": "A wall already stands here",
       "terrain": "A wall can't stand on this terrain"
+    },
+    "riverLock": {
+      "tooCurved": "This stretch of river bends too much: it needs a straighter river piece"
     },
     "bridgeLock": {
       "notWide": "This river is no wide river: armies already wade across it",
@@ -122,27 +147,26 @@
       "combatNotImplemented": "Combat is not implemented yet",
       "landHere": "Land here",
       "sendSettlers": "Send settlers",
-      "noSettlersYet": "You have no settlers available yet",
+      "foundNeedsSettlers": "{have} / {need} settlers at home",
+      "foundNeedsRenown": "Renown {total} / {required}",
+      "foundRenownUnknown": "Checking your renown…",
+      "setUpCamp": "Set up camp",
+      "campNeedsBuilders": "{have} / {need} camp builders at home",
       "sendArmyHere": "Send army here",
       "attack": "Attack",
-      "support": "Support",
-      "noUnitsAtHome": "No units at home",
       "upgrade": "Upgrade",
       "notEnough": "Needs {resources}",
       "raze": "Raze",
       "cantRazeLonghouse": "Can't raze the longhouse",
-      "notWiredYet": "Not wired to the backend yet",
       "trainUnits": "Train units",
       "feasts": "Feasts",
       "build": "Build",
-      "giantOccupied": "Occupied by a giant landmark",
       "hunt": "Hunt",
-      "campOccupied": "Occupied by wild beasts",
       "maxLevel": "Max level",
-      "noLandUnitsAtHome": "No land units at home",
-      "noShipsAtHome": "No ships at home",
       "siege": "Siege",
-      "noRamAtHome": "Needs a battering ram at home"
+      "noRamAtHome": "Needs a battering ram at home",
+      "hexBusy": "This hex already has an order",
+      "storageTooSmall": "Storage too small"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "LV {level} · HEX {q}, {r}",
@@ -156,23 +180,36 @@
       "upgradeSub": "{building} · Level {from} → {to}",
       "givesTotal": "{amount} total",
       "needResources": "Need {resources}",
+      "needResourcesIn": "Need {resources} · enough in {time}",
       "needSlots": "Needs {needed} build slot · {free} of {total} free | Needs {needed} build slots · {free} of {total} free",
       "needSlotsNext": "Needs {needed} build slot · {free} of {total} free · next free in {time} | Needs {needed} build slots · {free} of {total} free · next free in {time}",
       "willQueue": "Will queue behind current builds ({waiting} of {max} waiting)",
       "queueFull": "The waiting queue is full ({waiting} of {max})",
       "badgeNoResources": "Not enough resources",
       "badgeNoSlot": "No free build slot",
-      "requiresBuilding": "Requires {building} level {level}"
+      "requiresBuilding": "Requires {building} level {level}",
+      "razeTitle": "Raze to level {level}",
+      "razeTitleRemove": "Tear down",
+      "razeSubRemove": "{building} · Level 1 → gone",
+      "razeBadge": "CAN BE RAZED",
+      "campTitle": "Set up a beach camp",
+      "campSub": "Two camp builders set it up",
+      "campBadge": "CAMP CAN GO HERE"
     },
     "tap": {
       "build": "Tap {name} again to build",
-      "upgrade": "Tap {name} again to upgrade"
+      "upgrade": "Tap {name} again to upgrade",
+      "raze": "Tap {name} again to raze"
     },
     "errors": {
+      "couldNotSwitchRealm": "Could not switch to that realm.",
       "couldNotQueueBuild": "Could not queue that build.",
-      "couldNotQueueUpgrade": "Could not queue that upgrade."
+      "couldNotQueueUpgrade": "Could not queue that upgrade.",
+      "couldNotQueueRaze": "Could not queue that raze."
     },
-    "towerCampWarning": "Wild beasts will burn this tower unless an army stands guard on it."
+    "towerCampWarning": "Wild beasts will burn this tower unless an army stands guard on it.",
+    "razeTime": "Raze time",
+    "refund": "Refund"
   },
   "buildQueue": {
     "title": "Construction",
@@ -182,7 +219,9 @@
     "hexSubtext": "hex {q}-{r}",
     "cancel": "✕",
     "cancelError": "Could not cancel the order.",
-    "reservedFooter": "Reserved for queued construction: {wood}w {stone}b {food}f {iron}i"
+    "reservedFooter": "Reserved for queued construction: {wood}w {stone}b {food}f {iron}i",
+    "razeOrderName": "Razing {name} → {level}",
+    "razeRemoveOrderName": "Tearing down {name}"
   },
   "trainingQueue": {
     "title": "Training",
@@ -198,7 +237,13 @@
     "sendHome": "Send home",
     "sendingHome": "Sending home…",
     "sendHomeError": "Couldn't send the army home.",
-    "unknownSettlement": "Unknown settlement"
+    "unknownSettlement": "Unknown settlement",
+    "upkeep": "Upkeep",
+    "upkeepPerHour": "−{amount}/h",
+    "foodPerHour": "{amount}/h",
+    "foodRunsOut": "Food runs out in {time}",
+    "showRates": "Tap for food per unit type",
+    "hideRates": "Tap to hide food per unit type"
   },
   "queueDrawer": {
     "title": "Queues",
@@ -230,15 +275,7 @@
     "slotHere": "Slot here",
     "slotRuneError": "Could not slot that rune — it may already be slotted, or this shrine has no free slot.",
     "unslotRuneError": "Could not unslot that rune.",
-    "queuedNote": "Queued — waiting for a construction slot.",
-    "upgradeCost": "Upgrade cost",
     "notEnoughResources": "Not enough resources available (some may be reserved for queued construction).",
-    "premiumRequired": "Every construction slot is busy, and this account has no waiting queue to fall back on — that's a {premium} feature.",
-    "premium": "Premium",
-    "queuing": "Queuing…",
-    "noFreeSlotPremium": "No free slot — Premium required",
-    "queueBuild": "Queue build",
-    "upgradeToLevel": "Upgrade to level {level}",
     "feastTitle": "Feast",
     "feastDesc": "Turn surplus wood, brick and food into renown. It is paid up front and the renown arrives when the feast ends.",
     "feastCost": "Cost",
@@ -279,33 +316,40 @@
     "demoNote": "Training requires the live backend and isn't wired up in demo mode yet.",
     "reservedNote": "{amount} resources reserved for queued construction.",
     "attackDefense": "Atk {attack} · Def {defense}",
-    "requiresCoastal": "requires a coastal settlement",
-    "requiresLonghouse": "requires longhouse {level}",
-    "requiresUnit": "and {unit}",
+    "needBuildingLevel": "{building} {required} (now {current})",
+    "needLonghouse": "Longhouse {required} (now {current})",
+    "needUnit": "{unit} unlocked",
+    "needCoast": "Coast",
+    "needs": "Needs",
+    "quantity": "Amount of {unit}",
+    "fewer": "Fewer",
+    "more": "More",
+    "minus": "−",
+    "plus": "+",
+    "max": "Max",
+    "countOfMax": "/ {max}",
+    "trainOrders": "Train {count} order | Train {count} orders",
+    "pickUnits": "Pick units to train",
+    "footerOrders": "{count} order · {free} of {max} slots free | {count} orders · {free} of {max} slots free",
+    "tooManyOrders": "Not enough free slots for {count} orders here.",
+    "cantAfford": "Not enough resources for this.",
     "training": "Training…",
-    "train": "Train",
-    "trainingFailed": "Training failed."
-  },
-  "expansionPanel": {
-    "title": "Expansion",
-    "renown": "Renown {total} / {required}",
-    "settlement": "Settlement",
-    "settlersInGarrison": "Settlers in garrison",
-    "trainSettlers": "Train 5 settlers",
-    "canFoundAnother": "Can found another settlement",
-    "yes": "Yes",
-    "notYet": "Not yet",
-    "targetHex": "Target hex",
-    "provisions": "Provisions (max {max})",
-    "foundHere": "Found settlement here",
-    "settlerConvoy": "Settler convoy",
-    "recall": "Recall",
-    "retarget": "Retarget",
-    "confirm": "Confirm",
     "trainingFailed": "Training failed.",
-    "dispatchFailed": "Dispatch failed.",
-    "recallFailed": "Recall failed.",
-    "retargetFailed": "Retarget failed."
+    "queueTitle": "Training here",
+    "queueSlots": "{used} of {max} slots used",
+    "queueEmpty": "Nothing in training here.",
+    "queueNow": "Training",
+    "cancelOrder": "Cancel order",
+    "cancelAsk": "Cancel {count}× {unit}?",
+    "cancelRefund": "You get back {amount} (50 %).",
+    "cancelKept": "{count} already trained stay.",
+    "cancelNothing": "Nothing is refunded.",
+    "cancelConfirm": "Cancel order",
+    "cancelKeep": "Keep",
+    "cancelFailed": "Couldn't cancel the order.",
+    "ladderTitle": "Unlocks",
+    "ladderLevel": "Level {level}",
+    "ladderNow": "now"
   },
   "battleReport": {
     "buildings": {
@@ -319,7 +363,10 @@
       "reindeerherder": "Reindeer herder",
       "pumpkinfarm": "Pumpkin farm",
       "palisade": "Palisade",
-      "palisadegate": "Palisade gate"
+      "palisadegate": "Palisade gate",
+      "harbour": "Harbour",
+      "shipyard": "Shipyard",
+      "shrineofnjord": "Shrine of Njörd"
     },
     "missionAttack": "Attack",
     "missionRaid": "Raid",
@@ -338,12 +385,22 @@
     "unit": "Unit",
     "sent": "Sent",
     "lost": "Lost",
+    "volleyPower": "Volley power",
+    "lostVolley": "Lost (volley)",
+    "lostFight": "Lost (fight)",
     "survived": "Survived",
     "noStacksRecorded": "No stacks recorded.",
     "lootTaken": "Loot taken",
     "settlementRazed": "Settlement razed",
     "siege": "Siege",
-    "hexCoord": "Hex ({q}, {r})"
+    "hexCoord": "Hex ({q}, {r})",
+    "shipFight": "Ship fight",
+    "landFight": "Land fight",
+    "noLandFight": "No land fight was fought.",
+    "drowned": "Drowned",
+    "fireShips": "Fire craft",
+    "fireShipsBurned": "{n} fire craft burned",
+    "summaryDrowned": "{n} drowned"
   },
   "fieldBattleReport": {
     "title": "Field battle",
@@ -360,7 +417,10 @@
     "summaryLost": "lost, {n} lost",
     "summaryTied": "tied, {n} lost",
     "summaryLooted": "{n} looted",
-    "hexCoord": "Hex ({q}, {r})"
+    "hexCoord": "Hex ({q}, {r})",
+    "showOnMap": "Show on map",
+    "location": "Location",
+    "unknownOpponent": "Unknown"
   },
   "armyStatus": {
     "arriving": "Arriving",
@@ -368,23 +428,44 @@
     "supportingNamed": "Supporting {name}",
     "supporting": "Supporting",
     "returning": "Returning",
+    "standingAt": "Standing at ({q}, {r})",
+    "headsHomeIn": "heads home in {eta}",
+    "waitingToGather": "Waiting at ({q}, {r}) for the other groups",
+    "movesOnIn": "moves on in {eta}",
     "inTransit": "In transit",
-    "hunting": "Hunting"
+    "hunting": "Hunting",
+    "cannotGetHome": "Cannot get home",
+    "starvesIn": "starves in {eta}",
+    "buildingCamp": "Building the camp, ready at {time}",
+    "arrivesIn": "arrives in {eta}",
+    "homeIn": "home in {eta}",
+    "campReadyIn": "camp ready in {eta}",
+    "campReady": "Camp ready",
+    "movingOn": "Moving on"
+  },
+  "garrisonSpots": {
+    "longhouse": "Longhouse",
+    "tower": "Tower",
+    "dock": "Harbour or Shipyard",
+    "beachcamp": "Beach camp",
+    "from": "from {spots}"
   },
   "armyPanel": {
     "title": "Armies",
     "demoNote": "Dispatching armies requires the live backend and isn't wired up in demo mode yet.",
     "noArmies": "No armies on the road.",
+    "withoutHome": "Without home",
     "dispatchArmy": "Dispatch army",
     "premiumRedirectTitle": "Premium required to redirect an army that is still travelling",
     "appendGoal": "Append goal",
     "moveOn": "Move on",
     "recalling": "Recalling…",
+    "recallFailed": "Recall failed.",
     "recall": "Recall",
     "fieldOrderInstructions": "Click hexes on the map to plot where this army should go next — the last click is the new destination. {count} {hexWord} plotted.",
     "hexWord": "hex | hexes",
     "freeAccountWaypoints": "Free with the account: one destination, no stops along the way.",
-    "premiumWaypointsNeeded": "is needed to plot extra waypoints.",
+    "premiumWaypointsNeeded": "is needed to plot extra waypoints, up to 10.",
     "premium": "Premium",
     "dragPinHint": "Drag a pin on the map to move a waypoint.",
     "destinationTag": "destination",
@@ -394,6 +475,8 @@
     "cancel": "Cancel",
     "sending": "Sending…",
     "confirmOrder": "Confirm order",
+    "campInstructions": "The last hex of the route is where the beach camp is set up. Two camp builders go, and you can add ships and escorts. It costs {cost} and takes {time} to build once the army is there.",
+    "foundInstructions": "The last hex of the route is where the settlement is founded. Five settlers go, and you can add ships and escorts. With ships the convoy sails and lands on the last hex.",
     "dispatchInstructions": "Click hexes on the map to plot a route — the last click is the destination. {count} {hexWord} plotted.",
     "targetInstructions": "Choose a settlement to {mission}, then optionally click hexes on the map to plot a route there. {count} {waypointWord} plotted.",
     "waypointWord": "waypoint | waypoints",
@@ -421,6 +504,43 @@
     "dispatching": "Dispatching…",
     "confirmDispatch": "Confirm dispatch"
   },
+  "armyDetail": {
+    "showOnMap": "Show on map",
+    "back": "Back to armies",
+    "foodHeading": "Food",
+    "spare": "Spare",
+    "wayHome": "Way home",
+    "food": "food",
+    "perHour": "per hour",
+    "events": {
+      "left": "Left home",
+      "arrives": "Arrives at ({q}, {r})",
+      "arrived": "Arrived at ({q}, {r})",
+      "now": "now",
+      "turnsHome": "Turns home by itself",
+      "turnedHome": "Turned home",
+      "home": "Home",
+      "starves": "Food runs out",
+      "movesOn": "Moves on",
+      "campReady": "Camp ready"
+    },
+    "now": {
+      "marching": "On the way",
+      "standing": "Standing, eating spare food",
+      "returning": "On the way home",
+      "stranded": "Cannot get home",
+      "waiting": "Waiting for the other groups",
+      "camp": "Building the camp"
+    },
+    "next": {
+      "arrives": "Arrives {time}",
+      "turnsHome": "Turns home {time}",
+      "home": "Home {time}",
+      "starves": "Food runs out {time}",
+      "movesOn": "Moves on {time}",
+      "campReady": "Camp ready {time}"
+    }
+  },
   "dispatchSheet": {
     "cancel": "Cancel dispatch",
     "expand": "Expand dispatch sheet",
@@ -437,8 +557,41 @@
     "decrement": "−",
     "increment": "+"
   },
+  "sendPicker": {
+    "title": "{mission} → {target}",
+    "titleOwnRealm": "Send army → {target}",
+    "close": "Close",
+    "hex": "Hex ({q}, {r})",
+    "units": "{count} unit | {count} units",
+    "homeUnits": "Home · {count} unit | Home · {count} units",
+    "homeEmpty": "Home · no units",
+    "armyStandingAt": "Army · {count} unit at ({q}, {r}) | Army · {count} units at ({q}, {r})",
+    "armyMarchingTo": "Army · {count} unit marching to ({q}, {r}) | Army · {count} units marching to ({q}, {r})",
+    "etaMinutes": "{minutes} min",
+    "etaHours": "{hours} h {minutes} min",
+    "wholeArmy": "Whole army moves.",
+    "splits": "Splits: {go} go, {stay} keep standing.",
+    "pickOne": "Pick at least one unit.",
+    "reasons": {
+      "noUnitsAtHome": "No units at home",
+      "noLandUnits": "No land units",
+      "noShips": "No ships",
+      "supportingNamed": "Supporting {name}, recall it first",
+      "supporting": "Supporting, recall it first",
+      "returning": "Returning home",
+      "notOrderable": "On a mission, can't take new orders",
+      "premium": "Premium: redirect while marching",
+      "unreachable": "Can't get there",
+      "noFood": "Not enough food for the way home",
+      "checking": "Checking the route…"
+    }
+  },
   "tradeReport": {
     "summary": "Gave {gaveAmount} {gave} for {gotAmount} {got}"
+  },
+  "debugStack": {
+    "handle": "debug",
+    "handleTitle": "Drag to move, double-click to reset"
   },
   "fpsMeter": {
     "title": "Frame rate",
@@ -446,6 +599,8 @@
     "msPerFrame": "{n} ms/frame",
     "worstFrame": "Worst frame (last {seconds} s)",
     "ms": "{n} ms",
+    "average": "Average (last {n} frames)",
+    "fpsValue": "{n} fps",
     "ago": "{n} s ago",
     "stutters": "Frames over {threshold} ms",
     "sparkLabel": "Last {n} frame intervals",
@@ -510,5 +665,43 @@
     "towerBurned": "The tower at ({q}, {r}) burned down.",
     "towerHeld": "The tower at ({q}, {r}) held.",
     "summary": "{title}: {lost} units lost, {beasts} beasts slain, {loot} loot"
+  },
+  "buildingHud": {
+    "upgrade": "Upgrade",
+    "needsLonghouse": "Longhouse {level}",
+    "needsBuilding": "{building} {level}",
+    "storage": "Storage too small",
+    "max": "Max",
+    "more": "+{n} more",
+    "moreShort": "+{n}",
+    "perHour": "/h",
+    "each": "each",
+    "feast": "Feast",
+    "duration": {
+      "hoursMinutes": "{hours}h {minutes}m",
+      "minutes": "{minutes}m"
+    },
+    "markerLabel": "{building}, level {level}",
+    "toggle": {
+      "label": "Building info (H)",
+      "title": "Show or hide building info (H)"
+    }
+  },
+  "panelColumn": {
+    "toggle": "Show or hide {panel}",
+    "constructionEmpty": "Nothing under construction",
+    "withCount": "{panel} ({count})",
+    "collapse": "Collapse {panel}",
+    "expand": "Expand {panel}"
+  },
+  "quickUpgrade": {
+    "chipTitle": "Quick upgrade",
+    "chipHintTouch": "Tap a building · hold the map to stop",
+    "chipHintMouse": "Click a building · Esc to stop",
+    "stop": "Stop quick upgrade",
+    "holdHint": "Hold to keep upgrading: one tap per building",
+    "premiumHold": "Premium: hold to upgrade with one tap per building",
+    "shiftHint": "Shift+click: upgrade to level {level}",
+    "premiumShift": "Premium: Shift+click upgrades"
   }
 }

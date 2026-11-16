@@ -15,7 +15,8 @@
     "shrineofnjord": "Shrine of Njörd",
     "greatstorehouse": "Great Storehouse",
     "archeryrange": "Archery Range",
-    "dockyard": "Dockyard",
+    "harbour": "Harbour",
+    "shipyard": "Shipyard",
     "barracks": "Barracks",
     "sawmill": "Sawmill",
     "meadery": "Meadery",
@@ -32,7 +33,15 @@
     "palisadegate": "Palisade Gate",
     "bridge": "Bridge",
     "siegeworkshop": "Siege workshop",
+    "beachcamp": "Beach camp",
     "reindeerherder": "Reindeer Herder"
+  },
+  "shipGroups": {
+    "scouts": "Scouts",
+    "cargo": "Cargo",
+    "transport": "Transport",
+    "warships": "Warships",
+    "fireCraft": "Fire craft"
   },
   "units": {
     "thrall": "Thrall",
@@ -44,8 +53,16 @@
     "catapult": "Catapult",
     "ram": "Battering ram",
     "karve": "Karve",
-    "longship": "Longship",
-    "settler": "Settler"
+    "faering": "Færing",
+    "byrding": "Byrding",
+    "knarr": "Knarr",
+    "snekkja": "Snekkja",
+    "skeid": "Skeid",
+    "fireraft": "Fire Raft",
+    "firehulk": "Fire Hulk",
+    "settler": "Settler",
+    "campbuilder": "Camp builder",
+    "skirmisher": "Skirmisher"
   },
   "giants": {
     "giantmountain": "Giant mountain",
@@ -76,7 +93,8 @@
     "forest": "Forest",
     "mountain": "Mountain",
     "bog": "Bogland",
-    "lake": "Bog lake"
+    "lake": "Bog lake",
+    "inlandlake": "Inland lake"
   },
   "wastedTerrain": {
     "wasteland": "Wasteland",
@@ -96,6 +114,7 @@
     "support": "Support",
     "raid": "Raid",
     "found": "Found settlement",
+    "setupcamp": "Set up camp",
     "hunt": "Hunt"
   },
   "runes": {

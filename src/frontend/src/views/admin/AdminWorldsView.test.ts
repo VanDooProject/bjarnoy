@@ -38,6 +38,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     startsAt: null,
     joinsClosed: false,
     frozenIslesEnabled: false,
+    renownFollowsSpeed: false,
     hidden: false,
     endbossAt: null,
     endbossTriggeredAt: null,
@@ -367,6 +368,36 @@ describe('AdminWorldsView', () => {
       'world-1',
       expect.objectContaining({ name: 'Asgard', hidden: true }),
     );
+  });
+
+  it('sends the renown-follows-speed flag from the panel checkbox', async () => {
+    const wrapper = await mountView();
+    adminUpdateWorldSettings.mockResolvedValue(world({ renownFollowsSpeed: true }));
+
+    const box = wrapper.find('input#renown-speed-world-1');
+    expect((box.element as HTMLInputElement).checked).toBe(false);
+    await box.setValue(true);
+    await wrapper.find('.actions button').trigger('click');
+    await flushPromises();
+
+    expect(adminUpdateWorldSettings).toHaveBeenCalledWith(
+      'world-1',
+      expect.objectContaining({ renownFollowsSpeed: true }),
+    );
+  });
+
+  it('shows the renown-follows-speed flag as a column of the overview table', async () => {
+    const wrapper = await mountView([
+      world(),
+      world({ id: 'world-2', name: 'Utgard', renownFollowsSpeed: true }),
+    ]);
+
+    const col = wrapper.findAll('thead th').map((th) => th.text()).indexOf('Renown follows speed');
+    expect(col).toBeGreaterThan(-1);
+
+    const [off, on] = wrapper.findAll('tbody tr').map((tr) => tr.findAll('td').map((td) => td.text()));
+    expect(off[col]).toBe('No');
+    expect(on[col]).toBe('Yes');
   });
 
   it('refuses a panel name shorter than three characters without calling the API', async () => {

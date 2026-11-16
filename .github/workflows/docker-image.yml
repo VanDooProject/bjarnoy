@@ -95,7 +95,14 @@ jobs:
       - name: Smoke test the image
         run: |
           set -euo pipefail
+          # Run exactly the image this job built. A pushed tag like `:main` is
+          # shared: a run for the next commit can overwrite it between this
+          # job's push and the pull below, so a push run pins the digest. A
+          # pull request's image is only loaded locally, so its tag is safe.
           image=$(echo "${{ steps.meta.outputs.tags }}" | head -n 1)
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            image="${image%:*}@${{ steps.build.outputs.digest }}"
+          fi
           data=$(mktemp -d)
           chmod 777 "$data"
 
@@ -233,7 +240,7 @@ jobs:
           # object file" while every test on a normal machine passed. A chunk
           # is only encoded when the player has something in reach of it, so
           # found a settlement first and ask for the chunk it stands in.
-          curl -fsS "http://localhost:8080/api/v1/worlds/$world_id/islands" -o /tmp/islands.json
+          curl -fsS --compressed "http://localhost:8080/api/v1/worlds/$world_id/start-positions" -o /tmp/islands.json
           python3 - "$world_id" <<'PY'
           import json, sys
           world_id = sys.argv[1]

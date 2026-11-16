@@ -13,6 +13,7 @@ using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -42,7 +43,7 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
 
     private sealed record Player(SettlementResponse Settlement, AuthResponse Auth);
 
-    private static async Task<Player> FoundAsync(HttpClient client, Guid worldId, IslandResponse island, TileCoordinate plot, string name)
+    private static async Task<Player> FoundAsync(HttpClient client, Guid worldId, FullIslandResponse island, TileCoordinate plot, string name)
     {
         var ownerId = Unique("local-owner-");
         var settlement = await (await client.PostJsonAsync(
@@ -55,12 +56,11 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
         return new Player(settlement, auth);
     }
 
-    private async Task<(HttpClient Client, WorldEntity World, IslandResponse Island, Player Owner, HashSet<HexCoord> Rivers)> SetUpAsync()
+    private async Task<(HttpClient Client, WorldEntity World, FullIslandResponse Island, Player Owner, HashSet<HexCoord> Rivers)> SetUpAsync()
     {
         var client = _factory.CreateClient();
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.Where(i => i.StartPositions.Count > 3).OrderByDescending(i => i.TileCount).First();
         var owner = await FoundAsync(client, world.Id, island, island.StartPositions[0], "Ulf");
         var rivers = island.RiverTiles.Select(t => new HexCoord(t.Q, t.R)).ToHashSet();
@@ -76,7 +76,7 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
         return chunk!.Tiles.ToDictionary(t => new HexCoord(t.Q, t.R), t => t.Terrain);
     }
 
-    private async Task GrantAsync(HttpClient client, params (Guid SettlementId, int Spearmen)[] grants)
+    private async Task GrantAsync(HttpClient client, params (SettlementResponse Settlement, int Spearmen)[] grants)
     {
         var adminName = Unique("admin");
         var admin = await (await client.PostJsonAsync(
@@ -91,10 +91,10 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
         var token = (await (await client.PostJsonAsync(
             "/api/v1/auth/login", new LoginRequest(adminName, "correct-horse-battery"), Ct)).ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
         Authorize(client, token);
-        foreach (var (settlementId, spearmen) in grants)
+        foreach (var (grantee, spearmen) in grants)
         {
             var granted = await client.PostJsonAsync(
-                $"/api/v1/admin/settlements/{settlementId}/garrison", new AdjustGarrisonRequest("spearman", spearmen), Ct);
+                $"/api/v1/admin/settlements/{grantee.Id}/garrison", new AdjustGarrisonRequest("spearman", grantee.Spot(), spearmen), Ct);
             Assert.Equal(HttpStatusCode.OK, granted.StatusCode);
         }
     }
@@ -141,6 +141,10 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
             var longhouse = await db.PlacedBuildings.SingleAsync(b => b.SettlementId == owner.Settlement.Id && b.Type == BuildingType.Longhouse, Ct);
             longhouse.Level = 15;
+            // The late buildings cost more than a fresh settlement can hold: fund it beyond its storage.
+            var entity = await db.Settlements.SingleAsync(x => x.Id == owner.Settlement.Id, Ct);
+            entity.StockWood = entity.StockStone = entity.StockFood = 1_000_000;
+            entity.CapacityWood = entity.CapacityStone = entity.CapacityFood = 1_000_000;
             var towerHex = centre.WithinRadius(2).First(c => c != centre && !line.Contains(c) && c != branch && terrain.TryGetValue(c, out var t) && t is "grass" or "sand");
             db.PlacedBuildings.Add(new PlacedBuildingEntity { SettlementId = owner.Settlement.Id, Q = towerHex.Q, R = towerHex.R, Type = BuildingType.Tower, Level = 5 });
             await db.SaveChangesAsync(Ct);
@@ -232,16 +236,16 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
         // A client of its own: the first one now carries the owner's session.
         using var strangerClient = _factory.CreateClient();
         var stranger = await FoundAsync(strangerClient, world.Id, island, plot, "Egil");
-        await GrantAsync(client, (owner.Settlement.Id, 10), (stranger.Settlement.Id, 10));
+        await GrantAsync(client, (owner.Settlement, 10), (stranger.Settlement, 10));
 
         var ring = target.Neighbours();
 
-        DispatchArmyRequest ToTarget() =>
-            new([new UnitCountRequest("spearman", DispatchedSpearmen)], null, new HexPointRequest(target.Q, target.R), DispatchedProvisions);
+        DispatchArmyRequest ToTarget(Player who) =>
+            new([new(who.Settlement.Spot(), [new UnitCountRequest("spearman", DispatchedSpearmen)])], null, new HexPointRequest(target.Q, target.R), DispatchedProvisions);
         async Task<HttpResponseMessage> DispatchAsync(Player who)
         {
             Authorize(client, who.Auth.AccessToken);
-            return await client.PostJsonAsync($"/api/v1/settlements/{who.Settlement.Id}/armies", ToTarget(), Ct);
+            return await client.PostJsonAsync($"/api/v1/settlements/{who.Settlement.Id}/armies", ToTarget(who), Ct);
         }
 
         // Control: both players reach the target while no wall stands there.

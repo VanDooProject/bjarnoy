@@ -7,34 +7,38 @@
 // desktop panels do — with more than a handful of slots (premium accounts
 // can queue well past 3), a static "N / M" count stops being useful at a
 // glance. Instead it's a small 48px-wide edge tab showing, per non-empty
-// category (build then training), an icon, a count chip when more than one
-// order is queued, the soonest order's remaining time, and a thin progress
+// category (build then training), an icon, the soonest order's remaining time, and a thin progress
 // bar for that soonest order — see soonest()/buildHandleRow/
 // trainingHandleRow below.
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
-import { unitName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
-import GuestList from './GuestList.vue';
+import GarrisonList from './GarrisonList.vue';
 import { hudRailHeightPx } from '../../composables/hudBarHeight';
 import {
   formatCountdownShort,
   useBuildOrders,
   useTrainingOrders,
 } from '../../composables/useQueueOrders';
-import { sortArmyRowsByEta, useArmyRows } from '../../composables/useArmyRows';
+import { groupArmyRowsByHome, sortArmyRowsByEta, useArmyRows } from '../../composables/useArmyRows';
 import { confirmedBuild } from '../../composables/buildFeedback';
 import { motionEnabled } from '../../lib/motion';
-import { peek, popCount, pulseHandle, slideDrawer } from '../../lib/hud/queueMotion';
+import { peek, pulseHandle, slideDrawer } from '../../lib/hud/queueMotion';
 import axeIconUrl from '../../assets/icons/axe.svg?url';
 import swordIconUrl from '../../assets/icons/sword.svg?url';
 import flagIconUrl from '../../assets/icons/flag.svg?url';
+import { useArmyRecall } from '../../composables/useArmyRecall';
+import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
+import ArmyRowItem from './ArmyRowItem.vue';
+import ArmyDetail from './ArmyDetail.vue';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const open = defineModel<boolean>('open', { default: false });
+// A layer while open; closed, its handle and peek hide like HUD while any other layer is open.
+const layer = usePhoneLayer(open);
 const emit = defineEmits<{ select: [coord: { q: number; r: number }]; 'select-army': [armyId: string] }>();
 
 const buildOrders = useBuildOrders();
@@ -63,7 +67,6 @@ function soonest<T extends { remainingSeconds: number | null }>(pool: T[]): T | 
 interface HandleRow {
   category: 'build' | 'train' | 'army';
   icon: string;
-  count: number;
   timeText: string;
   progress: number;
   done: boolean;
@@ -83,7 +86,6 @@ const buildHandleRow = computed<HandleRow | null>(() => {
   return {
     category: 'build',
     icon: axeIconUrl,
-    count: buildOrders.value.length,
     timeText: order ? formatCountdownShort(order.remainingSeconds ?? 0) : '—',
     progress: order?.progress ?? 0,
     done: order?.done ?? false,
@@ -97,7 +99,6 @@ const trainingHandleRow = computed<HandleRow | null>(() => {
   return {
     category: 'train',
     icon: swordIconUrl,
-    count: trainingOrders.value.length,
     timeText: order?.remainingSeconds != null ? formatCountdownShort(order.remainingSeconds) : '—',
     progress: order?.progress ?? 0,
     done: order?.done ?? false,
@@ -115,7 +116,6 @@ const armyHandleRow = computed<HandleRow | null>(() => {
   return {
     category: 'army',
     icon: flagIconUrl,
-    count: sortedArmyRows.value.length,
     timeText: next ? formatCountdownShort((next.etaMs! - Date.now()) / 1000) : '—',
     progress: next?.progress ?? 0,
     done: false,
@@ -127,15 +127,9 @@ const handleRows = computed<HandleRow[]>(() =>
   [buildHandleRow.value, trainingHandleRow.value, armyHandleRow.value].filter((r): r is HandleRow => r !== null),
 );
 
-const garrison = computed(() =>
-  world.hud.garrison
-    .filter((g) => g.count > 0)
-    .map((g) => ({ key: g.unit, label: unitName(g.unit), count: g.count })),
-);
-
-// Issue #40 phase 4 — the guest rows themselves (and their "Send home") are
-// GuestList.vue, shared with TrainingQueuePanel.vue; see its comment for why
-// guests are folded in here rather than getting a separate HUD element.
+// The garrison and guest rows themselves are GarrisonList.vue (shared with TrainingQueuePanel.vue); here
+// only their presence matters, for hasAnything.
+const hasGarrison = computed(() => world.hud.garrison.some((g) => g.count > 0));
 const guestCount = computed(() => world.guestArmies.length);
 
 const reservedTotal = computed(() => {
@@ -149,25 +143,24 @@ const reservedTotal = computed(() => {
 // supporting army (no active ETA) sorts last.
 const armyRows = useArmyRows();
 const sortedArmyRows = computed(() => sortArmyRowsByEta(armyRows.value));
-const recallingId = ref<string | null>(null);
-async function recall(armyId: string) {
-  recallingId.value = armyId;
-  try {
-    await world.recallArmyLive(armyId);
-  } finally {
-    recallingId.value = null;
-  }
-}
+// The player's armies without a home show in every realm's list, under their own heading.
+const armyGroups = computed(() => groupArmyRowsByHome(sortedArmyRows.value, t('hud.armyPanel.withoutHome')));
+const { isRecalling, recall, refusalFor } = useArmyRecall();
 function beginFieldOrder(armyId: string) {
   close();
   world.startFieldOrder(armyId);
 }
-function selectArmy(armyId: string) {
+// A tap on a row selects the army (its route shows on the map) and opens its detail as the drawer's second level; "Show on
+// map" there closes the drawer and has the map focus the army. The level is the army's id, so an army that is gone (home,
+// dead) drops the drawer back to the list on its own.
+const detailArmyId = ref<string | null>(null);
+const detailRow = computed(() => armyRows.value.find((r) => r.id === detailArmyId.value) ?? null);
+function openDetail(armyId: string) {
+  world.selectArmy(armyId);
+  detailArmyId.value = armyId;
+}
+function showOnMap(armyId: string) {
   close();
-  if (world.selectedArmyId === armyId) {
-    world.clearSelectedArmy();
-    return;
-  }
   emit('select-army', armyId);
 }
 
@@ -175,7 +168,7 @@ const hasAnything = computed(
   () =>
     buildOrders.value.length > 0
     || trainingOrders.value.length > 0
-    || garrison.value.length > 0
+    || hasGarrison.value
     || guestCount.value > 0
     || armyRows.value.length > 0,
 );
@@ -198,6 +191,11 @@ function toggle() {
 function close() {
   open.value = false;
 }
+
+// Closed, the drawer opens on the list again.
+watch(open, (isOpen) => {
+  if (!isOpen) detailArmyId.value = null;
+});
 
 // Drag-to-open/close (issue: mobile queue sidebar). Matches the CSS's own
 // dimensions — see the `.queue-drawer`/`.queue-drawer-handle` rules below —
@@ -330,9 +328,9 @@ function onHandleClick(event: MouseEvent) {
 // P2 + P4: after a confirmed build, with the drawer collapsed, a peek panel
 // slides out from behind the handle with the new order ("Farm → 1",
 // "3:00 · queued"), stays 1.5 s and slides back. Only once it has retracted
-// does the handle's count chip pop and the handle give one gold pulse. The
+// does the handle give one gold pulse. The
 // drawer itself stays closed; with it open (or under reduced motion) nothing
-// plays — the handle's own count and times still update.
+// plays — the handle's own times still update.
 const handleEl = ref<HTMLElement | null>(null);
 const peekEl = ref<HTMLElement | null>(null);
 const peekOrder = ref<{ name: string; level: number; time: string | null } | null>(null);
@@ -344,8 +342,6 @@ watch(confirmedBuild, async (event) => {
   peekOrder.value = null;
   await nextTick();
   if (open.value || !handleEl.value) return;
-  const chip = handleEl.value.querySelector('.queue-drawer-handle-count');
-  if (chip) void popCount(chip);
   void pulseHandle(handleEl.value);
 });
 
@@ -391,10 +387,23 @@ function onDrawerLeave(el: Element, done: () => void) {
 
 <template>
   <Transition :css="false" @enter="onDrawerEnter" @leave="onDrawerLeave">
-  <div v-if="hasAnything">
-    <div v-if="open" class="queue-drawer-backdrop" @pointerdown.self="close" />
-    <div class="queue-drawer" :class="{ 'is-open': open, 'is-dragging': dragPx !== null }" :style="rootStyle">
+  <div v-if="hasAnything" data-quick-upgrade-keep>
+    <div v-if="open" v-phone-hidden="layer.hidden.value" class="queue-drawer-backdrop" @pointerdown.self="close" />
+    <div v-phone-hidden="layer.hidden.value" class="queue-drawer" :class="{ 'is-open': open, 'is-dragging': dragPx !== null }" :style="rootStyle">
       <div id="queue-drawer-body" class="queue-drawer-panel" :aria-hidden="!open" :inert="!open">
+        <ArmyDetail
+          v-if="detailRow"
+          :row="detailRow"
+          layout="sheet"
+          :recalling="isRecalling(detailRow.id)"
+          :refusal="refusalFor(detailRow.id)"
+          @back="detailArmyId = null"
+          @show-on-map="showOnMap(detailRow.id)"
+          @field-order="beginFieldOrder(detailRow.id)"
+          @recall="recall(detailRow.id)"
+        />
+
+        <template v-else>
         <div class="queue-drawer-header">
           <span class="status-card-title">{{ t('hud.queueDrawer.title') }}</span>
           <button type="button" class="queue-drawer-close" @click="close">{{ t('hud.queueDrawer.close') }}</button>
@@ -455,61 +464,20 @@ function onDrawerLeave(el: Element, done: () => void) {
               <span class="status-card-title">{{ t('hud.queueDrawer.armies') }}</span>
               <span class="status-card-count">{{ sortedArmyRows.length }}</span>
             </div>
-            <div v-for="row in sortedArmyRows" :key="row.id" class="status-row army-row" :class="{ 'is-selected': row.selected }">
-              <button type="button" class="status-row-click" @click="selectArmy(row.id)">
-                <div class="status-row-top">
-                  <span class="status-row-name">{{ row.composition }}</span>
-                  <span class="status-row-time">{{ row.eta ?? '—' }}</span>
-                </div>
-                <div v-if="row.progress !== null" class="status-progress">
-                  <div class="status-progress-fill" :style="{ width: `${Math.round(row.progress * 100)}%` }" />
-                </div>
-                <div class="status-subtext">
-                  {{ row.status }}<span v-if="row.mission" class="mission-tag"> · {{ row.mission }}</span>
-                </div>
-              </button>
-              <div class="army-row-actions">
-                <button
-                  v-if="row.canFieldOrder"
-                  type="button"
-                  class="cancel-button"
-                  :disabled="row.fieldOrderLocked"
-                  @click.stop="beginFieldOrder(row.id)"
-                >
-                  {{ row.fieldOrderLabel }}
-                </button>
-                <button
-                  v-if="row.canRecall"
-                  type="button"
-                  class="cancel-button recall"
-                  :disabled="recallingId === row.id"
-                  @click.stop="recall(row.id)"
-                >
-                  {{ recallingId === row.id ? t('hud.armyPanel.recalling') : t('hud.armyPanel.recall') }}
-                </button>
-              </div>
+            <template v-for="group in armyGroups" :key="group.key">
+            <div v-if="group.heading" class="army-group-heading" data-testid="army-group-without-home">{{ group.heading }}</div>
+            <div v-for="row in group.rows" :key="row.id" class="army-item" :class="{ 'is-selected': row.selected }" data-testid="army-row">
+              <ArmyRowItem :row="row" touch @click="openDetail(row.id)" />
             </div>
+            </template>
           </template>
 
           <div class="status-card-header" :class="{ 'has-section-above': buildOrders.length || trainingOrders.length || sortedArmyRows.length }">
             <span class="status-card-title">{{ t('hud.trainingQueue.garrison') }}</span>
           </div>
-          <div v-if="garrison.length" class="garrison-grid">
-            <div v-for="g in garrison" :key="g.key" class="garrison-row">
-              <span class="garrison-name">{{ g.label }}</span>
-              <span class="garrison-count">{{ g.count }}</span>
-            </div>
-          </div>
-          <div v-else class="status-subtext">{{ t('hud.trainingQueue.garrisonEmpty') }}</div>
-
-          <template v-if="guestCount">
-            <div class="status-card-header has-section-above">
-              <span class="status-card-title">{{ t('hud.trainingQueue.guests') }}</span>
-              <span class="status-card-count">{{ guestCount }}</span>
-            </div>
-            <GuestList />
-          </template>
+          <GarrisonList />
         </div>
+        </template>
       </div>
 
       <div v-if="peekOrder" ref="peekEl" class="queue-drawer-peek" role="status" data-testid="queue-peek">
@@ -535,7 +503,6 @@ function onDrawerLeave(el: Element, done: () => void) {
         <div v-for="row in handleRows" :key="row.category" class="queue-drawer-handle-row" :class="`is-${row.category}`">
           <span class="queue-drawer-handle-icon-wrap">
             <img :src="row.icon" alt="" aria-hidden="true" class="queue-drawer-handle-icon" />
-            <span v-if="row.count > 1" class="queue-drawer-handle-count">{{ row.count }}</span>
           </span>
           <span class="queue-drawer-handle-time" :class="{ 'is-muted': !row.showProgress }">{{ row.timeText }}</span>
           <div v-if="row.showProgress" class="queue-drawer-handle-progress">
@@ -555,32 +522,11 @@ function onDrawerLeave(el: Element, done: () => void) {
 
 <style scoped>
 /*
- * Reuses the `.status-*` conventions from BuildQueuePanel.vue/
- * TrainingQueuePanel.vue (mirrored, not shared — Vue scoped styles don't
- * leak across components) so the expanded drawer body reads the same as
- * the desktop panels it replaces.
+ * Reuses the `.status-*` conventions of BuildQueuePanel.vue/TrainingQueuePanel.vue so the expanded drawer body reads the same
+ * as the desktop panels it replaces: the card header is shared (style.css), the row rules are mirrored here.
  */
-.status-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--panel-border);
-}
 .status-card-header.has-section-above {
   margin-top: 12px;
-}
-.status-card-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text);
-}
-.status-card-count {
-  font-size: 12px;
-  color: var(--muted);
 }
 .status-row {
   display: flex;
@@ -603,6 +549,8 @@ function onDrawerLeave(el: Element, done: () => void) {
   font: inherit;
   padding: 0;
   cursor: pointer;
+  /* no browser double-tap zoom delay on a tapped row */
+  touch-action: manipulation;
 }
 .status-row-top {
   display: flex;
@@ -670,40 +618,11 @@ function onDrawerLeave(el: Element, done: () => void) {
   opacity: 0.5;
   cursor: default;
 }
-.army-row {
-  flex-direction: column;
-  align-items: stretch;
+.army-item {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
-.army-row.is-selected {
+.army-item.is-selected {
   background: rgba(255, 197, 92, 0.08);
-}
-.mission-tag {
-  color: var(--gold);
-}
-.army-row-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 4px;
-}
-.recall {
-  color: #e08a8a;
-}
-.garrison-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.garrison-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-}
-.garrison-name {
-  color: var(--text);
-}
-.garrison-count {
-  color: var(--gold);
-  font-weight: 600;
 }
 
 /* Drawer chrome
@@ -874,21 +793,6 @@ html[data-hud-motion='reduced'] .queue-drawer {
   width: 14px;
   height: 14px;
   display: block;
-}
-.queue-drawer-handle-count {
-  position: absolute;
-  top: -5px;
-  right: -7px;
-  min-width: 11px;
-  height: 11px;
-  padding: 0 2px;
-  border-radius: 6px;
-  background: var(--gold);
-  color: #1a1a1a;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 11px;
-  text-align: center;
 }
 .queue-drawer-handle-time {
   font-size: 11px;
