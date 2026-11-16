@@ -1258,25 +1258,24 @@ function rootActionList(): RingAction[] {
     // hovered — root actions carry no cost/card), Upgrade needs to say up
     // front whether it's even possible: same disabled+hint pattern already
     // used for Raze/Train/Attack above, not a new affordance.
-    const upgrade = upgradeActionFor(tile);
+    // An order still in the queue (under construction or waiting for a slot) takes Upgrade's place: the hex takes no further
+    // order then (one per hex), and Cancel takes it back.
+    const cancellable = cancellableOrder(world.hud.queue, tile);
     const actions: RingAction[] = [
-      upgrade,
+      cancellable
+        ? {
+            id: 'cancel-build',
+            label: t(
+              cancellable.kind === 'raze'
+                ? 'hud.ringMenu.actions.cancelRaze'
+                : cancellable.targetLevel <= 1
+                  ? 'hud.ringMenu.actions.cancelBuild'
+                  : 'hud.ringMenu.actions.cancelUpgrade',
+            ),
+          }
+        : upgradeActionFor(tile),
       razeActionFor(tile),
     ];
-    // An order still in the queue (under construction or waiting for a slot) can be taken back from the ring.
-    const cancellable = cancellableOrder(world.hud.queue, tile);
-    if (cancellable) {
-      actions.push({
-        id: 'cancel-build',
-        label: t(
-          cancellable.kind === 'raze'
-            ? 'hud.ringMenu.actions.cancelRaze'
-            : cancellable.targetLevel <= 1
-              ? 'hud.ringMenu.actions.cancelBuild'
-              : 'hud.ringMenu.actions.cancelUpgrade',
-        ),
-      });
-    }
     // Training belongs to a building: every building any UnitDefinition.RequiredBuildingType
     // points at offers the action, which opens that building's own TrainingModal; a finished Town Square
     // offers Feasts, which opens its BuildingModal (the feast lives there). The longhouse trains no unit.
