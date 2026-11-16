@@ -164,8 +164,9 @@ describe('BuildingHudDial quick look: the level hex and the switch', () => {
     vi.restoreAllMocks();
   });
 
-  const mountDial = (props: Record<string, unknown>) => {
-    wrapper = mount(BuildingHudDial, { props: { radius: R, ring: 'ready', level: 7, label: '7', ...props }, attachTo: document.body });
+  // The label's fade runs in <Transition>'s hooks, so the tests that check it mount with the real Transition, not the stub.
+  const mountDial = (props: Record<string, unknown>, global: { stubs?: Record<string, boolean> } = {}) => {
+    wrapper = mount(BuildingHudDial, { props: { radius: R, ring: 'ready', level: 7, label: '7', ...props }, attachTo: document.body, global });
     return wrapper;
   };
   const levelHex = () => wrapper!.find('.hud-dial__level');
@@ -252,7 +253,7 @@ describe('BuildingHudDial quick look: the level hex and the switch', () => {
   it('keeps the dial\'s own level hidden until the copy has slid back onto it, then shows it without a fade', async () => {
     fake = installFakeAnimate();
     const labelFade = vi.fn((_el: Element, _dir: 'in' | 'out', done: () => void) => done());
-    mountDial({ labelFade });
+    mountDial({ labelFade }, { stubs: { transition: false } });
     const label = () => wrapper!.find('.hud-dial__label');
     expect(label().text()).toBe('7');
     // Shift down: the copy takes the level over at once.
@@ -269,6 +270,27 @@ describe('BuildingHudDial quick look: the level hex and the switch', () => {
     expect(levelHex().exists()).toBe(false);
     expect(label().text()).toBe('7');
     expect(labelFade).not.toHaveBeenCalled();
+  });
+
+  it('keeps the dial\'s own level hidden while a switch-out reverses back in, and fades in a label other than the level', async () => {
+    fake = installFakeAnimate();
+    const labelFade = vi.fn((_el: Element, _dir: 'in' | 'out', done: () => void) => done());
+    mountDial({ labelFade }, { stubs: { transition: false } });
+    const label = () => wrapper!.find('.hud-dial__label');
+    await wrapper!.setProps({ glyph: 'up', label: '' });
+    fake.finishAll();
+    await wrapper!.setProps({ glyph: undefined, label: '7' });
+    await wrapper!.setProps({ glyph: 'up', label: '' });
+    expect(label().exists()).toBe(false);
+    // Out again, and an order takes its place before the copy lands: `#2` fades in as usual.
+    await wrapper!.setProps({ glyph: undefined, label: '#2' });
+    expect(label().exists()).toBe(false);
+    fake.finishAll();
+    await wrapper!.vm.$nextTick();
+    await wrapper!.vm.$nextTick();
+    expect(label().text()).toBe('#2');
+    expect(labelFade).toHaveBeenCalledTimes(1);
+    expect(labelFade.mock.calls[0]![1]).toBe('in');
   });
 
   it('swaps up and wait without the switch animation', async () => {

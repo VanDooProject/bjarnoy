@@ -181,7 +181,10 @@ function playSwitch(direction: 'in' | 'out') {
  * carries the level the whole way, so the label only comes back once the copy has landed on the dial and is gone.
  */
 const levelCopyOn = computed(() => shown.value !== undefined && props.level !== undefined);
-/** The label is handing over to / from the level copy in this render: it switches without its fade (the copy sits right on it). */
+/**
+ * The label is handing over to / from the level copy in this render: the level switches without its fade (the copy sits right on
+ * it). Any other label (`#place`, a countdown) that arrives as the copy lands keeps its fade.
+ */
 let labelHandoff = false;
 watch(levelCopyOn, () => {
   labelHandoff = true;
@@ -190,7 +193,7 @@ watch(levelCopyOn, () => {
   });
 });
 function fadeLabel(el: Element, direction: 'in' | 'out', done: () => void) {
-  if (labelHandoff || !props.labelFade) return done();
+  if (!props.labelFade || (labelHandoff && el.textContent?.trim() === String(props.level))) return done();
   props.labelFade(el, direction, done);
 }
 
