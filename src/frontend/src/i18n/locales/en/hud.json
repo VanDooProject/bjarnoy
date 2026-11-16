@@ -157,6 +157,8 @@
       "upgrade": "Upgrade",
       "notEnough": "Needs {resources}",
       "raze": "Raze",
+      "cancelBuild": "Cancel build",
+      "cancelUpgrade": "Cancel upgrade",
       "cantRazeLonghouse": "Can't raze the longhouse",
       "trainUnits": "Train units",
       "feasts": "Feasts",
@@ -205,7 +207,8 @@
       "couldNotSwitchRealm": "Could not switch to that realm.",
       "couldNotQueueBuild": "Could not queue that build.",
       "couldNotQueueUpgrade": "Could not queue that upgrade.",
-      "couldNotQueueRaze": "Could not queue that raze."
+      "couldNotQueueRaze": "Could not queue that raze.",
+      "couldNotCancelBuild": "Could not cancel that order."
     },
     "towerCampWarning": "Wild beasts will burn this tower unless an army stands guard on it.",
     "razeTime": "Raze time",
