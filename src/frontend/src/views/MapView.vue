@@ -1105,9 +1105,7 @@ function upgradeActionFor(tile: Tile): RingAction {
       art: buildingArt(type, nextLevel),
       okBadge: null,
       availability: busyNote ? undefined : availability,
-      holdHint: quickUpgrade.available
-        ? { text: t('hud.quickUpgrade.holdHint'), locked: false }
-        : { text: t('hud.quickUpgrade.premiumHold'), locked: true },
+      holdHint: quickUpgrade.available ? t('hud.quickUpgrade.holdHint') : undefined,
     },
   };
 }

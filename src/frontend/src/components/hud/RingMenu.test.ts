@@ -1290,20 +1290,14 @@ describe('RingMenu', () => {
       expect(wrapper.emitted('hold')).toEqual([['upgrade']]);
     });
 
-    it('the card carries the hold hint as its last line, locked for a free account', async () => {
+    it('the card carries the hold hint as its last line; without one there is no line', async () => {
       const card = { title: 'Upgrade to level 2', cost: { wood: 10 } };
-      const wrapper = ring({
-        actions: [{ id: 'upgrade', label: 'Upgrade', card: { ...card, holdHint: { text: 'Hold to keep upgrading', locked: false } } }],
-      });
+      const wrapper = ring({ actions: [{ id: 'upgrade', label: 'Upgrade', card: { ...card, holdHint: 'Hold to enable quick upgrade' } }] });
       await bubble(wrapper, 'Upgrade').trigger('mouseenter');
-      const hint = wrapper.get('[data-testid="ring-hold-hint"]');
-      expect(hint.text()).toBe('Hold to keep upgrading');
-      expect(hint.classes()).not.toContain('locked');
-      const locked = ring({
-        actions: [{ id: 'upgrade', label: 'Upgrade', card: { ...card, holdHint: { text: 'Premium: hold', locked: true } } }],
-      });
-      await bubble(locked, 'Upgrade').trigger('mouseenter');
-      expect(locked.get('[data-testid="ring-hold-hint"]').classes()).toContain('locked');
+      expect(wrapper.get('.ring-card [data-testid="ring-hold-hint"]').text()).toBe('Hold to enable quick upgrade');
+      const plain = ring({ actions: [{ id: 'upgrade', label: 'Upgrade', card }] });
+      await bubble(plain, 'Upgrade').trigger('mouseenter');
+      expect(plain.find('[data-testid="ring-hold-hint"]').exists()).toBe(false);
     });
   });
 });

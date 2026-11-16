@@ -112,8 +112,8 @@ export interface RingCard {
   /** Art for the card thumbnail. */
   art?: ArtRef;
   availability?: RingAvailability;
-  /** The card's last line: what holding the bubble does (gold arrows), or, locked, that it needs premium (lock, muted). */
-  holdHint?: { text: string; locked: boolean };
+  /** The card's last line: what holding the bubble does (gold arrows). Only set when the player can use it. */
+  holdHint?: string;
 }
 
 export interface RingBuilding extends RingAction, Omit<RingCard, 'title'> {
@@ -501,7 +501,7 @@ interface CardView {
   statuses: { text: string; tone: Tone }[];
   /** Touch: "Tap X again to build" — only while the shown item is armed and committable. */
   tapHint?: string;
-  holdHint?: { text: string; locked: boolean };
+  holdHint?: string;
 }
 
 function resourceList(shortfall: Partial<Record<(typeof RESOURCE_KEYS)[number], number>>): string {
@@ -1158,10 +1158,9 @@ function onBackdropPointerDown(e: PointerEvent) {
         <i class="tap-bubble" aria-hidden="true" />{{ cardView.tapHint }}
       </p>
       <div v-else-if="!(cardView.statuses.length || error || cardView.holdHint)" class="card-foot" />
-      <p v-if="cardView.holdHint" class="card-hold-hint" :class="{ locked: cardView.holdHint.locked }" data-testid="ring-hold-hint">
-        <svg v-if="cardView.holdHint.locked" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
-        <svg v-else viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.5 6 3l3.5 3.5M2.5 10 6 6.5 9.5 10" /></svg>
-        {{ cardView.holdHint.text }}
+      <p v-if="cardView.holdHint" class="card-hold-hint" data-testid="ring-hold-hint">
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.5 6 3l3.5 3.5M2.5 10 6 6.5 9.5 10" /></svg>
+        {{ cardView.holdHint }}
       </p>
     </div>
 
@@ -1536,9 +1535,6 @@ function onBackdropPointerDown(e: PointerEvent) {
   stroke-width: 1.4;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-.card-hold-hint.locked {
-  color: var(--muted);
 }
 /* The hold ring sits around the bubble, outside its border; the press itself stays on the bubble. */
 .ring-bubble.holdable {
