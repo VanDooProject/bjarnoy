@@ -644,7 +644,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   });
 
   test.describe("docs hub", () => {
-    test("shows the five groups and fifteen art cards, and the cards and footer link through", async ({
+    test("shows the five groups and sixteen art cards, and the cards and footer link through", async ({
       page,
     }) => {
       await page.goto("/docs");
@@ -667,10 +667,10 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         ).toBeVisible();
       }
       await expect(page.locator(".groups .group")).toHaveCount(5);
-      await expect(page.locator(".groups .group a.card")).toHaveCount(15);
+      await expect(page.locator(".groups .group a.card")).toHaveCount(16);
       for (const [group, count] of [
         ["story", 1],
-        ["island", 2],
+        ["island", 3],
         ["building", 5],
         ["move", 5],
         ["beyond", 2],
@@ -681,7 +681,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       }
 
       const cards = page.locator(".groups a.card");
-      await expect(cards).toHaveCount(15);
+      await expect(cards).toHaveCount(16);
       for (const title of [
         "The saga",
         "Tiles",
@@ -708,8 +708,8 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       // Every card's art is drawn from the atlas: a sprite with a background
       // image, or the animated camp's layers.
       const arts = page.getByTestId("docs-card-art");
-      await expect(arts).toHaveCount(15);
-      for (let i = 0; i < 15; i++) {
+      await expect(arts).toHaveCount(16);
+      for (let i = 0; i < 16; i++) {
         const layer = arts
           .nth(i)
           .locator(
@@ -750,7 +750,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     test("does not overflow horizontally on a phone", async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/docs");
-      await expect(page.locator(".groups a.card")).toHaveCount(15);
+      await expect(page.locator(".groups a.card")).toHaveCount(16);
       const overflow = await page
         .locator(".docs-page")
         .evaluate((el) => el.scrollWidth - el.clientWidth);
