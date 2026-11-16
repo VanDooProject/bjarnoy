@@ -225,7 +225,7 @@ rivers, ~17 tiles long). Green islands now get a **drainage network** instead. E
 `riverGenerator.ts`; all knobs are `WorldGenerationOptions` values (admin-tunable like the rest) and TS
 constants of the same name.
 
-1. **Outlets.** An island gets one river mouth for every 2 to 4 springs (springs / 3, at least one), so bigger islands get more mouths and most rivers still meet another before the sea. A river does not run along the coast: tiles next to the shore cost extra, and so does running beside another river without joining it.
+1. **Outlets.** An island gets one river mouth for every 2 to 4 springs (springs / 3, at least one), so bigger islands get more mouths and most rivers still meet another before the sea. A river does not run along the coast: tiles next to the shore cost extra, and a river never runs beside another one except where it joins.
    `Kout = clamp(round(plannedSprings / SpringsPerOutlet), 1, MaxOutlets)` (3, 12), where `plannedSprings` is
    the same `K` step 3 uses (`RiverGenerator.PlannedSprings`). Before, `Kout` came from the land area
    (`landTiles / 2000`), which gave islands 2.5 outlets on average, so springs near the sea had to walk a long way
@@ -258,10 +258,16 @@ constants of the same name.
    (`RiverConfluence.Classify`), priced as its own cost plus the trunk's remaining cost to its outlet. It joins
    when that total is at most the walk's own cost to an outlet plus `MergeSlack` (6) and the route itself costs
    at most `MergeReach` (20), so a tributary joins a nearby trunk unless that is much longer than running on
-   alone. A junction into a river-width trunk (downstream of an earlier confluence) with the wide geometry
+   alone. The route keeps clear of rivers: it may not enter a tile beside an earlier tile of the walk's own course (only the
+   last two tiles may be touched, and only by the first route steps: the first tile touches the last one, a sharp bend the one
+   before it) nor a tile beside an earlier river. The one exception is the final approach tile, which is beside the trunk it
+   joins by definition, but it (and the spring) may touch only the trunk tile it joins and the trunk tiles right before and
+   after it; and the finished course (walk, route and the trunk tile after the join) must not touch itself more than two steps
+   apart, else the route is rejected. So a junction never climbs back up alongside the trunk to reach a drawable Y. A junction into a river-width trunk (downstream of an earlier confluence) with the wide geometry
    gets `RiverStreamBonus` (3) off, because the river-stream Y needs no widening first.
-   With no junction near, the walk follows the pointers. Before stepping beside an earlier river it searches
-   again; the walk's own pick of out-direction (`Drainage.CrowdedOut`, and `SteeredOut` when meandering) also pays
+   With no junction near, the walk follows the pointers; it never steps onto a tile beside its own earlier course (the next
+   step may touch only the last two tiles, and a walk with no such step left is dropped) and never onto a tile beside an
+   earlier river: with its next tile beside or onto one it searches again, and runs on alone when nothing is found. The walk's own pick of out-direction (`Drainage.CrowdedOut`, and `SteeredOut` when meandering) also pays
    `WalkCrowdingCost` (1) per earlier-river neighbour of the candidate tile (0 for an earlier river's own tile,
    which would be a join), so a river that runs on alone drifts off another one instead of running beside it;
    the static field, `BestOut` and the `naturalCost` the searches are priced on do not include it (higher values
@@ -270,12 +276,14 @@ constants of the same name.
    more without the slack (limit infinite, reach still `MergeReach`; right beside an earlier mouth the walk's own
    cost is about 0, so the slack-limited search would reject every junction upstream), else runs on
    alone (`SearchJunction` with `toMouth`: cheapest route to any free coastal tile, tiles beside earlier rivers
-   cost `CrowdingCost` 2 each, reach `10 * MergeReach`, and the new mouth must be head-on too: sea straight
+   never enter a tile beside an earlier river or beside the walk's own course; reach `10 * MergeReach`, and the new mouth must be head-on too: sea straight
    ahead of the last step, and at least `MinMouthSpacing` (4) hexes from every existing sea mouth: every outlet
    of the drainage, used or not, and the last tile of every committed river that ends at the sea) and becomes a
    river of its own with a new mouth; if even that fails it is dropped and counted (`DroppedRivers`). Rivers
    spawned by bogs and valley streams trace through the same code with the committed rivers as claims, so the
    rule holds for them too.
+
+   > A river never runs back beside itself or beside another river: apart from a sharp bend and the tile where it joins another river, no river tile touches another river tile further up or down the water's course.
 
    > Two river mouths are never close together: a river that can't join another one runs to its own mouth at least 4 hexes from every other mouth. Head-on coast is rarer than any coast, so the reach is 10x: at `3 * MergeReach`
    about 2% more rivers found none and were dropped.
@@ -315,11 +323,28 @@ The mouth spacing rule (`MinMouthSpacing` 4 plus the slack-free junction retry),
 | antiparallel adjacent pairs (per 1000 river tiles) | 313 (4.5) | 607 (8.9) |
 | parallel adjacent pairs (per 1000 river tiles) | 15.0 | 5.0 |
 
+The rule "a river never runs back beside itself or beside another river" (hard: route and walk tiles may not touch the walk's own
+earlier course or an earlier river, except at a junction), same seeds. Before it, 634 of the ~668 antiparallel pairs were a river
+beside its own downstream course (junction routes climbing back up beside the trunk, and the run-alone route folding back along
+the river; seed 1 had a 40 tile U-turn), only ~32 were two separate rivers:
+
+| | before | after |
+|---|---|---|
+| antiparallel adjacent pairs (per 1000 river tiles) | 668 (9.8) | 6 (0.1) |
+| parallel adjacent pairs (per 1000 river tiles) | 336 (4.9) | 142 (2.1) |
+| rivers whose course touches itself more than 2 steps apart | 307 of 2 631 | 0 of 2 596 |
+| rivers with a shore run | 29 of 2 631 (1.1%) | 29 of 2 596 (1.1%) |
+| sea-mouth pairs closer than 4 hexes | 0 | 0 |
+| merges per island | 5.7 | 5.2 |
+| truncated + dropped (% of rivers) | 38 (1.4%) | 72 (2.7%) |
+| valley streams carved / cut-off valleys | 1 of 2 | 1 of 2 |
+
 Acceptance (`scripts/worldgen-preview/river-stats.ts --seeds 1-8 --radius 1000`, and
 `RiverStreamTests`): 0 inland mouths, under 3% of rivers with a shore run,
 antiparallel pairs under 5.5 per 1000 river tiles, every confluence drawable, truncated + dropped under 5% of rivers, at
 least one merge per island with 4+ rivers on average, hugging adjacencies under 3% of river tiles (river-width
-Straight tiles per island are reported, not asserted).
+Straight tiles per island are reported, not asserted), and no river course touching itself more than two steps apart
+(`RiverStreamTests.A_river_never_runs_back_beside_its_own_course`).
 
 ### Meanders and mountain entry (green islands)
 
@@ -484,7 +509,7 @@ bogs are final (including the width pass) and before giants, camps and start pos
    blocks the bogland, the new hexes and their neighbours) to a river, a lake or the sea. The spring is the valley hex and
    flows towards the mountains.
 5. **Skipped (and counted) when it does not fit:** the trace fails (`ValleySkippedTrace`); the layout is wrong
-   (`ValleySkippedLayout`: a hex twice, on the bogland, a run beside itself or beside a river it does not drain into -
+   (`ValleySkippedLayout`: a hex twice, on the bogland, a run beside itself - a sharp 120 degree bend, where a hex touches the one two steps on, is fine - or beside a river it does not drain into -
    adjacent tiles must reach the same mouth, the preview's "parallel runs" measure); the width pass drops or changes
    what it should keep (`ValleySkippedWidths`: every old river tile and the whole stream must survive, so no truncated
    branch); it breaks a map rule (`ValleySkippedRules`: `BogRules` R1-R12 may not get worse); or it cuts land off

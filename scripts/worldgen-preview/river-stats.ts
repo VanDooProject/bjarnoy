@@ -29,6 +29,8 @@ let parallel = 0;
 let landTiles = 0;
 let hugging = 0;
 let antiparallel = 0;
+let selfAdjacentCourses = 0;
+let selfAdjacentPairs = 0;
 let mouthPairs = 0;
 const lengths: number[] = [];
 const mergesPer: { rivers: number; merges: number; land: number; outlets: number; straights: number }[] = [];
@@ -91,6 +93,24 @@ for (let seed = from; seed <= to; seed++) {
       cur = cur.outDirection ? all.get(coordKey(neighbors(cur)[outIndex(cur)]!)) : undefined;
     }
     if (best >= 6) hugging++;
+  }
+  // A spring's whole course to its mouth touching itself: two of its tiles more than 2 steps apart that are neighbours.
+  for (const t of all.values()) {
+    if (t.shape !== 'spring') continue;
+    const order = new Map<string, number>();
+    for (let cur: RiverTile | undefined = t; cur && !order.has(coordKey(cur)); cur = cur.outDirection ? all.get(coordKey(neighbors(cur)[outIndex(cur)]!)) : undefined) {
+      order.set(coordKey(cur), order.size);
+    }
+    let pairs = 0;
+    for (const [key, i] of order) {
+      const tile = all.get(key)!;
+      for (const n of neighbors(tile)) {
+        const j = order.get(coordKey(n));
+        if (j !== undefined && j > i + 2) pairs++;
+      }
+    }
+    if (pairs > 0) selfAdjacentCourses++;
+    selfAdjacentPairs += pairs;
   }
   // Adjacent tiles of different rivers, not linked by flow, heading in opposite directions.
   for (const t of all.values()) {
@@ -167,5 +187,6 @@ console.log(`river-tile share: river ${pct(river, tilesTotal)} widen ${pct(widen
 console.log(`inland mouths ${inland}; parallel adjacent pairs ${parallel} (${((1000 * parallel) / Math.max(1, tilesTotal)).toFixed(1)}/1000 tiles); generate ${ms.toFixed(0)} ms`);
 console.log(`valley streams ${stats.valleyStreams} of ${stats.valleyCandidates} cut-off valleys (${stats.valleyStreamsIntoRivers} into a river, joined earlier ${stats.valleysJoined})`);
 console.log(`shore hugging: ${hugging} of ${lengths.length} rivers (${pct(hugging, lengths.length)}) run 6+ tiles within two tiles of the sea; antiparallel adjacent pairs ${antiparallel} (${((1000 * antiparallel) / Math.max(1, tilesTotal)).toFixed(1)}/1000 tiles)`);
+console.log(`self-adjacent courses (a river beside its own course, >2 steps apart): ${selfAdjacentCourses} of ${lengths.length} (${selfAdjacentPairs} tile pairs)`);
 console.log(`sea-mouth pairs closer than 4 hexes: ${mouthPairs}`);
 if (verbose) console.log(JSON.stringify(mergesPer));

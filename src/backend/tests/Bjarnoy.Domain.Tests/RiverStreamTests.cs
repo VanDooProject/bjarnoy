@@ -572,6 +572,42 @@ public class RiverStreamTests
         Assert.True(antiparallel < 0.0055 * riverTiles, $"{antiparallel} antiparallel adjacent pairs over {riverTiles} river tiles");
     }
 
+    /// <summary>A river never runs back beside itself: following any spring downstream to its mouth, no tile touches another tile of that course more than 2 steps away (a sharp bend touches the tile 2 steps away).</summary>
+    [Fact]
+    public void A_river_never_runs_back_beside_its_own_course()
+    {
+        var offenders = new List<string>();
+        var courses = 0;
+        foreach (var (seed, island, _) in GreenIslands())
+        {
+            var byCoord = island.RiverTiles.ToDictionary(t => t.Coord);
+            foreach (var spring in island.RiverTiles.Where(t => t.Shape == RiverTileShape.Spring))
+            {
+                courses++;
+                var order = new Dictionary<HexCoord, int>();
+                for (HexCoord? at = spring.Coord; at is { } c && byCoord.TryGetValue(c, out var cur) && !order.ContainsKey(c);)
+                {
+                    order[c] = order.Count;
+                    at = cur.OutDirection is { } o ? Step(c, o) : null;
+                }
+
+                foreach (var (coord, i) in order)
+                {
+                    foreach (var n in coord.Neighbours())
+                    {
+                        if (order.TryGetValue(n, out var j) && j > i + 2)
+                        {
+                            offenders.Add($"seed {seed} spring {spring.Coord}: {coord} (step {i}) touches {n} (step {j})");
+                        }
+                    }
+                }
+            }
+        }
+
+        Assert.True(courses > 500, $"only {courses} courses");
+        Assert.True(offenders.Count == 0, $"{offenders.Count} touching pairs, e.g. {string.Join("; ", offenders.Take(5))}");
+    }
+
     [Fact]
     public void Lava_rivers_stay_river_width()
     {
