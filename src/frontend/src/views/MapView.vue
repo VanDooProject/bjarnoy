@@ -634,31 +634,38 @@ watch(
 const armyHint = ref<{ x: number; y: number; text: string } | null>(null);
 let armyHintTimer: ReturnType<typeof setTimeout> | null = null;
 const sendBlockText = useSendBlockText();
-function onArmyTap(armyId: string, screen: { x: number; y: number }): boolean {
+/**
+ * Whether a tap on an own army's marker ends at the marker: a moving army is only selected, the tap does not also reach the tile (no ring
+ * menu). Not while the send picker is open (the renderer already keeps that tap off the tile) nor while a route is being composed (the tap
+ * adds the waypoint). A standing army's hex stays tappable.
+ */
+function armyTapStopsAtMarker(armyId: string): boolean {
+  if (world.sendPicker || world.dispatchDraft || world.fieldOrderDraft) return false;
+  return !!world.armies.find((a) => a.id === armyId)?.movement;
+}
+function onArmyTap(armyId: string, screen: { x: number; y: number }) {
   if (armyHintTimer) clearTimeout(armyHintTimer);
   armyHint.value = null;
-  // No picker open: the marker selects its army, shown highlighted in the armies panel. The tap still reaches the tile (onHexClick), so
-  // while a route is being composed it adds the waypoint and selects nothing. A moving army only gets selected: returning true keeps the
-  // tap from reaching the tile, so no ring menu opens.
+  // No picker open: the marker selects its army, shown highlighted in the armies panel. The tap may still reach the tile (onHexClick, see
+  // armyTapStopsAtMarker), so while a route is being composed it adds the waypoint and selects nothing.
   if (!world.sendPicker) {
-    if (world.dispatchDraft || world.fieldOrderDraft) return false;
+    if (world.dispatchDraft || world.fieldOrderDraft) return;
     world.selectArmy(armyId);
     // The selection shows in the Armies panel, so bring it up if it was closed or collapsed (the docked panel is settlement view, desktop only).
     if (!isMobile.value && mode.value === 'settlement') hudPrefs.showPanel('armies');
-    return !!world.armies.find((a) => a.id === armyId)?.movement;
+    return;
   }
   const row = sendPicker.rows.value.find((r) => r.id === armyId);
-  if (!row) return false;
+  if (!row) return;
   if (row.ok) {
     world.selectSendSource(armyId);
-    return false;
+    return;
   }
-  if (row.block === 'pending') return false;
+  if (row.block === 'pending') return;
   const text = sendBlockText(row, sendPicker.target.value);
-  if (!text) return false;
+  if (!text) return;
   armyHint.value = { x: Math.min(Math.max(screen.x, 110), Math.max(110, stage.value.w - 110)), y: Math.max(48, screen.y - 34), text };
   armyHintTimer = setTimeout(() => (armyHint.value = null), 3500);
-  return false;
 }
 watch(
   () => world.sendPicker,
@@ -1682,6 +1689,7 @@ useQuickUpgradeInput({
       @hover="onHover"
       @waypoint-move="onWaypointMove"
       @waypoint-tap="onWaypointTap"
+      :army-tap-stops="armyTapStopsAtMarker"
       @army-tap="onArmyTap"
       @long-press="quickUpgrade.stop()"
       @long-press-progress="onMapLongPressProgress"

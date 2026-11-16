@@ -55,6 +55,9 @@ const props = defineProps<{
   // HexMapRendererOptions.previewSea / confineCamera.
   previewSea?: boolean;
   confineCamera?: boolean;
+  // Asked on a tap on an army's marker (after `army-tap`): true keeps the tap from also reaching the tile below. A prop, not an event,
+  // because an emit cannot return the answer — see HexMapRendererOptions.armyTapStopsAtMarker.
+  armyTapStops?: (armyId: string) => boolean;
 }>();
 const emit = defineEmits<{
   'hex-click': [coord: AxialCoord, tile: Tile, screen: { x: number; y: number }];
@@ -101,6 +104,7 @@ const { renderer, loadState, animLoad, mountError, retry: retryMount } = useHexM
   onWaypointMove: (index, coord) => emit('waypoint-move', index, coord),
   onWaypointTap: (index) => emit('waypoint-tap', index),
   onArmyTap: (armyId, screen) => emit('army-tap', armyId, screen),
+  armyTapStopsAtMarker: (armyId) => props.armyTapStops?.(armyId) ?? false,
   onLongPress: (screen) => emit('long-press', screen),
   onLongPressProgress: (state) => emit('long-press-progress', state),
   onZoomModeChange: (mode) => emit('zoom-mode-change', mode),
