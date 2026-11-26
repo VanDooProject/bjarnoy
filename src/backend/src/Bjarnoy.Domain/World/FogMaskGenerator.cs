@@ -38,12 +38,23 @@ public sealed record FogMaskOptions
     /// </summary>
     public const int DefaultUnknownMarginHexes = 14;
 
-    /// <summary>Ramp width, in hexes, of the G (out-of-sight) channel.</summary>
-    public int OutOfSightMarginHexes { get; init; } = 2;
+    /// <summary>
+    /// Ramp width, in hexes, of the G (out-of-sight) channel: the dark tier's own budget. Must stay equal to the frontend's
+    /// <c>OUT_OF_SIGHT_RAMP_MARGIN_HEXES</c> (<c>fogRamp.ts</c>, which the demo mask and the troop's
+    /// <c>ARMY_FOG_BLACK_MARGIN</c> use): the shader's dark edge window is in ramp units of this width.
+    /// </summary>
+    public int OutOfSightMarginHexes { get; init; } = DefaultOutOfSightMarginHexes;
+
+    /// <summary>The default <see cref="OutOfSightMarginHexes"/>.</summary>
+    public const int DefaultOutOfSightMarginHexes = 4;
 }
 
-/// <summary>One doubled-row texel's baked channel values, per §2.2's RGBA8 layout.</summary>
-public readonly record struct FogMaskCell(byte Unknown, byte OutOfSight, byte NoiseSeed)
+/// <summary>
+/// One doubled-row texel's baked channel values, per §2.2's RGBA8 layout. <paramref name="Lump"/> (B) is the smooth,
+/// deterministic value-noise "lump" of the texel's own position (<see cref="FogMaskGenerator.TexelLump"/>): the shader
+/// pushes the fog edge in or out by it, so the edge is irregular at the scale of a hex or two.
+/// </summary>
+public readonly record struct FogMaskCell(byte Unknown, byte OutOfSight, byte Lump)
 {
     public static readonly FogMaskCell FullyUnknown = new(255, 0, 0);
 }
@@ -89,7 +100,7 @@ public static class FogMaskGenerator
     /// version the API serves as ETag, so browsers revalidating after a deploy
     /// do not get a 304 for pixels the old generator baked.
     /// </summary>
-    public const int Version = 2;
+    public const int Version = 3;
 
     /// <summary>
     /// Generates the mask for <paramref name="bounds"/>. <paramref name="sources"/>
@@ -177,7 +188,6 @@ public static class FogMaskGenerator
         // Pass 1: real hexes, from the distance transforms + persisted history.
         foreach (var texel in hexTexels)
         {
-            var hex = FogMaskLayout.ToHex(texel);
             var explored = trail.IsExplored(texel);
 
             // Explored ground is 0. Beside it, the source ramp (255 far from any
@@ -189,13 +199,13 @@ public static class FogMaskGenerator
                     Ramp(GetOrMax(unknownDistance, texel), options.UnknownMarginHexes),
                     TrailRamp(trail.DistanceAt(texel)));
             var outOfSight = Ramp(GetOrMax(outOfSightDistance, texel), options.OutOfSightMarginHexes);
-            var noise = NoiseSeed(hex);
 
-            SetCell(cells, bounds, texel, new FogMaskCell(unknown, outOfSight, noise));
+            SetCell(cells, bounds, texel, new FogMaskCell(unknown, outOfSight, TexelLump(texel.U, texel.V)));
         }
 
-        // Pass 2: interpolation-only texels, averaged from their four
-        // diagonal hex neighbours now that every hex texel is filled. A
+        // Pass 2: interpolation-only texels, R/G averaged from their four
+        // diagonal hex neighbours now that every hex texel is filled (B is the
+        // texel's own lump, never averaged: it is smooth by construction). A
         // neighbour outside the generated bounds (edge of the world/chunk)
         // is treated as fully unknown/out-of-sight rather than skipped, so
         // an edge texel doesn't read as more-explored than its neighbours
@@ -210,7 +220,7 @@ public static class FogMaskGenerator
                     continue;
                 }
 
-                int unknownSum = 0, outOfSightSum = 0, noiseSum = 0, count = 0;
+                int unknownSum = 0, outOfSightSum = 0, count = 0;
                 foreach (var neighbour in FogMaskLayout.DiagonalNeighboursForInterpolation(texel))
                 {
                     var cell = bounds.Contains(neighbour)
@@ -218,7 +228,6 @@ public static class FogMaskGenerator
                         : FogMaskCell.FullyUnknown;
                     unknownSum += cell.Unknown;
                     outOfSightSum += cell.OutOfSight;
-                    noiseSum += cell.NoiseSeed;
                     count++;
                 }
 
@@ -229,7 +238,7 @@ public static class FogMaskGenerator
                     new FogMaskCell(
                         (byte)(unknownSum / count),
                         (byte)(outOfSightSum / count),
-                        (byte)(noiseSum / count)));
+                        TexelLump(u, v)));
             }
         }
 
@@ -551,13 +560,50 @@ public static class FogMaskGenerator
     }
 
     /// <summary>
-    /// Deterministic per-hex pseudo-random seed for the shader's UV warp
-    /// (§2.4), so the same world always warps the same way.
+    /// The B channel: a smooth, deterministic pseudo-random "lump" value (0..255) of a texel's own position — value noise at
+    /// about two hexes (60%) plus about one hex (40%). Computed for every texel, hex or interpolation, straight from (u, v),
+    /// never averaged. The frontend's <c>fogLump.ts</c> is the same maths; both are pinned by a golden table of texels so the
+    /// two ports cannot drift. All integer maths is 32-bit wrapping (JS <c>Math.imul</c> / <c>&gt;&gt;&gt;</c> semantics).
     /// </summary>
-    private static byte NoiseSeed(HexCoord hex)
+    public static byte TexelLump(int u, int v)
     {
-        var hash = HashCode.Combine(hex.Q, hex.R);
-        return (byte)(hash & 0xFF);
+        double q = u;
+        var r = (v - u) / 2.0;
+        var x = q + (r / 2);
+        var y = r * Math.Sqrt(3) / 2;
+        var coarse = ValueNoise(x / 2, y / 2, 11);
+        var fine = ValueNoise(x + 31.7, y + 5.3, 7);
+        return (byte)Math.Floor((255 * ((0.6 * coarse) + (0.4 * fine))) + 0.5);
+    }
+
+    private static double Hash01(int x, int y, int salt)
+    {
+        unchecked
+        {
+            var h = ((uint)x * 0x27d4eb2du) ^ ((uint)y * 0x165667b1u) ^ ((uint)salt * 0x9e3779b1u);
+            h = (h ^ (h >> 15)) * 0x85ebca6bu;
+            h ^= h >> 13;
+            h *= 0xc2b2ae35u;
+            h ^= h >> 16;
+            return h / 4294967296.0;
+        }
+    }
+
+    private static double ValueNoise(double x, double y, int salt)
+    {
+        var fx0 = Math.Floor(x);
+        var fy0 = Math.Floor(y);
+        var ix = (int)fx0;
+        var iy = (int)fy0;
+        var fx = x - fx0;
+        var fy = y - fy0;
+        var sx = fx * fx * (3 - (2 * fx));
+        var sy = fy * fy * (3 - (2 * fy));
+        var a = Hash01(ix, iy, salt);
+        var b = Hash01(ix + 1, iy, salt);
+        var c = Hash01(ix, iy + 1, salt);
+        var d = Hash01(ix + 1, iy + 1, salt);
+        return a + ((b - a) * sx) + ((c - a) * sy) + ((a - b - c + d) * sx * sy);
     }
 
     private static void SetCell(FogMaskCell[] cells, MaskBounds bounds, MaskTexel texel, FogMaskCell cell) =>

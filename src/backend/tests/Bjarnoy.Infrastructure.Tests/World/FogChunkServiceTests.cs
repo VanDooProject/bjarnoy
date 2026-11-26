@@ -239,7 +239,7 @@ public class FogChunkServiceTests : IDisposable
                 Assert.Equal(expected.OutOfSight, actual.OutOfSight);
                 if (ChunkAt(result, FogChunkLayout.ChunkOf(texel)).Png is not null)
                 {
-                    Assert.Equal(expected.NoiseSeed, actual.NoiseSeed);
+                    Assert.Equal(expected.Lump, actual.Lump);
                 }
 
                 compared++;

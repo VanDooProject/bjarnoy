@@ -7,7 +7,7 @@ namespace Bjarnoy.Infrastructure.World;
 /// Encodes a <see cref="FogMaskBuffer"/> as an RGBA8 PNG, per
 /// <c>docs/design/map-fog-v2.md</c> §2.2's channel layout: R = <see
 /// cref="FogMaskCell.Unknown"/>, G = <see cref="FogMaskCell.OutOfSight"/>,
-/// B = <see cref="FogMaskCell.NoiseSeed"/>, A = reserved (opaque). Kept
+/// B = <see cref="FogMaskCell.Lump"/>, A = reserved (opaque). Kept
 /// separate from <see cref="FogMaskGenerator"/> so the domain project can
 /// stay free of package references — see <c>Bjarnoy.Domain.csproj</c>.
 /// </summary>
@@ -25,7 +25,7 @@ public static class FogMaskPngEncoder
             {
                 var u = buffer.Bounds.MinU + col;
                 var cell = buffer[new MaskTexel(u, v)];
-                bitmap.SetPixel(col, row, new SKColor(cell.Unknown, cell.OutOfSight, cell.NoiseSeed, byte.MaxValue));
+                bitmap.SetPixel(col, row, new SKColor(cell.Unknown, cell.OutOfSight, cell.Lump, byte.MaxValue));
             }
         }
 
