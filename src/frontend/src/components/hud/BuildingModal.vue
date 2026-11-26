@@ -10,7 +10,8 @@ import { useI18n } from 'vue-i18n';
 import type { Tile } from '../../lib/map/types';
 import type { ResourceLine } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
-import { formatBuildingModifier, formatBuildingOutput } from '../../lib/map/buildingStatsText';
+import { formatBuildingModifier } from '../../lib/map/buildingStatsText';
+import BuildingOutputText from './BuildingOutputText.vue';
 import { buildingName, terrainName, resourceName, runeTypeName, runeRarityName } from '../../i18n/catalogueNames';
 import { DEMO_MODE } from '../../config';
 import { apiErrorMessage } from '../../i18n/apiErrors';
@@ -240,9 +241,7 @@ const buildingStats = computed(() =>
 const currentStats = computed(() =>
   buildingStats.value
     ? {
-        output: buildingStats.value.output
-          ? formatBuildingOutput(scaleOutput(buildingStats.value.output, world.worldSpeedFactor), t)
-          : undefined,
+        output: buildingStats.value.output ? scaleOutput(buildingStats.value.output, world.worldSpeedFactor) : undefined,
         modifier: buildingStats.value.modifier ? formatBuildingModifier(buildingStats.value.modifier, t) : undefined,
       }
     : undefined,
@@ -280,7 +279,7 @@ const currentStats = computed(() =>
         <dl v-if="!outsideRealm && currentStats && (currentStats.output || currentStats.modifier)" class="stats">
           <template v-if="currentStats.output">
             <dt>{{ t('hud.hoverTooltip.output') }}</dt>
-            <dd>{{ currentStats.output }}</dd>
+            <dd><BuildingOutputText :output="currentStats.output" /></dd>
           </template>
           <template v-if="currentStats.modifier">
             <dt>{{ t('hud.hoverTooltip.modifier') }}</dt>

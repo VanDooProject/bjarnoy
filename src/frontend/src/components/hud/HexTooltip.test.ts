@@ -119,7 +119,9 @@ describe('HexTooltip production at world speed', () => {
       owner: { settlementName: 'Hvit', ownerName: 'Ulf', mine: true },
     } as HoverInfo;
     const wrapper = mount(HexTooltip, { props: { info }, global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] } });
-    expect(wrapper.text()).toContain('+160 Food/h');
+    expect(wrapper.text()).toContain('+160 /h');
+    expect(wrapper.find('.output-rate svg.resource-icon').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('Food/h');
   });
 });
 
@@ -134,7 +136,7 @@ describe('HexTooltip has no workers line', () => {
       owner: { settlementName: 'Hvit', ownerName: 'Ulf', mine: true },
     } as HoverInfo;
     const text = mount(HexTooltip, { props: { info }, global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] } }).text();
-    expect(text).toContain('Food/h');
+    expect(text).toContain('/h');
     expect(text).not.toContain('Workers');
   });
 });
