@@ -184,11 +184,12 @@ These parts only change when a world is reseeded, so they are served from memory
 
 ## Rendering baseline (measured 2026-11-26)
 
-One machine, one scene, one set of numbers to compare later changes against.
-These are not a benchmark of a player's device: they are the first reading on a
-known setup, so a later reading can say "this got worse" rather than "this feels
-slow". Everything below was measured, not estimated; where the measurement
-could not separate an effect from the frame clock's own wobble, it says so.
+One machine, four framings, one set of numbers to compare later changes
+against. These are not a benchmark of a player's device: they are the first
+reading on a known setup, so a later reading can say "this got worse" rather
+than "this feels slow". Everything below was measured, not estimated; where
+the measurement could not separate an effect from the frame clock's own
+wobble, it says so.
 
 ### Setup
 
@@ -199,11 +200,12 @@ could not separate an effect from the frame clock's own wobble, it says so.
 | Viewport | 1296 × 841 CSS px, device pixel ratio 1 |
 | Build | Vite dev server from `src/frontend` (`npx vite --port 5183 --strictPort`), demo mode, `?debug=1` |
 | Settings | Defaults: building animations on Auto (not enabled), no motion overrides set |
-| Scene | Default settlement view after landing, atlas and water mask loaded, camera held still |
+| Framings | Default settlement (z=0.34), settlement zoomed out (z=0.09), world default (z=0.22), world at the zoom-out clamp (z=0.05); atlas and water mask loaded, camera held still |
 
-The path to the scene was the same one `scripts/screenshot-helpers/flow.mjs`
-walks: open `/?debug=1`, press "Go to the map", click the biased plot on the
-canvas, then the Settlement tab. The debug hooks installed for demo mode
+The path to the settlement scene was the same one
+`scripts/screenshot-helpers/flow.mjs` walks: open `/?debug=1`, press "Go to the
+map", click the biased plot on the canvas, then the Settlement tab. The debug
+hooks installed for demo mode
 (`main.ts`) expose the same counters the perf panels read:
 `window.__fogPerf` (`fogPerfStats`), `window.__waterPerf` (`waterPerfStats`),
 `window.__fogDebug`, `window.__waterDebug` and `window.__settlementRenderer`.
@@ -227,11 +229,20 @@ WaterPerfPanel's **Measure breakdown** button: median plus median absolute
 deviation (MAD), discarding the first two frames after a state change. The A/B
 rows came from that module's `runPerfSweep`, with WaterPerfPanel's own subject
 list; the alternating on/off blocks below repeat the same A/B to check for
-machine drift. Rebuild numbers are `rebuildAll()` called ten times in a row and
-`__fogPerf` read afterwards; this is the work a camera pan triggers, measured
-without waiting on a drag. A browser performance trace and a JS CPU profile
+machine drift. Rebuild numbers are `rebuildAll()` called repeatedly (ten times
+for the default framing, eight for the others) and `__fogPerf` read afterwards;
+this is the work a camera pan triggers, measured without waiting on a drag. A browser performance trace and a JS CPU profile
 cover ~10 s each, and 60 frames had their WebGL calls counted by wrapping the
 context's draw/program/buffer methods from the console.
+
+The heavy framings need one more distinction. `framePacing.ts` deliberately
+caps the ticker once a smoothed frame exceeds 50 ms, so what a player sees at
+settlement z=0.09 or world z=0.05 is roughly one second between frames even
+though the render itself costs 53 ms or 118 ms. To measure the render cost I
+called the detach handle returned by `attachFramePacing` from the console, set
+`ticker.maxFPS = 0` and `ticker.minFPS = 10`, and reattached the pacer
+afterwards. Those unpaced numbers are the ones in the framing table; the paced
+interval is listed beside them.
 
 ### Steady frame
 
@@ -305,6 +316,42 @@ not knowable from the frame clock on this machine; a timer query would be
 needed, and this codebase does not have one (hence the missing GPU-time rows
 in the perf panels).
 
+### Other framings
+
+The same A/B was repeated at the other framings. `zoomBy` clamps to 0.05–4
+(`HexMapRenderer.ts:3880`, `:2717`); 0.09 is still settlement because the
+default 0.34 already sits below the 0.4 world-exit threshold
+(`zoomTransition.ts:54`), so a single zoom-out step never crosses it.
+
+| Framing | Unpaced frame, median / MAD | Paced interval | Draws / programs per render | Rebuild |
+| --- | ---: | ---: | ---: | ---: |
+| Settlement, default z=0.34 | 43–45 ms / 6.5–7.3 ms | same (pacer off) | 43 / 32 | 12–20 ms (first 35.9) |
+| Settlement, z=0.09 | 52.8 / 10.5 ms | 1,037 ms (MAD 16.4) | ~43 / ~32 | 7.6–31.4 ms |
+| World, default z=0.22 | 34.3 / 1.9 ms | same (pacer off) | 9.3 / 7.3 | 4.5–14.3 ms |
+| World, z=0.05 | 118.2 / 15.4 ms | 1,038 ms (MAD 10.5) | 8.7 / 6.7 | 4.2–22.4 ms |
+
+Rebuild ranges are eight `rebuildAll()` calls per extra framing; the default
+settlement row is the ten-call series above.
+
+Layer costs at the three extra framings, from 6 s on/off blocks with the pacer
+detached:
+
+| Framing | All on | Water off | Fog off | Both off | Reading |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Settlement, z=0.09 | 52.8 | 34.2 | 50.5 | 33.7 | water −18.6 (resolved), fog −2.3 (< MAD) |
+| World, default z=0.22 | 34.3 | 33.9 | 34.1 | 34.0 | all inside MAD 1.2–1.9 |
+| World, z=0.05 | 118.2 | 34.0 | 117.8 | 34.0 | water −84.2 (resolved), fog −0.4 |
+
+The scene counters show why. At settlement z=0.09 the viewport covers 19,980
+hexes; the fog rebuild still walks 1,087 (1,048 drawn) in 18.2 ms, and the water
+mask is 804 × 548 texels, baked on the worker in 186.6 ms when the zoom changed.
+At world default only 711 terrain hexes are drawn out of the same 1,087 walked,
+with 96 waves drawn and 476 culled; fog rebuild is 4.8 ms and the 364 × 263
+mask baked in 72.6 ms. At world z=0.05 the viewport covers 52,819 hexes but fog
+still draws 711 terrain hexes and no waves, rebuild is 11.7 ms, and the mask
+grows to 1,028 × 688 at 359.7 ms to bake. The walked count is set by the scan
+clip, not the viewport; zooming out grows the viewport count and the water mask.
+
 ### Trace and caveats
 
 The 10 s trace recorded 15,494 events: 5,848 `RunTask` (2,651 ms total, max
@@ -318,8 +365,10 @@ Caveats that would change how these numbers are read:
 - Dev build, not a production bundle; demo mode's fog mask is generated in
   memory rather than fetched from the API.
 - One desktop, one window size, one day's machine load. Compare like with like
-  (same viewport, same scene, same settings) before calling a number a
+  (same viewport, same framing, same settings) before calling a number a
   regression.
+- The extra framings' off blocks were single 6 s windows, not repeated
+  alternating pairs; treat sub-5 ms deltas there as unresolved.
 - No per-effect GPU timing exists, and a full heap snapshot could not be
   exported (over the 5 MiB capture limit), so neither is part of this baseline.
 - The older figures in `docs/design/water-shader.md` come from a software
@@ -329,8 +378,11 @@ Caveats that would change how these numbers are read:
 To repeat: start the Vite server, open `/?debug=1`, reach the default
 settlement view as above, wait for the bakes to settle, then read
 `__fogPerf`/`__waterPerf` and click **Measure breakdown** in the water perf
-panel (or call `sampleFrames`/`runPerfSweep` from the console). Keep the camera
-still during a sweep, and report the MAD and baseline drift with every result.
+panel (or call `sampleFrames`/`runPerfSweep` from the console). For the other
+framings, zoom with `zoomBy` (or load a camera hash such as
+`#world&q=61&r=-2&z=0.22`) and wait for the new water bake before sampling.
+Keep the camera still during a sweep, report the MAD and baseline drift with
+every result, and say whether the pacer was attached.
 
 ## Possible next steps
 
