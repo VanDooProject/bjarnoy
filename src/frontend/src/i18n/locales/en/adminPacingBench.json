@@ -123,7 +123,7 @@
   },
   "cost": {
     "title": "Longhouse wood cost per level",
-    "note": "Brick costs 5/6 of the wood, food half of it. Levels 1–5 cost no brick. The reference value is in brackets.",
+    "note": "Brick costs 5/6 of the wood, food half of it. Levels 1–10 cost no brick. The reference value is in brackets.",
     "level": "LH {level}"
   }
 }
