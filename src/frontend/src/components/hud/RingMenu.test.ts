@@ -19,7 +19,10 @@ const CATEGORIES: RingCategory[] = [
     id: 'housing',
     label: 'Housing',
     color: 'var(--gold)',
-    buildings: [{ id: 'hut', label: 'Hut', cost: { wood: 100, stone: 80 }, time: '4:00', gives: '+5 population capacity' }],
+    buildings: [
+      { id: 'hut', label: 'Hut', cost: { wood: 100, stone: 80 }, time: '4:00', gives: '+5 population capacity' },
+      { id: 'longhouse', label: 'Hall', cost: { wood: 200 } },
+    ],
   },
   {
     id: 'defense',
@@ -46,7 +49,7 @@ function availability(overrides: Partial<RingAvailabilityInput> = {}) {
 
 function ringWith(building: Record<string, unknown>, props: Record<string, unknown> = {}) {
   return ring({
-    categories: [{ id: 'housing', label: 'Housing', color: 'var(--gold)', buildings: [{ id: 'hut', label: 'Hut', ...building }] }],
+    categories: [{ id: 'housing', label: 'Housing', color: 'var(--gold)', buildings: [{ id: 'hut', label: 'Hut', ...building }, { id: 'longhouse', label: 'Hall', cost: { wood: 200 } }] }],
     ...props,
   });
 }
@@ -115,6 +118,50 @@ describe('RingMenu', () => {
     expect(wrapper.emitted('select')).toBeUndefined();
   });
 
+  it('puts a lone building in place of its category: one tap commits it, and hovering it shows its card', async () => {
+    const wrapper = ring({
+      categories: [
+        {
+          id: 'resource',
+          label: 'Resources',
+          color: 'var(--cat-resource)',
+          buildings: [{ id: 'lumberjack', label: 'Lumberjack', cost: { wood: 50 }, time: '2:00', gives: '+10 wood/h' }],
+        },
+        CATEGORIES[1],
+      ],
+    });
+    await bubble(wrapper, 'Build').trigger('click');
+    expect(labels(wrapper)).toEqual(['Lumberjack', 'Defense', '‹ BACK']);
+
+    await bubble(wrapper, 'Lumberjack').trigger('mouseenter');
+    expect(wrapper.get('.ring-card').text()).toContain('+10 wood/h');
+
+    await bubble(wrapper, 'Lumberjack').trigger('click');
+    expect(wrapper.emitted('select')).toEqual([['lumberjack']]);
+  });
+
+  it('a lone building in place of its category still refuses to commit while locked', async () => {
+    const wrapper = ring({
+      categories: [{ id: 'religion', label: 'Religion', color: 'var(--cat-religion)', buildings: [{ id: 'druidhut', label: 'Druid Hut', cost: { wood: 50 }, lock: 'Requires longhouse 3' }] }],
+    });
+    await bubble(wrapper, 'Build').trigger('click');
+    expect(wrapper.get('.ring-bubble[aria-label="Druid Hut"]').classes()).toContain('is-locked');
+    await bubble(wrapper, 'Druid Hut').trigger('click');
+    expect(wrapper.emitted('select')).toBeUndefined();
+  });
+
+  it('a touch tap on a lone building previews it first and commits on the second tap', async () => {
+    const wrapper = ring({
+      categories: [{ id: 'resource', label: 'Resources', color: 'var(--cat-resource)', buildings: [{ id: 'lumberjack', label: 'Lumberjack', cost: { wood: 50 } }] }],
+    });
+    await bubble(wrapper, 'Build').trigger('click');
+    const touch = () => bubble(wrapper, 'Lumberjack').trigger('touchstart');
+    await touch();
+    expect(wrapper.find('.ring-card').exists()).toBe(true);
+    await bubble(wrapper, 'Lumberjack').trigger('click');
+    expect(wrapper.emitted('select')).toBeDefined();
+  });
+
   it('shows no detail card until a building is genuinely hovered', async () => {
     const wrapper = ring();
     await bubble(wrapper, 'Build').trigger('click');
@@ -151,7 +198,10 @@ describe('RingMenu', () => {
         id: 'defense',
         label: 'Defense',
         color: 'var(--iron)',
-        buildings: [{ id: 'tower', label: 'Watchtower', cost: { wood: 1 }, warning: 'Wild beasts will burn this tower unless an army stands guard on it.' }],
+        buildings: [
+          { id: 'tower', label: 'Watchtower', cost: { wood: 1 }, warning: 'Wild beasts will burn this tower unless an army stands guard on it.' },
+          { id: 'barracks', label: 'Barracks', cost: { wood: 1 } },
+        ],
       },
     ];
     const wrapper = ring({ categories });

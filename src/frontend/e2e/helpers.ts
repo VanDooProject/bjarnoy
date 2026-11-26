@@ -283,25 +283,33 @@ export async function openRingOnGuidedHex(settlement: SettlementPage, chipText =
 
 /**
  * Builds `building` through the onboarding's ring on the already-clicked hex, the way a player does: Build hub, then
- * the category, then the building (the ring is the map's own, see useBuildRing). A phone taps (the first tap on a
- * building arms it and docks its card, the second commits); desktop clicks with the real pointer.
+ * the category, then the building (the ring is the map's own, see useBuildRing). A category that holds only this one
+ * building on the hex is not offered: the building sits on the Build lane itself, so pass `null` as the category.
+ * A phone taps (the first tap on a building arms it and docks its card, the second commits); desktop clicks with the
+ * real pointer.
  */
-export async function buildThroughOpenRing(settlement: SettlementPage, category: string, building: string): Promise<void> {
+export async function buildThroughOpenRing(settlement: SettlementPage, category: string | null, building: string): Promise<void> {
   const ring = settlement.ring;
   await ring.waitForOpen();
   const phone = (settlement.page.viewportSize()?.width ?? 1280) <= 768;
   if (phone) {
     await ring.action('Build').first().tap();
     await ring.settledLayer();
-    await ring.category(category).first().tap();
-    await ring.settledLayer();
-    const bubble = ring.child(building).first();
+    if (category !== null) {
+      await ring.category(category).first().tap();
+      await ring.settledLayer();
+    }
+    const bubble = (category === null ? ring.category(building) : ring.child(building)).first();
     await expect(bubble).toBeVisible();
     await bubble.tap();
     await bubble.tap();
     return;
   }
   await ring.openBuildCategories();
+  if (category === null) {
+    await ring.click(ring.category(building).first());
+    return;
+  }
   await ring.openCategory(category);
   await ring.click(ring.child(building).first());
 }
