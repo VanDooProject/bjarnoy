@@ -28,6 +28,7 @@ import HuntTargetSummary from './HuntTargetSummary.vue';
 import DispatchTargetBuildingPicker from './DispatchTargetBuildingPicker.vue';
 import SendArmyPicker from './SendArmyPicker.vue';
 import DispatchSlots from './DispatchSlots.vue';
+import DispatchProvisionsField from './DispatchProvisionsField.vue';
 import { useDispatchUnitPicker } from '../../composables/useDispatchUnitPicker';
 import { groupArmyRowsByHome, useArmyRows } from '../../composables/useArmyRows';
 import { useArmyRowTap } from '../../composables/useArmyRowTap';
@@ -457,15 +458,7 @@ async function confirmFieldOrderClick() {
 
         <DispatchSlots :unit-counts="draft.unitCounts" />
 
-        <label class="provisions-field">
-          <span>{{ t('hud.armyPanel.provisions') }}</span>
-          <input
-            type="number"
-            min="0"
-            :value="draft.provisions"
-            @input="world.setDispatchProvisions(Number(($event.target as HTMLInputElement).value))"
-          />
-        </label>
+        <DispatchProvisionsField />
 
         <div class="dispatch-actions">
           <button class="secondary" @click="world.removeLastWaypoint()" :disabled="routeLength === 0">
@@ -726,23 +719,6 @@ async function confirmFieldOrderClick() {
 }
 .qty {
   width: 56px;
-  padding: 4px 6px;
-  background: transparent;
-  border: 1px solid var(--panel-border);
-  border-radius: 6px;
-  color: var(--text);
-  font: inherit;
-  text-align: center;
-}
-.provisions-field {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  color: var(--text);
-}
-.provisions-field input {
-  width: 90px;
   padding: 4px 6px;
   background: transparent;
   border: 1px solid var(--panel-border);

@@ -45,6 +45,7 @@ import {
   isHuntUnit,
   wouldExceedWaypointLimit,
   maxAffordableProvisions,
+  foodCarryCapacity,
 } from '../lib/units/armyDispatch';
 import { CAMP_BUILDERS_PER_CAMP, SETTLERS_PER_FOUNDING } from '../lib/founding';
 import { isSandCampFamily, isWaterCampFamily } from '../lib/map/campPlacement';
@@ -2292,9 +2293,12 @@ export const useWorldStore = defineStore('world', {
       if (this.dispatchDraft.mission === 'setupcamp' && unit === 'campbuilder') return;
       this.dispatchDraft.unitCounts[unit] = Math.max(0, Math.floor(count));
     },
+    /** Sets the food the dispatch takes along, clamped to what the chosen units can carry, so the order is never refused for it. */
     setDispatchProvisions(provisions: number) {
-      if (!this.dispatchDraft) return;
-      this.dispatchDraft.provisions = Math.max(0, provisions);
+      const draft = this.dispatchDraft;
+      if (!draft) return;
+      const capacity = foodCarryCapacity(draft.unitCounts, useUnitCatalogueStore().byType);
+      draft.provisions = Math.min(capacity, Math.max(0, Number.isFinite(provisions) ? Math.floor(provisions) : 0));
     },
     /** Clicking a hex on the map while a dispatch is being composed appends it as the next waypoint (the last click is always the eventual destination). */
     addWaypoint(coord: AxialCoord) {

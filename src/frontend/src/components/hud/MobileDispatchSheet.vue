@@ -21,6 +21,7 @@ import type { MessageSchema } from '../../i18n/schema';
 import CampInstructions from './CampInstructions.vue';
 import HuntTargetSummary from './HuntTargetSummary.vue';
 import DispatchSlots from './DispatchSlots.vue';
+import DispatchProvisionsField from './DispatchProvisionsField.vue';
 import { useDispatchUnitPicker } from '../../composables/useDispatchUnitPicker';
 import { campName, missionName, unitName } from '../../i18n/catalogueNames';
 import {
@@ -314,15 +315,7 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
 
         <DispatchSlots :unit-counts="draft.unitCounts" />
 
-        <label class="provisions-field">
-          <span>{{ t('hud.armyPanel.provisions') }}</span>
-          <input
-            type="number"
-            min="0"
-            :value="draft.provisions"
-            @input="world.setDispatchProvisions(Number(($event.target as HTMLInputElement).value))"
-          />
-        </label>
+        <DispatchProvisionsField touch />
       </template>
 
       <template v-else-if="isFieldOrder && fieldDraft">
@@ -638,22 +631,5 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
 .stepper-all:disabled {
   opacity: 0.4;
   cursor: default;
-}
-.provisions-field {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  color: var(--text);
-}
-.provisions-field input {
-  width: 90px;
-  padding: 6px;
-  background: transparent;
-  border: 1px solid var(--panel-border);
-  border-radius: 6px;
-  color: var(--text);
-  font: inherit;
-  text-align: center;
 }
 </style>
