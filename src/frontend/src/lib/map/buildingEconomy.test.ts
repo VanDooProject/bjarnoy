@@ -12,6 +12,7 @@ import {
   buildingStatsFor,
   scaleOutput,
   upgradeRateGain,
+  brickShareAt,
   buildingUpgradeCost,
   niceRound,
   isNearAnyOf,
@@ -195,6 +196,10 @@ describe('economy curves (mirror BuildingCatalogue.cs, docs/design/economy.md)',
     }
     expect(buildingUpgradeCost('claybrickworks', 1).stone).toBe(0);
     expect(buildingUpgradeCost('claybrickworks', 2).stone).toBe(10);
+    // The start buildings' brick phases in: 25%, 50%, 75% on the three levels after the brick-free ones, then the full stone.
+    expect([9, 10, 11, 12, 13].map((l) => brickShareAt('lumberjack', l))).toEqual([0.25, 0.5, 0.75, 1, 1]);
+    expect([10, 11, 12, 13, 14].map((l) => brickShareAt('longhouse', l))).toEqual([0, 0.25, 0.5, 0.75, 1]);
+    expect(brickShareAt('claybrickworks', 2)).toBe(1);
     expect(buildingUpgradeCost('lumberjack', 1)).toEqual({ wood: 10, stone: 0, food: 18, iron: 0 });
   });
 

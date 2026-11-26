@@ -74,7 +74,7 @@ describe('applyWhatIf', () => {
   it('keeps the start buildings brick-free for their first levels, whatever the knobs', () => {
     const w = applyWhatIf(live, { ...defaultWhatIf(), producerCostScale: 2, costGrowth: 1.5 });
     for (const level of [1, 8]) expect(w.lumberjack[level - 1].cost.stone, `lumberjack ${level}`).toBe(0);
-    expect(w.lumberjack[8].cost.stone).toBe(niceRound(49 * 2 * 1.5 ** 8));
+    expect(w.lumberjack[8].cost.stone).toBe(niceRound(49 * 2 * 1.5 ** 8 * 0.25));
     for (const level of [1, 10]) expect(w.longhouse[level - 1].cost.stone, `longhouse ${level}`).toBe(0);
     expect(w.longhouse[10].cost.stone).toBeGreaterThan(0);
     expect(w.claybrickworks[0].cost.stone).toBe(0);

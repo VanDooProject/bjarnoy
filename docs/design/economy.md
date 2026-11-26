@@ -16,7 +16,7 @@ formula changes, re-run the lab and check all of them.
 | T1 | A new player is never waiting in the first 10 minutes | founding stock covers every build started in the first 10 min; first builds take 1–3 min (1, 2.8 and 8 min at levels 1 to 3) |
 | T2 | Something new unlocks often, one building at a time | at most one new building per Longhouse level (LH1 excepted); no run of 3+ LH levels without an unlock before LH 18 |
 | T3 | 2nd settlement: optimising player ≈ **1 week**, average player ≈ **2 weeks** | simulated (§6, with feasts): active d7.1, 4 check-ins d15.0, 2 check-ins d30.0; without feasts the active player d11.6; with the §9 build-time curves d16.3, d24.5, d34.5 (§6) |
-| T4 | A settlement is "full" (LH 30, producers maxed) after about **4–7 months** (LH 30 needs Great Storehouses, the Longhouse costs ×1.60 per level from level 11) | simulated: active ≈ d256 (about 8.5 months), 4 check-ins ≈ d300 (about 10 months) |
+| T4 | A settlement is "full" (LH 30, producers maxed) after about **4–7 months** (LH 30 needs Great Storehouses, the Longhouse costs ×1.60 per level from level 11) | simulated: active ≈ d254 (about 8.5 months), 4 check-ins ≈ d300 (about 10 months) |
 | T5 | Later levels still pay off, but ever more slowly | producer payback grows ~8% per level (cost ×1.30 vs the level's added output ×1.20) |
 | T6 | Troops come before settling | Cart Workshop (settlers) at LH 10, after Barracks (LH 5) and Harbour (LH 5) |
 | T7 | Territory grows through towers, not the Longhouse | Longhouse claim radius stops growing at LH 3 (§5) |
@@ -120,7 +120,7 @@ whole number, 100–999 to the nearest 10, 1 000–9 999 to the nearest 50,
 | Shrines (Thor, Freyja, Ullr, Njörd, Odin Statue) | 475 000 / 505 000 / 150 000, g_c 2.140 | | 6 h → 24 h (L5) |
 | Palisade, Palisade Gate (per hex) | 540 / 150 / 40 | | 10 min → 1 h (L3) |
 
-- The Longhouse needs no brick up to and including level 10; the Tower, Lumberjack and Reindeer Herder need none up to and including level 8 (the Tower tops out at level 5, so it never needs brick). The Clay Brickworks costs no brick at level 1.
+- The Longhouse needs no brick up to and including level 10; the Tower, Lumberjack and Reindeer Herder need none up to and including level 8. Brick then phases in: the first three levels that cost brick pay 25 %, 50 % and 75 % of the formula's brick, and the full value from the fourth on. (The Tower tops out at level 5, so it never needs brick.) The Clay Brickworks costs no brick at level 1.
 - The Longhouse produces wood and food only: no brick, no iron.
 - Each producer level adds 20% more output than the level before it, starting at 8/h for wood and brick.
 - The food buildings are worth different amounts, so where you build food is a choice: Reindeer Herder 8/h (the start building), Farm 12/h, Pumpkin Farm 13/h, Fishing Hut 16/h (going to the shore for fish pays off).
@@ -655,10 +655,10 @@ so renown binds the active player and the Longhouse the 4-check-ins player. Feas
 2.7× for the active player and 3.3× for 4 check-ins.
 
 **With the build-time curves of §9, one builder slot every second Longhouse level** (construction-slots.md) **and the
-Longhouse brick-free to level 10** (§3; same settings, simulated 2026-11): the 2nd settlement comes on day 10.3 for the
-active player with feasts (16.8 without), day 17.5 for 4 check-ins and day 29.0 for 2 check-ins. Longhouse 10 is reached
-on day 10.3 (active) and day 17.5 (4 check-ins), Longhouse 30 on day 256 (active) and day 300 (4 check-ins). Renown
-reaches 80 000 on day 9.5 for the active player with feasts, so the Longhouse 10 unlock binds every profile by about
+Longhouse brick-free to level 10, brick phasing in after** (§3; same settings, simulated 2026-11): the 2nd settlement
+comes on day 10.0 for the active player with feasts (16.6 without), day 17.5 for 4 check-ins and day 29.0 for 2
+check-ins. Longhouse 10 is reached on day 9.9 (active) and day 17.5 (4 check-ins), Longhouse 30 on day 254 (active) and
+day 300 (4 check-ins). Renown reaches 80 000 on day 9.4 for the active player with feasts, so the Longhouse 10 unlock binds every profile by about
 half a day or more, not renown as the §6 target above asks. Feasts multiply the day-30 renown by about 3.0× for the
 active player.
 

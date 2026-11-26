@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-11-26T19:07:43.518Z"
+    "generatedAt": "2026-11-26T20:18:48.308Z"
   },
   "data": [
     {
@@ -439,7 +439,7 @@
       "level": 11,
       "cost": {
         "wood": 2650,
-        "stone": 2250,
+        "stone": 560,
         "food": 1350,
         "iron": 0
       },
@@ -482,7 +482,7 @@
       "level": 12,
       "cost": {
         "wood": 4300,
-        "stone": 3550,
+        "stone": 1800,
         "food": 2150,
         "iron": 0
       },
@@ -525,7 +525,7 @@
       "level": 13,
       "cost": {
         "wood": 6850,
-        "stone": 5700,
+        "stone": 4300,
         "food": 3400,
         "iron": 0
       },
@@ -1635,7 +1635,7 @@
       "level": 9,
       "cost": {
         "wood": 130,
-        "stone": 400,
+        "stone": 100,
         "food": 240,
         "iron": 0
       },
@@ -1677,7 +1677,7 @@
       "level": 10,
       "cost": {
         "wood": 170,
-        "stone": 520,
+        "stone": 260,
         "food": 320,
         "iron": 0
       },
@@ -1719,7 +1719,7 @@
       "level": 11,
       "cost": {
         "wood": 220,
-        "stone": 680,
+        "stone": 510,
         "food": 410,
         "iron": 0
       },
@@ -21105,7 +21105,7 @@
       "level": 9,
       "cost": {
         "wood": 420,
-        "stone": 290,
+        "stone": 73,
         "food": 57,
         "iron": 0
       },
@@ -21147,7 +21147,7 @@
       "level": 10,
       "cost": {
         "wood": 550,
-        "stone": 380,
+        "stone": 190,
         "food": 74,
         "iron": 0
       },
@@ -21189,7 +21189,7 @@
       "level": 11,
       "cost": {
         "wood": 720,
-        "stone": 500,
+        "stone": 370,
         "food": 97,
         "iron": 0
       },

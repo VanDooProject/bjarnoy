@@ -1,6 +1,6 @@
 import type { BuildingDefinitionResponse, ResourceLine } from '../../api/types';
 import { DEFAULT_BUILD_TIME_KNOBS, buildSecondsOf, type BuildTimeKnobs } from './buildTimes';
-import { DEFAULT_EARLY_DISCOUNT, costGrowthOf, isEarlyDiscountType, levelOneBaseCost, niceRound, type BuildingKind } from '../map/buildingEconomy';
+import { DEFAULT_EARLY_DISCOUNT, brickShareAt, costGrowthOf, isEarlyDiscountType, levelOneBaseCost, niceRound, type BuildingKind } from '../map/buildingEconomy';
 
 // "What if the curves were different?": regenerate every level of every
 // building type from that type's level-1 row and a handful of growth factors,
@@ -89,15 +89,15 @@ const copyDef = (d: BuildingDefinitionResponse): BuildingDefinitionResponse => (
 const SPELLED_OUT_TYPES: ReadonlySet<string> = new Set(['bridge']);
 
 /**
- * Mirrors `BuildingCatalogue`'s brick-free levels: no stone up to `levels`, from the next level on the cost's stone is
- * `stone · growth^(level−1)`. The catalogue's level-1 row has no stone there, so the stone it would have is kept here.
+ * The level-1 stone of the types with brick-free levels (`brickShareAt`): the catalogue's level-1 row has no stone there,
+ * so the stone it would have is kept here; a level's stone is `stone · growth^(level−1) · brickShareAt(type, level)`.
  */
-const BRICK_FREE: Readonly<Record<string, { levels: number; stone: number }>> = {
-  longhouse: { levels: 10, stone: 100 },
-  tower: { levels: 8, stone: 200 },
-  lumberjack: { levels: 8, stone: 49 },
-  reindeerherder: { levels: 8, stone: 36 },
-  claybrickworks: { levels: 1, stone: 10 },
+const BRICK_FREE_STONE: Readonly<Record<string, number>> = {
+  longhouse: 100,
+  tower: 200,
+  lumberjack: 49,
+  reindeerherder: 36,
+  claybrickworks: 10,
 };
 
 /** `BuildingCatalogue.ProductionFor`: the level total of an increment-geometric series, `I1 · (g^L − 1) / (g − 1)`. */
@@ -140,14 +140,14 @@ export function applyWhatIf(
     const liveTotal = sumLine(first.productionPerHour);
     const outputScale = override !== undefined && liveTotal > 0 ? override / liveTotal : 1;
     const costScale = lh ? knobs.longhouseCostScale : knobs.producerCostScale;
-    const brickFree = BRICK_FREE[type];
+    const brickFreeStone = BRICK_FREE_STONE[type];
     // The level-1 row already carries the producers' level-1 discount (60%) and its rounding: grow from the undiscounted base.
     const discounted = isEarlyDiscountType(type);
     const baseCost = discounted ? levelOneBaseCost(type as BuildingKind) : first.cost;
     out[type] = defs.map((d) => {
       const discount = discountAt(d.level);
       const grown = scaleLine(baseCost, costScale * costFactorAt(d.level) * discount);
-      if (brickFree) grown.stone = d.level <= brickFree.levels ? 0 : brickFree.stone * costScale * costFactorAt(d.level) * discount;
+      if (brickFreeStone !== undefined) grown.stone = brickFreeStone * costScale * costFactorAt(d.level) * discount * brickShareAt(type, d.level);
       return {
         ...copyDef(d),
         cost: scaleLine(grown, 1, niceRound),

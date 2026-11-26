@@ -436,7 +436,7 @@ public static class BuildingCatalogue
             BuildingType.CartWorkshop => CartWorkshop(level),
             // The start's stone source: on plain bog moss (the landing spots guarantee bog in reach), not on grass.
             BuildingType.ClayBrickworks =>
-                Producer(type, level, Bog, new ResourceAmounts(0, Stone: 8, 0, 0), new ResourceAmounts(Wood: 52, Stone: 10, Food: 33, Iron: 0), brickFreeLevels: 1)
+                Producer(type, level, Bog, new ResourceAmounts(0, Stone: 8, 0, 0), new ResourceAmounts(Wood: 52, Stone: 10, Food: 33, Iron: 0), brickFreeLevels: 1, brickPhaseIn: false)
                     with { RequiresBogKind = PlainBogOnly },
             // Iron, on plain bog moss only (not a shore, mouth, creek or lake). Its own P1 is tuned in the Economy lab
             // (docs/design/economy.md section 8); terrain boost in Boosts, the Hammerschmiede's radius boost below.
@@ -925,11 +925,12 @@ public static class BuildingCatalogue
         ResourceAmounts perHourAtLevelOne,
         ResourceAmounts costAtLevelOne,
         int brickFreeLevels = 0,
-        double growth = CostGrowth) => new()
+        double growth = CostGrowth,
+        bool brickPhaseIn = true) => new()
         {
             Type = type,
             Level = level,
-            Cost = BrickFree(costAtLevelOne * CostFactor(level, growth) * ProducerEarlyDiscount(type, level), level, brickFreeLevels),
+            Cost = BrickFree(costAtLevelOne * CostFactor(level, growth) * ProducerEarlyDiscount(type, level), level, brickFreeLevels, brickPhaseIn),
             BuildDuration = BuildTime(type, level),
             // Increment-geometric in level (each level adds x1.20 more than the last), the level's total.
             ProductionPerHour = ProductionFor(perHourAtLevelOne, level),
@@ -945,9 +946,22 @@ public static class BuildingCatalogue
             ? level switch { 1 => 0.6, 2 => 0.75, 3 => 0.9, _ => 1.0 }
             : 1.0;
 
-    /// <summary>The cost without its stone while <paramref name="level"/> is within <paramref name="brickFreeLevels"/>.</summary>
-    private static ResourceAmounts BrickFree(ResourceAmounts cost, int level, int brickFreeLevels) =>
-        level <= brickFreeLevels ? cost with { Stone = 0 } : cost;
+    /// <summary>
+    /// The cost without its stone while <paramref name="level"/> is within <paramref name="brickFreeLevels"/>. With
+    /// <paramref name="phaseIn"/> (the start buildings) the stone then phases in: the first three levels after the brick-free
+    /// ones pay 25%, 50% and 75% of it, the full value from the fourth on.
+    /// </summary>
+    private static ResourceAmounts BrickFree(ResourceAmounts cost, int level, int brickFreeLevels, bool phaseIn = true) =>
+        cost with { Stone = cost.Stone * BrickShare(level, brickFreeLevels, phaseIn) };
+
+    /// <summary>The share of the formula's stone a level pays, see <see cref="BrickFree"/>.</summary>
+    private static double BrickShare(int level, int brickFreeLevels, bool phaseIn)
+    {
+        if (brickFreeLevels <= 0) return 1;
+        var past = level - brickFreeLevels;
+        if (past <= 0) return 0;
+        return phaseIn && past <= 3 ? past * 0.25 : 1;
+    }
 
     private static BuildingDefinition Longhouse(int level) => new()
     {
