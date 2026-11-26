@@ -12,8 +12,9 @@ import enHud from '../../i18n/locales/en/hud.json';
 
 const spearman = (unitSnapshot.data as UnitDefinitionResponse[]).find((u) => u.type === 'spearman')!;
 
-function setup() {
+function setup(food = 100_000) {
   const world = useWorldStore();
+  world.hud.available.food = food;
   useUnitCatalogueStore().definitions = unitSnapshot.data as UnitDefinitionResponse[];
   world.selectedSettlementId = 'home-1';
   world.startDispatch();
@@ -42,6 +43,15 @@ describe('DispatchProvisionsField', () => {
     // Typing over the cap again leaves the stored figure as it was: the field still shows the cap, not the typed figure.
     await wrapper.get('input').setValue(String(capacity + 5));
     expect((wrapper.get('input').element as HTMLInputElement).value).toBe(String(capacity));
+  });
+
+  it('cuts a figure above the realm\'s free food down to that food, even when the units could carry more', async () => {
+    const { world, wrapper, capacity } = setup(spearman.foodCarryCapacity);
+    expect(capacity).toBeGreaterThan(spearman.foodCarryCapacity);
+    expect(wrapper.get('input').attributes('max')).toBe(String(spearman.foodCarryCapacity));
+
+    await wrapper.get('input').setValue(String(capacity));
+    expect(world.dispatchDraft!.provisions).toBe(spearman.foodCarryCapacity);
   });
 
   it('allows no food when no unit is chosen', async () => {

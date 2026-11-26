@@ -45,7 +45,6 @@ import {
   isHuntUnit,
   wouldExceedWaypointLimit,
   maxAffordableProvisions,
-  foodCarryCapacity,
 } from '../lib/units/armyDispatch';
 import { CAMP_BUILDERS_PER_CAMP, SETTLERS_PER_FOUNDING } from '../lib/founding';
 import { isSandCampFamily, isWaterCampFamily } from '../lib/map/campPlacement';
@@ -595,6 +594,15 @@ export const useWorldStore = defineStore('world', {
       return realms;
     },
     /** Where the open dispatch draft's units leave from: the open realm's HUD data or an other realm's snapshot; null when that realm is gone. */
+    /**
+     * The most food the dispatch being composed can take: what its units can carry, and no more than the source realm's free food
+     * (`available`: food reserved for the waiting build queue is not free to load onto an army, issue #158).
+     */
+    dispatchProvisionsCap(): number {
+      const draft = this.dispatchDraft;
+      if (!draft) return 0;
+      return maxAffordableProvisions(draft.unitCounts, useUnitCatalogueStore().byType, this.dispatchSource?.availableFood ?? this.hud.available.food);
+    },
     dispatchSource: (state) => {
       const draft = state.dispatchDraft;
       if (!draft || !state.selectedSettlementId) return null;
@@ -2292,13 +2300,14 @@ export const useWorldStore = defineStore('world', {
       // A camp army's builders are fixed at two likewise.
       if (this.dispatchDraft.mission === 'setupcamp' && unit === 'campbuilder') return;
       this.dispatchDraft.unitCounts[unit] = Math.max(0, Math.floor(count));
+      // The carry capacity changed: propose the most food the units can take again (the player can still edit it after).
+      this.dispatchDraft.provisions = this.dispatchProvisionsCap;
     },
-    /** Sets the food the dispatch takes along, clamped to what the chosen units can carry, so the order is never refused for it. */
+    /** Sets the food the dispatch takes along, clamped to `dispatchProvisionsCap`, so the order is never refused for it. */
     setDispatchProvisions(provisions: number) {
       const draft = this.dispatchDraft;
       if (!draft) return;
-      const capacity = foodCarryCapacity(draft.unitCounts, useUnitCatalogueStore().byType);
-      draft.provisions = Math.min(capacity, Math.max(0, Number.isFinite(provisions) ? Math.floor(provisions) : 0));
+      draft.provisions = Math.min(this.dispatchProvisionsCap, Math.max(0, Number.isFinite(provisions) ? Math.floor(provisions) : 0));
     },
     /** Clicking a hex on the map while a dispatch is being composed appends it as the next waypoint (the last click is always the eventual destination). */
     addWaypoint(coord: AxialCoord) {

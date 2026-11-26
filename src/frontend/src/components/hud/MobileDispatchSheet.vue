@@ -14,7 +14,6 @@
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
-import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { useAuthStore } from '../../stores/auth';
 import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
@@ -27,7 +26,6 @@ import { campName, missionName, unitName } from '../../i18n/catalogueNames';
 import {
   dispatchHasDestination,
   isRouteDestination,
-  maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
 import DispatchTargetBuildingPicker from './DispatchTargetBuildingPicker.vue';
 import SendArmyPicker from './SendArmyPicker.vue';
@@ -37,7 +35,6 @@ import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 
 const world = useWorldStore();
 const auth = useAuthStore();
-const catalogue = useUnitCatalogueStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // A layer on the phone stack while mounted (MapView mounts it only while an order is being composed).
@@ -79,16 +76,7 @@ function quantityFor(unit: string): number {
   return draft.value?.unitCounts[unit] ?? 0;
 }
 function applyQuantity(unit: string, value: number, max: number) {
-  const clamped = Number.isFinite(value) ? Math.max(0, Math.min(Math.floor(value), max)) : 0;
-  world.setDispatchUnitCount(unit, clamped);
-  // Same re-proposal ArmyPanel's setQuantity does — the carry capacity
-  // changed, so the previous provisions figure may no longer be the
-  // sensible default (the player can still edit it after).
-  if (draft.value) {
-    world.setDispatchProvisions(
-      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.dispatchSource?.availableFood ?? world.hud.available.food),
-    );
-  }
+  world.setDispatchUnitCount(unit, Number.isFinite(value) ? Math.max(0, Math.min(Math.floor(value), max)) : 0);
 }
 function decrement(unit: string, max: number) {
   applyQuantity(unit, quantityFor(unit) - 1, max);
@@ -307,7 +295,7 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
               <button type="button" class="stepper-btn" :disabled="!isRowSelectable(row.unit) || quantityFor(row.unit) === 0" @click="decrement(row.unit, row.available)">{{ t('hud.dispatchSheet.decrement') }}</button>
               <span class="stepper-count">{{ quantityFor(row.unit) }} / {{ row.available }}</span>
               <button type="button" class="stepper-btn" :disabled="!isRowSelectable(row.unit) || quantityFor(row.unit) >= row.available" @click="increment(row.unit, row.available)">{{ t('hud.dispatchSheet.increment') }}</button>
-              <button type="button" class="stepper-all" :disabled="!isRowSelectable(row.unit)" @click="setAll(row.unit, row.available)">{{ t('hud.dispatchSheet.allButton') }}</button>
+              <button type="button" class="stepper-all" :disabled="!isRowSelectable(row.unit) || quantityFor(row.unit) >= row.available" @click="setAll(row.unit, row.available)">{{ t('hud.dispatchSheet.allButton') }}</button>
             </div>
           </div>
           <div v-if="!garrisonRows.length" class="status-subtext">{{ t('hud.armyPanel.noUnitsAvailable') }}</div>
