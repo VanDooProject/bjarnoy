@@ -31,6 +31,8 @@ export class RingMenuComponent {
   readonly backBubble: Locator;
   /** The inner lane: root actions before drilling, build categories after. */
   readonly categoryBubbles: Locator;
+  /** The inner-lane bubbles that open into a second lane: categories, not a lone building standing in for its category. */
+  readonly drillableCategoryBubbles: Locator;
   /** The outer lane: the buildings inside the opened category. */
   readonly childBubbles: Locator;
   /** The informational cost/time/gate card docked beside the ring. */
@@ -45,6 +47,7 @@ export class RingMenuComponent {
     this.bubbles = page.locator('.ring-bubble');
     this.backBubble = page.locator('.ring-bubble.back');
     this.categoryBubbles = page.locator('.ring-bubble:not(.back):not(.child)');
+    this.drillableCategoryBubbles = page.locator('.ring-bubble:not(.back):not(.child):not(.lone)');
     this.childBubbles = page.locator('.ring-bubble.child');
     this.card = page.locator('.ring-card');
     this.backdrop = page.locator('.ring-backdrop');

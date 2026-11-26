@@ -1058,6 +1058,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         'is-locked': entry.state === 'locked',
         'is-waiting': entry.state === 'waiting',
         category: entry.category,
+        lone: !atRoot && !!promotedBuildingOf(entry.item.id),
         armed: armed === entry.item.id,
         'no-commit': entry.item.disabled,
         holdable: entry.item.holdable,
