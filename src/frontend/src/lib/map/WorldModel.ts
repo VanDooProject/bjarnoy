@@ -380,7 +380,7 @@ export class WorldModel {
   /**
    * The standing towers the server delivered per rival settlement (`applyRivalBuildings`). Kept apart from `settlementTowers` on
    * purpose: those feed the chain rule, vision and exploring, none of which a rival's towers take part in for the player. A
-   * rival's claim is its Longhouse disc plus the full disc of every tower listed here (`claimDiscsFor`), no chain check.
+   * rival's claim is its Longhouse disc plus the full disc of every tower listed here (`claimDiscsFor`). Towers the server flags `outsideRealm` (cut off) are not listed.
    */
   private rivalTowers = new Map<string, { q: number; r: number; level: number }[]>();
   /** Bumped whenever something a rival's claim depends on changes; `rivalClaimOwners` is rebuilt lazily when it lags behind. */
@@ -1520,8 +1520,8 @@ export class WorldModel {
    * this settlement's full claimed territory. A cut-off tower claims nothing.
    */
   private claimDiscsFor(settlement: Settlement) {
-    // A rival's claim is its Longhouse plus every tower the server delivered, whether or not the chain connects it: the client
-    // cannot resolve another player's realm and draws what the server showed it.
+    // A rival's claim is its Longhouse plus every tower the server delivered that is not flagged `outsideRealm` (cut off): the
+    // client cannot resolve another player's realm and draws what the server showed it.
     if (this.isRivalSettlement(settlement)) {
       return claimDiscs({ q: settlement.q, r: settlement.r }, settlement.level, this.rivalTowers.get(settlement.id) ?? [], this.isBeachCamp(settlement.id));
     }
