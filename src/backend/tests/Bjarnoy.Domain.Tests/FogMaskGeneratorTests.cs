@@ -7,7 +7,7 @@ public class FogMaskGeneratorTests
     private static readonly FogMaskOptions Options = new()
     {
         UnknownMarginHexes = 4,
-        OutOfSightMarginHexes = 2,
+        OutOfSightMarginHexes = 4,
     };
 
     [Fact]
@@ -374,19 +374,38 @@ public class FogMaskGeneratorTests
     }
 
     [Fact]
-    public void Same_hex_always_gets_the_same_noise_seed()
+    public void Same_texel_always_gets_the_same_lump()
     {
         var bounds = FogMaskLayout.WorldBounds(4);
 
         var first = FogMaskGenerator.Generate(bounds, [], new HashSet<HexCoord>(), Options);
         var second = FogMaskGenerator.Generate(bounds, [], new HashSet<HexCoord>(), Options);
 
-        foreach (var hex in HexCoord.Origin.WithinRadius(4))
+        for (var v = bounds.MinV; v < bounds.MaxV; v++)
         {
-            var texel = FogMaskLayout.ToTexel(hex);
-            Assert.Equal(first[texel].NoiseSeed, second[texel].NoiseSeed);
+            for (var u = bounds.MinU; u < bounds.MaxU; u++)
+            {
+                var texel = new MaskTexel(u, v);
+                Assert.Equal(first[texel].Lump, second[texel].Lump);
+                Assert.Equal(FogMaskGenerator.TexelLump(u, v), first[texel].Lump);
+            }
         }
     }
+
+    /// <summary>
+    /// The same texels and bytes as <c>GOLDEN_LUMPS</c> in the frontend's <c>fogLump.test.ts</c>: the two ports of the
+    /// lump (B channel) maths are pinned to one table so they cannot drift.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 0, 53)]
+    [InlineData(1, 1, 89)]
+    [InlineData(-7, 13, 183)]
+    [InlineData(23, -40, 97)]
+    [InlineData(-31, -18, 98)]
+    [InlineData(100, 257, 148)]
+    [InlineData(5, -2, 71)]
+    public void TexelLump_matches_the_golden_table(int u, int v, int expected) =>
+        Assert.Equal(expected, FogMaskGenerator.TexelLump(u, v));
 
     // ---- Chunked generation (map-fog-v2.md §3) --------------------------------
 
