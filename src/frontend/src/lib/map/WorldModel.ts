@@ -2049,7 +2049,8 @@ export class WorldModel {
       const key = coordKey({ q: building.q, r: building.r });
       if (ownRendered.has(key)) continue;
       if (building.type === 'beachcamp' && building.level >= 1) rivalCamps.add(building.settlementId);
-      if (building.type === 'tower' && building.level >= 1) {
+      // A tower the server marks outside its realm is cut off (economy.md §5): it claims nothing, so it gets no disc here either.
+      if (building.type === 'tower' && building.level >= 1 && building.outsideRealm !== true) {
         const list = towers.get(building.settlementId) ?? [];
         list.push({ q: building.q, r: building.r, level: building.level });
         towers.set(building.settlementId, list);
