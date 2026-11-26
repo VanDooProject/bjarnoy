@@ -499,12 +499,12 @@ public class EconomyDesignTests
     [Fact]
     public void Each_producers_own_resource_is_the_smallest_share_of_its_level_1_cost()
     {
-        // The Bog-ore works produce iron, which no building costs, so there is no share to compare. Read at level 6: the start
-        // buildings and the Clay Brickworks hide their stone at level 1, and every level grows by the same factor.
+        // The Bog-ore works produce iron, which no building costs, so there is no share to compare. Read at level 9: the start
+        // buildings hide their stone up to level 8 (the Clay Brickworks at level 1), and every level grows by the same factor.
         foreach (var type in Producers.Where(t => t != BuildingType.BogOreWorks))
         {
             var produced = BuildingCatalogue.Get(type, 1).ProductionPerHour;
-            var cost = BuildingCatalogue.Get(type, 6).Cost;
+            var cost = BuildingCatalogue.Get(type, 9).Cost;
             var own = produced.Wood > 0 ? cost.Wood : produced.Stone > 0 ? cost.Stone : cost.Food;
 
             Assert.True(own <= Math.Min(cost.Wood, Math.Min(cost.Stone, cost.Food)), $"{type}: own resource {own} is not the cheapest of {cost}");
