@@ -24,6 +24,7 @@ const statusFilter = ref('');
 interface Draft {
   displayName: string;
   role: string;
+  renown: number;
   saving: boolean;
   error: string | null;
 }
@@ -34,6 +35,7 @@ function draftFor(user: AdminUserResponse): Draft {
   return {
     displayName: user.displayName ?? '',
     role: user.role,
+    renown: Math.floor(user.renown),
     saving: false,
     error: null,
   };
@@ -149,6 +151,27 @@ async function togglePremium(user: AdminUserResponse) {
     draft.saving = false;
   }
 }
+
+async function saveRenown(user: AdminUserResponse) {
+  const draft = drafts[user.id];
+  if (!draft || draft.saving) return;
+
+  if (!Number.isFinite(draft.renown) || draft.renown < 0) {
+    draft.error = t('adminUsers.renownInvalid');
+    return;
+  }
+
+  draft.saving = true;
+  draft.error = null;
+  try {
+    const updated = await api.adminSetUserRenown(user.id, { renown: draft.renown });
+    applyUpdated(updated);
+  } catch (err) {
+    draft.error = err instanceof ApiError ? err.message : t('adminUsers.renownError');
+  } finally {
+    draft.saving = false;
+  }
+}
 </script>
 
 <template>
@@ -178,6 +201,7 @@ async function togglePremium(user: AdminUserResponse) {
             <th>{{ $t('adminUsers.columns.role') }}</th>
             <th>{{ $t('adminUsers.columns.status') }}</th>
             <th>{{ $t('adminUsers.columns.premium') }}</th>
+            <th>{{ $t('adminUsers.columns.renown') }}</th>
             <th>{{ $t('adminUsers.columns.settlements') }}</th>
             <th>{{ $t('adminUsers.columns.created') }}</th>
             <th>{{ $t('adminUsers.columns.lastLogin') }}</th>
@@ -207,6 +231,25 @@ async function togglePremium(user: AdminUserResponse) {
                 @click="togglePremium(user)"
               >
                 {{ user.isPremium ? $t('adminUsers.premium.revoke') : $t('adminUsers.premium.grant') }}
+              </button>
+            </td>
+            <td class="renown">
+              <input
+                v-model.number="drafts[user.id].renown"
+                type="number"
+                min="0"
+                step="1"
+                class="cell-input renown-input"
+                :aria-label="$t('adminUsers.columns.renown')"
+                @keyup.enter="saveRenown(user)"
+              />
+              <button
+                type="button"
+                class="renown-set"
+                :disabled="drafts[user.id]?.saving"
+                @click="saveRenown(user)"
+              >
+                {{ $t('adminUsers.actions.setRenown') }}
               </button>
             </td>
             <td>{{ user.settlementCount }}</td>
@@ -286,6 +329,13 @@ async function togglePremium(user: AdminUserResponse) {
 }
 .cell-input {
   width: 100%;
+}
+.renown {
+  display: flex;
+  gap: 6px;
+}
+.renown-input {
+  width: 110px;
 }
 .status {
   text-transform: capitalize;

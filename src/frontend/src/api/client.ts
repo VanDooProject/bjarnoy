@@ -83,6 +83,7 @@ import type {
   SetBuildingLevelRequest,
   SetGuildMemberRoleRequest,
   SetUserPremiumRequest,
+  SetUserRenownRequest,
   SetUserStatusRequest,
   SetWorldRunStateRequest,
   SettlementResponse,
@@ -572,6 +573,11 @@ export const api = {
     }),
   adminSetUserPremium: (userId: string, body: SetUserPremiumRequest) =>
     request<AdminUserResponse>(`/admin/users/${userId}/premium`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminSetUserRenown: (userId: string, body: SetUserRenownRequest) =>
+    request<AdminUserResponse>(`/admin/users/${userId}/renown`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
