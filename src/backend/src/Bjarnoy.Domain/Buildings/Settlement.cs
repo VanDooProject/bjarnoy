@@ -994,8 +994,8 @@ public sealed record Settlement
 
     /// <summary>
     /// The waiting order that may start next out of <paramref name="fifoQueue"/> (the whole queue in FIFO/plan order): the first
-    /// waiting order with no earlier order on its hex (stage 1d contiguity), provided its slot cost fits the free slots
-    /// (head-of-line: a smaller order behind it never jumps). <see langword="null"/> when none may start.
+    /// waiting order, provided no earlier order on its hex is unfinished and its slot cost fits the free slots (head-of-line:
+    /// no order behind it ever jumps). <see langword="null"/> when none may start.
     /// </summary>
     internal static BuildOrder? NextPromotable(IReadOnlyList<BuildOrder> fifoQueue, int constructionSlots)
     {
@@ -1006,24 +1006,22 @@ public sealed record Settlement
         }
 
         // List position — not QueuedAt — is the tiebreaker that actually matters: two orders planned in the same instant
-        // (identical QueuedAt) still have a real, distinguishable plan order here.
-        var candidate = fifoQueue
-            .Where(o => o.IsWaiting)
-            .FirstOrDefault(o =>
-            {
-                var index = IndexOfOrder(fifoQueue, o);
-                return !fifoQueue.Any(other => other.Coord == o.Coord && other.Id != o.Id && IndexOfOrder(fifoQueue, other) < index);
-            });
-
+        // (identical QueuedAt) still have a real, distinguishable plan order here. Strict FIFO: only the oldest waiting
+        // order may start; whatever holds it back (slots, an unfinished earlier order on its hex) holds back everything
+        // behind it too.
+        var candidate = fifoQueue.FirstOrDefault(o => o.IsWaiting);
         if (candidate is null)
         {
             return null;
         }
 
-        var slotCost = EffectiveSlotCost(candidate, constructionSlots);
+        var index = IndexOfOrder(fifoQueue, candidate);
+        if (fifoQueue.Any(other => other.Coord == candidate.Coord && other.Id != candidate.Id && IndexOfOrder(fifoQueue, other) < index))
+        {
+            return null;
+        }
 
-        // Head-of-line blocking: the waiting queue is FIFO, not a pool a smaller order can jump.
-        return slotCost > free ? null : candidate;
+        return EffectiveSlotCost(candidate, constructionSlots) > free ? null : candidate;
     }
 
     private static int IndexOfOrder(IReadOnlyList<BuildOrder> queue, BuildOrder order)
@@ -1801,7 +1799,7 @@ public sealed record Settlement
     }
 
     /// <summary>
-    /// The slot logic shared by <see cref="PlanBuild"/> and <see cref="PlanRaze"/>: the order starts now when its slot cost
+    /// The slot logic shared by <see cref="PlanBuild"/> and <see cref="PlanRaze"/>: the order starts now when nothing in the realm is waiting and its slot cost
     /// (<paramref name="slotDefinition"/>, the level in work) fits the free slots, waits in the premium queue when there is room
     /// for it, and is refused otherwise.
     /// </summary>
@@ -1822,7 +1820,9 @@ public sealed record Settlement
         // alone are not enough: two levels of the same hex must never be
         // "under construction" at once, or completion order (and hence the
         // level a hex ends up at) stops being deterministic.
-        var fitsNow = !earlierOnHexUnfinished && slotCost <= FreeSlots;
+        // A new order never starts ahead of one already waiting (FIFO): with any waiting order in the realm, it waits too,
+        // even when its smaller slot cost would fit the free slots.
+        var fitsNow = !earlierOnHexUnfinished && !GroupWaitingOrders.Any() && slotCost <= FreeSlots;
 
         if (!fitsNow && GroupWaitingOrders.Count() >= maxWaitingOrders)
         {
