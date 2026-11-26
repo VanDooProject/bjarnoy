@@ -577,6 +577,15 @@ describe('RingMenu', () => {
       expect(wrapper.get('[data-testid="ring-card-total"]').text()).toBe('· 90 total');
     });
 
+    it('draws a resource-rate gain with the resource icon instead of its name', async () => {
+      const wrapper = ringWith({ gives: '+15 Brick/h', givesOutput: { kind: 'resourceRate', resource: 'stone', amount: 15 }, givesTotal: '90 total' });
+      await hoverHut(wrapper);
+      const card = wrapper.get('.ring-card');
+      expect(card.find('.output-rate svg.resource-icon').exists()).toBe(true);
+      expect(card.text()).toContain('+15');
+      expect(card.text()).not.toContain('Brick/h');
+    });
+
     it('lets a premium player queue when slots are full, with a gold footer, and no clock badge', async () => {
       const wrapper = ringWith({
         availability: availability({

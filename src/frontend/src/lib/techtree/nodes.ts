@@ -52,6 +52,8 @@ export interface TechTreeNode {
   label: string;
   /** The one-line "what it gives you", from the same helper the map tooltip uses. */
   gives: string;
+  /** The structured output behind `gives` (absent for a modifier): the card draws a resource rate with the resource icon. */
+  output?: BuildingOutput;
   category: GraphCategory;
   /** Pixel position of the card's top-left corner. */
   x: number;
@@ -112,6 +114,7 @@ export function buildTechTreeNodes(
       type,
       label: MERGED_CARDS[type]?.label ?? typeLabel(type),
       gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : '',
+      output: stats.output,
       category: graphCategoryOf(type),
       x: columnX(col),
       y: rowY(row),

@@ -4,20 +4,22 @@
 // is the shared text from buildingStatsText.ts.
 import { useI18n } from 'vue-i18n';
 import type { BuildingOutput } from '../../lib/map/buildingEconomy';
-import { formatBuildingOutput } from '../../lib/map/buildingStatsText';
+import { formatBuildingOutput, type StatsTranslate } from '../../lib/map/buildingStatsText';
 import type { MessageSchema } from '../../i18n/schema';
 import ResourceIcon from '../ResourceIcon.vue';
 
-defineProps<{ output: BuildingOutput }>();
+// `locale` pins the wording to one language (the docs tech tree is always English); omitted, it follows the player's locale.
+const props = withDefaults(defineProps<{ output: BuildingOutput; locale?: string; iconSize?: number }>(), { iconSize: 14 });
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const translate: StatsTranslate = (key, named) => t(key, named ?? {}, props.locale ? { locale: props.locale as 'en-US' } : {}) as string;
 </script>
 
 <template>
-  <i18n-t v-if="output.kind === 'resourceRate'" keypath="hud.hoverTooltip.outputResourceRateIcon" tag="span" class="output-rate">
+  <i18n-t v-if="output.kind === 'resourceRate'" keypath="hud.hoverTooltip.outputResourceRateIcon" tag="span" class="output-rate" :locale="locale">
     <template #amount>{{ output.amount }}</template>
-    <template #icon><ResourceIcon :kind="output.resource" :size="14" /></template>
+    <template #icon><ResourceIcon :kind="output.resource" :size="iconSize" /></template>
   </i18n-t>
-  <template v-else>{{ formatBuildingOutput(output, t) }}</template>
+  <template v-else>{{ formatBuildingOutput(output, translate) }}</template>
 </template>
 
 <style scoped>
