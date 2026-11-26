@@ -66,6 +66,7 @@
     "output": "Output",
     "modifier": "Modifier",
     "outputResourceRate": "+{amount} {resource}/h",
+    "outputResourceRateIcon": "+{amount} {icon}/h",
     "outputPopulationCapacity": "+{amount} population capacity",
     "outputStorageCapacity": "+{amount} storage capacity",
     "outputVisionRing": "Vision radius {amount} (explored {explored})",
