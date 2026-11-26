@@ -540,6 +540,8 @@ const cardView = computed<CardView | null>(() => {
         text: t('hud.ringMenu.card.willQueue', { waiting: a.queue.waiting, max: a.queue.max }),
         tone: 'queue',
       });
+    } else if (a.queue.locked) {
+      statuses.push({ text: t('hud.ringMenu.card.queueLocked'), tone: 'wait' });
     } else {
       const params = { needed: a.slots.needed, free: a.slots.free, total: a.slots.total };
       statuses.push({

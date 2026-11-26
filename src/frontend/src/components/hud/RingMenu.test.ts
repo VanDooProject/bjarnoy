@@ -526,6 +526,19 @@ describe('RingMenu', () => {
       expect(wrapper.emitted('select')).toBeUndefined();
     });
 
+    it('says the queue is locked when orders still wait and there is no premium room', async () => {
+      const wrapper = ringWith({
+        availability: availability({
+          construction: { slots: 3, slotsUsed: 1, maxWaitingOrders: 0, waitingOrders: 1 },
+        }),
+      });
+      await hoverHut(wrapper);
+      const card = wrapper.get('.ring-card');
+      expect(card.get('[data-testid="ring-card-status"]').text()).toBe(
+        'Builds are still waiting. Without Premium you can add more once they have started.',
+      );
+    });
+
     it('shows full slots as the same waiting look, with the free count and time until the next slot', async () => {
       const wrapper = ringWith({
         availability: availability({

@@ -185,6 +185,7 @@
       "needSlots": "Braucht {needed} Bauplatz · {free} von {total} frei | Braucht {needed} Bauplätze · {free} von {total} frei",
       "needSlotsNext": "Braucht {needed} Bauplatz · {free} von {total} frei · nächster frei in {time} | Braucht {needed} Bauplätze · {free} von {total} frei · nächster frei in {time}",
       "willQueue": "Wird hinter den laufenden Bauten eingereiht ({waiting} von {max} wartend)",
+      "queueLocked": "Es warten noch Aufträge. Ohne Premium kannst du erst nachlegen, wenn sie gestartet sind.",
       "queueFull": "Die Warteschlange ist voll ({waiting} von {max})",
       "badgeNoResources": "Nicht genug Rohstoffe",
       "badgeNoSlot": "Kein freier Bauplatz",
