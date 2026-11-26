@@ -157,6 +157,33 @@ public sealed class ConstructionSlotTests
     }
 
     [Fact]
+    public void Cancelling_a_waiting_head_starts_the_order_it_held_back_at_once()
+    {
+        // Level 4: 3 slots. Two builds run (1 free), the upgrade (2 slots) waits, a one-slot build waits behind it.
+        var settlement = Found(4);
+        var first = settlement.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var withFirst = settlement.Enqueue(first.Order!, T0);
+        var second = withFirst.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(-1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var withTwo = withFirst.Enqueue(second.Order!, T0);
+        var upgrade = withTwo.PlanBuild(
+            BuildingType.Longhouse, Centre, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var withUpgrade = withTwo.Enqueue(upgrade.Order!, T0);
+        var later = withUpgrade.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var queued = withUpgrade.Enqueue(later.Order!, T0);
+        Assert.True(later.Order!.IsWaiting);
+
+        var cancelAt = T0.AddSeconds(10);
+        var cancelled = queued.CancelBuild(upgrade.Order!.Id, cancelAt);
+
+        Assert.True(cancelled.Accepted);
+        var started = cancelled.Settlement!.Queue.Single(o => o.Id == later.Order.Id);
+        Assert.Equal(cancelAt, started.StartedAt);
+    }
+
+    [Fact]
     public void A_longhouse_upgrade_at_level_1_leaves_one_of_two_slots_free()
     {
         var settlement = Found();

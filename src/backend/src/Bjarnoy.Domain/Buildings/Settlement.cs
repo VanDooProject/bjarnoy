@@ -1947,10 +1947,12 @@ public sealed record Settlement
 
         // A waiting order never spent anything (its cost is only reserved) —
         // cancelling it just drops it, no refund, no stub to remove (it never
-        // staked one).
+        // staked one). It may have been the head of the FIFO holding back a
+        // smaller order that fits the free slots, so promote right away.
         if (order.IsWaiting)
         {
-            return CancelBuildResult.Accept(this with { Queue = [.. Queue.Where(o => o.Id != orderId)] });
+            var (afterDrop, _) = (this with { Queue = [.. Queue.Where(o => o.Id != orderId)] }).PromoteWaitingOrders(now, speedFactor);
+            return CancelBuildResult.Accept(afterDrop);
         }
 
         // A raze cost nothing, so there is nothing to refund, and the building it was lowering stays as it is.
