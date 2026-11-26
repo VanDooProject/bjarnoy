@@ -55,6 +55,9 @@ The build queue is strictly first in, first out. Only the oldest waiting order c
 slots, every order behind it waits too, even one that needs fewer slots. A newly planned order starts right away only
 when nothing is waiting; otherwise it joins the end of the queue.
 
+When Premium ends, orders already in the waiting queue stay and start as slots free up. Until all of them have
+started, no new order can be added (`BuildRejection.QueueLockedWithoutPremium`).
+
 Everything stays lazy and clock-settled: `SettleTo(now)` replays completions **and** promotions in
 chronological order (`complete → promote → starvation`, in that order, at every instant), so reading a
 settlement at time T gives the same answer whether nobody looked for a week or polled every second. A

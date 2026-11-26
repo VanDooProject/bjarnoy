@@ -540,6 +540,8 @@ const cardView = computed<CardView | null>(() => {
         text: t('hud.ringMenu.card.willQueue', { waiting: a.queue.waiting, max: a.queue.max }),
         tone: 'queue',
       });
+    } else if (a.queue.locked) {
+      statuses.push({ text: t('hud.ringMenu.card.queueLocked'), tone: 'wait' });
     } else {
       const params = { needed: a.slots.needed, free: a.slots.free, total: a.slots.total };
       statuses.push({
@@ -558,6 +560,7 @@ const cardView = computed<CardView | null>(() => {
   let badge: CardView['badge'];
   if (locks.length) badge = { text: locks[0].toUpperCase(), tone: 'lock' };
   else if (resourcesShort) badge = { text: t('hud.ringMenu.card.badgeNoResources').toUpperCase(), tone: 'wait' };
+  else if (a?.queue.locked) badge = { text: t('hud.ringMenu.card.badgeQueueLocked').toUpperCase(), tone: 'wait' };
   else if (a?.state === 'waiting') badge = { text: t('hud.ringMenu.card.badgeNoSlot').toUpperCase(), tone: 'wait' };
   else badge = { text: card.okBadge ?? t('hud.ringMenu.buildableHere'), tone: 'ok' };
 

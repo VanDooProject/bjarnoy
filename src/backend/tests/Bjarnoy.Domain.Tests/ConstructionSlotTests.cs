@@ -195,6 +195,29 @@ public sealed class ConstructionSlotTests
     }
 
     [Fact]
+    public void Without_premium_nothing_new_can_be_added_while_an_earlier_order_still_waits()
+    {
+        // Same setup as the FIFO test above: the longhouse upgrade waits, one slot is free.
+        var settlement = Found(4);
+        var first = settlement.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var withFirst = settlement.Enqueue(first.Order!, T0);
+        var second = withFirst.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(-1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var withTwo = withFirst.Enqueue(second.Order!, T0);
+        var upgrade = withTwo.PlanBuild(
+            BuildingType.Longhouse, Centre, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var queued = withTwo.Enqueue(upgrade.Order!, T0);
+        Assert.True(upgrade.Order!.IsWaiting);
+        Assert.Equal(1, queued.FreeSlots);
+
+        var later = queued.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 0);
+
+        Assert.Equal(BuildRejection.QueueLockedWithoutPremium, later.Rejection);
+    }
+
+    [Fact]
     public void Past_slot_count_with_no_waiting_room_is_refused_with_NoFreeSlot()
     {
         var settlement = Found();

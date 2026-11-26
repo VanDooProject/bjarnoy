@@ -1826,7 +1826,11 @@ public sealed record Settlement
 
         if (!fitsNow && GroupWaitingOrders.Count() >= maxWaitingOrders)
         {
-            return BuildDecision.Rejected(maxWaitingOrders <= 0 ? BuildRejection.NoFreeSlot : BuildRejection.QueueFull);
+            // Without Premium, orders queued earlier stay and keep going, but nothing new joins them until all have started.
+            var rejection = maxWaitingOrders > 0
+                ? BuildRejection.QueueFull
+                : GroupWaitingOrders.Any() ? BuildRejection.QueueLockedWithoutPremium : BuildRejection.NoFreeSlot;
+            return BuildDecision.Rejected(rejection);
         }
 
         if (fitsNow)
@@ -2485,7 +2489,7 @@ public sealed record Settlement
             Buildings = buildings,
             Queue = [.. Queue.Where(o => o.Coord != editedCoord)],
             Resources = resources,
-        }).CancelTrainingAt(new HashSet<HexCoord> { editedCoord }, now);
+        }).CancelTrainingAt(new HashSet<HexCoord> { editedCoord }, now).PromoteWaitingOrders(now, speedFactor).Settlement;
     }
 
     /// <summary>
