@@ -189,6 +189,7 @@
       "queueFull": "The waiting queue is full ({waiting} of {max})",
       "badgeNoResources": "Not enough resources",
       "badgeNoSlot": "No free build slot",
+      "badgeQueueLocked": "Queue locked",
       "requiresBuilding": "Requires {building} level {level}",
       "razeTitle": "Raze to level {level}",
       "razeTitleRemove": "Tear down",

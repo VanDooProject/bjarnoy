@@ -962,7 +962,7 @@ public static class SettlementEndpoints
         BuildRejection.NoFreeSlot =>
             "Every construction slot is busy. Premium settlements can queue extra builds to wait for a free slot.",
         BuildRejection.QueueLockedWithoutPremium =>
-            "Your queued builds still go ahead, but without Premium you can't add new ones until every queued build has started.",
+            "Your waiting builds stay in the queue and start as slots free up, but without Premium you can't add new ones until all of them have started.",
         _ => "Refused.",
     };
 

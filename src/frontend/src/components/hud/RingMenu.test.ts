@@ -537,6 +537,8 @@ describe('RingMenu', () => {
       expect(card.get('[data-testid="ring-card-status"]').text()).toBe(
         'Builds are still waiting. Without Premium you can add more once they have started.',
       );
+      expect(card.text()).toContain('QUEUE LOCKED');
+      expect(card.text()).not.toContain('NO FREE BUILD SLOT');
     });
 
     it('shows full slots as the same waiting look, with the free count and time until the next slot', async () => {
