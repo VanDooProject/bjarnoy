@@ -182,6 +182,156 @@ These parts only change when a world is reseeded, so they are served from memory
   all river tiles for every order. The cache also keeps which river hexes lie on wasted islands, so a bridge placement
   does not read any island row either.
 
+## Rendering baseline (measured 2026-11-26)
+
+One machine, one scene, one set of numbers to compare later changes against.
+These are not a benchmark of a player's device: they are the first reading on a
+known setup, so a later reading can say "this got worse" rather than "this feels
+slow". Everything below was measured, not estimated; where the measurement
+could not separate an effect from the frame clock's own wobble, it says so.
+
+### Setup
+
+| | |
+| --- | --- |
+| Machine | Windows 11, 4 logical cores |
+| Browser | Chromium 152 (desktop app's in-app browser), WebGL 2 via ANGLE on Intel UHD Graphics (D3D11) |
+| Viewport | 1296 × 841 CSS px, device pixel ratio 1 |
+| Build | Vite dev server from `src/frontend` (`npx vite --port 5183 --strictPort`), demo mode, `?debug=1` |
+| Settings | Defaults: building animations on Auto (not enabled), no motion overrides set |
+| Scene | Default settlement view after landing, atlas and water mask loaded, camera held still |
+
+The path to the scene was the same one `scripts/screenshot-helpers/flow.mjs`
+walks: open `/?debug=1`, press "Go to the map", click the biased plot on the
+canvas, then the Settlement tab. The debug hooks installed for demo mode
+(`main.ts`) expose the same counters the perf panels read:
+`window.__fogPerf` (`fogPerfStats`), `window.__waterPerf` (`waterPerfStats`),
+`window.__fogDebug`, `window.__waterDebug` and `window.__settlementRenderer`.
+
+What those counters cover: Pixi's `Application` is created in
+`src/frontend/src/lib/map/HexMapRenderer.ts:2828-2839` and its ticker at `:2981`;
+the per-frame pass is at `:3031-3106`, with water/river/bog updates at
+`:3085-3087` and fog at `:3094-3104`. The shaders are GLSL strings in TS, not
+files: `water/waterShader.ts`, `water/riverShader.ts`,
+`water/bogLakeShader.ts` and `fog/fogShader.ts` (one field pass into a render
+texture, then two composite quads), sharing `shaderNoise.ts`. Draw order comes
+from `worldLayerOrder` (`:1940`); in settlement mode water sits between the
+terrain and the borders. A camera move calls `rebuildAll()` (`:4398-4482`),
+which writes `fogPerfStats`; `maybeBakeWaterMask()` (`:4499`) writes
+`waterPerfStats`. The toggles used in the A/B rows live in
+`water/waterDebug.ts:18-131` and `HexMapRenderer.ts:302-354`.
+
+Frame intervals came from `sampleFrames` in
+`src/frontend/src/lib/map/water/perfSweep.ts` — the same sampler behind
+WaterPerfPanel's **Measure breakdown** button: median plus median absolute
+deviation (MAD), discarding the first two frames after a state change. The A/B
+rows came from that module's `runPerfSweep`, with WaterPerfPanel's own subject
+list; the alternating on/off blocks below repeat the same A/B to check for
+machine drift. Rebuild numbers are `rebuildAll()` called ten times in a row and
+`__fogPerf` read afterwards; this is the work a camera pan triggers, measured
+without waiting on a drag. A browser performance trace and a JS CPU profile
+cover ~10 s each, and 60 frames had their WebGL calls counted by wrapping the
+context's draw/program/buffer methods from the console.
+
+### Steady frame
+
+| Measurement | Value |
+| --- | ---: |
+| Median frame interval | 43.3–44.7 ms (22–23 fps) across several 6–10 s windows |
+| MAD of those intervals | 6.5–7.3 ms |
+| `drawElements` per frame | 43 |
+| `useProgram` per frame | 32 |
+| `bufferSubData` per frame | 4.3 |
+| Shader compiles during the window | 0 (7 Pixi `GlProgram`s cached) |
+| JS heap in use | ~91 MB (Chrome `performance.memory`; atlas textures live on the GPU, outside this number) |
+
+The frame is not display-paced at this size: 43 ms is well past the 16.7 ms
+vsync floor, so an effect switched off has room to show up in the interval. The
+CPU profile of the same window is mostly idle (~6.9 s of 8.6 s sampled), with
+Pixi's filter path taking most of the rest (`addRenderable` ~246 ms,
+`packQuadAttributes` ~119 ms, `collectRenderablesSimple` ~114 ms sampled self
+time); the renderer's own tick is single-digit milliseconds in total. This is
+a GPU/fill-rate-bound frame, not a JavaScript-bound one.
+
+### Rebuild (camera move)
+
+Ten consecutive `rebuildAll()` calls took 35.9 ms the first time and 12.2–19.6
+ms after that (mean ~15 ms). The last `__fogPerf` reading for this scene:
+
+| Phase | ms |
+| --- | ---: |
+| Terrain (1,048 hexes drawn of 1,087 walked) | 7.9–11.5 |
+| Borders (19 bordered hexes) | 1.4–2.2 |
+| Bog edges | 0.5–1.0 |
+| Markers | 0.1–0.7 |
+| **Total** | **10.6–14.3** |
+
+The viewport covers 2,332 hexes; 1,087 of them are walked after the scan clip.
+The fog mask fetch took 67.4 ms once (demo mode's in-memory mask; live mode
+uses the cached `/fog-mask` response). The water mask was 260 × 198 texels
+(51,480), baked on the worker in 135.8 ms; the first bake during load took
+435.8 ms. Three bakes happened in the session, all during load/navigation —
+the counter stayed put while the camera was still, as it should.
+
+### Layer A/B
+
+The built-in sweep's baseline was 45.9 ms with 0.55 ms drift between its first
+and last baseline. Every sample's MAD was about 10 ms, so only a row clearing
+that noise is resolved:
+
+| Subject switched off | Frame with it off | Delta | Verdict |
+| --- | ---: | ---: | --- |
+| Water layer, all of it | 32.5 ms | −13.4 ms | resolved (noise ±10.0) |
+| Fog, both tiers | 38.7 ms | −7.2 ms | < noise (±10.0) |
+| Surface pattern (nested) | 42.9 ms | −3.0 ms | < noise (±10.0) |
+| Coarse net (nested) | 41.5 ms | −4.4 ms | < noise (±10.3) |
+| Fine net (nested) | 42.6 ms | −3.3 ms | < noise (±10.0) |
+| Shadow pools (nested) | 47.5 ms | not resolved | negative delta |
+| Shoreline foam (nested) | 45.4 ms | −0.5 ms | < noise (±10.6) |
+| Wave squiggles (world map) | 42.7 ms | −3.2 ms | < noise (±10.0) |
+
+As in the panel, the rows are separate A/Bs against the same baseline: they do
+not add up, and the nested rows are already inside the whole-water row.
+
+Running water and fog as alternating on/off blocks (2.5 s per block, twice
+each) gave a more consistent answer: water 47.2 ms on → 40.3 ms off, a **6.9 ms**
+cost (the two pairs gave 6.5 and 7.4); fog 44.7 → 39.4, **5.3 ms** (pairs 6.1
+and 4.4). The machine got faster over the run in both cases, which is why the
+pairwise deltas matter more than the raw on/off medians. The individual shader
+effects stay inside the noise: water is one fragment shader with each effect
+behind a uniform, fog is a field pass into a render texture plus two cheap
+composite quads, and river flow has its own mesh. Which effect dominates is
+not knowable from the frame clock on this machine; a timer query would be
+needed, and this codebase does not have one (hence the missing GPU-time rows
+in the perf panels).
+
+### Trace and caveats
+
+The 10 s trace recorded 15,494 events: 5,848 `RunTask` (2,651 ms total, max
+171.9 ms), 862 `FireAnimationFrame` (1,959 ms total), one long task of 121.9 ms
+from the forced rebuilds inside the window, 217 `Commit`, 6 `Paint` (1.3 ms)
+and 3 `RasterTask` (1.7 ms). The renderer-process trace does not include the
+GPU's shader time; event durations overlap and must not be summed.
+
+Caveats that would change how these numbers are read:
+
+- Dev build, not a production bundle; demo mode's fog mask is generated in
+  memory rather than fetched from the API.
+- One desktop, one window size, one day's machine load. Compare like with like
+  (same viewport, same scene, same settings) before calling a number a
+  regression.
+- No per-effect GPU timing exists, and a full heap snapshot could not be
+  exported (over the 5 MiB capture limit), so neither is part of this baseline.
+- The older figures in `docs/design/water-shader.md` come from a software
+  rasteriser at 1440×900 (~550 ms/frame). They explain why the mesh and the
+  river split exist, but are not comparable with the GPU numbers here.
+
+To repeat: start the Vite server, open `/?debug=1`, reach the default
+settlement view as above, wait for the bakes to settle, then read
+`__fogPerf`/`__waterPerf` and click **Measure breakdown** in the water perf
+panel (or call `sampleFrames`/`runPerfSweep` from the console). Keep the camera
+still during a sweep, and report the MAD and baseline drift with every result.
+
 ## Possible next steps
 
 - A small showcase thumbnail atlas (one camera, 200 × 300) for in-game UI,
