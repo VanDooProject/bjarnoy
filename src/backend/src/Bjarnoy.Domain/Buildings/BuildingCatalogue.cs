@@ -884,8 +884,11 @@ public static class BuildingCatalogue
     private static ResourceAmounts ProductionFor(ResourceAmounts incrementAtLevelOne, int level) =>
         incrementAtLevelOne * ((Math.Pow(ProductionGrowth, level) - 1) / (ProductionGrowth - 1));
 
-    /// <summary>The levels (1 to this) at which the start buildings — Longhouse, Tower, Lumberjack, Reindeer Herder — cost no stone.</summary>
-    private const int StartBrickFreeLevels = 5;
+    /// <summary>The levels (1 to this) at which the start buildings — Tower, Lumberjack, Reindeer Herder — cost no stone.</summary>
+    private const int StartBrickFreeLevels = 8;
+
+    /// <summary>The levels (1 to this) at which the Longhouse costs no stone.</summary>
+    private const int LonghouseBrickFreeLevels = 10;
 
     /// <summary>
     /// A building cost rounded the way a player reads it, per resource: below 100 to a whole number, 100 to 999 to the nearest 10,
@@ -950,7 +953,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.Longhouse,
         Level = level,
-        Cost = BrickFree(new ResourceAmounts(Wood: 120, Stone: 100, Food: 60, Iron: 0) * LonghouseCostFactor(level), level, StartBrickFreeLevels),
+        Cost = BrickFree(new ResourceAmounts(Wood: 120, Stone: 100, Food: 60, Iron: 0) * LonghouseCostFactor(level), level, LonghouseBrickFreeLevels),
         BuildDuration = BuildTime(BuildingType.Longhouse, level),
         // The anchor feeds its own settlement a little, so a new holding is
         // never completely stalled. Linear in level (unlike every other

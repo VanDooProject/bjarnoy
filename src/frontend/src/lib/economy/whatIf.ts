@@ -93,10 +93,10 @@ const SPELLED_OUT_TYPES: ReadonlySet<string> = new Set(['bridge']);
  * `stone · growth^(level−1)`. The catalogue's level-1 row has no stone there, so the stone it would have is kept here.
  */
 const BRICK_FREE: Readonly<Record<string, { levels: number; stone: number }>> = {
-  longhouse: { levels: 5, stone: 100 },
-  tower: { levels: 5, stone: 200 },
-  lumberjack: { levels: 5, stone: 49 },
-  reindeerherder: { levels: 5, stone: 36 },
+  longhouse: { levels: 10, stone: 100 },
+  tower: { levels: 8, stone: 200 },
+  lumberjack: { levels: 8, stone: 49 },
+  reindeerherder: { levels: 8, stone: 36 },
   claybrickworks: { levels: 1, stone: 10 },
 };
 

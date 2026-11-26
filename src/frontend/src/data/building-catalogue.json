@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-11-13T12:03:22.000Z"
+    "generatedAt": "2026-11-26T19:07:43.518Z"
   },
   "data": [
     {
@@ -224,7 +224,7 @@
       "level": 6,
       "cost": {
         "wood": 520,
-        "stone": 430,
+        "stone": 0,
         "food": 260,
         "iron": 0
       },
@@ -267,7 +267,7 @@
       "level": 7,
       "cost": {
         "wood": 690,
-        "stone": 580,
+        "stone": 0,
         "food": 350,
         "iron": 0
       },
@@ -310,7 +310,7 @@
       "level": 8,
       "cost": {
         "wood": 930,
-        "stone": 780,
+        "stone": 0,
         "food": 470,
         "iron": 0
       },
@@ -353,7 +353,7 @@
       "level": 9,
       "cost": {
         "wood": 1250,
-        "stone": 1050,
+        "stone": 0,
         "food": 620,
         "iron": 0
       },
@@ -396,7 +396,7 @@
       "level": 10,
       "cost": {
         "wood": 1650,
-        "stone": 1400,
+        "stone": 0,
         "food": 840,
         "iron": 0
       },
@@ -1509,7 +1509,7 @@
       "level": 6,
       "cost": {
         "wood": 59,
-        "stone": 180,
+        "stone": 0,
         "food": 110,
         "iron": 0
       },
@@ -1551,7 +1551,7 @@
       "level": 7,
       "cost": {
         "wood": 77,
-        "stone": 240,
+        "stone": 0,
         "food": 140,
         "iron": 0
       },
@@ -1593,7 +1593,7 @@
       "level": 8,
       "cost": {
         "wood": 100,
-        "stone": 310,
+        "stone": 0,
         "food": 190,
         "iron": 0
       },
@@ -20979,7 +20979,7 @@
       "level": 6,
       "cost": {
         "wood": 190,
-        "stone": 130,
+        "stone": 0,
         "food": 26,
         "iron": 0
       },
@@ -21021,7 +21021,7 @@
       "level": 7,
       "cost": {
         "wood": 250,
-        "stone": 170,
+        "stone": 0,
         "food": 34,
         "iron": 0
       },
@@ -21063,7 +21063,7 @@
       "level": 8,
       "cost": {
         "wood": 330,
-        "stone": 230,
+        "stone": 0,
         "food": 44,
         "iron": 0
       },

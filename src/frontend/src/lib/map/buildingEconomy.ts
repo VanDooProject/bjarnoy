@@ -613,12 +613,12 @@ export function niceRound(value: number): number {
   return Math.round(value / step) * step;
 }
 
-/** Mirrors `BuildingCatalogue`'s brick-free levels: no stone at levels 1-5 of the start buildings, none at level 1 of the Clay Brickworks. */
+/** Mirrors `BuildingCatalogue`'s brick-free levels: no stone at levels 1-10 of the Longhouse and 1-8 of the other start buildings, none at level 1 of the Clay Brickworks. */
 const BRICK_FREE_LEVELS: Partial<Record<BuildingKind, number>> = {
-  longhouse: 5,
-  tower: 5,
-  lumberjack: 5,
-  reindeerherder: 5,
+  longhouse: 10,
+  tower: 8,
+  lumberjack: 8,
+  reindeerherder: 8,
   claybrickworks: 1,
 };
 

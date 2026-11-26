@@ -187,10 +187,11 @@ describe('economy curves (mirror BuildingCatalogue.cs, docs/design/economy.md)',
     }
   });
 
-  it('the start buildings cost no brick at levels 1-5 (Clay Brickworks: level 1), the normal brick after', () => {
-    for (const type of ['longhouse', 'tower', 'lumberjack', 'reindeerherder'] as const) {
-      for (let level = 1; level <= 5; level++) expect(buildingUpgradeCost(type, level).stone, `${type} ${level}`).toBe(0);
-      expect(buildingUpgradeCost(type, 6).stone, `${type} 6`).toBeGreaterThan(0);
+  it('the Longhouse costs no brick at levels 1-10, the other start buildings at 1-8 (Clay Brickworks: level 1), the normal brick after', () => {
+    for (const [type, free] of [['longhouse', 10], ['tower', 8], ['lumberjack', 8], ['reindeerherder', 8]] as const) {
+      const max = Math.min(free, maxLevelFor(type));
+      for (let level = 1; level <= max; level++) expect(buildingUpgradeCost(type, level).stone, `${type} ${level}`).toBe(0);
+      if (maxLevelFor(type) > free) expect(buildingUpgradeCost(type, free + 1).stone, `${type} ${free + 1}`).toBeGreaterThan(0);
     }
     expect(buildingUpgradeCost('claybrickworks', 1).stone).toBe(0);
     expect(buildingUpgradeCost('claybrickworks', 2).stone).toBe(10);
