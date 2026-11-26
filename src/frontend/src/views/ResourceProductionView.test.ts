@@ -81,7 +81,8 @@ describe('ResourceProductionView', () => {
     const wrapper = await mountPage();
 
     const cells = (type: string) => wrapper.get(`[data-producer=${type}]`).findAll('td').map((td) => td.text());
-    expect(cells('farm')[3]).toBe('Grassland');
+    expect(cells('farm')[3]).toContain('Grassland');
+    expect(cells('farm')[3]).toContain('wheat soil');
     expect(cells('farm')[4]).toContain('Longhouse 4');
     expect(cells('farm')[4]).toContain('Reindeer Herder 3');
     expect(cells('fishinghut')[3]).toContain('Shallow (coastal) water');

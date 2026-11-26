@@ -154,7 +154,8 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
     return river ? world.model.riverVariantAt(coord, river.shape) : undefined;
   }
 
-  // PumpkinFarm is only offered on a Pumpkin-soil island — mirrors
+  // Farm is only offered on a Wheat-soil island, PumpkinFarm only on a
+  // Pumpkin-soil one — mirrors
   // WorldModel.placeBuilding's own check, same "filter out of the category
   // rather than render locked" reasoning riverShapeAt above uses, since this
   // too is a fixed property of the settlement rather than a progression gate.

@@ -1167,9 +1167,8 @@ public sealed class SettlementService(
                 .ConfigureAwait(false)
             : null;
 
-        // Likewise, only PumpkinFarm cares which crop this island grows —
-        // Farm stays buildable everywhere.
-        var islandSoil = type == BuildingType.PumpkinFarm
+        // Likewise, only Farm and PumpkinFarm care which crop this island grows.
+        var islandSoil = type is BuildingType.Farm or BuildingType.PumpkinFarm
             ? await IslandSoilAsync(booking.IslandId, sampler, cancellationToken).ConfigureAwait(false)
             : null;
 

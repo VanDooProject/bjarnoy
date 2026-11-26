@@ -50,7 +50,7 @@ function standsOn(type: string): string {
   return first.allowedTerrain.map(terrainName).join(', ');
 }
 
-const NOTED = new Set(['pumpkinfarm', 'fishinghut', 'claybrickworks', 'bogoreworks']);
+const NOTED = new Set(['farm', 'pumpkinfarm', 'fishinghut', 'claybrickworks', 'bogoreworks']);
 
 function unlockOf(type: string) {
   return {

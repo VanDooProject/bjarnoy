@@ -312,10 +312,9 @@ export function buildingStatsFor(
     // ReindeerHerder, Farm and PumpkinFarm are deliberately excluded from
     // BuildingCatalogue.cs's Boosts table (they work a herd or a fixed field,
     // not a resource that concentrates nearby) — no terrain or water adjacency
-    // changes their output. The herder is the starting food building; Farm is
-    // buildable everywhere from LH 4; PumpkinFarm is gated to Pumpkin-soil
-    // islands (see ringCatalogue.ts's cropAllowedHere) and yields more, the
-    // "more fertile" island's bonus crop.
+    // changes their output. The herder is the starting food building; from LH 4
+    // an island grows either Farm (Wheat soil) or PumpkinFarm (Pumpkin soil,
+    // see ringCatalogue.ts's cropAllowedHere), which yields more.
     case 'reindeerherder':
       return { output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(8, level) } };
     case 'farm':

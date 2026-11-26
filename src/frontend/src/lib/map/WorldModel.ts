@@ -1027,9 +1027,9 @@ export class WorldModel {
 
   /**
    * Which crop the island centred on `centre` grows — mirrors the backend's
-   * `TerrainSampler.SoilAt` (via `soilAt`'s own doc comment). Only
-   * PumpkinFarm cares (see `Settlement.PlanBuild`'s islandSoil parameter on
-   * the backend): Farm stays buildable everywhere regardless of soil.
+   * `TerrainSampler.SoilAt` (via `soilAt`'s own doc comment). Farm is
+   * only buildable on Wheat soil, PumpkinFarm only on Pumpkin soil (see
+   * `Settlement.PlanBuild`'s islandSoil parameter on the backend).
    */
   soilAtIslandCentre(centre: AxialCoord): 'wheat' | 'pumpkin' {
     return soilAt(centre.q, centre.r, { seed: this.seed, generation: this.generation });
@@ -2299,8 +2299,8 @@ export class WorldModel {
     }
     if (!type || !this.hexTakesBuilding(at, type)) return false;
     const tile = this.getTile(at.q, at.r);
-    // PumpkinFarm is only buildable on a Pumpkin-soil island (matches
-    // BuildRejection.WrongCropForIslandSoil) — Farm has no such gate.
+    // Farm only on a Wheat-soil island, PumpkinFarm only on a Pumpkin-soil one
+    // (matches BuildRejection.WrongCropForIslandSoil).
     if (type && !cropAllowedHere(type, this.soilForSettlement(settlementId))) {
       return false;
     }

@@ -148,9 +148,9 @@ describe('cropAllowedHere', () => {
     expect(cropAllowedHere('pumpkinfarm', undefined)).toBe(true);
   });
 
-  it('never refuses farm, on either soil or unresolvable soil', () => {
+  it('only allows farm on wheat soil', () => {
     expect(cropAllowedHere('farm', 'wheat')).toBe(true);
-    expect(cropAllowedHere('farm', 'pumpkin')).toBe(true);
+    expect(cropAllowedHere('farm', 'pumpkin')).toBe(false);
     expect(cropAllowedHere('farm', undefined)).toBe(true);
   });
 

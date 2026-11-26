@@ -265,11 +265,11 @@
       "bridge": "Opens a wide river to land armies. A causeway first, then a footbridge, the king's bridge, and a guarded bridge with forts that only you and your friends may cross. Attackers burn a guarded bridge down a level at a time.",
       "siegeworkshop": "Trains the siege engines on grass: catapults and battering rams. Unlocks at Longhouse 18 behind a level-3 Archery range. Rams are the only engine that breaches walls (they hit towers too); catapults burn towers and every other building.",
       "reindeerherder": "A herder's hut and a pen of reindeer on open grassland — the settlement's first food building, available from the start.",
-      "farm": "Grows food on open grassland, keeping the longhouse table full. Buildable on every island, regardless of soil, from Longhouse 4 behind a level-3 Reindeer Herder (it and Pumpkin Farm share one tech-tree card).",
+      "farm": "Grows food on open grassland, keeping the longhouse table full. Only buildable on a Wheat-soil island (a Pumpkin-soil island grows Pumpkin Farms instead), from Longhouse 4 behind a level-3 Reindeer Herder (it and Pumpkin Farm share one tech-tree card).",
       "storagehouse": "Extra room for the harvest, on grass. A resource stops being produced once it reaches the storage limit, so a full store wastes output.",
       "tower": "A watch built on grass, sand, forest or plain bog moss at the border, pushing the claimed ground further out. A tower only claims ground, and only sees, while it is chained to one of your longhouses: it has to stand on ground that a longhouse or another connected tower claims. If a tower in the chain falls, every tower beyond it is cut off and claims nothing until the link is rebuilt. Cut-off towers do not count against your tower limit. Buildings the realm no longer reaches stop working and lose levels over time until your realm reaches them again; at level 0 they are gone.",
       "fishinghut": "A dock over shallow water, fishing the shallows a farm never could. It also stands on stilts on the half shore of a bog lake.",
-      "pumpkinfarm": "A second harvest for grass — pumpkins alongside the plain fields, yielding more than Farm. Only buildable on a Pumpkin-soil island (the game picks each island's soil, not the player) — the bonus crop a \"more fertile\" island unlocks.",
+      "pumpkinfarm": "Pumpkins instead of grain on grass, yielding more than Farm. Only buildable on a Pumpkin-soil island (the game picks each island's soil, not the player); there it replaces the Farm.",
       "shrineofthor": "Raised to Thor on grass, behind a level-5 Smithy — the war god's favour raises the attack of your land units (+10% at level 1, +22% at level 5). A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
       "shrineoffreyja": "Raised to Freyja on grass — its favour boosts Food production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
       "shrineofullr": "Raised to Ullr in the forest — its favour boosts Wood production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
@@ -975,13 +975,14 @@
       "perHour": "All figures are per hour, before any boost from neighbours, mills or shrines. Only buildings inside your realm produce; one outside it stands idle and loses levels until your realm reaches it again.",
       "longhouseUnlock": "From the start",
       "notes": {
+        "farm": "Only on an island with wheat soil",
         "pumpkinfarm": "Only on an island with pumpkin soil",
         "fishinghut": "or on the half shore of a bog lake",
         "claybrickworks": "Plain bog moss only",
         "bogoreworks": "Plain bog moss only, not shore, creek or lake"
       },
       "longhouse": "The Longhouse is the exception: it adds the same fixed amount every level ({amounts} an hour: wood / food) instead of adding 20% more each time.",
-      "soil": "Every island has either wheat or pumpkin soil, about half of them each. A {pumpkin} fits only pumpkin soil and makes {pumpkinRate} food at level 1 where a {farm} makes {farmRate}; a {farm} fits any island."
+      "soil": "Every island has either wheat or pumpkin soil, about half of them each. A {pumpkin} fits only pumpkin soil and makes {pumpkinRate} food at level 1 where a {farm} makes {farmRate}; a {farm} fits only wheat soil."
     },
     "boost": {
       "heading": "Neighbour boost",

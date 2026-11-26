@@ -1715,19 +1715,38 @@ public class SettlementTests
     }
 
     [Fact]
-    public void A_new_farm_is_never_refused_by_island_soil_either_way()
+    public void A_new_farm_is_accepted_on_a_wheat_soil_island()
     {
-        // Farm is the always-available staple crop — soil only ever gates
-        // PumpkinFarm, the bonus a "more fertile" island unlocks.
         var settlement = FoundAtLonghouseLevel(4, (BuildingType.ReindeerHerder, 3));
 
-        var onWheat = settlement.PlanBuild(
+        var decision = settlement.PlanBuild(
             BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Wheat);
-        var onPumpkin = settlement.PlanBuild(
-            BuildingType.Farm, new HexCoord(2, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Pumpkin);
 
-        Assert.True(onWheat.Accepted, $"expected accept, got {onWheat.Rejection}");
-        Assert.True(onPumpkin.Accepted, $"expected accept, got {onPumpkin.Rejection}");
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_new_farm_is_refused_on_a_pumpkin_soil_island()
+    {
+        // Each island grows one crop: a Pumpkin-soil island gets PumpkinFarm instead of Farm.
+        var settlement = FoundAtLonghouseLevel(4, (BuildingType.ReindeerHerder, 3));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Pumpkin);
+
+        Assert.Equal(BuildRejection.WrongCropForIslandSoil, decision.Rejection);
+    }
+
+    [Fact]
+    public void Leveling_up_an_existing_farm_is_not_refused_even_on_pumpkin_soil()
+    {
+        var settlement = FoundAtLonghouseLevel(4, (BuildingType.Farm, 1));
+        var farmCoord = new HexCoord(-2, 0); // FoundAtLonghouseLevel's first `standing` entry
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Farm, farmCoord, Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Pumpkin);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
 
     [Fact]

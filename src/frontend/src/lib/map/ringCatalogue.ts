@@ -138,16 +138,18 @@ export function riverFitLock(type: string, riverShape: string | undefined, river
 }
 
 /**
- * Whether `type` can be placed given this settlement's island soil — only
- * PumpkinFarm cares (`WorldModel.placeBuilding`/the backend's
- * `Settlement.PlanBuild` mirror this): it's the bonus crop a Pumpkin-soil
- * island unlocks, a "more fertile" island over a Wheat-soil one. Farm stays
- * offered everywhere. `soil` is `undefined` when the caller couldn't resolve
+ * Whether `type` can be placed given this settlement's island soil — each
+ * island grows one crop: Farm on Wheat soil, PumpkinFarm on Pumpkin soil
+ * (`WorldModel.placeBuilding`/the backend's `Settlement.PlanBuild` mirror
+ * this). `soil` is `undefined` when the caller couldn't resolve
  * an island (e.g. a demo settlement founded with no island id) — permissive
  * by default, same as the backend's null islandSoil.
  */
 export function cropAllowedHere(type: string, soil: 'wheat' | 'pumpkin' | undefined): boolean {
-  return type !== 'pumpkinfarm' || soil === undefined || soil === 'pumpkin';
+  if (soil === undefined) return true;
+  if (type === 'pumpkinfarm') return soil === 'pumpkin';
+  if (type === 'farm') return soil === 'wheat';
+  return true;
 }
 
 /**

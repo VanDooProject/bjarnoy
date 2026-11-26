@@ -1414,10 +1414,9 @@ public sealed record Settlement
     /// </param>
     /// <param name="islandSoil">
     /// Which crop this settlement's island grows (<see cref="SoilType"/>) —
-    /// only <see cref="BuildingType.PumpkinFarm"/> cares: it's only buildable
-    /// on a Pumpkin-soil island, the bonus a "more fertile" island unlocks.
-    /// <see cref="BuildingType.Farm"/> stays buildable everywhere regardless
-    /// of soil. The caller resolves this once from the island's centre
+    /// <see cref="BuildingType.Farm"/> is only buildable on a Wheat-soil island,
+    /// <see cref="BuildingType.PumpkinFarm"/> only on a Pumpkin-soil one: each
+    /// island grows one of the two crops. The caller resolves this once from the island's centre
     /// (<c>SettlementService.QueueBuildAsync</c>, <see cref="TerrainSampler.SoilAt"/>).
     /// </param>
     /// <param name="realm">
@@ -1644,15 +1643,12 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.ShrineGodAlreadyOnIsland);
         }
 
-        // Farm is the settlement's always-available staple — never gated.
-        // PumpkinFarm is the bonus crop a Pumpkin-soil island additionally
-        // unlocks (see SoilType), which is what makes such an island "more
-        // fertile" rather than just different. Only gates a *new*
-        // PumpkinFarm (!occupied); leveling up one already standing here is
-        // always allowed, so a settlement from before this rule existed
-        // never gets bricked by its own earlier build.
-        if (!occupied && type == BuildingType.PumpkinFarm
-            && islandSoil is { } soil && soil == SoilType.Wheat)
+        // Each island grows one crop (see SoilType): Farm on Wheat soil,
+        // PumpkinFarm on Pumpkin soil. Only gates a *new* farm (!occupied);
+        // leveling up one already standing here is always allowed.
+        if (!occupied && islandSoil is { } soil
+            && ((type == BuildingType.PumpkinFarm && soil == SoilType.Wheat)
+                || (type == BuildingType.Farm && soil == SoilType.Pumpkin)))
         {
             return BuildDecision.Rejected(BuildRejection.WrongCropForIslandSoil);
         }

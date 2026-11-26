@@ -155,9 +155,8 @@ public enum BuildRejection
     SettlementAlreadyHasShrine,
 
     /// <summary>
-    /// PumpkinFarm was ordered on a Wheat-soil island — it's the bonus crop
-    /// only a Pumpkin-soil island (<see cref="World.SoilType"/>) unlocks;
-    /// Farm stays buildable everywhere regardless of soil. See
+    /// A farm was ordered for the wrong crop of its island (<see cref="World.SoilType"/>):
+    /// a Farm on a Pumpkin-soil island or a PumpkinFarm on a Wheat-soil one. See
     /// <see cref="Settlement.PlanBuild"/>'s islandSoil parameter.
     /// </summary>
     WrongCropForIslandSoil,

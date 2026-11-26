@@ -367,17 +367,16 @@ public static class BuildingCatalogue
             // The starting food building: any grass, any island, LH 1. No
             // terrain boost, like Farm (a herd is not a concentrating resource).
             BuildingType.ReindeerHerder => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 8, 0), new ResourceAmounts(Wood: 52, Stone: 36, Food: 7, Iron: 0), brickFreeLevels: StartBrickFreeLevels),
-            // Buildable on any island regardless of soil, from LH 4 behind a
+            // Only buildable on a Wheat-soil island, from LH 4 behind a
             // level-3 Reindeer Herder (it and PumpkinFarm are one tech-tree
             // card, split into two types only by their soil rule).
             BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 12, 0), new ResourceAmounts(Wood: 57, Stone: 29, Food: 9, Iron: 0)),
             BuildingType.StorageHouse => StorageHouse(level),
             BuildingType.Tower => Tower(level),
             BuildingType.FishingHut => FishingHut(level),
-            // The bonus crop: only buildable on a Pumpkin-soil island
+            // Only buildable on a Pumpkin-soil island, where it replaces Farm
             // (Settlement.PlanBuild's islandSoil parameter, from
-            // World.TerrainSampler.SoilAt) — not a free player choice, and
-            // not gated the other way (Farm stays buildable everywhere).
+            // World.TerrainSampler.SoilAt) — not a free player choice.
             // Yields more than Farm: an indirect fertility signal via the
             // production curve rather than a separate bonus multiplier —
             // that's what makes a Pumpkin-soil island "more fertile".
