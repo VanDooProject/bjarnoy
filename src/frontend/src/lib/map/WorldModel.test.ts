@@ -2987,6 +2987,17 @@ describe('WorldModel chained towers', () => {
     expect(model.claimDiscsOf(settlement.id).some((d) => d.q === along(7).q)).toBe(false);
   });
 
+  it('a tower cut off by a dropped link gets no border of its own, not even on its own hex', () => {
+    const { model, settlement, along, snap } = setup();
+    snap(settlement, [along(3), along(5), along(7)]);
+    expect(model.realmBorderOwnerAt(along(7).q, along(7).r)).toBe(settlement.id);
+
+    snap(settlement, [along(3), along(7)]); // the middle tower is gone: the far one is out of reach
+
+    expect(model.realmBorderOwnerAt(along(7).q, along(7).r)).toBeUndefined();
+    expect(model.realmBorderOwnerAt(along(5).q, along(5).r)).toBe(settlement.id);
+  });
+
   it('reconnecting the chain claims the far side again', () => {
     const { settlement, along, snap, owner } = setup();
     snap(settlement, [along(3), along(7)]);

@@ -385,6 +385,8 @@ export class WorldModel {
   private rivalTowers = new Map<string, { q: number; r: number; level: number }[]>();
   /** Bumped whenever something a rival's claim depends on changes; `rivalClaimOwners` is rebuilt lazily when it lags behind. */
   private rivalClaimRevision = 0;
+  /** Per own settlement: the hexes of its current claim, as `syncOwnClaim` last computed them (without buildings standing outside it). */
+  private ownClaimKeys = new Map<string, Set<string>>();
   private rivalClaimCache: { revision: number; owners: Map<string, string> } | null = null;
   /**
    * The settlements the chain rule resolves together locally (`realmChain.ts`): one player's settlements on one island, keyed
@@ -1685,6 +1687,7 @@ export class WorldModel {
       else tile.ownerId = undefined;
     }
     this.claimedKeys.set(id, owned);
+    this.ownClaimKeys.set(id, claimed);
     this.rivalClaimRevision++;
   }
 
@@ -2082,12 +2085,12 @@ export class WorldModel {
 
   /**
    * The settlement whose realm border is drawn on this hex, ignoring the fog: for the player's own settlements the tile's owner
-   * as `syncClaim` left it; for a rival the owner by claim only (`rivalClaimOwners`), so a rival building standing outside every
-   * claim disc of its realm gets no border of its own.
+   * as `syncClaim` left it, but only where the hex is inside that settlement's claim; for a rival the owner by claim only
+   * (`rivalClaimOwners`). A building standing outside every claim disc of its realm (a cut-off tower) gets no border of its own.
    */
   realmBorderOwnerAt(q: number, r: number): string | undefined {
     const ownerId = this.getTile(q, r).ownerId;
-    if (ownerId !== undefined && !this.isRivalRealm(ownerId)) return ownerId;
+    if (ownerId !== undefined && !this.isRivalRealm(ownerId)) return this.ownClaimKeys.get(ownerId)?.has(coordKey({ q, r })) ? ownerId : undefined;
     return this.rivalClaimOwners().get(coordKey({ q, r }));
   }
 
