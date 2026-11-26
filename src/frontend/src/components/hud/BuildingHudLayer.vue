@@ -36,8 +36,7 @@ import {
   hasHudMarker,
   markerBoxRect,
   markerScale,
-  pointInRect,
-  markerHexAt,
+  markerAt,
   type MarkerHitArea,
   rowsFor,
   rowsSignature,
@@ -57,7 +56,6 @@ import {
   dialRadiusPx,
   dialRemainingSeconds,
   nextTapReveal,
-  pickTappedDial,
   type BlockedMarker,
   type ConstructionDial,
 } from '../../lib/map/constructionDial';
@@ -400,33 +398,40 @@ function labelOf(m: Marker): string {
 
 // ---- hover / tap (like the progress dial: grows to its default-zoom size, comes to the front) --------------------------------
 
-// The markers take no pointer input (like the canvas dials they never block the map's hover, tap and ring): hover is the
-// mouse position the map tracks (dial disc, box or hex), a tap is reported by the map (dial disc only).
+// The markers take no pointer input (like the canvas dials they never block the map's hover, wheel and drags): hover is the
+// mouse position the map tracks (dial disc, box or hex); a click or tap is the map's, which asks the layer which marker it is on
+// (`tapTargetAt`) and then reaches that marker's hex.
 let tapKey: string | null = null;
 let tapAtMs = 0;
 const hoverT = new Map<string, number>();
-/** Where each marker's dial is drawn right now (canvas px, radius), for the tap hit test. */
+/** Where each marker's dial is drawn right now (canvas px, radius), for the tap hit test; absent while it is faded out. */
 const dialDiscs = new Map<string, { key: string; cx: number; cy: number; r: number }>();
 /** Where each marker's box is drawn right now (canvas px); absent while it has none. */
 const boxRects = new Map<string, { x: number; y: number; w: number; h: number }>();
 
-/** A tap on a dial reveals it (a second one closes it); a tap elsewhere closes a revealed one. */
+/** The marker (dial disc or box) at canvas point `screen` as placed in the last frame, or null: the top-most of several. */
+function placedMarkerAt(screen: { x: number; y: number }): MarkerHitArea | null {
+  if (hudHidden.value) return null;
+  const areas: MarkerHitArea[] = [];
+  for (const [key, disc] of dialDiscs) areas.push({ key, hexKey: disc.key, disc, box: boxRects.get(key), z: lastZ.get(key) ?? 0 });
+  return markerAt(screen, areas);
+}
+
+/** A tap on a marker reveals it (a second one closes it); a tap elsewhere closes a revealed one. */
 function onMapTap(screen: { x: number; y: number }) {
-  tapKey = nextTapReveal(tapKey, pickTappedDial(screen, [...dialDiscs.values()]));
+  tapKey = nextTapReveal(tapKey, placedMarkerAt(screen)?.hexKey ?? null);
   tapAtMs = Date.now();
 }
 
 /**
- * The hex of the marker (dial disc or box) under canvas point `screen`, for the map's click and tap (`setTapTarget`): the marker
- * stands for its building's hex, not for the one it is drawn over. The top-most one wins; a faded marker (under the ring menu,
- * no disc) and a hidden layer take none.
+ * The hex a click or tap at canvas point `screen` means (`setTapTarget`): on a marker, its building's hex, not the one it is
+ * drawn over, for the ring menu and quick upgrade. A route being plotted (dispatch, field order) or the send picker's target
+ * keeps the hex under the pointer.
  */
 function tapTargetAt(screen: { x: number; y: number }): AxialCoord | null {
-  if (hudHidden.value) return null;
-  const areas: MarkerHitArea[] = [];
-  for (const [key, disc] of dialDiscs) areas.push({ hexKey: disc.key, disc, box: boxRects.get(key), z: lastZ.get(key) ?? 0 });
-  const hexKey = markerHexAt(screen, areas);
-  return hexKey === null ? null : (placeables.value.find((p) => p.hexKey === hexKey)?.coord ?? null);
+  if (world.dispatchDraft || world.fieldOrderDraft || world.sendPicker) return null;
+  const hexKey = placedMarkerAt(screen)?.hexKey;
+  return hexKey === undefined ? null : (placeables.value.find((p) => p.hexKey === hexKey)?.coord ?? null);
 }
 
 /**
@@ -435,13 +440,12 @@ function tapTargetAt(screen: { x: number; y: number }): AxialCoord | null {
  */
 function directHit(mouse: { x: number; y: number } | null, candidates: { key: string; x: number; y: number; zs: number }[]): string | null {
   if (!mouse) return null;
-  const hits = candidates
-    .filter(({ key, x, y, zs }) => {
-      const size = boxSizes.get(key);
-      return Math.hypot(mouse.x - x, mouse.y - y) <= dialRadiusPx(zs) || (size !== undefined && pointInRect(mouse, markerBoxRect(x, y, size, zs)));
-    })
-    .map(({ key, x }) => ({ key, x, hovered: (hoverT.get(key) ?? 0) > 0 }));
-  return stackOrder(hits).at(-1)?.key ?? null;
+  const ranked = stackOrder(candidates.map((c) => ({ ...c, hovered: (hoverT.get(c.key) ?? 0) > 0 })));
+  const areas = ranked.map(({ key, x, y, zs }, z): MarkerHitArea => {
+    const size = boxSizes.get(key);
+    return { key, hexKey: key, disc: { cx: x, cy: y, r: dialRadiusPx(zs) }, box: size && markerBoxRect(x, y, size, zs), z };
+  });
+  return markerAt(mouse, areas)?.key ?? null;
 }
 
 // ---- per-frame placement --------------------------------------------------------------------------------------------------

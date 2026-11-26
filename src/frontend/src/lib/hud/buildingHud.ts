@@ -80,26 +80,28 @@ export function pointInRect(point: { x: number; y: number }, rect: { x: number; 
 // ---- stacking ---------------------------------------------------------------------------------------------------------
 
 /** Markers bottom to top: ascending screen x (right-most on top), the hovered/tapped one last. Stable, input untouched. */
-/** One marker as a tap sees it: its hex, its dial disc and box on screen (canvas px), and its stacking order (higher = on top). */
+export function stackOrder<T extends { x: number; hovered?: boolean }>(markers: readonly T[]): T[] {
+  return [...markers].sort((a, b) => Number(!!a.hovered) - Number(!!b.hovered) || a.x - b.x);
+}
+
+/** One marker as the pointer sees it: its dial disc and box on screen (canvas px) and its stacking order (higher = on top). */
 export interface MarkerHitArea {
+  key: string;
+  /** The hex ("q,r") the marker stands for. */
   hexKey: string;
   disc: { cx: number; cy: number; r: number };
   box?: { x: number; y: number; w: number; h: number };
   z: number;
 }
 
-/** The hex of the top-most marker whose dial disc or box holds `point`, or null when the point is on none. */
-export function markerHexAt(point: { x: number; y: number }, areas: Iterable<MarkerHitArea>): string | null {
-  let best: MarkerHitArea | null = null;
+/** The top-most marker whose dial disc or box holds `point`, or null when the point is on none: the one hit test of hover and tap. */
+export function markerAt<T extends MarkerHitArea>(point: { x: number; y: number }, areas: Iterable<T>): T | null {
+  let best: T | null = null;
   for (const a of areas) {
     const hit = Math.hypot(point.x - a.disc.cx, point.y - a.disc.cy) <= a.disc.r || (a.box !== undefined && pointInRect(point, a.box));
     if (hit && (best === null || a.z > best.z)) best = a;
   }
-  return best?.hexKey ?? null;
-}
-
-export function stackOrder<T extends { x: number; hovered?: boolean }>(markers: readonly T[]): T[] {
-  return [...markers].sort((a, b) => Number(!!a.hovered) - Number(!!b.hovered) || a.x - b.x);
+  return best;
 }
 
 // ---- view model -------------------------------------------------------------------------------------------------------
