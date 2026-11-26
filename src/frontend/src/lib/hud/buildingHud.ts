@@ -3,7 +3,7 @@
 // `buildingStatsFor`, `maxLevelFor`), see docs on `resolveUpgradeTarget`.
 import type { AxialCoord } from '../hex/coords';
 import type { BuildingDefinitionResponse, BuildOrderResponse, TrainingOrderResponse, UnitStackResponse } from '../../api/types';
-import { DIAL_LABEL_BASE_PX, DIAL_MIN_LABEL_PX, dialPhase, liftedScale, type ConstructionDial } from '../map/constructionDial';
+import { DIAL_LABEL_BASE_PX, DIAL_MIN_LABEL_PX, dialLevelFontPx, dialRadiusPx, dialPhase, liftedScale, type ConstructionDial } from '../map/constructionDial';
 import { buildingStatsFor, maxLevelFor, scaleOutput, type BuildingKind, type BuildingOutput } from '../map/buildingEconomy';
 import {
   RING_RESOURCE_KEYS,
@@ -20,17 +20,19 @@ import { upgradeVerdict } from './upgradeRules';
 // ---- zoom tiers -------------------------------------------------------------------------------------------------------
 
 /**
- * far: the dial's ring only (the progress dial would hide its label too); dial: level or time inside, no box yet; mid: the
- * compact box; near: the full box.
+ * far: the dial's ring only; level: the level (or queue place) inside, a countdown is still too small and hidden (the progress
+ * dial hides its label too); dial: level or time inside, no box yet; mid: the compact box; near: the full box.
  */
-export type HudTier = 'near' | 'mid' | 'dial' | 'far';
+export type HudTier = 'near' | 'mid' | 'dial' | 'level' | 'far';
 
 /** Smallest text of the box at zs = 1, in px; the box shows once this would be `DIAL_MIN_LABEL_PX` on screen. */
 export const HUD_BOX_FONT_PX = 11;
 
 /** The marker's tiers are measured on `zs`, the progress dial's own size factor (`dialScale`), so both change at the same zoom. */
 export const HUD_TIER = {
-  /** Below this zs the dial's label would be under `DIAL_MIN_LABEL_PX` on screen: far, ring only (the progress dial's rule). */
+  /** Below this zs the dial's level (its larger font) would be under `DIAL_MIN_LABEL_PX` on screen: far, ring only. */
+  levelBelow: DIAL_MIN_LABEL_PX / dialLevelFontPx(dialRadiusPx(1)),
+  /** Below this zs a countdown in the dial would be under `DIAL_MIN_LABEL_PX` on screen: level only (the progress dial's rule). */
   labelBelow: DIAL_MIN_LABEL_PX / DIAL_LABEL_BASE_PX,
   /** Below this zs the box text would be under `DIAL_MIN_LABEL_PX` on screen: the dial alone. */
   boxBelow: DIAL_MIN_LABEL_PX / HUD_BOX_FONT_PX,
@@ -42,10 +44,11 @@ export const HUD_TIER = {
 
 /** The tier at size factor `zs`; `previous` (the marker's current tier) adds the hysteresis. */
 export function tierFor(zs: number, previous: HudTier | null = null): HudTier {
-  const { labelBelow, boxBelow, nearAt, hysteresis } = HUD_TIER;
+  const { levelBelow, labelBelow, boxBelow, nearAt, hysteresis } = HUD_TIER;
   // A threshold the marker is already past stays crossed until zs is `hysteresis` back.
   const atLeast = (threshold: number, held: HudTier[]) => zs >= threshold - (previous !== null && held.includes(previous) ? hysteresis : 0);
-  if (!atLeast(labelBelow, ['dial', 'mid', 'near'])) return 'far';
+  if (!atLeast(levelBelow, ['level', 'dial', 'mid', 'near'])) return 'far';
+  if (!atLeast(labelBelow, ['dial', 'mid', 'near'])) return 'level';
   if (!atLeast(boxBelow, ['mid', 'near'])) return 'dial';
   return atLeast(nearAt, ['near']) ? 'near' : 'mid';
 }
@@ -77,6 +80,24 @@ export function pointInRect(point: { x: number; y: number }, rect: { x: number; 
 // ---- stacking ---------------------------------------------------------------------------------------------------------
 
 /** Markers bottom to top: ascending screen x (right-most on top), the hovered/tapped one last. Stable, input untouched. */
+/** One marker as a tap sees it: its hex, its dial disc and box on screen (canvas px), and its stacking order (higher = on top). */
+export interface MarkerHitArea {
+  hexKey: string;
+  disc: { cx: number; cy: number; r: number };
+  box?: { x: number; y: number; w: number; h: number };
+  z: number;
+}
+
+/** The hex of the top-most marker whose dial disc or box holds `point`, or null when the point is on none. */
+export function markerHexAt(point: { x: number; y: number }, areas: Iterable<MarkerHitArea>): string | null {
+  let best: MarkerHitArea | null = null;
+  for (const a of areas) {
+    const hit = Math.hypot(point.x - a.disc.cx, point.y - a.disc.cy) <= a.disc.r || (a.box !== undefined && pointInRect(point, a.box));
+    if (hit && (best === null || a.z > best.z)) best = a;
+  }
+  return best?.hexKey ?? null;
+}
+
 export function stackOrder<T extends { x: number; hovered?: boolean }>(markers: readonly T[]): T[] {
   return [...markers].sort((a, b) => Number(!!a.hovered) - Number(!!b.hovered) || a.x - b.x);
 }
@@ -484,11 +505,11 @@ function upgradeRow(vm: BuildingHudViewModel, tier: 'near' | 'mid', premium: boo
 }
 
 /**
- * The rows a marker shows at `tier` (none without a box: far and dial). Near takes up to three rows, mid two. `quick` is set
+ * The rows a marker shows at `tier` (none without a box: far, level and dial). Near takes up to three rows, mid two. `quick` is set
  * on the hovered marker while quick upgrade applies (`premium`), or while a free account holds Shift (`locked`).
  */
 export function rowsFor(vm: BuildingHudViewModel, tier: HudTier, opts: { premium: boolean; quick?: 'premium' | 'locked'; shift?: boolean }): HudRow[] {
-  if (tier === 'far' || tier === 'dial') return [];
+  if (tier === 'far' || tier === 'level' || tier === 'dial') return [];
   const upgrade = upgradeRow(vm, tier, opts.premium, opts.quick, opts.shift ?? false);
   // The Longhouse with a garrison shows the garrison instead of its production.
   const showProduction = !vm.garrison;

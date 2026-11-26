@@ -8,6 +8,7 @@ import {
   buildingHudViewModel,
   hudMarkerKeys,
   markerBoxRect,
+  markerHexAt,
   markerScale,
   pointInRect,
   rowsSignature,
@@ -17,7 +18,7 @@ import {
   type BuildingHudInput,
   type HudRow,
 } from './buildingHud';
-import { DIAL_FINISH_MS, DIAL_MIN_LABEL_PX, DIAL_REJECT_MS, dialScale, type ConstructionDial } from '../map/constructionDial';
+import { DIAL_FINISH_MS, DIAL_MIN_LABEL_PX, DIAL_REJECT_MS, dialLevelFontPx, dialRadiusPx, dialScale, type ConstructionDial } from '../map/constructionDial';
 
 const stock = (o: Partial<Record<'wood' | 'stone' | 'food' | 'iron', number>> = {}) => ({ wood: 0, stone: 0, food: 0, iron: 0, ...o });
 
@@ -295,13 +296,22 @@ describe('rowsFor', () => {
 });
 
 describe('tierFor', () => {
-  const { labelBelow, boxBelow, nearAt, hysteresis } = HUD_TIER;
-  it('goes far exactly where the progress dial hides its label', () => {
-    // dialScale(mapScale, 0) shows the label from this size on; below it the marker is the ring only.
+  const { levelBelow, labelBelow, boxBelow, nearAt, hysteresis } = HUD_TIER;
+  it('drops the countdown exactly where the progress dial hides its label', () => {
+    // dialScale(mapScale, 0) shows the label from this size on; below it the marker shows the level only.
     expect(dialScale(labelBelow, 0).showLabel).toBe(true);
     expect(dialScale(labelBelow - 0.01, 0).showLabel).toBe(false);
     expect(tierFor(labelBelow)).toBe('dial');
-    expect(tierFor(labelBelow - 0.01)).toBe('far');
+    expect(tierFor(labelBelow - 0.01)).toBe('level');
+  });
+  it('keeps the level until its own (larger) font would be under the minimum label size on screen', () => {
+    // The bug: the level vanished at the countdown's threshold, while it was still drawn at over 12 px.
+    expect(dialLevelFontPx(dialRadiusPx(1)) * levelBelow).toBeCloseTo(DIAL_MIN_LABEL_PX);
+    expect(levelBelow).toBeLessThan(labelBelow);
+    expect(tierFor(0.64)).toBe('level');
+    expect(tierFor(levelBelow)).toBe('level');
+    expect(tierFor(levelBelow - 0.01)).toBe('far');
+    expect(tierFor(levelBelow - hysteresis / 2, 'level')).toBe('level');
   });
   it('shows the box once its text would be at least the minimum label size on screen', () => {
     expect(HUD_BOX_FONT_PX * boxBelow).toBeCloseTo(DIAL_MIN_LABEL_PX);
@@ -320,7 +330,7 @@ describe('tierFor', () => {
     expect(tierFor(boxBelow - hysteresis / 2, 'mid')).toBe('mid');
     expect(tierFor(boxBelow - hysteresis / 2, 'dial')).toBe('dial');
     expect(tierFor(labelBelow - hysteresis / 2, 'dial')).toBe('dial');
-    expect(tierFor(labelBelow - hysteresis / 2, 'far')).toBe('far');
+    expect(tierFor(labelBelow - hysteresis / 2, 'level')).toBe('level');
   });
   it('does not flicker when zs jitters around a threshold', () => {
     let tier = tierFor(nearAt + 0.05, null);
@@ -328,10 +338,27 @@ describe('tierFor', () => {
     for (const z of [nearAt + 0.01, nearAt - 0.01, nearAt + 0.02, nearAt - 0.02, nearAt]) seen.add((tier = tierFor(z, tier)));
     expect(seen).toEqual(new Set(['near']));
   });
-  it('has no box rows on far and dial', () => {
+  it('has no box rows on far, level and dial', () => {
     const vm = buildingHudViewModel(input());
     expect(rowsFor(vm, 'far', { premium: false })).toEqual([]);
+    expect(rowsFor(vm, 'level', { premium: false })).toEqual([]);
     expect(rowsFor(vm, 'dial', { premium: false })).toEqual([]);
+  });
+});
+
+describe('markerHexAt', () => {
+  const area = (hexKey: string, cx: number, z: number, box?: { x: number; y: number; w: number; h: number }) => ({ hexKey, disc: { cx, cy: 100, r: 20 }, box, z });
+  it("gives the hex of the marker whose dial or box holds the point", () => {
+    const areas = [area('1,0', 100, 0, { x: 100, y: 85, w: 120, h: 30 }), area('2,0', 300, 1)];
+    expect(markerHexAt({ x: 105, y: 110 }, areas)).toBe('1,0');
+    expect(markerHexAt({ x: 200, y: 100 }, areas)).toBe('1,0');
+    expect(markerHexAt({ x: 290, y: 95 }, areas)).toBe('2,0');
+    expect(markerHexAt({ x: 100, y: 200 }, areas)).toBeNull();
+  });
+  it('takes the top-most of overlapping markers', () => {
+    const areas = [area('1,0', 100, 2, { x: 100, y: 85, w: 120, h: 30 }), area('2,0', 180, 1)];
+    expect(markerHexAt({ x: 170, y: 100 }, areas)).toBe('1,0');
+    expect(markerHexAt({ x: 170, y: 100 }, [areas[0]!, { ...areas[1]!, z: 3 }])).toBe('2,0');
   });
 });
 

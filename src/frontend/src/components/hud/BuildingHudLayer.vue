@@ -37,6 +37,8 @@ import {
   markerBoxRect,
   markerScale,
   pointInRect,
+  markerHexAt,
+  type MarkerHitArea,
   rowsFor,
   rowsSignature,
   stackOrder,
@@ -77,6 +79,8 @@ export interface BuildingHudRenderer {
   readonly hoveredHexKey: string | null;
   /** Touch taps on the map, which still reach the map itself: a tap on a marker's dial reveals it. */
   setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null): void;
+  /** A click or tap on a marker (dial or box) reaches the hex the marker belongs to, not the one it is drawn over. */
+  setTapTarget(fn: ((screen: { x: number; y: number }) => AxialCoord | null) | null): void;
   /** Called once per rendered map frame after the camera moved: the markers are placed from it, in the frame the canvas presents. */
   setFrameObserver(fn: (() => void) | null): void;
   /** The open ring menu's footprint (canvas px); markers beneath it fade out like the progress dials do. */
@@ -369,7 +373,7 @@ function glyphOf(m: Marker): 'up' | 'wait' | undefined {
 
 /**
  * Inside the dial: the countdown of a running upgrade or raze, `#place` of a queued order, else the level; the far tier is the
- * ring only. A pending, refused or finishing dial draws its own symbols instead of a number; an upgrade or raze whose time is up
+ * ring only, the level tier hides a countdown (its smaller font would be unreadable there). A pending, refused or finishing dial draws its own symbols instead of a number; an upgrade or raze whose time is up
  * (`settling`, or the finish animation) shows none until the poll brings the new state.
  */
 function labelOf(m: Marker): string {
@@ -380,6 +384,7 @@ function labelOf(m: Marker): string {
     case 'upgrading':
     case 'razing':
       // Time up (the finish animation, or the poll has not brought the new state yet): no number.
+      if (tierOf(m.key) === 'level') return '';
       return (dial.secondsLeft ?? 0) > 0 ? formatCountdownShort(dial.secondsLeft!) : '';
     case 'queued':
       return `#${dial.queuePosition ?? ''}`;
@@ -405,10 +410,23 @@ const dialDiscs = new Map<string, { key: string; cx: number; cy: number; r: numb
 /** Where each marker's box is drawn right now (canvas px); absent while it has none. */
 const boxRects = new Map<string, { x: number; y: number; w: number; h: number }>();
 
-/** A tap on a dial reveals it (a second one closes it); a tap elsewhere closes a revealed one. A box takes no tap: the hex under it is another one's. */
+/** A tap on a dial reveals it (a second one closes it); a tap elsewhere closes a revealed one. */
 function onMapTap(screen: { x: number; y: number }) {
   tapKey = nextTapReveal(tapKey, pickTappedDial(screen, [...dialDiscs.values()]));
   tapAtMs = Date.now();
+}
+
+/**
+ * The hex of the marker (dial disc or box) under canvas point `screen`, for the map's click and tap (`setTapTarget`): the marker
+ * stands for its building's hex, not for the one it is drawn over. The top-most one wins; a faded marker (under the ring menu,
+ * no disc) and a hidden layer take none.
+ */
+function tapTargetAt(screen: { x: number; y: number }): AxialCoord | null {
+  if (hudHidden.value) return null;
+  const areas: MarkerHitArea[] = [];
+  for (const [key, disc] of dialDiscs) areas.push({ hexKey: disc.key, disc, box: boxRects.get(key), z: lastZ.get(key) ?? 0 });
+  const hexKey = markerHexAt(screen, areas);
+  return hexKey === null ? null : (placeables.value.find((p) => p.hexKey === hexKey)?.coord ?? null);
 }
 
 /**
@@ -786,6 +804,7 @@ onMounted(() => {
   if (root.value) ensureBoxObserver().observe(root.value, { box: 'border-box' });
   window.addEventListener('keydown', onKeyDown);
   props.renderer?.setTapObserver(onMapTap);
+  props.renderer?.setTapTarget(tapTargetAt);
   props.renderer?.setFrameObserver(tick);
 });
 watch(
@@ -793,8 +812,10 @@ watch(
   (next, previous) => {
     setMouseHovering(false);
     previous?.setTapObserver(null);
+    previous?.setTapTarget(null);
     previous?.setFrameObserver(null);
     next?.setTapObserver(onMapTap);
+    next?.setTapTarget(tapTargetAt);
     next?.setFrameObserver(tick);
   },
 );
@@ -809,6 +830,7 @@ onUnmounted(() => {
   boxSizes.clear();
   window.removeEventListener('keydown', onKeyDown);
   props.renderer?.setTapObserver(null);
+  props.renderer?.setTapTarget(null);
   props.renderer?.setFrameObserver(null);
 });
 </script>
@@ -854,7 +876,7 @@ onUnmounted(() => {
                 :radius="DIAL_RADIUS"
                 :ring="d.ring"
                 :progress="d.progress"
-                :label="tierOf(d.key) === 'far' ? '' : d.label"
+                :label="tierOf(d.key) === 'far' || (d.time && tierOf(d.key) === 'level') ? '' : d.label"
                 :time="d.time"
                 :urgent="d.urgent"
                 :order="d.dial"
@@ -882,6 +904,8 @@ onUnmounted(() => {
 .building-hud__markers {
   position: absolute;
   inset: 0;
+  /* Its own stacking context: the markers' per-frame z-index (stackOrder) never lifts one above the phone switch. */
+  z-index: 0;
 }
 /* The marker is a zero-size anchor at the dial's centre; the placement loop moves and scales it (zs, like the progress dial). */
 .hud-marker {
@@ -938,6 +962,7 @@ html[data-hud-motion='reduced'] .hud-marker__box {
 /* Phone: the switch sits at the map's top left, below the settlement bubble that sits there (it ends about 44px under the bar). */
 .building-hud__toggle--phone {
   position: absolute;
+  z-index: 1;
   top: calc(var(--hud-inset-top, 0px) + 60px);
   left: calc(16px + var(--hud-inset-left, 0px));
 }

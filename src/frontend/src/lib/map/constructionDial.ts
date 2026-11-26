@@ -212,6 +212,10 @@ export function polylinePartial(points: { x: number; y: number }[], fraction: nu
 
 /** The dial label's font size in px at map scale 1 (12 px drawn at 1.2x: the HUD dial's label, see `HUD_TIER.labelBelow`). */
 export const DIAL_LABEL_BASE_PX = 12 * 1.2;
+/** The HUD dial's level font size in px for dial radius `r` (px); larger than the countdown's (`DIAL_LABEL_BASE_PX` at zs 1). */
+export function dialLevelFontPx(r: number): number {
+  return 13 + (r - 14) * 0.5;
+}
 /** A dial's time label is hidden while it would be smaller than this many on-screen px. */
 export const DIAL_MIN_LABEL_PX = 10;
 /** How long a dial takes to grow to / shrink back from its hovered size. */
