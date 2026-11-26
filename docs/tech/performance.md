@@ -352,6 +352,66 @@ still draws 711 terrain hexes and no waves, rebuild is 11.7 ms, and the mask
 grows to 1,028 × 688 at 359.7 ms to bake. The walked count is set by the scan
 clip, not the viewport; zooming out grows the viewport count and the water mask.
 
+### Component profiling
+
+To go below the whole-layer rows I toggled one layer or one debug flag at a
+time (`layersByName()`, `waterDebugFlags`, `fogDebugFlags`), twice per subject
+(on → off → on → off, 2.5 s per block), with the pacer detached as above. Each
+entry is the mean of the two on-minus-off median differences; the pair values
+show whether the two runs agreed. Block MADs were 1.9–19.0 ms, so these are
+screening measurements, not GPU timings: a negative or sub-MAD delta is
+unresolved, not a saving.
+
+At the default settlement framing, after a fresh 260 × 198 mask bake (73.2 ms
+on the worker), nothing individual cleared the noise:
+
+| Subject off | Mean Δ (ms) |
+| --- | ---: |
+| Water layer | +1.1 |
+| River flow | +0.7 |
+| Bog lakes | −0.4 |
+| Terrain base | +1.4 |
+| Terrain flat | −0.4 |
+| Terrain top | +0.5 |
+| Bog edges | −0.4 |
+| Rivers | 0.0 |
+| Borders | +0.6 |
+| Waves | +0.3 |
+| Fog, both tiers | +0.8 |
+
+This run's steady frame was ~35 ms, notably faster than the 43–45 ms of the
+first baseline session, and the fresh mask baked in 73.2 ms rather than 135.8
+ms. The two sessions are both recorded; deltas under the noise are not averaged
+across them.
+
+At settlement z=0.09 the whole water layer was +19.4 ms (54.0 → 34.6 ms) after
+a fresh 800 × 548 bake (241.8 ms). Its sub-effects were:
+
+| Subject off | Mean Δ | Pair deltas |
+| --- | ---: | --- |
+| Surface pattern (`midWaterWaves`) | +3.1 | 4.5, 1.7 |
+| Coarse caustics | +7.8 | 11.6, 3.9 |
+| Fine caustics | +1.7 | 1.2, 2.2 |
+| Shadow pools | +3.0 | 1.3, 4.7 |
+| Shoreline foam | −0.8 | −1.6, 0.0 |
+| River flow | +0.9 | 0.2, 1.7 |
+
+The fog parts at the same framing, with both tiers' whole-layer delta still
+under the noise, were: `maskUnknown` 0.0 (0.8, −0.7), `maskOutOfSight` +1.1
+(0.0, 2.1), `warp` +3.1 (1.1, 5.1), `drift` +3.2 (4.6, 1.8), `realmBorders`
++3.7 (3.0, 4.3) and `terrainCull` −0.7 (−1.7, 0.4). Coarse caustics is the
+largest water row and realm borders the largest fog row, but their own pairs
+disagree by 7.7 ms and 1.3 ms respectively, so neither is resolved.
+
+At world z=0.05 the whole water layer was +80.7 ms (114.6 → 33.9 ms) after a
+fresh 1,028 × 688 bake (303.3 ms). Switching its visible effects off hardly
+moved the frame: `seaBody` +3.5 (−0.1, 7.0), `shorelineFoam` +2.1 (5.0, −0.8),
+`legacyWaveSquiggles` −4.9 (−4.0, −5.9). That is the shape
+`docs/design/water-shader.md` predicts: the cost is drawing and blending one
+full-viewport water mesh, not the fragment maths inside it. The bake cost is a
+worker-side camera-move cost (73.2 / 241.8 / 303.3 ms for the three mask sizes
+above), not a per-frame cost.
+
 ### Trace and caveats
 
 The 10 s trace recorded 15,494 events: 5,848 `RunTask` (2,651 ms total, max
