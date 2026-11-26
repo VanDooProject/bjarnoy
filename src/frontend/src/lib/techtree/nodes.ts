@@ -32,7 +32,7 @@ function formatModifier(modifier: BuildingModifier): string {
 /**
  * Card-per-type exceptions: one card standing for several building types. Farm
  * and Pumpkin Farm are separate types only because their soil rule differs
- * (Pumpkin Farm needs a Pumpkin-soil island), so the tree shows one card with
+ * (Farm needs a Wheat-soil island, Pumpkin Farm a Pumpkin-soil one), so the tree shows one card with
  * one unlock level and one prerequisite, and the other type has no slot of its
  * own in `TECH_TREE_LAYOUT`.
  */

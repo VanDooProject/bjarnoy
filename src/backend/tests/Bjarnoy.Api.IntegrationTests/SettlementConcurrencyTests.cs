@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Domain.Settlers;
+using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
@@ -55,7 +56,7 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
 
     private sealed record Player(
         HttpClient Client, HttpClient Admin, AuthResponse Auth, Guid WorldId, SettlementResponse Settlement,
-        IReadOnlyList<AdminSettlementHexResponse> FreeGrass);
+        IReadOnlyList<AdminSettlementHexResponse> FreeGrass, string Crop, string OtherCrop);
 
     /// <summary>
     /// A world with one settlement owned by a registered player (so the renown
@@ -117,7 +118,20 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
             new GrantResourcesRequest(Wood: 1_000_000, Stone: 1_000_000, Food: 1_000_000, Iron: 1_000_000), Ct);
         Assert.Equal(HttpStatusCode.OK, topUp.StatusCode);
 
-        return new Player(client, admin, auth, world.Id, founded, freeGrass);
+        // Each island grows one crop (Farm on Wheat soil, PumpkinFarm on Pumpkin soil), so build the one this island takes.
+        var soil = await IslandSoilAsync(world.Id, island.Id);
+        var (crop, otherCrop) = soil == SoilType.Wheat ? ("farm", "pumpkinfarm") : ("pumpkinfarm", "farm");
+
+        return new Player(client, admin, auth, world.Id, founded, freeGrass, crop, otherCrop);
+    }
+
+    private async Task<SoilType> IslandSoilAsync(Guid worldId, Guid islandId)
+    {
+        await using var scope = _baseFactory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        var world = await db.Worlds.SingleAsync(w => w.Id == worldId, Ct);
+        var island = await db.Islands.SingleAsync(i => i.Id == islandId, Ct);
+        return new TerrainSampler(world.ToGenerationOptions()).SoilAt(new HexCoord(island.CentreQ, island.CentreR));
     }
 
     private async Task<string> CreateAdminTokenAsync(HttpClient client)
@@ -140,30 +154,42 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
         return (await loggedIn.ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
     }
 
-    private static Task<HttpResponseMessage> QueueFarm(HttpClient client, Guid settlementId, AdminSettlementHexResponse hex) =>
-        client.PostJsonAsync(
-            $"/api/v1/settlements/{settlementId}/builds", new QueueBuildRequest("farm", hex.Q, hex.R), Ct);
+    private static Task<HttpResponseMessage> QueueFarm(Player p, AdminSettlementHexResponse hex, string? type = null) =>
+        p.Client.PostJsonAsync(
+            $"/api/v1/settlements/{p.Settlement.Id}/builds", new QueueBuildRequest(type ?? p.Crop, hex.Q, hex.R), Ct);
 
     private static Task<SettlementResponse?> GetSettlement(HttpClient client, Guid id) =>
         client.GetFromJsonAsync<SettlementResponse>($"/api/v1/settlements/{id}", SqliteApiFixture.StrictJson, Ct);
 
-    private async Task<ResourceLine> FarmCostAsync(HttpClient client)
+    private async Task<ResourceLine> FarmCostAsync(Player p)
     {
-        var catalogue = await client.GetFromJsonAsync<List<BuildingDefinitionResponse>>(
+        var catalogue = await p.Client.GetFromJsonAsync<List<BuildingDefinitionResponse>>(
             "/api/v1/buildings", SqliteApiFixture.StrictJson, Ct);
-        return catalogue!.Single(b => b.Type == "farm" && b.Level == 1).Cost;
+        return catalogue!.Single(b => b.Type == p.Crop && b.Level == 1).Cost;
+    }
+
+    [Fact]
+    public async Task Queuing_the_crop_this_island_does_not_grow_is_refused()
+    {
+        // SettlementService has to resolve the island's soil for both farm types, or PlanBuild never sees it.
+        var p = await SetUpAsync();
+
+        var response = await QueueFarm(p, p.FreeGrass[0], p.OtherCrop);
+
+        Assert.NotEqual(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.Equal("WrongCropForIslandSoil", await response.RejectionAsync(Ct));
     }
 
     [Fact]
     public async Task Two_overlapping_build_orders_both_keep_their_cost_deduction()
     {
         var p = await SetUpAsync();
-        var cost = await FarmCostAsync(p.Client);
+        var cost = await FarmCostAsync(p);
         var before = (await GetSettlement(p.Client, p.Settlement.Id))!.Resources.Stock;
 
         HttpResponseMessage? competing = null;
-        _injector.ArmOnce(async () => competing = await QueueFarm(p.Client, p.Settlement.Id, p.FreeGrass[1]));
-        var first = await QueueFarm(p.Client, p.Settlement.Id, p.FreeGrass[0]);
+        _injector.ArmOnce(async () => competing = await QueueFarm(p, p.FreeGrass[1]));
+        var first = await QueueFarm(p, p.FreeGrass[0]);
 
         Assert.Equal(1, _injector.Fired);
         Assert.True(first.StatusCode == HttpStatusCode.Accepted, await first.Content.ReadAsStringAsync(Ct));
@@ -181,7 +207,7 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
     public async Task A_build_racing_an_army_dispatch_keeps_both_effects()
     {
         var p = await SetUpAsync();
-        var cost = await FarmCostAsync(p.Client);
+        var cost = await FarmCostAsync(p);
         var before = (await GetSettlement(p.Client, p.Settlement.Id))!;
         var spearmenBefore = before.Garrison.Single(g => g.Unit == "spearman").Count;
         var target = p.FreeGrass[2];
@@ -191,7 +217,7 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
             $"/api/v1/settlements/{p.Settlement.Id}/armies",
             new DispatchArmyRequest([new(p.Settlement.Spot(), [new UnitCountRequest("spearman", 4)])], null, new HexPointRequest(target.Q, target.R), 5),
             Ct));
-        var build = await QueueFarm(p.Client, p.Settlement.Id, p.FreeGrass[0]);
+        var build = await QueueFarm(p, p.FreeGrass[0]);
 
         Assert.Equal(1, _injector.Fired);
         Assert.True(build.StatusCode == HttpStatusCode.Accepted, await build.Content.ReadAsStringAsync(Ct));
@@ -235,7 +261,7 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
         // on it) and, before it saves, the renown endpoint collects that
         // renown and zeroes it. The stale build must not put it back.
         _injector.ArmOnce(async () => await p.Client.GetAsync($"/api/v1/worlds/{p.WorldId}/renown", Ct));
-        var build = await QueueFarm(p.Client, p.Settlement.Id, p.FreeGrass[0]);
+        var build = await QueueFarm(p, p.FreeGrass[0]);
         Assert.Equal(1, _injector.Fired);
         Assert.True(build.StatusCode == HttpStatusCode.Accepted, await build.Content.ReadAsStringAsync(Ct));
 
@@ -254,13 +280,13 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
     public async Task A_world_speed_change_racing_a_build_is_retried_and_keeps_both_effects()
     {
         var p = await SetUpAsync();
-        var cost = await FarmCostAsync(p.Client);
+        var cost = await FarmCostAsync(p);
         var before = (await GetSettlement(p.Client, p.Settlement.Id))!.Resources.Stock;
 
         // The speed retune reads (and rewrites) every settlement in the world;
         // right after that read, a player queues a build on one of them.
         HttpResponseMessage? competing = null;
-        _injector.ArmOnce(async () => competing = await QueueFarm(p.Client, p.Settlement.Id, p.FreeGrass[0]));
+        _injector.ArmOnce(async () => competing = await QueueFarm(p, p.FreeGrass[0]));
         var patch = await p.Admin.PatchJsonAsync(
             $"/api/v1/admin/worlds/{p.WorldId}/settings", new UpdateWorldSettingsRequest { SpeedFactor = 7 }, Ct);
 
@@ -286,7 +312,7 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
         // Every read of the settlement is followed by a competing write.
         _injector.ArmAlways(async () => await p.Admin.PostJsonAsync(
             $"/api/v1/admin/settlements/{p.Settlement.Id}/resources", new GrantResourcesRequest(Wood: -1), Ct));
-        var response = await QueueFarm(p.Client, p.Settlement.Id, p.FreeGrass[0]);
+        var response = await QueueFarm(p, p.FreeGrass[0]);
         _injector.Disarm();
 
         var body = await response.Content.ReadAsStringAsync(Ct);

@@ -165,8 +165,8 @@ public static class BuildingCatalogue
     /// </para>
     /// <para>
     /// The Reindeer Herder is the starting food building (LH 1). Farm and Pumpkin
-    /// Farm both unlock at LH 4 behind a level-3 Herder; Pumpkin Farm stays
-    /// soil-gated (see <see cref="Settlement.PlanBuild"/>'s islandSoil parameter).
+    /// Farm both unlock at LH 4 behind a level-3 Herder; each island takes
+    /// only the one its soil grows (see <see cref="Settlement.PlanBuild"/>'s islandSoil parameter).
     /// </para>
     /// </remarks>
     private static readonly IReadOnlyDictionary<BuildingType, int> UnlockLevels =
@@ -705,7 +705,7 @@ public static class BuildingCatalogue
     /// <see cref="Totals(IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain}?)"/>.
     /// Crop Mill grinds grain, so it only boosts Farm — PumpkinFarm is a
     /// different crop (see <see cref="BuildingType.PumpkinFarm"/>'s own doc
-    /// comment: the Pumpkin-soil-only bonus, not the staple a mill grinds).
+    /// comment: the Pumpkin-soil island's crop, not grain a mill grinds).
     /// </summary>
     private static readonly IReadOnlyDictionary<BuildingType, IReadOnlySet<BuildingType>> RadiusBoostTargets =
         new Dictionary<BuildingType, IReadOnlySet<BuildingType>>
