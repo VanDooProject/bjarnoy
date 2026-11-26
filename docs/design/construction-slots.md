@@ -51,6 +51,10 @@ one place that happens. It is called from every path that can free a slot: `Sett
 completion), `CancelBuild` (cancelling a building order), and `WithQueuesDueAt` (admin instant build — which
 additionally bypasses the slot gate entirely, since it's a bypass, not a new plan).
 
+The build queue is strictly first in, first out. Only the oldest waiting order can start; while it doesn't fit the free
+slots, every order behind it waits too, even one that needs fewer slots. A newly planned order starts right away only
+when nothing is waiting; otherwise it joins the end of the queue.
+
 Everything stays lazy and clock-settled: `SettleTo(now)` replays completions **and** promotions in
 chronological order (`complete → promote → starvation`, in that order, at every instant), so reading a
 settlement at time T gives the same answer whether nobody looked for a week or polled every second. A

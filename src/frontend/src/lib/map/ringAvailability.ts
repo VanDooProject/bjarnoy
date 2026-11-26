@@ -144,7 +144,8 @@ export interface RingAvailabilityInput {
 export function computeAvailability(input: RingAvailabilityInput): RingAvailability {
   const { construction } = input;
   const free = Math.max(0, construction.slots - construction.slotsUsed);
-  const slotsShort = !!input.hexBusy || input.slotsNeeded > free;
+  // FIFO: with any order already waiting, a new one waits behind it even when it would fit the free slots.
+  const slotsShort = !!input.hexBusy || construction.waitingOrders > 0 || input.slotsNeeded > free;
   const queueHasRoom = construction.maxWaitingOrders > 0 && construction.waitingOrders < construction.maxWaitingOrders;
   const shortfall = resourceShortfall(input.cost, input.available);
   const resourcesShort = Object.keys(shortfall).length > 0;

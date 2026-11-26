@@ -189,6 +189,12 @@ describe('computeAvailability', () => {
     expect(two.slots).toEqual({ needed: 2, total: 3, free: 1, short: true });
   });
 
+  it('queues behind an order already waiting even when it would fit the free slots (FIFO)', () => {
+    const a = computeAvailability(input({ construction: { slots: 3, slotsUsed: 1, maxWaitingOrders: 3, waitingOrders: 1 } }));
+    expect(a.state).toBe('queues');
+    expect(a.slots).toEqual({ needed: 1, total: 3, free: 2, short: true });
+  });
+
   it('treats an unfinished earlier order on the same hex as not fitting now', () => {
     expect(computeAvailability(input({ hexBusy: true })).state).toBe('waiting');
   });
