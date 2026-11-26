@@ -58,6 +58,7 @@ import { settlementBadgeSuffix } from './settlementBadge';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import { FogField } from './fog/FogField';
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP, armyFogClearReachHexes, type ArmyVisionSource } from './fog/FogMaskLayer';
+import { FOG_DESATURATE_DEFAULTS, FogDesaturateFilter, fogFilterArea } from './fog/FogDesaturateFilter';
 import type { FogCoverageLookup } from './fog/fogCoverage';
 import { UNKNOWN_RAMP_MARGIN_HEXES } from './fog/fogRamp';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
@@ -141,7 +142,6 @@ const CART_MARKER_SIZE = 36;
 // owner colour or CART.
 const RANGE_TINT_COLOR = 0xffffff;
 const RANGE_TINT_ALPHA = 0.16;
-const FOG_SCOUTED = 0x0b1116;
 const HOVER_FILL = 0xffffff;
 const HOVER_STROKE = 0xffe9c2;
 
@@ -302,7 +302,7 @@ function hash01(x: number, y: number, salt: number): number {
 export interface FogDebugFlags {
   /** Isolates the unexplored (white mist) tier — off hides whiteMistLayer entirely. */
   maskUnknown: boolean;
-  /** Isolates the out-of-sight (dark) tier — off hides blackFogLayer entirely. */
+  /** Isolates the out-of-sight (dark) tier — off removes the desaturation filter (FogDesaturateFilter) entirely. */
   maskOutOfSight: boolean;
   /** The §2.4 UV warp on/off — direct successor to v1's distJitter, but now a continuous per-pixel wobble instead of a per-hex jitter. */
   warp: boolean;
@@ -335,9 +335,16 @@ export interface FogDebugTuning {
    * guesses. Not persisted — a reload is back to 1.
    */
   driftSpeed: number;
+  /** FogDesaturateFilter: how much colour the dark tier removes, 0..1. */
+  desaturate: number;
+  /** FogDesaturateFilter: how far bright tones (sand, foam, snow) are pulled toward mid grey, 0..1. */
+  brightPull: number;
+  /** FogDesaturateFilter: how much the dark tier dims the picture, 0..0.8. */
+  darken: number;
 }
 export const fogDebugTuning: FogDebugTuning = {
   driftSpeed: 1,
+  ...FOG_DESATURATE_DEFAULTS,
 };
 
 export const fogDebugFlags: FogDebugFlags = {
@@ -1620,11 +1627,6 @@ function distanceBeyondSources(q: number, r: number, sources: FogSource[]): numb
   return min === Infinity ? Infinity : Math.max(0, min);
 }
 
-// The scouted (out-of-sight) tier's tint alpha at full ramp saturation — the
-// fog v2 shader's uScoutedAlpha uniform (fogShader.ts) reads this directly,
-// same constant both tiers' colours ultimately come from (see
-// FogMaskLayerColors in FogMaskLayer.ts).
-const FOG_SCOUTED_ALPHA = 0.6;
 // See scheduleCull's own comment for why this exists: throttles how often a
 // drag can trigger a full terrain/border/fog rebuild.
 const DRAG_REBUILD_THROTTLE_MS = 150;
@@ -2349,26 +2351,20 @@ export class HexMapRenderer {
   // `highlightLayer` (above the buildings) in settlement mode only.
   private constructionDials: ConstructionDial[] | null = null;
   private blockedMarkers: readonly BlockedMarker[] = NO_BLOCKED;
-  // Fog v2 (docs/design/map-fog-v2.md §2.4/§4): two screen-space Pixi Mesh
-  // layers sampling the fetched mask texture through a shared GLSL shader —
-  // see fog/FogMaskLayer.ts. blackFogLayer (out-of-sight tint) sits between
-  // `world` and `markerLayer` in the stage; whiteMistLayer (never-scouted
-  // mist) sits after `markerLayer` — see mount()'s addChild order. Both are
-  // genuinely screen-space (no `world`-transform syncing needed, unlike v1's
-  // `fogWorld`), and both stay in sync via setCamera on every camera change.
-  // Both quads sample one shared, world-anchored field texture (fog/FogField.ts) that is rendered once, not per quad,
-  // and only when its inputs changed (fogFieldPlan.ts) — the mask/noise shader no longer runs over the screen twice a frame.
+  // Fog v2 (docs/design/map-fog-v2.md §2.4/§4): the mist is a screen-space Pixi Mesh layer sampling the fetched mask
+  // texture through a shared GLSL shader — see fog/FogMaskLayer.ts. whiteMistLayer (never-scouted mist) sits after
+  // `markerLayer` — see mount()'s addChild order. It is genuinely screen-space (no `world`-transform syncing needed,
+  // unlike v1's `fogWorld`), and stays in sync via setCamera on every camera change. The dark tier (out-of-sight) is a
+  // filter, fog/FogDesaturateFilter.ts, on `underFogLayer` (the world and the camp paws, everything under the markers):
+  // it greys the picture where the field says so. Both read one shared, world-anchored field texture (fog/FogField.ts)
+  // that is rendered once, not per consumer, and only when its inputs changed (fogFieldPlan.ts).
   private fogField = new FogField();
-  private blackFogLayer = new FogMaskLayer('outOfSight', {
-    scoutedColor: FOG_SCOUTED,
-    unexploredColor: FOG_UNEXPLORED,
-    scoutedAlpha: FOG_SCOUTED_ALPHA,
-  }, this.fogField);
-  private whiteMistLayer = new FogMaskLayer('unknown', {
-    scoutedColor: FOG_SCOUTED,
-    unexploredColor: FOG_UNEXPLORED,
-    scoutedAlpha: FOG_SCOUTED_ALPHA,
-  }, this.fogField);
+  private whiteMistLayer = new FogMaskLayer(FOG_UNEXPLORED, this.fogField);
+  private fogDesaturateFilter = new FogDesaturateFilter(this.fogField);
+  // The world and the camp paws, the content the dark tier's filter greys. Unfiltered (no filter pass at all) while the
+  // dark tier is off, hidden or a debug view shows the field's channels.
+  private underFogLayer = new Container();
+  private darkTierFiltered = false;
   // The fetched (or, before the first fetch resolves, not-yet-fetched) mask
   // texture and the world-to-mask-UV placement it was decoded with — see
   // setFogMask. Null until fetchFogMask's first call resolves (or forever in
@@ -2966,14 +2962,17 @@ export class HexMapRenderer {
     // silent.
     this.world.addChild(...worldLayerOrder(this.options.mode).map((name) => this.layersByName()[name]));
 
-    // §4's layer stack: the two fog quads are the only genuinely
-    // screen-space `app.stage` children — everything else (terrain,
-    // borders, buildings) stays nested inside `world`, camera-transformed
-    // as one. blackFogLayer (out-of-sight tint) sits under markerLayer so
-    // troop/settlement labels read as veiled by it rather than floating in
-    // front; whiteMistLayer (never-scouted) sits over everything, since
-    // nothing should show through ground that's never been seen at all.
-    app.stage.addChild(this.world, this.campPawLayer, this.blackFogLayer.mesh, this.markerLayer, this.whiteMistLayer.mesh);
+    // §4's layer stack: the mist quad is the only genuinely screen-space
+    // `app.stage` child — everything else (terrain, borders, buildings)
+    // stays nested inside `world`, camera-transformed as one. The dark tier
+    // is the desaturation filter on underFogLayer (world + camp paws), which
+    // sits under markerLayer so troop/settlement labels read as veiled by it
+    // rather than floating in front; whiteMistLayer (never-scouted) sits
+    // over everything, since nothing should show through ground that's never
+    // been seen at all.
+    this.underFogLayer.addChild(this.world, this.campPawLayer);
+    this.underFogLayer.filterArea = fogFilterArea(this.viewport.width, this.viewport.height);
+    app.stage.addChild(this.underFogLayer, this.markerLayer, this.whiteMistLayer.mesh);
     this.armyStatic.addChild(this.armyStaticGraphics);
     this.markerLayer.addChildAt(this.armyStatic, 0);
     this.markerLayer.addChildAt(this.armyFrameGraphics, 1);
@@ -2990,6 +2989,8 @@ export class HexMapRenderer {
     if (!this.app) return;
     this.viewport = { width, height };
     this.app.renderer.resize(width, height);
+    // The filter's area is the screen rectangle (see FogDesaturateFilter): pinned so Pixi never measures the world.
+    this.underFogLayer.filterArea = fogFilterArea(width, height);
     // A locked preview must stay fit to the island on every resize/rotation —
     // unlike the normal camera, which just keeps whatever position/zoom it
     // had (re-projected onto the new viewport), a locked one has no other
@@ -3019,8 +3020,8 @@ export class HexMapRenderer {
       this.viewport.width / 2 - this.camera.x * this.camera.zoom,
       this.viewport.height / 2 - this.camera.y * this.camera.zoom,
     );
-    // The fog quads are genuinely screen-space (see the class-level comment
-    // on blackFogLayer/whiteMistLayer) — no transform to sync, just the raw
+    // The fog mist quad and the desaturation filter are genuinely screen-space (see the class-level comment
+    // on whiteMistLayer/fogDesaturateFilter) — no transform to sync, just the raw
     // camera/viewport values their shader uses to invert screen -> world
     // itself (fogShader.ts's own screenToWorld-equivalent).
     this.fogField.setCamera(this.camera, this.viewport);
@@ -3092,8 +3093,15 @@ export class HexMapRenderer {
     // both quads' placeholder (fully-unknown) texture would blanket a view
     // the rest of the renderer deliberately leaves unfogged.
     const fogActive = this.isFogActive();
-    this.blackFogLayer.mesh.visible = fogActive && fogDebugFlags.maskOutOfSight;
-    this.whiteMistLayer.mesh.visible = fogActive && fogDebugFlags.maskUnknown;
+    // The dark tier is off (no filter pass at all) while a debug view shows the field's channels: the filter would grade them.
+    const darkTierVisible = fogActive && fogDebugFlags.maskOutOfSight && !fogDebugFlags.showRawMask && !fogDebugFlags.showEffectiveMask;
+    const mistVisible = fogActive && fogDebugFlags.maskUnknown;
+    this.whiteMistLayer.mesh.visible = mistVisible;
+    if (darkTierVisible !== this.darkTierFiltered) {
+      this.darkTierFiltered = darkTierVisible;
+      this.underFogLayer.filters = darkTierVisible ? [this.fogDesaturateFilter] : [];
+    }
+    if (darkTierVisible) this.fogDesaturateFilter.setTuning(fogDebugTuning);
     const debug = {
       warpEnabled: fogDebugFlags.warp,
       showRawMask: fogDebugFlags.showRawMask,
@@ -3101,7 +3109,7 @@ export class HexMapRenderer {
     };
     this.fogField.setDebug(debug);
     this.fogField.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed * waterDebugTuning.mapAnimationSpeed);
-    if (this.blackFogLayer.mesh.visible || this.whiteMistLayer.mesh.visible) this.fogField.update(this.app!.renderer);
+    if (darkTierVisible || mistVisible) this.fogField.update(this.app!.renderer);
     this.drawHighlight();
   };
 
@@ -7196,14 +7204,15 @@ export class HexMapRenderer {
     this.detachFramePacing?.();
     this.detachFramePacing = undefined;
     // app.destroy({ children: true }) destroys everything still attached to
-    // the stage, but the fog layers' meshes are — see mount()'s addChild —
+    // the stage, but the fog mist mesh is — see mount()'s addChild —
     // so this covers them too; only the mask textures they hold are
     // generated/fetched independently and need their own explicit destroy.
     this.fogMaskTexture?.destroy(true);
     this.fogMaskTexture = null;
     this.previousFogMaskTexture?.destroy(true);
     this.previousFogMaskTexture = null;
-    this.blackFogLayer.destroy();
+    this.underFogLayer.filters = [];
+    this.fogDesaturateFilter.destroy();
     this.whiteMistLayer.destroy();
     this.fogField.destroy();
     this.waterLayer.destroy();
