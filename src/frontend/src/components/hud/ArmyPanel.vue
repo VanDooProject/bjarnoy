@@ -710,7 +710,10 @@ async function confirmFieldOrderClick() {
   color: var(--text);
 }
 .unit-picker-max {
+  /* Room for a three-digit count, so the inputs and All buttons line up between rows. */
+  min-width: 5ch;
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
 .unit-picker-all {
