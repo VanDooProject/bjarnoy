@@ -118,20 +118,43 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
         speedUpResponse.EnsureSuccessStatusCode();
 
         // --- Guided build 1: Reindeer Herder on the grass hex, via the REAL ring menu -----
+        // The ring returns once its last bubble is clicked; each order counts as queued only once the server answered.
+        var buildsPath = $"/api/v1/settlements/{settlement.Id}/builds";
+        Task<IResponse> BuildQueuedAsync() => page.WaitForResponseAsync(
+            response => response.Request.Method == "POST" && response.Url.EndsWith(buildsPath),
+            new PageWaitForResponseOptions { Timeout = 45_000 });
+
         await LiveFrontendTestHelpers.ClickHexAsync(page, grassTile.Q, grassTile.R);
+        var herderQueued = BuildQueuedAsync();
         await LiveFrontendTestHelpers.BuildThroughRingAsync(page, "Resource", "Reindeer Herder");
+        var herderResponse = await herderQueued;
+        Assert.True(herderResponse.Ok, $"Queueing the Reindeer Herder answered {herderResponse.Status}.");
 
         // --- Guided build 2: Lumberjack on the forest hex, via the ring menu ---
-        await LiveFrontendTestHelpers.ClickHexAsync(page, forestTile.Q, forestTile.R);
-        await LiveFrontendTestHelpers.BuildThroughRingAsync(page, null, "Lumberjack");
-
-        // Both queued against the real backend; startHudSync()'s poll picks
-        // them up with no reload/click once the sped-up world resolves them
-        // — same wait pattern (and the same reasoning for why there's no
-        // reliable frame to catch an individual row) as
-        // LandingOnboardingCompletionTests.
+        // On CI's software renderer the ring's layer swaps take seconds each, so the sped-up Reindeer Herder
+        // (~6 s) can be standing, and the HUD's poll can have cleared its row, before the Lumberjack's order even
+        // reaches the server. The construction card then hides in the gap between the two orders, so waiting for
+        // it to hide proves nothing about the Lumberjack: the test used to read the settlement before that order
+        // was in. Hold the Lumberjack's request until exactly that has happened, so the worst case runs every
+        // time, not only on a slow runner.
         var statusCard = page.Locator(".status-card");
-        await Assertions.Expect(statusCard).ToBeVisibleAsync(new() { Timeout = 10_000 });
+        var buildsRoute = $"**{buildsPath}";
+        await page.RouteAsync(buildsRoute, async route =>
+        {
+            await WaitForStandingBuildingAsync(apiClient, settlement.Id, "reindeerherder", cancellationToken);
+            await Assertions.Expect(statusCard).ToBeHiddenAsync(new() { Timeout = 30_000 });
+            await route.ContinueAsync();
+        });
+        await LiveFrontendTestHelpers.ClickHexAsync(page, forestTile.Q, forestTile.R);
+        var lumberjackQueued = BuildQueuedAsync();
+        await LiveFrontendTestHelpers.BuildThroughRingAsync(page, null, "Lumberjack");
+        var lumberjackResponse = await lumberjackQueued;
+        Assert.True(lumberjackResponse.Ok, $"Queueing the Lumberjack answered {lumberjackResponse.Status}.");
+        await page.UnrouteAsync(buildsRoute);
+
+        // Both orders are on the server now; once the Lumberjack stands, startHudSync()'s poll has to clear the
+        // construction card with no reload or click.
+        await WaitForStandingBuildingAsync(apiClient, settlement.Id, "lumberjack", cancellationToken);
         await Assertions.Expect(statusCard).ToBeHiddenAsync(new() { Timeout = 45_000 });
 
         var settlementAfterCompletion = await apiClient.GetFromJsonAsync<SettlementResponse>(
@@ -248,5 +271,23 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
         Assert.Equal(settlement.Id.ToString(), membershipAfterRelogin!.SettlementId);
 
         Assert.True(consoleErrors.Count == 0, $"Unexpected console errors:\n{string.Join("\n", consoleErrors)}");
+    }
+
+    /// <summary>
+    /// Polls the settlement until a building of <paramref name="type"/> stands in it at level 1 or more (one still
+    /// under construction is listed as a level-0 foundation). Reading it settles finished orders on the server.
+    /// </summary>
+    private static async Task WaitForStandingBuildingAsync(
+        HttpClient apiClient, Guid settlementId, string type, CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(45));
+        while (true)
+        {
+            var current = await apiClient.GetFromJsonAsync<SettlementResponse>(
+                $"/api/v1/settlements/{settlementId}", timeout.Token);
+            if (current!.Buildings.Any(b => b.Type == type && b.Level >= 1)) return;
+            await Task.Delay(TimeSpan.FromMilliseconds(500), timeout.Token);
+        }
     }
 }
