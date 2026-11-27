@@ -57,7 +57,7 @@ import { evaluateDemoQuests, questBit } from '../lib/quests';
 import { useConnectionStatusStore } from './connectionStatus';
 import { fogPerfStats } from '../lib/map/fog/fogPerfStats';
 import { buildDemoFogMask, demoMaskBounds } from '../lib/map/fog/demoFogMask';
-import { FogCoverage, type FogCoverageLookup } from '../lib/map/fog/fogCoverage';
+import { FogCoverage, type FogCoverageLookup, type FogOverviewPixels } from '../lib/map/fog/fogCoverage';
 import {
   FOG_CHUNK_SIZE,
   FogChunkCache,
@@ -70,8 +70,8 @@ import {
   chunkOfTexel,
   type ChunkRange,
 } from '../lib/map/fog/fogChunks';
-import { decodeChunkPng, pixelsToBitmap } from '../lib/map/fog/fogChunkCodec';
-import { toTexel, type MaskBounds } from '../lib/map/fog/fogMaskLayout';
+import { decodeChunkPng, decodeMaskPng, pixelsToBitmap } from '../lib/map/fog/fogChunkCodec';
+import { maskBounds, toTexel, type MaskBounds } from '../lib/map/fog/fogMaskLayout';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
 import type { PalisadePiece } from '../lib/map/palisadeTiles';
 import { constructionDialsFromQueue, type ConstructionDial } from '../lib/map/constructionDial';
@@ -91,6 +91,10 @@ const LIVE_POLL_MS = 4000;
 // that discrete position from ever looking stale for long) rather than a
 // full websocket/animation loop, which the design doc explicitly defers.
 const ARMY_POLL_MS = 2000;
+
+// The fog overview only matters past the chunk window and regenerates whenever an army trail moves, so it is polled
+// slower than the live poll (an unchanged overview is a body-less 304).
+const FOG_OVERVIEW_POLL_MS = 30_000;
 
 /**
  * What the send picker needs of one of the player's realms other than the open one: its home garrison (and the spots it stands at),
@@ -127,6 +131,13 @@ const FOG_VIEWPORT_DEBOUNCE_MS = 150;
 // `fogMaskBitmap`'s markRaw.
 const fogChunkCache = new FogChunkCache();
 let fogViewportTimer: ReturnType<typeof setTimeout> | null = null;
+// The overview fetch's own `ETag` and in-flight guard — same module-scope reasoning.
+let fogOverviewEtag: string | null = null;
+let fogOverviewInFlight = false;
+// What `FogCoverage` is rebuilt from whenever either the chunk window or the overview changes (`applyFogCoverage`): the
+// window's bounds + stitched pixels and the decoded overview. Module scope for the same reason as the chunk cache.
+let fogWindowPixels: { bounds: MaskBounds; pixels: Uint8ClampedArray } | null = null;
+let fogOverviewPixels: FogOverviewPixels | null = null;
 
 // Demo mode's seed — kept as its own constant since both the initial
 // `WorldModel` below and its island labels have to agree on it. The e2e suite
@@ -455,6 +466,7 @@ export const useWorldStore = defineStore('world', {
     syncHandle: null as ReturnType<typeof setInterval> | null,
     livePollHandle: null as ReturnType<typeof setInterval> | null,
     demoFogPollHandle: null as ReturnType<typeof setInterval> | null,
+    fogOverviewPollHandle: null as ReturnType<typeof setInterval> | null,
     // Live-mode state: which backend world this session is playing in, and
     // the start positions a settlement may be founded on. Unused in demo
     // mode, where `WorldModel` is the entire source of truth.
@@ -502,6 +514,12 @@ export const useWorldStore = defineStore('world', {
      * renderer places the texture by it (`HexMapRenderer.setFogMask`).
      */
     fogMaskBounds: null as MaskBounds | null,
+    /**
+     * The whole-world coarse mask (`fetchFogOverview`) the renderer falls back to past the chunk window, and where it
+     * sits in mask-texel space. Live mode only; demo mode's mask is already the whole world.
+     */
+    fogOverviewBitmap: null as ImageBitmap | null,
+    fogOverviewBounds: null as MaskBounds | null,
     /**
      * The chunk rectangle the camera currently sees, as last reported by the
      * renderer (`requestFogViewport`). Null until it has reported once.
@@ -1566,6 +1584,12 @@ export const useWorldStore = defineStore('world', {
       this.fogWindow = null;
       this.fogEtag = null;
       this.fogMaskError = null;
+      this.fogOverviewBitmap?.close();
+      this.fogOverviewBitmap = null;
+      this.fogOverviewBounds = null;
+      fogOverviewEtag = null;
+      fogWindowPixels = null;
+      fogOverviewPixels = null;
       fogChunkCache.clear();
       if (fogViewportTimer) clearTimeout(fogViewportTimer);
       fogViewportTimer = null;
@@ -2486,6 +2510,8 @@ export const useWorldStore = defineStore('world', {
           void this.fetchFogMask();
         };
         pollLive();
+        void this.fetchFogOverview();
+        this.fogOverviewPollHandle = setInterval(() => void this.fetchFogOverview(), FOG_OVERVIEW_POLL_MS);
         void this.trackPoll('armies', () => this.refreshArmies());
         this.livePollHandle = setInterval(pollLive, LIVE_POLL_MS);
         // Separate, tighter interval than LIVE_POLL_MS — see ARMY_POLL_MS's
@@ -2506,6 +2532,16 @@ export const useWorldStore = defineStore('world', {
       this.armyPollHandle = null;
       if (this.demoFogPollHandle) clearInterval(this.demoFogPollHandle);
       this.demoFogPollHandle = null;
+      if (this.fogOverviewPollHandle) clearInterval(this.fogOverviewPollHandle);
+      this.fogOverviewPollHandle = null;
+    },
+    /**
+     * Rebuilds `fogCoverage` from the last chunk window and the last overview (either may be missing; without a window
+     * there is nothing to build). The one place live mode builds it, so a window change and an overview change agree.
+     */
+    applyFogCoverage() {
+      if (!fogWindowPixels) return;
+      this.fogCoverage = markRaw(new FogCoverage(fogWindowPixels.bounds, fogWindowPixels.pixels, fogOverviewPixels));
     },
     /**
      * The chunk window to fetch now. While the camera stays inside the window
@@ -2593,7 +2629,6 @@ export const useWorldStore = defineStore('world', {
           if (stale.length > 0 || !sameWindow) {
             const bounds = windowBounds(window);
             const pixels = stitchWindow(window, fogChunkCache.pixelsByKey());
-            const coverage = new FogCoverage(bounds, pixels);
             const bitmap = await pixelsToBitmap(pixels, bounds.width, bounds.height);
             // Close the previous bitmap only once the new one is actually in
             // hand — closing it eagerly before the fetch settles would leave
@@ -2601,7 +2636,8 @@ export const useWorldStore = defineStore('world', {
             // store had.
             this.fogMaskBitmap?.close();
             this.fogMaskBitmap = markRaw(bitmap);
-            this.fogCoverage = markRaw(coverage);
+            fogWindowPixels = { bounds, pixels };
+            this.applyFogCoverage();
             this.fogMaskBounds = bounds;
           }
 
@@ -2649,6 +2685,47 @@ export const useWorldStore = defineStore('world', {
         if (this.fogWindow && !rangeContains(this.fogWindow, fogWindowFor(this.fogViewport, world, 0))) {
           this.requestFogViewport(this.fogViewport);
         }
+      }
+    },
+    /**
+     * Fetches the whole-world coarse fog mask the shader blends in past the chunk window (fog-overview endpoint), stashed
+     * on `fogOverviewBitmap` + `fogOverviewBounds`. Polled on `FOG_OVERVIEW_POLL_MS`; an unchanged overview is a body-less
+     * 304. A no-op in demo mode (its mask is the whole world) or before a world/owner is known. Best-effort: a failed
+     * fetch keeps the previous overview.
+     */
+    async fetchFogOverview() {
+      if (DEMO_MODE || !this.worldId || !this.ownerId) return;
+      if (fogOverviewInFlight) return;
+      fogOverviewInFlight = true;
+      const { worldId, ownerId } = this;
+      try {
+        const result = await api.getFogOverview(worldId, ownerId, fogOverviewEtag);
+        if (result.notModified) return;
+        const { data } = result;
+        const pixels = await decodeMaskPng(data.png, data.width, data.height);
+        const bitmap = await pixelsToBitmap(pixels, data.width, data.height);
+        // The world or owner switched while this was in flight: the overview belongs to the old one.
+        if (this.worldId !== worldId || this.ownerId !== ownerId) {
+          bitmap.close();
+          return;
+        }
+        // Close the previous bitmap only once the new one exists (see fetchFogMask).
+        this.fogOverviewBitmap?.close();
+        this.fogOverviewBitmap = markRaw(bitmap);
+        const bounds = maskBounds(
+          data.minU,
+          data.minV,
+          data.minU + data.width * data.factor,
+          data.minV + data.height * data.factor,
+        );
+        this.fogOverviewBounds = bounds;
+        fogOverviewPixels = { bounds, factor: data.factor, width: data.width, height: data.height, pixels };
+        this.applyFogCoverage();
+        fogOverviewEtag = result.etag;
+      } catch (err) {
+        console.warn('poll "fogOverview" failed', err);
+      } finally {
+        fogOverviewInFlight = false;
       }
     },
     /**

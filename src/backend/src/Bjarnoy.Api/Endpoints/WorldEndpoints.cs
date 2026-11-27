@@ -112,6 +112,13 @@ public static class WorldEndpoints
                 "one RGBA8 PNG per chunk (map-fog-v2.md §2.2/§3).")
             .RequireCallerRealm();
 
+        worlds.MapGet("/{worldId:guid}/fog-overview", GetFogOverview)
+            .WithName("GetWorldFogOverview")
+            .WithSummary(
+                "The requesting player's whole-world coarse fog overview as one RGBA8 PNG " +
+                "(map-fog-v2.md §3, Overview), sampled by the client where its chunk window has no data.")
+            .RequireCallerRealm();
+
         worlds.MapGet("/{worldId:guid}/plot-suggestion", GetPlotSuggestion)
             .WithName("GetPlotSuggestion")
             .WithSummary("The plot this visitor is offered to found on, pinned across reloads.")
@@ -753,6 +760,51 @@ public static class WorldEndpoints
 
         httpContext.Response.Headers.ETag = eTag;
         return TypedResults.Ok(FogChunksResponse.From(cuMin, cuMax, cvMin, cvMax, result.Chunks!));
+    }
+
+    /// <summary>
+    /// <c>GET /worlds/{id}/fog-overview</c>: the caller's whole-world coarse fog mask, scoped like
+    /// <see cref="GetFogChunks"/>. The ETag is the overview's version hash, so an unchanged world is a 304.
+    /// </summary>
+    private static async Task<IResult> GetFogOverview(
+        Guid worldId,
+        HttpContext httpContext,
+        FogOverviewService fogOverview,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome == CallerRealmOutcome.MissingHeader)
+        {
+            return TypedResults.BadRequest(MissingOwnerIdProblem());
+        }
+
+        if (realm.Outcome == CallerRealmOutcome.Refused)
+        {
+            return NotOwnerRefusal();
+        }
+
+        var result = await fogOverview.GetAsync(worldId, realm.OwnerId!, cancellationToken);
+        if (result.Rejection == FogOverviewRejection.WorldNotFound)
+        {
+            return TypedResults.NotFound(WorldNotFoundProblem());
+        }
+
+        var eTag = $"\"{result.Version}\"";
+        if (httpContext.Request.Headers.IfNoneMatch == eTag)
+        {
+            return TypedResults.StatusCode(StatusCodes.Status304NotModified);
+        }
+
+        httpContext.Response.Headers.ETag = eTag;
+        return TypedResults.Ok(new FogOverviewResponse(
+            result.Factor,
+            result.Bounds.MinU,
+            result.Bounds.MinV,
+            result.Width,
+            result.Height,
+            result.Version!,
+            Convert.ToBase64String(result.Png!)));
     }
 
     /// <summary>

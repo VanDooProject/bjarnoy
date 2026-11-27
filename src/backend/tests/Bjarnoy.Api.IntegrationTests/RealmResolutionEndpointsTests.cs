@@ -148,6 +148,10 @@ public sealed class RealmResolutionEndpointsTests : IAsyncLifetime
         var fogChunksError = await fogChunks.ReadStrictAsync<AuthErrorResponse>(Ct);
         Assert.Equal("not_owner", fogChunksError.Error);
 
+        var fogOverview = await client.GetAsync($"/api/v1/worlds/{worldId}/fog-overview", Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, fogOverview.StatusCode);
+        Assert.Equal("not_owner", (await fogOverview.ReadStrictAsync<AuthErrorResponse>(Ct)).Error);
+
         var plotSuggestion = await client.GetAsync($"/api/v1/worlds/{worldId}/plot-suggestion", Ct);
         Assert.Equal(HttpStatusCode.Forbidden, plotSuggestion.StatusCode);
         var plotSuggestionError = await plotSuggestion.ReadStrictAsync<AuthErrorResponse>(Ct);

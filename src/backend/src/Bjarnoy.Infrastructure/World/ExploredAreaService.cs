@@ -690,23 +690,21 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
             return (merged, false);
         }
 
-        var wanted = PersistedExploredBitset.GroupByChunk(
-            discs.SelectMany(d => d.Centre.WithinRadius(d.Radius)).Distinct());
+        var wanted = GroupDiscsByChunk(discs);
         var rows = await LoadChunkRowsAsync(worldId, ownerId, wanted.Keys, tracked: true, cancellationToken)
             .ConfigureAwait(false);
 
         var inserting = false;
-        foreach (var (chunk, hexes) in wanted)
+        foreach (var (chunk, next, grew) in MergeDiscs(
+            wanted, c => rows.TryGetValue(c, out var r) ? ToData(r) : ExploredChunkData.None))
         {
-            var hasRow = rows.TryGetValue(chunk, out var row);
-            var existing = hasRow ? ToData(row!) : ExploredChunkData.None;
-            var next = PersistedExploredBitset.Merge(chunk, existing, hexes, out var grew);
             merged[chunk] = next;
             if (!grew)
             {
                 continue;
             }
 
+            var hasRow = rows.TryGetValue(chunk, out var row);
             if (!hasRow)
             {
                 row = new PlayerExploredChunkEntity
@@ -726,6 +724,24 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
         }
 
         return (merged, inserting);
+    }
+
+    /// <summary>The hexes of every disc, grouped by the fog chunk each lies in. The one disc-to-chunks step of every merge.</summary>
+    public static Dictionary<FogChunkCoord, List<HexCoord>> GroupDiscsByChunk(IEnumerable<ExploredDisc> discs)
+        => PersistedExploredBitset.GroupByChunk(discs.SelectMany(d => d.Centre.WithinRadius(d.Radius)).Distinct());
+
+    /// <summary>
+    /// ORs each chunk's grouped hexes into <paramref name="existing"/>'s data for it, in memory. The one merge both the
+    /// persisting path (<see cref="StageAsync"/>) and read-only views (the fog overview) use.
+    /// </summary>
+    public static IEnumerable<(FogChunkCoord Chunk, ExploredChunkData Next, bool Grew)> MergeDiscs(
+        IReadOnlyDictionary<FogChunkCoord, List<HexCoord>> wanted, Func<FogChunkCoord, ExploredChunkData> existing)
+    {
+        foreach (var (chunk, hexes) in wanted)
+        {
+            var next = PersistedExploredBitset.Merge(chunk, existing(chunk), hexes, out var grew);
+            yield return (chunk, next, grew);
+        }
     }
 
     private async Task<Dictionary<FogChunkCoord, PlayerExploredChunkEntity>> LoadChunkRowsAsync(

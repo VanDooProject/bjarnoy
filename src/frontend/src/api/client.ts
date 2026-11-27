@@ -33,6 +33,7 @@ import type {
   FieldBattleReportResponse,
   FieldOrderRequest,
   FogChunksResponse,
+  FogOverviewResponse,
   FoundSettlementRequest,
   GrantResourcesRequest,
   GrantRuneRequest,
@@ -239,31 +240,30 @@ export interface FogChunkRect {
 }
 
 /**
- * Result of a conditional fog-chunks fetch: either the rectangle is unchanged
- * since the `ETag` the caller sent (`notModified`, no body), or the new body
- * plus the `ETag` to send next time.
+ * Result of a conditional fog fetch (chunks or overview): either the body is
+ * unchanged since the `ETag` the caller sent (`notModified`, no body), or the
+ * new body plus the `ETag` to send next time.
  */
-export type FogChunksResult =
+export type ConditionalFogResult<T> =
   | { notModified: true }
-  | { notModified: false; data: FogChunksResponse; etag: string | null };
+  | { notModified: false; data: T; etag: string | null };
+
+export type FogChunksResult = ConditionalFogResult<FogChunksResponse>;
+export type FogOverviewResult = ConditionalFogResult<FogOverviewResponse>;
 
 /**
- * `GET /worlds/{id}/fog-chunks` (map-fog-v2.md §3) — one batched, conditional
- * read of a chunk rectangle. Not `request<T>` because of the 304, which has no
- * body to parse. No 401-refresh retry either: the endpoint doesn't require a
- * JWT — anonymous play proves ownership via `ownerId` the same way the
- * mutating endpoints do — so there is no access token whose expiry this call
- * needs to react to.
+ * One conditional, owner-proving GET of a fog endpoint (map-fog-v2.md §3).
+ * Not `request<T>` because of the 304, which has no body to parse. No
+ * 401-refresh retry either: the endpoints don't require a JWT — anonymous play
+ * proves ownership via `ownerId` the same way the mutating endpoints do — so
+ * there is no access token whose expiry this call needs to react to.
  */
-async function requestFogChunks(
-  worldId: string,
+async function requestFogResource<T>(
+  path: string,
   ownerId: string,
-  rect: FogChunkRect,
   etag?: string | null,
-): Promise<FogChunksResult> {
+): Promise<ConditionalFogResult<T>> {
   const accessToken = authHooks.getAccessToken();
-  const path =
-    `/worlds/${worldId}/fog-chunks?cuMin=${rect.cuMin}&cuMax=${rect.cuMax}&cvMin=${rect.cvMin}&cvMax=${rect.cvMax}`;
   const res = await fetchOrThrow('GET', path, {
     headers: {
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -279,7 +279,7 @@ async function requestFogChunks(
     throw new ApiError(res.status, problem, 'GET', path);
   }
 
-  return { notModified: false, data: (await res.json()) as FogChunksResponse, etag: res.headers.get('ETag') };
+  return { notModified: false, data: (await res.json()) as T, etag: res.headers.get('ETag') };
 }
 
 export const api = {
@@ -844,7 +844,15 @@ export const api = {
   // the way there's a public settlement list. Pass the previous response's
   // `etag` for the same rectangle to get a body-less 304 when nothing changed.
   getFogChunks: (worldId: string, ownerId: string, rect: FogChunkRect, etag?: string | null) =>
-    requestFogChunks(worldId, ownerId, rect, etag),
+    requestFogResource<FogChunksResponse>(
+      `/worlds/${worldId}/fog-chunks?cuMin=${rect.cuMin}&cuMax=${rect.cuMax}&cvMin=${rect.cvMin}&cvMax=${rect.cvMax}`,
+      ownerId,
+      etag,
+    ),
+  // The whole-world coarse fog mask the shader falls back to past the chunk
+  // window. Same auth, ownership proof and conditional-GET behaviour as getFogChunks.
+  getFogOverview: (worldId: string, ownerId: string, etag?: string | null) =>
+    requestFogResource<FogOverviewResponse>(`/worlds/${worldId}/fog-overview`, ownerId, etag),
   // The backend-owned plot suggestion (see PlotReservationService): pinned
   // per `ownerId` across reloads, held with a short exclusive reservation.
   // `ownerId` is required, same reasoning as getFogChunks's own.

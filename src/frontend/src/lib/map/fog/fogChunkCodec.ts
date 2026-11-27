@@ -6,7 +6,12 @@
 import { FOG_CHUNK_SIZE } from './fogChunks';
 
 /** Decodes one chunk's base64 PNG into RGBA8 pixels (`FOG_CHUNK_SIZE` square). */
-export async function decodeChunkPng(base64: string): Promise<Uint8ClampedArray> {
+export function decodeChunkPng(base64: string): Promise<Uint8ClampedArray> {
+  return decodeMaskPng(base64, FOG_CHUNK_SIZE, FOG_CHUNK_SIZE);
+}
+
+/** Decodes a base64 mask PNG (a chunk, the overview) into RGBA8 pixels, checking it is `width` x `height`. */
+export async function decodeMaskPng(base64: string, width: number, height: number): Promise<Uint8ClampedArray> {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
@@ -18,12 +23,12 @@ export async function decodeChunkPng(base64: string): Promise<Uint8ClampedArray>
     premultiplyAlpha: 'none',
   });
   try {
-    if (bitmap.width !== FOG_CHUNK_SIZE || bitmap.height !== FOG_CHUNK_SIZE) {
-      throw new Error(`fog chunk is ${bitmap.width}x${bitmap.height}, expected ${FOG_CHUNK_SIZE}x${FOG_CHUNK_SIZE}`);
+    if (bitmap.width !== width || bitmap.height !== height) {
+      throw new Error(`fog mask is ${bitmap.width}x${bitmap.height}, expected ${width}x${height}`);
     }
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
     const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) throw new Error('no 2d context to decode a fog chunk with');
+    if (!context) throw new Error('no 2d context to decode a fog mask with');
     context.drawImage(bitmap, 0, 0);
     return context.getImageData(0, 0, bitmap.width, bitmap.height).data;
   } finally {

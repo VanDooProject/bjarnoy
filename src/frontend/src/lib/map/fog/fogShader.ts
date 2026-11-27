@@ -91,6 +91,15 @@
 
 import { NOISE_LATTICE_GLSL } from '../shaderNoise';
 import { EDGE_NOISE_FADE_RAMP } from './fogRamp';
+import { UNKNOWN_TEXEL } from './fogChunks';
+
+/**
+ * UNKNOWN_TEXEL as a GLSL vec4 — what the field shader reads where no mask covers the ground. Derived from the one
+ * definition the chunk stitcher fills unfetched chunks with, so ground past the window and an unfetched chunk inside it
+ * read the same: both tiers on (unknown ⊆ out of sight). A different default here drew a hard seam in the dark tier
+ * along the window's edge.
+ */
+export const UNKNOWN_TEXEL_GLSL = `vec4(${UNKNOWN_TEXEL.map((c) => (c / 255).toFixed(4)).join(', ')})`;
 
 export const FOG_VERTEX = `
 in vec2 aPosition;
@@ -125,6 +134,9 @@ out vec4 finalColor;
 
 uniform sampler2D uMask;
 uniform sampler2D uMaskPrev;
+// The whole-world coarse mask (fog-overview endpoint): read wherever the chunk
+// window has no data, blended in over the window's outer WINDOW_BLEND_TEXELS.
+uniform sampler2D uMaskOverview;
 
 uniform float uMaskBlend;
 // The world rectangle this render covers: vUV (0..1, top-down) maps onto it.
@@ -137,6 +149,14 @@ uniform vec2 uWorldToMaskOffset;
 // different place than the one fading in (see FogField.setMaskTexture).
 uniform vec2 uWorldToMaskScalePrev;
 uniform vec2 uWorldToMaskOffsetPrev;
+// The overview's own placement; uHasOverview stays 0 until one is set.
+uniform vec2 uWorldToOverviewScale;
+uniform vec2 uWorldToOverviewOffset;
+uniform float uHasOverview;
+// Texel size of the window uMask / uMaskPrev hold, to measure the distance to
+// the window's edge in texels.
+uniform vec2 uMaskTexels;
+uniform vec2 uMaskTexelsPrev;
 // Where each tier's ramp turns over, in ramp units (0 = at the ring, 1 = the
 // generator's full margin — 14 hexes for unknown, 4 for out-of-sight). x is
 // where the tier starts showing at all, y where it saturates.
@@ -326,15 +346,30 @@ vec2 armyRamps(vec2 world) {
   return ramps;
 }
 
-// Outside the fetched/generated mask entirely (past the world's own
-// radius) reads as "never scouted" — never a leak, always correct, per
-// map-fog-v2.md §3's missing-chunk-default rule, which applies just as much
-// to ground past the world edge as to a chunk that hasn't arrived yet.
-vec4 sampleMask(sampler2D tex, vec2 uv) {
-  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-    return vec4(1.0, 0.0, 0.0, 1.0);
-  }
-  return texture(tex, uv);
+// Outside the chunk window the whole-world overview stands in (blended over
+// the window's outer WINDOW_BLEND_TEXELS so there is no hard edge); where there
+// is no overview (demo mode, before its first fetch) or it doesn't cover the
+// ground either, it reads as "never scouted", exactly like an unfetched chunk
+// inside the window (UNKNOWN_TEXEL) — never a leak, always correct, per
+// map-fog-v2.md §3's missing-chunk-default rule.
+const float WINDOW_BLEND_TEXELS = 16.0;
+
+vec4 sampleOverview(vec2 world) {
+  if (uHasOverview < 0.5) return ${UNKNOWN_TEXEL_GLSL};
+  vec2 uv = world * uWorldToOverviewScale + uWorldToOverviewOffset;
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return ${UNKNOWN_TEXEL_GLSL};
+  return texture(uMaskOverview, uv);
+}
+
+// texels from uv to the window's nearest edge (negative outside)
+vec4 sampleMask(sampler2D tex, vec2 uv, vec2 texels, vec2 world) {
+  vec2 inside = min(uv, 1.0 - uv) * texels;
+  float edge = min(inside.x, inside.y);
+  if (edge >= WINDOW_BLEND_TEXELS) return texture(tex, uv);
+  if (uHasOverview < 0.5) return edge >= 0.0 ? texture(tex, uv) : ${UNKNOWN_TEXEL_GLSL};
+  vec4 overview = sampleOverview(world);
+  if (edge <= 0.0) return overview;
+  return mix(overview, texture(tex, uv), smoothstep(0.0, WINDOW_BLEND_TEXELS, edge));
 }
 
 void main() {
@@ -342,7 +377,7 @@ void main() {
   vec2 maskUV = world * uWorldToMaskScale + uWorldToMaskOffset;
 
   if (uShowRaw > 0.5) {
-    finalColor = sampleMask(uMask, maskUV);
+    finalColor = sampleMask(uMask, maskUV, uMaskTexels, world);
     return;
   }
 
@@ -350,10 +385,10 @@ void main() {
   // (§2.6), which is a few hundred milliseconds after a mask swap and never
   // again — the steady state is uMaskBlend == 1, where the mix is the
   // identity and the second fetch is a texture read thrown away.
-  vec4 m = sampleMask(uMask, maskUV);
+  vec4 m = sampleMask(uMask, maskUV, uMaskTexels, world);
   if (uMaskBlend < 1.0) {
     vec2 maskUVPrev = world * uWorldToMaskScalePrev + uWorldToMaskOffsetPrev;
-    m = mix(sampleMask(uMaskPrev, maskUVPrev), m, uMaskBlend);
+    m = mix(sampleMask(uMaskPrev, maskUVPrev, uMaskTexelsPrev, world), m, uMaskBlend);
   }
 
   // §1c: a live army's real-time vision only ever reveals — min() with the

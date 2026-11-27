@@ -584,6 +584,19 @@ public sealed record FogChunksResponse(
     }
 }
 
+/// <summary>
+/// <c>GET /worlds/{id}/fog-overview</c>: the whole world's coarse fog mask (map-fog-v2.md §3, "Overview"), one
+/// overview texel per <paramref name="Factor"/> x <paramref name="Factor"/> block of detailed texels.
+/// </summary>
+/// <param name="Factor">Detailed texels per overview texel, per axis.</param>
+/// <param name="MinU">Detailed-texel u of the grid's left edge.</param>
+/// <param name="MinV">Detailed-texel v of the grid's top edge.</param>
+/// <param name="Width">Overview grid width in texels.</param>
+/// <param name="Height">Overview grid height in texels.</param>
+/// <param name="Version">Hash of every input that shapes the pixels (also the ETag).</param>
+/// <param name="Png">Base64 RGBA8 PNG of <paramref name="Width"/> x <paramref name="Height"/>: R unknown, G out of sight, B 0.</param>
+public sealed record FogOverviewResponse(int Factor, int MinU, int MinV, int Width, int Height, string Version, string Png);
+
 public sealed record TileChunkResponse(
     Guid WorldId,
     int QMin,

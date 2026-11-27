@@ -8,6 +8,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
+import { useFogMaskSync } from '../composables/useFogMaskSync';
 import { topPhoneLayerId, useHiddenUnderPhoneLayer, vPhoneHidden } from '../composables/usePhoneLayer';
 import { useJoinBlockedLabel } from '../composables/useJoinBlockedLabel';
 import PlayIntroButton from '../intro/PlayIntroButton.vue';
@@ -900,18 +901,8 @@ async function foundHere(coord: AxialCoord) {
   }
 }
 
-// Fog v2 (map-fog-v2.md §3): same watcher as SettlementView.vue's — without
-// it, founding here (world.startHudSync() in foundHere, above) leaves the
-// fog quads on their opaque "fully unknown" placeholder forever, since
-// nothing else pushes a freshly built/fetched mask into the renderer once
-// isFogActive() flips true. Watching both together covers the renderer not
-// existing yet on the tick a mask resolves.
-watch(
-  [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.fogMaskBounds, () => world.fogCoverage],
-  ([renderer, bitmap, bounds, coverage]) => {
-    if (renderer && bitmap && bounds && coverage) renderer.setFogMask(bounds, bitmap, coverage);
-  },
-);
+// Fog v2 (map-fog-v2.md §3): the fetched fog mask and overview go into the renderer (see the composable).
+useFogMaskSync(() => canvasRef.value?.renderer);
 
 // Fog chunks are fetched for the ground the camera actually sees (§3): the
 // renderer reports which chunks that is as it pans/zooms, the store debounces

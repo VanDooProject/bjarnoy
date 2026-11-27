@@ -121,5 +121,6 @@ export function fogMaskPlacement(
   return {
     scale: [1 / (0.75 * tileWidth * bounds.width), 2 / (tileHeight * bounds.height)],
     offset: [(-bounds.minU - 1 / 6) / bounds.width, (-bounds.minV - 0.5) / bounds.height],
+    texels: [bounds.width, bounds.height],
   };
 }
