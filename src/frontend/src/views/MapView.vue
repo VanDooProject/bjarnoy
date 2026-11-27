@@ -635,13 +635,13 @@ const armyHint = ref<{ x: number; y: number; text: string } | null>(null);
 let armyHintTimer: ReturnType<typeof setTimeout> | null = null;
 const sendBlockText = useSendBlockText();
 /**
- * Whether a tap on an own army's marker ends at the marker: a moving army is only selected, the tap does not also reach the tile (no ring
- * menu). Not while the send picker is open (the renderer already keeps that tap off the tile) nor while a route is being composed (the tap
- * adds the waypoint). A standing army's hex stays tappable.
+ * Whether a tap on an own army's marker ends at the marker: the army is only selected, the tap does not also reach the tile (no ring
+ * menu, and with the army now selected the tile click would queue a waypoint on its own hex). Not while the send picker is open (the
+ * renderer already keeps that tap off the tile) nor while a route is being composed (the tap adds the waypoint).
  */
 function armyTapStopsAtMarker(armyId: string): boolean {
   if (world.sendPicker || world.dispatchDraft || world.fieldOrderDraft) return false;
-  return !!world.armies.find((a) => a.id === armyId)?.movement;
+  return world.armies.some((a) => a.id === armyId);
 }
 function onArmyTap(armyId: string, screen: { x: number; y: number }) {
   if (armyHintTimer) clearTimeout(armyHintTimer);
@@ -873,7 +873,7 @@ watch(canvasInteractionLocked, (locked) => {
 // otherwise clash with it) hides, and the HUD pull-down drawer closes the
 // same way opening QueueDrawer already does above.
 const hasActiveDraft = useHasActiveDraft();
-useEscapeCancelsPlanning();
+useEscapeCancelsPlanning({ ringOpen: () => ringOpen.value });
 watch(hasActiveDraft, (active) => {
   if (active) {
     queueDrawerOpen.value = false;
@@ -1353,6 +1353,9 @@ async function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y:
     quickUpgradeAt(coord, tile);
     return;
   }
+  // An own army is selected: the click queues a waypoint for it (a field order, same as the army panel's Move on / Append goal) instead
+  // of opening the ring. Escape deselects the army (useEscapeCancelsPlanning), which brings the ring back.
+  if (world.queueFieldOrderWaypoint(coord)) return;
   // World mode used to click-to-enter the settlement unconditionally here —
   // zoom is now the only way in (the zoom-driven transition above/pinch-zoom
   // still does that); a plain tap opens the same ring menu settlement mode
