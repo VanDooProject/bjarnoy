@@ -903,8 +903,8 @@ function onLaneTouchStart(e: TouchEvent, item: RingAction) {
 }
 // Holding a holdable root bubble (Upgrade, for the quick upgrade mode): the press fills a ring around the bubble over
 // LONG_PRESS_MS, then `hold` fires and the click the release would bring is swallowed. A release (or leaving the bubble, or
-// drifting off it) before that cancels the hold and leaves the ordinary click alone. A disabled bubble is holdable too: it
-// reads its refusal in the caller. The same tracker the map's long press uses (lib/map/longPress.ts).
+// drifting off it) before that cancels the hold and leaves the ordinary click alone. A disabled bubble is holdable too: the
+// hold only switches the mode on, whatever the bubble's state. The same tracker the map's long press uses (lib/map/longPress.ts).
 const HOLD_SLOP_PX = 10;
 /** The bubble whose hold ring is filling. */
 const holdingId = ref<string | null>(null);
