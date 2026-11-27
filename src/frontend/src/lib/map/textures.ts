@@ -52,7 +52,7 @@ import {
   type GiantTextureMap,
 } from './giantTiles';
 import { PALISADE_FAMILY, isRefusal, palisadeTileFor, type PalisadePiece } from './palisadeTiles';
-import { isLakeFishingHut, lakeFishingHutFamily } from './placementRules';
+import { isLakeFishingHut, lakeFishingHutArt } from './placementRules';
 import { drawsAsSea, type BogTile, type ForestKind, type RiverTile, type Terrain, type Tile, type TileOrientation } from './types';
 import type { RiverVariant } from './worldGenerator';
 import {
@@ -1786,9 +1786,10 @@ export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
   if (tile.lakeProp && !tile.buildingType) return LAKE_PROP_KEY[tile.lakeProp];
   if (tile.buildingType === 'sawmill') return 'sawmillriver';
   if (tile.buildingType === 'bridge') return 'riverbridge';
-  // A Fishing Hut on a bog lake's inlet, shore or half shore has its own lake art (the key is its family without the underscore); the Hammer Forge on a creek is the river hammer mill
+  // A Fishing Hut on a bog lake's inlet, shore or half shore has its own lake art; the Hammer Forge on a creek is the river hammer mill
   // (straight creek or bend), a placeholder until the bog-creek art exists.
-  if (isLakeFishingHut(tile)) return lakeFishingHutFamily(tile.bog?.kind).replace('_', '') as TextureKey;
+  const lakeHut = isLakeFishingHut(tile) ? lakeFishingHutArt(tile.bog?.kind) : undefined;
+  if (lakeHut) return lakeHut.key;
   if (tile.buildingType === 'hammerschmiede' && tile.bog?.kind === 'creek') {
     return bogTextureKey(tile.bog) === 'bogcreek' ? 'hammerschmiede' : 'hammerschmiedebend';
   }

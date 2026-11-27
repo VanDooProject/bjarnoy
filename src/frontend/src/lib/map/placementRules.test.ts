@@ -3,7 +3,7 @@ import catalogue from '../../data/building-catalogue.json';
 import type { BuildingDefinitionResponse } from '../../api/types';
 import { categoriesFor } from '../../composables/useBuildRing';
 import { buildingAllowedOnHex, isBogBoundBuilding, isWaterOnlyBuilding, newPlacementDisabled, riverBuildingAllowedHere } from './ringCatalogue';
-import { isLakeFishingHut, lakeFishingHutFamily, placementRuleFor, setPlacementRules } from './placementRules';
+import { isLakeFishingHut, lakeFishingHutArt, placementRuleFor, setPlacementRules } from './placementRules';
 import type { Tile } from './types';
 
 const SNAPSHOT = catalogue.data as unknown as BuildingDefinitionResponse[];
@@ -14,9 +14,10 @@ afterEach(() => setPlacementRules(SNAPSHOT));
 
 describe('the lake Fishing Hut', () => {
   it('picks its art family by the bog kind it stands on, and stands on exactly the kinds the catalogue names', () => {
-    expect(lakeFishingHutFamily('inlet')).toBe('fisherhut_inlet');
-    expect(lakeFishingHutFamily('shore')).toBe('fisherhut_lakeshore');
-    expect(lakeFishingHutFamily('half')).toBe('fisherhut_lake');
+    expect(lakeFishingHutArt('inlet')).toEqual({ key: 'fisherhutinlet', family: 'fisherhut_inlet' });
+    expect(lakeFishingHutArt('shore')).toEqual({ key: 'fisherhutlakeshore', family: 'fisherhut_lakeshore' });
+    expect(lakeFishingHutArt('half')).toEqual({ key: 'fisherhutlake', family: 'fisherhut_lake' });
+    expect(lakeFishingHutArt('mouth')).toBeUndefined();
     for (const kind of ['inlet', 'shore', 'half']) expect(isLakeFishingHut({ buildingType: 'fishinghut', bog: { kind } }), kind).toBe(true);
     for (const kind of ['bog', 'lake', 'mouth', 'creek', 'creekspring']) expect(isLakeFishingHut({ buildingType: 'fishinghut', bog: { kind } }), kind).toBe(false);
   });

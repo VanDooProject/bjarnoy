@@ -10,7 +10,7 @@
 // level for yet (e.g. `hut`/vikinghut isn't in showcase at all) fall back
 // to the older, lower-res per-level hextiles/ PNG.
 import { findAtlasFrame, findAtlasClip, type AtlasClip, type AtlasFrameRect } from './atlas';
-import { isLakeFishingHut, lakeFishingHutFamily } from './placementRules';
+import { isLakeFishingHut, lakeFishingHutArt } from './placementRules';
 import { TILE_ORIENTATIONS as TILE_DIRECTIONS, type TileOrientation } from './types';
 
 /** Either a showcase atlas frame (preferred) or a plain PNG URL fallback — <AtlasSprite>/<img> render either uniformly. */
@@ -190,9 +190,8 @@ export function buildingArtOnTile(
   if (type === 'tower' && tile.terrain === 'forest') return buildingArtByFamily('stavetower_forest', level);
   if (type === 'tower' && tile.terrain === 'sand') return buildingArtByFamily('stavetower_sand', level);
   if (type === 'longhouse' && tile.terrain === 'sand') return buildingArtByFamily('greathall_sand', level);
-  if (isLakeFishingHut({ buildingType: type, bog: tile.bog })) {
-    return buildingArtByFamily(lakeFishingHutFamily(tile.bog?.kind), level);
-  }
+  const lakeHut = isLakeFishingHut({ buildingType: type, bog: tile.bog }) ? lakeFishingHutArt(tile.bog?.kind) : undefined;
+  if (lakeHut) return buildingArtByFamily(lakeHut.family, level);
   if (type === 'hammerschmiede' && tile.bog?.kind === 'creek') {
     const straight =
       tile.bog.inDirections[0] !== undefined &&
