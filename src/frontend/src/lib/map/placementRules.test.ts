@@ -3,7 +3,7 @@ import catalogue from '../../data/building-catalogue.json';
 import type { BuildingDefinitionResponse } from '../../api/types';
 import { categoriesFor } from '../../composables/useBuildRing';
 import { buildingAllowedOnHex, isBogBoundBuilding, isWaterOnlyBuilding, newPlacementDisabled, riverBuildingAllowedHere } from './ringCatalogue';
-import { placementRuleFor, setPlacementRules } from './placementRules';
+import { isLakeFishingHut, lakeFishingHutFamily, placementRuleFor, setPlacementRules } from './placementRules';
 import type { Tile } from './types';
 
 const SNAPSHOT = catalogue.data as unknown as BuildingDefinitionResponse[];
@@ -12,11 +12,21 @@ const types = (tile: Partial<Tile>) => categoriesFor(tile as Tile).flatMap((c) =
 // The suite's setup registers the snapshot; every test here that swaps the rules puts it back.
 afterEach(() => setPlacementRules(SNAPSHOT));
 
+describe('the lake Fishing Hut', () => {
+  it('picks its art family by the bog kind it stands on, and stands on exactly the kinds the catalogue names', () => {
+    expect(lakeFishingHutFamily('inlet')).toBe('fisherhut_inlet');
+    expect(lakeFishingHutFamily('shore')).toBe('fisherhut_lakeshore');
+    expect(lakeFishingHutFamily('half')).toBe('fisherhut_lake');
+    for (const kind of ['inlet', 'shore', 'half']) expect(isLakeFishingHut({ buildingType: 'fishinghut', bog: { kind } }), kind).toBe(true);
+    for (const kind of ['bog', 'lake', 'mouth', 'creek', 'creekspring']) expect(isLakeFishingHut({ buildingType: 'fishinghut', bog: { kind } }), kind).toBe(false);
+  });
+});
+
 describe('the placement rules come from the building catalogue', () => {
   it('registers the level-1 entry of every catalogue building, plus the demo-only hut', () => {
     expect(placementRuleFor('tower')).toMatchObject({ category: 'defense', alsoOnBogKinds: ['bog'] });
     expect(placementRuleFor('hammerschmiede')).toMatchObject({ requiresBogKinds: ['creek'] });
-    expect(placementRuleFor('fishinghut')).toMatchObject({ requiresCoastalWater: true, lakeShoreKinds: ['half', 'shore'] });
+    expect(placementRuleFor('fishinghut')).toMatchObject({ requiresCoastalWater: true, lakeShoreKinds: ['half', 'inlet', 'shore'] });
     expect(placementRuleFor('sawmill')).toMatchObject({ requiresRiverShapes: ['bend', 'bend60', 'straight'], excludedRiverVariants: ['loop'] });
     expect(placementRuleFor('hut')).toMatchObject({ category: null, allowedTerrain: ['grass'] });
     expect(placementRuleFor('nonsense')).toBeUndefined();

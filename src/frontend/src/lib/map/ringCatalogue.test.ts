@@ -253,12 +253,13 @@ describe('buildingAllowedOnHex', () => {
     expect(buildingAllowedOnHex('hammerschmiede', { terrain: 'sea', isCoastalWater: true })).toBe(false);
   });
 
-  it('the Fishing Hut keeps the coast and also stands on a lake shore and half shore, nowhere else on the bog', () => {
+  it('the Fishing Hut keeps the coast and also stands on a lake inlet, shore and half shore, nowhere else on the bog', () => {
     expect(buildingAllowedOnHex('fishinghut', { terrain: 'sea', isCoastalWater: true })).toBe(true);
     expect(buildingAllowedOnHex('fishinghut', { terrain: 'sea', isCoastalWater: false })).toBe(false);
     expect(buildingAllowedOnHex('fishinghut', bogHex('half'))).toBe(true);
     expect(buildingAllowedOnHex('fishinghut', bogHex('shore'))).toBe(true);
-    for (const kind of ALL_KINDS.filter((k) => k !== 'half' && k !== 'shore')) {
+    expect(buildingAllowedOnHex('fishinghut', bogHex('inlet'))).toBe(true);
+    for (const kind of ALL_KINDS.filter((k) => k !== 'half' && k !== 'shore' && k !== 'inlet')) {
       expect(buildingAllowedOnHex('fishinghut', bogHex(kind)), `on ${kind}`).toBe(false);
     }
     // A coastal hut on land is not a thing: grass is not water (the caller filters non-coastal terrain separately).
@@ -390,10 +391,11 @@ describe('buildingAllowedOnHex — the catalogue\'s terrain per building', () =>
     for (const type of ['tower', 'palisade', 'palisadegate']) expect(buildingAllowedOnHex(type, { terrain: 'sand' }), type).toBe(true);
   });
 
-  it('keeps the lake Fishing Hut on a bog lake\'s shore and half shore only', () => {
+  it('keeps the lake Fishing Hut on a bog lake\'s inlet, shore and half shore only', () => {
     expect(buildingAllowedOnHex('fishinghut', { terrain: 'bog', bog: { kind: 'half' } })).toBe(true);
     expect(buildingAllowedOnHex('fishinghut', { terrain: 'bog', bog: { kind: 'shore' } })).toBe(true);
-    for (const kind of ['bog', 'lake', 'inlet', 'mouth', 'creek', 'creekspring'] as const) {
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'bog', bog: { kind: 'inlet' } })).toBe(true);
+    for (const kind of ['bog', 'lake', 'mouth', 'creek', 'creekspring'] as const) {
       expect(buildingAllowedOnHex('fishinghut', { terrain: 'bog', bog: { kind } }), kind).toBe(false);
     }
   });

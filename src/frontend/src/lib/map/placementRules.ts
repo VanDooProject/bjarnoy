@@ -76,12 +76,25 @@ export function setPlacementRules(definitions: readonly BuildingDefinitionRespon
 
 /**
  * Whether the building on `tile` stands on a bog lake's shore by its catalogue rule (`lakeShoreKinds`, the backend's
- * `BuildingDefinition.LakeShoreKinds`): today the lake Fishing Hut, on a shore (two water edges, `fisherhut_lakeshore`) or a half
- * shore (three, `fisherhut_lake`), rather than on the coast. The one place the client tells a lake hut from a coastal one.
+ * `BuildingDefinition.LakeShoreKinds`): today the lake Fishing Hut, on an inlet (one water edge, `fisherhut_inlet`), a shore (two,
+ * `fisherhut_lakeshore`) or a half shore (three, `fisherhut_lake`), rather than on the coast. The one place the client tells a lake hut
+ * from a coastal one.
  */
 export function isLakeFishingHut(tile: { buildingType?: string; bog?: { kind: string } }): boolean {
   const kind = tile.bog?.kind;
   return kind !== undefined && (placementRuleFor(tile.buildingType)?.lakeShoreKinds.includes(kind) ?? false);
+}
+
+/** The art family of a lake Fishing Hut by the bog kind it stands on. The one place that choice is written. */
+const LAKE_FISHING_HUT_FAMILY: Readonly<Record<string, string>> = {
+  inlet: 'fisherhut_inlet',
+  shore: 'fisherhut_lakeshore',
+  half: 'fisherhut_lake',
+};
+
+/** The art family (`fisherhut_inlet`, `fisherhut_lakeshore`, `fisherhut_lake`) of a lake Fishing Hut standing on bog `kind`. */
+export function lakeFishingHutFamily(kind: string | undefined): string {
+  return (kind !== undefined ? LAKE_FISHING_HUT_FAMILY[kind] : undefined) ?? LAKE_FISHING_HUT_FAMILY.half;
 }
 
 export function placementRuleFor(type: string | undefined): PlacementRule | undefined {

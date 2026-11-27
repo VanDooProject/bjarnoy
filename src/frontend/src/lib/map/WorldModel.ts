@@ -600,8 +600,8 @@ export class WorldModel {
   }
 
   /**
-   * Recomputes the lake decorations (`lakeProps.ts`) from the bog and the buildings standing on it: a lake Fishing Hut (on a
-   * half shore) may bring a fish weir and a fishing boat, a bog-ore works an ore boat. Sets `Tile.lakeProp` on the hexes that
+   * Recomputes the lake decorations (`lakeProps.ts`) from the bog and the buildings standing on it: a lake Fishing Hut (on an
+   * inlet, shore or half shore) may bring a fish weir and a fishing boat, a bog-ore works an ore boat. Sets `Tile.lakeProp` on the hexes that
    * carry one and clears it where one went away; pure in (seed, bog, buildings), so every client draws the same lake.
    */
   private recomputeLakeProps() {

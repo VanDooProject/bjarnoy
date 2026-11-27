@@ -1934,6 +1934,7 @@ describe('bog buildings and lake decorations', () => {
     expect(KEY_FAMILY.hammerschmiedebend).toBe('hammerschmiede_bend');
     expect(KEY_FAMILY.fisherhutlake).toBe('fisherhut_lake');
     expect(KEY_FAMILY.fisherhutlakeshore).toBe('fisherhut_lakeshore');
+    expect(KEY_FAMILY.fisherhutinlet).toBe('fisherhut_inlet');
     expect(KEY_FAMILY.claybrickworks).toBe('claybrickworks');
   });
 
@@ -1975,13 +1976,24 @@ describe('bog buildings and lake decorations', () => {
   it('draws a Fishing Hut on a shore with the lake shore art, turned like the shore, and never on other bog kinds', () => {
     const shore: Tile = { q: 0, r: 0, terrain: 'bog', orientation: 'NW', buildingType: 'fishinghut', buildingLevel: 2, bog: bog('shore', [], null, ['SE', 'E']) };
     expect(textureKeyFor(shore)).toBe('fisherhutlakeshore');
-    expect(textureKeyFor({ ...shore, bog: bog('inlet', [], null, ['SE']) })).toBe('fishinghut');
+    expect(textureKeyFor({ ...shore, bog: bog('mouth', ['W'], 'E', ['E']) })).toBe('fishinghut');
 
     const textures = labelled(['fisherhutlakeshore']);
     const shoreOrientation = bogOrientationFor(shore.bog!, 'NW');
     expect(shoreOrientation).not.toBe('NW');
     expect(baseTextureFor(textures, shore)).toBe(`fisherhutlakeshore-base-${shoreOrientation}`);
     expect(topTextureFor(textures, shore)).toBe(`fisherhutlakeshore-top-${shoreOrientation}`);
+  });
+
+  it('draws a Fishing Hut on an inlet with the inlet art, turned like the inlet tile', () => {
+    const inlet: Tile = { q: 0, r: 0, terrain: 'bog', orientation: 'NW', buildingType: 'fishinghut', buildingLevel: 2, bog: bog('inlet', [], null, ['SE']) };
+    expect(textureKeyFor(inlet)).toBe('fisherhutinlet');
+
+    const textures = labelled(['fisherhutinlet']);
+    const inletOrientation = bogOrientationFor(inlet.bog!, 'NW');
+    expect(inletOrientation).not.toBe('NW');
+    expect(baseTextureFor(textures, inlet)).toBe(`fisherhutinlet-base-${inletOrientation}`);
+    expect(topTextureFor(textures, inlet)).toBe(`fisherhutinlet-top-${inletOrientation}`);
   });
 
   it('draws a Hammer Forge on a creek as the straight or bend river mill, turned like the creek', () => {

@@ -85,7 +85,7 @@ describe('ResourceProductionView', () => {
     expect(cells('farm')[4]).toContain('Longhouse 4');
     expect(cells('farm')[4]).toContain('Reindeer Herder 3');
     expect(cells('fishinghut')[3]).toContain('Shallow (coastal) water');
-    expect(cells('fishinghut')[3]).toContain('bog-lake shore with water on two or three sides');
+    expect(cells('fishinghut')[3]).toContain('bog-lake shore with water on one, two or three sides');
     expect(cells('pumpkinfarm')[3]).toContain('pumpkin soil');
     wrapper.unmount();
   });
