@@ -41,6 +41,7 @@ import {
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
   dispatchTargetCoord,
+  canFieldOrderArmy,
   isFieldOrderMidMarch,
   isHuntUnit,
   wouldExceedWaypointLimit,
@@ -1911,6 +1912,18 @@ export const useWorldStore = defineStore('world', {
     },
     cancelFieldOrder() {
       this.fieldOrderDraft = null;
+    },
+    /**
+     * A map click while an own army is selected: starts a field order for it (its first click is the "move on" / "append goal"
+     * destination) and queues the clicked hex as a waypoint, further clicks queue more. False when there is no selected army or it
+     * takes no field order (at home, supporting, heading home), so the click is not claimed.
+     */
+    queueFieldOrderWaypoint(coord: AxialCoord): boolean {
+      const army = this.selectedArmyId ? this.armyById(this.selectedArmyId) : undefined;
+      if (!army || !canFieldOrderArmy(army)) return false;
+      if (this.fieldOrderDraft?.armyId !== army.id) this.startFieldOrder(army.id);
+      this.addFieldOrderWaypoint(coord);
+      return true;
     },
     /**
      * The ring's army bubbles (Send army here, Attack, Support, Hunt) open the source picker aimed at the tapped target: `coord` is

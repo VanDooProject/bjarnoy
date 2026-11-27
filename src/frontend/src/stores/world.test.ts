@@ -531,6 +531,46 @@ describe('useWorldStore startDispatchAt', () => {
   });
 });
 
+describe('useWorldStore queueFieldOrderWaypoint (map click with an army selected)', () => {
+  const army = (over: Record<string, unknown> = {}) =>
+    ({ id: 'army-1', atHome: false, supporting: false, mission: 'move', movement: null, stacks: [], ...over }) as never;
+
+  it('starts a field order for the selected army and queues the clicked hex, further clicks queue more', async () => {
+    const store = await loadStoreModule(true);
+    const { useAuthStore } = await import('./auth');
+    useAuthStore().user = { id: 'u1', userName: 'r', role: 'player', status: 'active', displayName: null, isPremium: true, preferredLocale: null };
+    store.armies = [army()];
+    store.selectArmy('army-1');
+
+    expect(store.queueFieldOrderWaypoint({ q: 1, r: 0 })).toBe(true);
+    expect(store.queueFieldOrderWaypoint({ q: 2, r: 0 })).toBe(true);
+
+    expect(store.fieldOrderDraft?.armyId).toBe('army-1');
+    expect(store.fieldOrderDraft?.route).toEqual([{ q: 1, r: 0 }, { q: 2, r: 0 }]);
+  });
+
+  it('does not claim the click without a selected army', async () => {
+    const store = await loadStoreModule(true);
+    store.armies = [army()];
+
+    expect(store.queueFieldOrderWaypoint({ q: 1, r: 0 })).toBe(false);
+    expect(store.fieldOrderDraft).toBeNull();
+  });
+
+  it.each([
+    ['at home', { atHome: true }],
+    ['supporting', { supporting: true }],
+    ['heading home', { movement: { isReturning: true } }],
+  ])('does not claim the click for an army that is %s (it takes no field order)', async (_label, over) => {
+    const store = await loadStoreModule(true);
+    store.armies = [army(over)];
+    store.selectArmy('army-1');
+
+    expect(store.queueFieldOrderWaypoint({ q: 1, r: 0 })).toBe(false);
+    expect(store.fieldOrderDraft).toBeNull();
+  });
+});
+
 // The premium-gating UX fix (docs/design/premium-gating-ux.md): a standing
 // army's first click is the free "move on" destination — Army.PlanFieldOrder
 // never charges premium for that one case — but a second click turns it into

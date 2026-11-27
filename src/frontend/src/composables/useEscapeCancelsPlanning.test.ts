@@ -6,11 +6,11 @@ import { mount } from '@vue/test-utils';
 import { useEscapeCancelsPlanning } from './useEscapeCancelsPlanning';
 import { useWorldStore } from '../stores/world';
 
-function setup() {
+function setup(host: { ringOpen?: () => boolean } = {}) {
   const wrapper = mount(
     defineComponent({
       setup() {
-        useEscapeCancelsPlanning();
+        useEscapeCancelsPlanning(host);
         return () => h('div', [h('input', { id: 'field' })]);
       },
     }),
@@ -45,6 +45,36 @@ describe('useEscapeCancelsPlanning', () => {
     } as unknown as typeof world.fieldOrderDraft;
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(world.fieldOrderDraft).toBeNull();
+    wrapper.unmount();
+  });
+
+  it('closes the send picker together with the order it was composing', () => {
+    const { wrapper, world } = setup();
+    world.openSendPicker({ q: 1, r: 1 });
+    world.fieldOrderDraft = { armyId: 'a', route: [] } as unknown as typeof world.fieldOrderDraft;
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(world.sendPicker).toBeNull();
+    expect(world.fieldOrderDraft).toBeNull();
+    wrapper.unmount();
+  });
+
+  it('cancels the route first and keeps the army selected, a second Escape deselects it', () => {
+    const { wrapper, world } = setup();
+    world.selectArmy('a');
+    world.fieldOrderDraft = { armyId: 'a', route: [{ q: 1, r: 0 }] } as unknown as typeof world.fieldOrderDraft;
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(world.fieldOrderDraft).toBeNull();
+    expect(world.selectedArmyId).toBe('a');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(world.selectedArmyId).toBeNull();
+    wrapper.unmount();
+  });
+
+  it('leaves the selected army alone while the ring menu is open (the ring takes that Escape)', () => {
+    const { wrapper, world } = setup({ ringOpen: () => true });
+    world.selectArmy('a');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(world.selectedArmyId).toBe('a');
     wrapper.unmount();
   });
 
