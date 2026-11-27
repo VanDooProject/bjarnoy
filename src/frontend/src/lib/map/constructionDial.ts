@@ -212,6 +212,10 @@ export function polylinePartial(points: { x: number; y: number }[], fraction: nu
 
 /** The dial label's font size in px at map scale 1 (12 px drawn at 1.2x: the HUD dial's label, see `HUD_TIER.labelBelow`). */
 export const DIAL_LABEL_BASE_PX = 12 * 1.2;
+/** The HUD dial's level font size in px for dial radius `r` (px); larger than the countdown's (`DIAL_LABEL_BASE_PX` at zs 1). */
+export function dialLevelFontPx(r: number): number {
+  return 13 + (r - 14) * 0.5;
+}
 /** A dial's time label is hidden while it would be smaller than this many on-screen px. */
 export const DIAL_MIN_LABEL_PX = 10;
 /** How long a dial takes to grow to / shrink back from its hovered size. */
@@ -263,32 +267,6 @@ export function dialRadiusPx(zs: number, rejectScale = 1): number {
 
 /** How long a tap-revealed dial stays revealed without another tap. */
 export const DIAL_TAP_REVEAL_MS = 4000;
-
-export interface DialHitTarget {
-  key: string;
-  cx: number;
-  cy: number;
-  /** Currently drawn radius in px. */
-  r: number;
-}
-
-/**
- * The dial a touch at `point` lands on: within its drawn radius `r` (only the
- * dial itself is tappable, so the tiles around and under it stay reachable);
- * the nearest centre wins when several qualify. Null for none.
- */
-export function pickTappedDial(point: { x: number; y: number }, dials: DialHitTarget[]): string | null {
-  let best: string | null = null;
-  let bestDist = Infinity;
-  for (const d of dials) {
-    const dist = Math.hypot(point.x - d.cx, point.y - d.cy);
-    if (dist <= d.r && dist < bestDist) {
-      best = d.key;
-      bestDist = dist;
-    }
-  }
-  return best;
-}
 
 /**
  * Next tap-revealed dial after a tap: tapping a dial reveals it, tapping the

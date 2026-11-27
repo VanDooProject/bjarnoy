@@ -1,6 +1,7 @@
 // The fog's shared field (docs/design/map-fog-v2.md, "Shared field"): ONE pass of the fog shader (fogShader.ts's
 // FOG_FIELD_FRAGMENT: mask, cross-fade, army vision, edge noise, drift) into a world-anchored RenderTexture with
-// R = out-of-sight tier alpha and G = unknown tier alpha. The two stage quads (FogMaskLayer) only sample it. It is
+// R = out-of-sight tier alpha and G = unknown tier alpha. The mist quad (FogMaskLayer) and the dark tier's desaturation
+// filter (FogDesaturateFilter) only sample it. It is
 // re-rendered only when fogFieldPlan.ts's fogFieldRenderReason says so, not every frame. Two snapshots are kept (previous
 // and newest) so the periodic drift render does not make the edge jump: see `update`.
 import { BufferImageSource, GlProgram, Mesh, MeshGeometry, RenderTexture, Shader, Texture, UniformGroup, type Renderer } from 'pixi.js';
@@ -14,7 +15,7 @@ import {
   fullscreenGeometry,
   type ArmyVisionSource,
 } from './FogMaskLayer';
-import { NOISE_REACH } from './fogRamp';
+import { NOISE_REACH, OUT_OF_SIGHT_RAMP_MARGIN_HEXES, UNKNOWN_RAMP_MARGIN_HEXES } from './fogRamp';
 import {
   driftBlendWeight,
   driftRenderPhase,
@@ -34,49 +35,54 @@ const REVEAL_FADE_MS = 600;
 // Everything below is in *ramp units*: 0 is the tier's own ring, 1 is the
 // generator's full margin for that tier — 14 hexes for unknown
 // (UNKNOWN_RAMP_MARGIN_HEXES in fogRamp.ts, which
-// FogMaskOptions.UnknownMarginHexes has to equal), 2 for
-// out-of-sight. So 0.1 of the unknown ramp is 1.4 hexes, and 0.1 of the
-// out-of-sight ramp is a fifth of one.
+// FogMaskOptions.UnknownMarginHexes has to equal), 4 for out-of-sight
+// (OUT_OF_SIGHT_RAMP_MARGIN_HEXES). So 0.1 of the unknown ramp is 1.4 hexes,
+// and 0.1 of the out-of-sight ramp is 0.4 of one.
+//
+// Why the edge used to read as an ellipse (euclidean ramps on a squashed map,
+// a 2-hex dark ramp the displacement swallowed, one fixed outer reach for the
+// mist) and how the A+B shaping breaks it — baked lumps (A) plus domain-warped
+// clouds (B) displacing the ramp, a narrow mist fade, an outer reach pulled in
+// by the lumps — is in fogShader.ts's header. The numbers below are in hexes
+// first (the unit a designer thinks in) and converted to ramp units.
 
 /**
- * Where the never-scouted mist starts (x) and reaches full opacity (y).
- * Half a hex past the explored ring to just under six: wide enough that the frayed,
- * fading part of the mist is a band you can read as weather rather than a
- * rim around the realm, and (with EDGE_NOISE below) the outermost wisps
- * carry a good deal further than `y` itself. Past the point where the noise
- * window closes the mist is fully opaque and stays that way — deep fog is
- * not supposed to be see-through.
- *
- * Not the raw 0→10-hex ramp the mask bakes, though: that is a linear
- * airbrush hundreds of pixels deep with no edge in it to make organic at
- * all, and it never reaches full opacity inside the terrain cull radius.
+ * Where the never-scouted mist starts (x) and reaches full opacity (y): 0.04 of
+ * the ramp (half a hex) to 2.6 hexes further. A narrow fade on purpose — the
+ * lumps and clouds move the edge by several hexes, and a wide fade would turn
+ * that into a gradient rather than a ragged edge. Past the point where the noise
+ * window closes the mist is fully opaque and stays that way: deep fog is not
+ * supposed to be see-through.
  */
-const UNKNOWN_EDGE: [number, number] = [0.04, 0.42];
+const MIST_FADE_HEXES = 2.6;
+const UNKNOWN_EDGE: [number, number] = [0.04, 0.04 + MIST_FADE_HEXES / UNKNOWN_RAMP_MARGIN_HEXES];
 /**
- * Same for the scouted-but-out-of-sight tint, over its own 2-hex ramp: a
- * third of a hex past the line-of-sight ring to one and two thirds, so the
- * grey band lands inside the explored ring (WorldModel's FOG_SCOUT_RING)
- * rather than washing over the mist beyond it.
+ * Same for the dark tier's desaturation, over its own 4-hex ramp: from 0.3 to 1.7 hexes past the line-of-sight ring, so
+ * the grey band lands inside the explored ring (WorldModel's FOG_SCOUT_RING) rather than over the mist beyond it.
  */
-const OUT_OF_SIGHT_EDGE: [number, number] = [0.15, 0.85];
+const OUT_OF_SIGHT_EDGE: [number, number] = [0.3 / OUT_OF_SIGHT_RAMP_MARGIN_HEXES, 1.7 / OUT_OF_SIGHT_RAMP_MARGIN_HEXES];
 // NOISE_REACH and FOG_MIST_OPAQUE_AT_RAMP live in fogRamp.ts (no pixi there, so FogCoverage and the store can read them).
 /**
- * Peak-to-peak displacement of each tier's edge by the drifting cloud field
- * — [unknown, outOfSight]. 0.46 of the unknown ramp is ±3.2 hexes, several
- * times the one-hex spacing of the mask's integer `hexDistance` contours,
- * which is what stops those hexagonal rings being legible as straight
- * edges at all. It is also what makes the edge *fluffy* rather than merely
- * wavy: at this amplitude the noise tears the boundary into overlapping
- * banks and detached wisps instead of displacing one continuous line.
+ * How far the lump / cloud noise may push each tier's edge — [unknown, outOfSight], in ramp units. The noise
+ * (cloud - 0.5) and the lump (B - 0.5) mostly stay within about +-0.3 each, so 3.2x reads roughly as hexes: about 3.0 hexes
+ * of mist edge and 1.8 hexes of dark edge, each at 65% (the A+B weight: two displacements summed, so each is a bit
+ * under full strength). That is several times the one-hex spacing of the mask's contours, which is what stops the
+ * ramp's regular rings being legible at all, and what tears the boundary into overlapping banks instead of one wavy line.
  */
-const EDGE_NOISE: [number, number] = [0.46, 0.4];
+const EDGE_NOISE_HEXES: [number, number] = [3.0, 1.8];
+const EDGE_NOISE_SCALE = 3.2;
+const EDGE_NOISE_WEIGHT = 0.65;
+const EDGE_NOISE: [number, number] = [
+  (EDGE_NOISE_SCALE * EDGE_NOISE_HEXES[0] * EDGE_NOISE_WEIGHT) / UNKNOWN_RAMP_MARGIN_HEXES,
+  (EDGE_NOISE_SCALE * EDGE_NOISE_HEXES[1] * EDGE_NOISE_WEIGHT) / OUT_OF_SIGHT_RAMP_MARGIN_HEXES,
+];
 /**
- * Displacement by the mask's baked per-hex seed (§2.2's B channel), same
- * units. Deliberately well under EDGE_NOISE — this adds per-hex grain to
- * the edge, but pushed further it starts re-imposing the hex silhouette the
- * cloud noise exists to break.
+ * How far, in hexes, the mist's noise window may close earlier than NOISE_REACH[0] where the lump / second cloud layer
+ * is high. The reach only ever shrinks (fogShader.ts), so the radius past which the mist is opaque
+ * (FOG_MIST_OPAQUE_AT_RAMP, derived from NOISE_REACH[0]) is still a valid bound for terrain culling.
  */
-const SEED_JITTER: [number, number] = [0.1, 0.14];
+const MIST_PULL_IN_HEXES = 4;
+const MIST_PULL_IN = MIST_PULL_IN_HEXES / UNKNOWN_RAMP_MARGIN_HEXES;
 /**
  * How far the second cloud layer is allowed to thin each tier where the
  * noise window is open — [unknown, outOfSight], as a fraction of the tier's
@@ -195,8 +201,8 @@ export class FogField {
       uUnknownEdge: { value: new Float32Array(UNKNOWN_EDGE), type: 'vec2<f32>' },
       uOutOfSightEdge: { value: new Float32Array(OUT_OF_SIGHT_EDGE), type: 'vec2<f32>' },
       uNoiseReach: { value: new Float32Array(NOISE_REACH), type: 'vec2<f32>' },
+      uMistPullIn: { value: MIST_PULL_IN, type: 'f32' },
       uEdgeNoise: { value: new Float32Array(EDGE_NOISE), type: 'vec2<f32>' },
-      uSeedJitter: { value: new Float32Array(SEED_JITTER), type: 'vec2<f32>' },
       uEdgeSoftness: { value: new Float32Array(EDGE_SOFTNESS), type: 'vec2<f32>' },
       uNoiseScale: { value: NOISE_SCALE, type: 'f32' },
       uTime: { value: 0, type: 'f32' },
@@ -352,8 +358,8 @@ export class FogField {
 
   /**
    * §2.8's real (functional, not cosmetic) debug toggles: `warp` zeroes both
-   * edge-noise amplitudes, leaving the mask's raw `hexDistance` ramp to
-   * shape the boundary on its own. `showRawMask` bypasses the edge shaping and
+   * edge-noise amplitudes (the clouds and the baked lump share them) and the mist's outer pull-in, leaving the mask's raw
+   * distance ramp to shape the boundary on its own. `showRawMask` bypasses the edge shaping and
    * tier compositing, rendering the fetched mask texture unmodified;
    * `showEffectiveMask` dumps the mask channels after the §1c army-vision ramps.
    * Both debug views are written into the field's RGB and shown as-is by
@@ -366,9 +372,7 @@ export class FogField {
     const edgeNoise = this.uniforms.uniforms.uEdgeNoise as Float32Array;
     edgeNoise[0] = opts.warpEnabled ? EDGE_NOISE[0] : 0;
     edgeNoise[1] = opts.warpEnabled ? EDGE_NOISE[1] : 0;
-    const seedJitter = this.uniforms.uniforms.uSeedJitter as Float32Array;
-    seedJitter[0] = opts.warpEnabled ? SEED_JITTER[0] : 0;
-    seedJitter[1] = opts.warpEnabled ? SEED_JITTER[1] : 0;
+    this.uniforms.uniforms.uMistPullIn = opts.warpEnabled ? MIST_PULL_IN : 0;
     this.uniforms.uniforms.uShowRaw = opts.showRawMask ? 1 : 0;
     this.uniforms.uniforms.uShowEffective = opts.showEffectiveMask ? 1 : 0;
     this.compositeUniforms.uniforms.uDebugView = opts.showRawMask || opts.showEffectiveMask ? 1 : 0;

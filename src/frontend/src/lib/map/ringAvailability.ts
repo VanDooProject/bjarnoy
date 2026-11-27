@@ -50,6 +50,8 @@ export interface RingAvailability {
     hasRoom: boolean;
     waiting: number;
     max: number;
+    /** No Premium (no waiting room) but earlier orders are still waiting: nothing new can be added until they have started. */
+    locked: boolean;
   };
   /** Seconds until the soonest building order frees its slot(s); null when unknown (demo mode, nothing building). */
   nextSlotFreeInSeconds: number | null;
@@ -144,7 +146,8 @@ export interface RingAvailabilityInput {
 export function computeAvailability(input: RingAvailabilityInput): RingAvailability {
   const { construction } = input;
   const free = Math.max(0, construction.slots - construction.slotsUsed);
-  const slotsShort = !!input.hexBusy || input.slotsNeeded > free;
+  // FIFO: with any order already waiting, a new one waits behind it even when it would fit the free slots.
+  const slotsShort = !!input.hexBusy || construction.waitingOrders > 0 || input.slotsNeeded > free;
   const queueHasRoom = construction.maxWaitingOrders > 0 && construction.waitingOrders < construction.maxWaitingOrders;
   const shortfall = resourceShortfall(input.cost, input.available);
   const resourcesShort = Object.keys(shortfall).length > 0;
@@ -158,7 +161,12 @@ export function computeAvailability(input: RingAvailabilityInput): RingAvailabil
     state,
     shortfall,
     slots: { needed: input.slotsNeeded, total: construction.slots, free, short: slotsShort },
-    queue: { hasRoom: queueHasRoom, waiting: construction.waitingOrders, max: construction.maxWaitingOrders },
+    queue: {
+      hasRoom: queueHasRoom,
+      waiting: construction.waitingOrders,
+      max: construction.maxWaitingOrders,
+      locked: construction.maxWaitingOrders === 0 && construction.waitingOrders > 0,
+    },
     nextSlotFreeInSeconds: slotsShort ? nextSlotFreeInSeconds(input.queue) : null,
     resourcesReadyInSeconds: resourcesShort ? resourcesReadyInSeconds(shortfall, input.rates, input.cost, input.storageCap) : null,
   };

@@ -137,8 +137,8 @@ scenarios, all on seed 11 at radius 1000 (g on seeds 1 and 5):
 
 | file | shows |
 | --- | --- |
-| `a-wide-river-vs-stream` | route A across a wide river walks 24 steps round to where it starts as a stream (cost 36.2, was 11.1); route B across a stream goes straight over at +8, same as before |
-| `b-mountains-block` | mountains impassable: the route round a horseshoe ridge is 25 steps instead of 8 |
+| `a-wide-river-vs-stream` | route A across a wide river walks 30 steps round to where it starts as a stream (cost 45.3, was 10.5); route B across a stream goes straight over at +8, same as before |
+| `b-mountains-block` | mountains impassable: the route round the ridge is 20 steps instead of 8 |
 | `c-sea-end-seals` | wall from a wide river to the sea, ending in `palisade_end_coast`, with a gate: the enemy has no route in, the friendly army walks through the gate |
 | `d-land-end-at-coast` | the same wall with a plain land end: the enemy walks over the half-open end at a penalty (see below) |
 | `d2-land-end-one-short` | the same wall one hex short of the coast: round the end or over it, whichever is cheaper |

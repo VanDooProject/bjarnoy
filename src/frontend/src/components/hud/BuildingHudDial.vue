@@ -5,13 +5,14 @@
 // remaining time (information, so it plays under reduced motion too), not a step per polled second.
 // It also draws every state of the hex's order dial the way the canvas does (`order`, read through `dialPhase`): queued (plain
 // track and `#place`), pending (orbiting sweep and dots), refused (red flash, cross, shrink) and the finish animation.
-import { computed, onUnmounted, ref, watch, type ComponentPublicInstance } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch, type ComponentPublicInstance } from 'vue';
 import type { HudRing } from '../../lib/hud/buildingHud';
 import {
   CONSTRUCTION_DIAL_ELAPSED_COLOR,
   BLOCKED_DIAL_OPTIONS,
   CONSTRUCTION_DIAL_REJECT_COLOR,
   DIAL_PENDING_SWEEP_MS,
+  dialLevelFontPx,
   dialPhase,
   dialProgress,
   dialRejectFrame,
@@ -45,6 +46,11 @@ const props = defineProps<{
    */
   glyph?: 'up' | 'wait';
   /**
+   * The building's level, shown in a small hex on the dial's lower right corner point while a glyph replaces it in the dial.
+   * Switching the glyph in, a copy of the dial with the level slides there; switching out plays that in reverse.
+   */
+  level?: number;
+  /**
    * When a quick upgrade hit this blocked building (the renderer's `flashBlockedMarker`): the refusal animation plays over the
    * plain dial without the cross and the fade-out, so the marker stays as it was (`BLOCKED_DIAL_OPTIONS`).
    */
@@ -57,6 +63,7 @@ const css = (color: number) => `#${color.toString(16).padStart(6, '0')}`;
 const YELLOW = css(CONSTRUCTION_DIAL_ELAPSED_COLOR);
 const RED = css(CONSTRUCTION_DIAL_REJECT_COLOR);
 const DARK = '#08121a';
+const DARK_FILL = '#0b1720';
 
 type Pts = readonly (readonly number[])[];
 const fmt = (pts: Pts) => pts.map((p) => `${p[0]!.toFixed(2)},${p[1]!.toFixed(2)}`).join(' ');
@@ -80,7 +87,7 @@ const geometry = computed(() => {
   const hex = [0, 1, 2, 3, 4, 5].map((i) => vertex(i, r));
   // The arc is this outline (from the top vertex, clockwise, closed), drawn `progress` of the way round by its dash offset.
   const outline = `M${hex.map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' L')} Z`;
-  const font = props.time ? (14.4 * r) / 27.5 : 13 + (r - 14) * 0.5;
+  const font = props.time ? (14.4 * r) / 27.5 : dialLevelFontPx(r);
   return { sw, size: 2 * c, c, hex: fmt(hex), hexAt, outline, font, unit: sw / 6 };
 });
 
@@ -98,6 +105,135 @@ const glyphMarks = computed(() => {
     hands: fmt([[c, c - 0.22 * r], [c, c], [c + 0.16 * r, c + 0.1 * r]]),
   };
 });
+
+// ---- the quick look: the level hex and the switch --------------------------------------------------------------------------
+// While a glyph shows, the level sits in a small hex on the dial's lower right corner point. It is a copy of the whole dial
+// (dark hex, ring, level) at 0.6 scale, so switching is one element sliding: in, a full-size copy starts over the dial and moves
+// to the corner while the dial underneath turns gold and the glyph fades in; out, the same in reverse.
+
+const CORNER_SCALE = 0.6;
+const SWITCH_MS = 450;
+const SWITCH_EASING = 'cubic-bezier(.3, 0, .2, 1)';
+/** The glyph starts to fade in this far into the switch (a share of it). */
+const GLYPH_DELAY = 120 / SWITCH_MS;
+const FULL_COPY = 'translate(0px, 0px) scale(1)';
+const cornerCopy = computed(() => `translate(${(0.866 * props.radius * 0.98).toFixed(2)}px, ${(0.5 * props.radius * 0.98).toFixed(2)}px) scale(${CORNER_SCALE})`);
+/** The copy's level in its own (full-size) units: scaled to the corner it is 1.05 x the small hex's radius. */
+const cornerFont = computed(() => (1.05 * props.radius).toFixed(2));
+
+/** The glyph the dial draws now: follows `glyph`, except while the switch-out plays (the old glyph stays until it is done). */
+const shown = ref(props.glyph);
+const svgEl = ref<SVGSVGElement | null>(null);
+let switchAnims: Animation[] = [];
+let switchDir: 'in' | 'out' | null = null;
+
+function stopSwitch() {
+  switchAnims.forEach((a) => a.cancel());
+  switchAnims = [];
+  switchDir = null;
+}
+
+/** The animated parts of the switch, each with the keyframes of the switch-in (the switch-out plays them in reverse). */
+function switchParts(): { el: Element; frames: Keyframe[] }[] {
+  const root = svgEl.value;
+  if (!root) return [];
+  const parts: { el: Element; frames: Keyframe[] }[] = [];
+  const add = (selector: string, frames: Keyframe[]) => {
+    const el = root.querySelector(selector);
+    if (el && typeof (el as { animate?: unknown }).animate === 'function') parts.push({ el, frames });
+  };
+  add('.hud-dial__level', [{ transform: FULL_COPY }, { transform: cornerCopy.value }]);
+  add('.hud-dial__level-text', [{ fontSize: `${geometry.value.font}px` }, { fontSize: `${cornerFont.value}px` }]);
+  if (shown.value === 'up') add('.hud-dial__body', [{ fill: DARK_FILL }, { fill: GOLD }]);
+  add('.hud-dial__glyph', [
+    { opacity: 0, transform: 'translateY(5px)', offset: 0 },
+    { opacity: 0, transform: 'translateY(5px)', offset: GLYPH_DELAY },
+    { opacity: 1, transform: 'translateY(0)', offset: 1 },
+  ]);
+  return parts;
+}
+
+function playSwitch(direction: 'in' | 'out') {
+  const parts = switchParts();
+  if (!parts.length) {
+    if (direction === 'out') shown.value = undefined;
+    return;
+  }
+  switchDir = direction;
+  switchAnims = parts.map(({ el, frames }) =>
+    el.animate(frames, { duration: SWITCH_MS, easing: SWITCH_EASING, fill: 'both', direction: direction === 'in' ? 'normal' : 'reverse' }),
+  );
+  const anims = switchAnims;
+  const done = () => {
+    // Only the last of a batch settles the state (they all run the same time).
+    if (switchAnims !== anims || anims.some((a) => a.playState === 'running')) return;
+    if (switchDir !== 'out') return stopSwitch();
+    // The animations hold the first frame (the dial as it was) until the plain dial is drawn.
+    shown.value = undefined;
+    void nextTick(() => {
+      if (switchAnims === anims) stopSwitch();
+    });
+  };
+  anims.forEach((a) => a.addEventListener('finish', done));
+}
+
+/**
+ * The level copy is drawn (the quick look, and every frame of its switch in and out). The dial's own label waits for it: the copy
+ * carries the level the whole way, so the label only comes back once the copy has landed on the dial and is gone.
+ */
+const levelCopyOn = computed(() => shown.value !== undefined && props.level !== undefined);
+/**
+ * The label is handing over to / from the level copy in this render: the level switches without its fade (the copy sits right on
+ * it). Any other label (`#place`, a countdown) that arrives as the copy lands keeps its fade.
+ */
+let labelHandoff = false;
+watch(levelCopyOn, () => {
+  labelHandoff = true;
+  void nextTick(() => {
+    labelHandoff = false;
+  });
+});
+function fadeLabel(el: Element, direction: 'in' | 'out', done: () => void) {
+  if (!props.labelFade || (labelHandoff && el.textContent?.trim() === String(props.level))) return done();
+  props.labelFade(el, direction, done);
+}
+
+watch(
+  () => props.glyph,
+  async (next, prev) => {
+    if (next === undefined) {
+      if (prev === undefined || shown.value === undefined) return;
+      if (prefersReducedMotion()) {
+        stopSwitch();
+        shown.value = undefined;
+        return;
+      }
+      if (switchDir === 'in') {
+        // Reverse from where it is.
+        switchAnims.forEach((a) => a.reverse());
+        switchDir = 'out';
+      } else playSwitch('out');
+      return;
+    }
+    if (prev === undefined) {
+      // On or back from a switch-out in progress.
+      if (switchDir === 'out' && next === shown.value) {
+        switchAnims.forEach((a) => a.reverse());
+        switchDir = 'in';
+        return;
+      }
+      stopSwitch();
+      shown.value = next;
+      if (prefersReducedMotion() || props.level === undefined) return;
+      await nextTick();
+      playSwitch('in');
+      return;
+    }
+    // up <-> wait: just swap.
+    stopSwitch();
+    shown.value = next;
+  },
+);
 
 // ---- the elapsed arc --------------------------------------------------------------------------------------------------------
 
@@ -190,6 +326,7 @@ watch(
 );
 onUnmounted(() => {
   stopArc();
+  stopSwitch();
   cancelAnimationFrame(raf);
   if (endTimer !== null) clearTimeout(endTimer);
 });
@@ -286,6 +423,7 @@ const pending = computed(() => {
     :viewBox="`0 0 ${geometry.size} ${geometry.size}`"
     style="overflow: visible"
     aria-hidden="true"
+    ref="svgEl"
     :data-refused="blocked ? '' : undefined"
   >
     <g v-if="burst" class="hud-dial__burst" :transform="`translate(${burst.shake.toFixed(2)} 0)`">
@@ -297,7 +435,7 @@ const pending = computed(() => {
     </g>
     <g v-else :transform="blocked?.transform">
       <polygon v-for="(ring, i) in blocked?.rings ?? []" :key="`b${i}`" :points="ring.points" fill="none" :stroke="RED" :stroke-opacity="ring.opacity" :stroke-width="blocked!.ringWidth" stroke-linejoin="round" />
-      <polygon :points="geometry.hex" :fill="glyph === 'up' ? GOLD : '#0b1720'" />
+      <polygon class="hud-dial__body" :points="geometry.hex" :fill="shown === 'up' ? GOLD : DARK_FILL" />
       <polygon :points="geometry.hex" fill="none" :stroke="trackColor" :stroke-opacity="trackOpacity" :stroke-width="geometry.sw" stroke-linejoin="round" />
       <path v-if="arcShown" :ref="setArcEl" class="hud-dial__arc" :d="geometry.outline" pathLength="1" stroke-dasharray="1 1" :stroke-dashoffset="arcOffset" fill="none" :stroke="YELLOW" :stroke-width="geometry.sw" stroke-linecap="round" stroke-linejoin="round" />
       <template v-if="pending">
@@ -307,16 +445,17 @@ const pending = computed(() => {
         </template>
       </template>
       <polygon v-if="blocked" class="hud-dial__flash" :points="blocked.flash" :fill="RED" :fill-opacity="blocked.flashOpacity" />
-      <g v-if="glyph === 'up'" class="hud-dial__glyph hud-dial__glyph--up">
+      <g v-if="shown === 'up'" class="hud-dial__glyph hud-dial__glyph--up">
         <polyline v-for="(chevron, i) in glyphMarks.chevrons" :key="i" :points="chevron" fill="none" :stroke="DARK" :stroke-width="glyphMarks.width" stroke-linecap="round" stroke-linejoin="round" />
       </g>
-      <g v-else-if="glyph === 'wait'" class="hud-dial__glyph hud-dial__glyph--wait">
+      <g v-else-if="shown === 'wait'" class="hud-dial__glyph hud-dial__glyph--wait">
         <circle :cx="geometry.c" :cy="geometry.c" :r="glyphMarks.clockRadius" fill="none" stroke="#fff" :stroke-width="glyphMarks.width" />
         <polyline :points="glyphMarks.hands" fill="none" stroke="#fff" :stroke-width="glyphMarks.width" stroke-linecap="round" stroke-linejoin="round" />
       </g>
-      <Transition :css="false" @enter="(el, done) => (labelFade ? labelFade(el, 'in', done) : done())" @leave="(el, done) => (labelFade ? labelFade(el, 'out', done) : done())">
+      <Transition :css="false" @enter="(el, done) => fadeLabel(el, 'in', done)" @leave="(el, done) => fadeLabel(el, 'out', done)">
         <text
-          v-if="label"
+          v-if="label && !levelCopyOn"
+          class="hud-dial__label"
           :x="geometry.c"
           :y="geometry.c + geometry.font * 0.36"
           text-anchor="middle"
@@ -331,6 +470,26 @@ const pending = computed(() => {
           {{ label }}
         </text>
       </Transition>
+      <!-- The level hex of the quick look: the dial's copy, at rest at the lower right corner point. -->
+      <g v-if="levelCopyOn" class="hud-dial__level" :style="{ transform: cornerCopy, transformOrigin: `${geometry.c}px ${geometry.c}px`, transformBox: 'view-box' }">
+        <polygon :points="geometry.hex" :fill="DARK_FILL" />
+        <polygon :points="geometry.hex" fill="none" :stroke="RING_COLOR[ring]" :stroke-width="geometry.sw" stroke-linejoin="round" />
+        <text
+          class="hud-dial__level-text"
+          :x="geometry.c"
+          :y="geometry.c"
+          dy="0.36em"
+          text-anchor="middle"
+          font-family="Barlow, sans-serif"
+          font-weight="700"
+          :style="{ fontSize: `${cornerFont}px`, paintOrder: 'stroke' }"
+          fill="#fff"
+          stroke="rgba(0,0,0,.6)"
+          stroke-width="1.5"
+        >
+          {{ level }}
+        </text>
+      </g>
     </g>
   </svg>
 </template>

@@ -168,6 +168,7 @@ public class FogVisionRadiiTests
     {
         Assert.Equal(0.8, FogVisionRadii.MistOpaqueAtRamp);
         Assert.Equal(14, FogMaskOptions.DefaultUnknownMarginHexes);
+        Assert.Equal(4, FogMaskOptions.DefaultOutOfSightMarginHexes);
         Assert.Equal(14, new FogMaskOptions().UnknownMarginHexes);
         Assert.Equal(0.75, FogVisionRadii.ArmyFogWhiteOffsetHexes);
         Assert.Equal(6, FogVisionRadii.ArmyFogWhiteMarginHexes);

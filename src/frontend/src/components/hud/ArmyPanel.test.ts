@@ -5,7 +5,9 @@ import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import ArmyPanel from './ArmyPanel.vue';
 import { useWorldStore } from '../../stores/world';
-import type { ArmyResponse } from '../../api/types';
+import type { ArmyResponse, UnitDefinitionResponse } from '../../api/types';
+import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
+import unitSnapshot from '../../data/unit-catalogue.json';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
@@ -254,5 +256,30 @@ describe('ArmyPanel rows', () => {
     await wrapper.get('[data-testid="army-field-order"]').trigger('click');
 
     expect(start).toHaveBeenCalledWith('army-1');
+  });
+});
+
+describe('ArmyPanel dispatch unit rows', () => {
+  beforeEach(() => setActivePinia(createPinia()));
+
+  it('the All button sends every unit of that kind and proposes the food they can take', async () => {
+    const world = useWorldStore();
+    useUnitCatalogueStore().definitions = unitSnapshot.data as UnitDefinitionResponse[];
+    world.selectedSettlementId = 'home-1';
+    world.hud.garrison = [{ unit: 'spearman', count: 7 }];
+    world.hud.available.food = 100_000;
+    world.startDispatch();
+    const wrapper = mount(ArmyPanel, {
+      global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] },
+    });
+    await nextTick();
+
+    const all = wrapper.get('.unit-picker-row .unit-picker-all');
+    await all.trigger('click');
+
+    expect(world.dispatchDraft!.unitCounts.spearman).toBe(7);
+    const spearman = (unitSnapshot.data as UnitDefinitionResponse[]).find((u) => u.type === 'spearman')!;
+    expect(world.dispatchDraft!.provisions).toBe(spearman.foodCarryCapacity * 7);
+    expect((all.element as HTMLButtonElement).disabled).toBe(true);
   });
 });

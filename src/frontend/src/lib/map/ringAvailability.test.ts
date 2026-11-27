@@ -172,13 +172,23 @@ describe('computeAvailability', () => {
   it('is waiting when the waiting queue is full too', () => {
     const a = computeAvailability(input({ construction: { slots: 2, slotsUsed: 2, maxWaitingOrders: 2, waitingOrders: 2 } }));
     expect(a.state).toBe('waiting');
-    expect(a.queue).toEqual({ hasRoom: false, waiting: 2, max: 2 });
+    expect(a.queue).toEqual({ hasRoom: false, waiting: 2, max: 2, locked: false });
   });
 
   it('queues when slots are full but the premium waiting queue has room', () => {
     const a = computeAvailability(input({ construction: { slots: 2, slotsUsed: 2, maxWaitingOrders: 3, waitingOrders: 1 } }));
     expect(a.state).toBe('queues');
-    expect(a.queue).toEqual({ hasRoom: true, waiting: 1, max: 3 });
+    expect(a.queue).toEqual({ hasRoom: true, waiting: 1, max: 3, locked: false });
+  });
+
+  it('locks the queue without premium while earlier orders still wait', () => {
+    const locked = computeAvailability(input({ construction: { slots: 3, slotsUsed: 1, maxWaitingOrders: 0, waitingOrders: 1 } }));
+    expect(locked.state).toBe('waiting');
+    expect(locked.queue).toEqual({ hasRoom: false, waiting: 1, max: 0, locked: true });
+    const noWaiting = computeAvailability(input({ construction: { slots: 2, slotsUsed: 2, maxWaitingOrders: 0, waitingOrders: 0 } }));
+    expect(noWaiting.queue.locked).toBe(false);
+    const premium = computeAvailability(input({ construction: { slots: 2, slotsUsed: 2, maxWaitingOrders: 2, waitingOrders: 1 } }));
+    expect(premium.queue.locked).toBe(false);
   });
 
   it('needs several free slots for a multi-slot building', () => {
@@ -187,6 +197,12 @@ describe('computeAvailability', () => {
     const two = computeAvailability(input({ slotsNeeded: 2, construction }));
     expect(two.state).toBe('waiting');
     expect(two.slots).toEqual({ needed: 2, total: 3, free: 1, short: true });
+  });
+
+  it('queues behind an order already waiting even when it would fit the free slots (FIFO)', () => {
+    const a = computeAvailability(input({ construction: { slots: 3, slotsUsed: 1, maxWaitingOrders: 3, waitingOrders: 1 } }));
+    expect(a.state).toBe('queues');
+    expect(a.slots).toEqual({ needed: 1, total: 3, free: 2, short: true });
   });
 
   it('treats an unfinished earlier order on the same hex as not fitting now', () => {
