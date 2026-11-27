@@ -91,6 +91,15 @@
 
 import { NOISE_LATTICE_GLSL } from '../shaderNoise';
 import { EDGE_NOISE_FADE_RAMP } from './fogRamp';
+import { UNKNOWN_TEXEL } from './fogChunks';
+
+/**
+ * UNKNOWN_TEXEL as a GLSL vec4 — what the field shader reads where no mask covers the ground. Derived from the one
+ * definition the chunk stitcher fills unfetched chunks with, so ground past the window and an unfetched chunk inside it
+ * read the same: both tiers on (unknown ⊆ out of sight). A different default here drew a hard seam in the dark tier
+ * along the window's edge.
+ */
+export const UNKNOWN_TEXEL_GLSL = `vec4(${UNKNOWN_TEXEL.map((c) => (c / 255).toFixed(4)).join(', ')})`;
 
 export const FOG_VERTEX = `
 in vec2 aPosition;
@@ -327,12 +336,12 @@ vec2 armyRamps(vec2 world) {
 }
 
 // Outside the fetched/generated mask entirely (past the world's own
-// radius) reads as "never scouted" — never a leak, always correct, per
-// map-fog-v2.md §3's missing-chunk-default rule, which applies just as much
-// to ground past the world edge as to a chunk that hasn't arrived yet.
+// radius, or past the chunk window) reads as "never scouted", exactly like an
+// unfetched chunk inside the window (UNKNOWN_TEXEL) — never a leak, always
+// correct, per map-fog-v2.md §3's missing-chunk-default rule.
 vec4 sampleMask(sampler2D tex, vec2 uv) {
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-    return vec4(1.0, 0.0, 0.0, 1.0);
+    return ${UNKNOWN_TEXEL_GLSL};
   }
   return texture(tex, uv);
 }
