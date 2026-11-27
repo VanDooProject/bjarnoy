@@ -324,8 +324,36 @@ const cardArea = computed<Rect>(
 
 const activeCategory = computed(() => props.categories.find((c) => c.id === path.value[1]) ?? null);
 const atRoot = computed(() => path.value.length === 0);
-/** Inner-lane entries: root actions, or the categories once `build` is open. */
-const laneItems = computed<RingAction[]>(() => (atRoot.value ? props.actions : props.categories));
+/**
+ * A category that holds exactly one building has nothing to open into: its building takes the category's place on the inner
+ * lane (by the building's id), so e.g. a forest's Lumberjack is one tap away instead of two.
+ */
+const promotedBuildings = computed(() => {
+  const promoted = new Map<string, RingBuilding>();
+  for (const c of props.categories) if (c.buildings.length === 1) promoted.set(c.id, c.buildings[0]);
+  return promoted;
+});
+/** Inner-lane entries: root actions, or the categories (a lone building in place of its category) once `build` is open. */
+const laneItems = computed<RingAction[]>(() => {
+  if (atRoot.value) return props.actions;
+  return props.categories.map((c): RingAction => {
+    const only = promotedBuildings.value.get(c.id);
+    if (!only) return c;
+    const state = stateOf(only);
+    return {
+      id: only.id,
+      label: only.label,
+      color: c.color,
+      disabled: only.disabled,
+      state: state === 'locked' || state === 'waiting' ? state : undefined,
+      card: cardOf(only),
+    };
+  });
+});
+/** The building a lane entry stands for, when it is a promoted one. */
+function promotedBuildingOf(itemId: string): RingBuilding | undefined {
+  return [...promotedBuildings.value.values()].find((b) => b.id === itemId);
+}
 /**
  * Past the root, the inner lane permanently reserves one extra slot for
  * ‹ BACK — so the categories keep identical positions whether or not a
@@ -344,7 +372,7 @@ const hovered = computed(() => (hoveredIndex.value === null ? null : buildings.v
 /** Index (on the inner lane) of the hovered root bubble that has a card to show. */
 const hoveredLane1Index = computed(() => {
   const i = laneItems.value.findIndex((item) => item.id === hoverLane1.value);
-  if (i < 0 || !atRoot.value) return null;
+  if (i < 0) return null;
   const item = laneItems.value[i];
   return item.card ? i : null;
 });
@@ -387,7 +415,7 @@ const lane1 = computed(() =>
       active,
       dim: !!activeCategory.value && !active,
       category: !atRoot.value,
-      state: item.state ?? (atRoot.value ? undefined : categoryState(item.id)),
+      state: item.state ?? (atRoot.value || promotedBuildingOf(item.id) ? undefined : categoryState(item.id)),
       // A disabled bubble with no availability state is the plain "can't do
       // that here" look; one with a state explains itself with a badge instead.
       ban: !!item.disabled && !item.state,
@@ -832,6 +860,12 @@ function onLaneClick(e: MouseEvent, item: RingAction) {
     swallowClick = false;
     return;
   }
+  // A lone building standing in for its category is committed exactly like one from the buildings lane.
+  const only = atRoot.value ? undefined : promotedBuildingOf(item.id);
+  if (only) {
+    onBuildingClick(e, only);
+    return;
+  }
   if (item.disabled) {
     // A blocked root action (Raze on the longhouse, Send army without units ...) shakes and flashes its reason.
     blockedFeedback(e.currentTarget as HTMLElement);
@@ -843,9 +877,7 @@ function onLaneClick(e: MouseEvent, item: RingAction) {
       else emit('select', item.id);
       return;
     }
-    if (props.categories.some((c) => c.id === item.id)) {
-      void go(['build', item.id]);
-    }
+    if (props.categories.some((c) => c.id === item.id)) void go(['build', item.id]);
   };
   if (!deferDuringSwap(act)) act();
 }
@@ -893,7 +925,7 @@ function onBuildingTouchStart(e: TouchEvent, building: RingBuilding) {
 // Every other root bubble (Build, a category, Send army …) acts on the first
 // tap as before — navigating or opening a sheet spends nothing.
 function onLaneTouchStart(e: TouchEvent, item: RingAction) {
-  if (!atRoot.value || !item.card) return;
+  if (!item.card || (!atRoot.value && !promotedBuildingOf(item.id))) return;
   const tap = tapArm(armed.value, item.id);
   if (tap.commit) return;
   e.preventDefault();
@@ -1036,6 +1068,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         'is-locked': entry.state === 'locked',
         'is-waiting': entry.state === 'waiting',
         category: entry.category,
+        lone: !atRoot && !!promotedBuildingOf(entry.item.id),
         armed: armed === entry.item.id,
         'no-commit': entry.item.disabled,
         holdable: entry.item.holdable,

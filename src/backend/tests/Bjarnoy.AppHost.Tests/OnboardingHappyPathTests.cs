@@ -123,7 +123,7 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
 
         // --- Guided build 2: Lumberjack on the forest hex, via the ring menu ---
         await LiveFrontendTestHelpers.ClickHexAsync(page, forestTile.Q, forestTile.R);
-        await LiveFrontendTestHelpers.BuildThroughRingAsync(page, "Resource", "Lumberjack");
+        await LiveFrontendTestHelpers.BuildThroughRingAsync(page, null, "Lumberjack");
 
         // Both queued against the real backend; startHudSync()'s poll picks
         // them up with no reload/click once the sped-up world resolves them

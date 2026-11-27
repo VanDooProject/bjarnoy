@@ -271,10 +271,11 @@ public static class LiveFrontendTestHelpers
     /// <summary>
     /// Builds <paramref name="building"/> through the open ring menu the way a player does: the Build hub, then
     /// <paramref name="category"/>, then the building bubble. The onboarding ring is the map's own two-lane ring
-    /// (<c>useBuildRing</c>), so a building is never on the first layer. Waits for each layer swap to land, as
+    /// (<c>useBuildRing</c>). A category that holds only this one building on the hex is not offered: the building then
+    /// stands on the Build lane itself, so pass <c>null</c> as the category. Waits for each layer swap to land, as
     /// RingMenu ignores navigation clicks until it has.
     /// </summary>
-    public static async Task BuildThroughRingAsync(IPage page, string category, string building)
+    public static async Task BuildThroughRingAsync(IPage page, string? category, string building)
     {
         await page.EvaluateAsync(RingTimelineScript);
         var swapped = page.Locator(".ring-backdrop:not([data-swapping])");
@@ -282,11 +283,14 @@ public static class LiveFrontendTestHelpers
         await Assertions.Expect(build).ToBeVisibleAsync(new() { Timeout = 10_000 });
         await build.ClickAsync();
         await ExpectSwapLandedAsync(page, swapped, "Build");
-        var categoryBubble = page.Locator(".ring-bubble:not(.back):not(.child)", new PageLocatorOptions { HasText = category }).First;
-        await Assertions.Expect(categoryBubble).ToBeVisibleAsync(new() { Timeout = 10_000 });
-        await categoryBubble.ClickAsync();
-        await ExpectSwapLandedAsync(page, swapped, category);
-        var buildingBubble = page.Locator(".ring-bubble.child", new PageLocatorOptions { HasText = building }).First;
+        if (category is not null)
+        {
+            var categoryBubble = page.Locator(".ring-bubble:not(.back):not(.child)", new PageLocatorOptions { HasText = category }).First;
+            await Assertions.Expect(categoryBubble).ToBeVisibleAsync(new() { Timeout = 10_000 });
+            await categoryBubble.ClickAsync();
+            await ExpectSwapLandedAsync(page, swapped, category);
+        }
+        var buildingBubble = page.Locator(category is null ? ".ring-bubble:not(.back):not(.child)" : ".ring-bubble.child", new PageLocatorOptions { HasText = building }).First;
         await Assertions.Expect(buildingBubble).ToBeVisibleAsync(new() { Timeout = 10_000 });
         await buildingBubble.ClickAsync();
     }

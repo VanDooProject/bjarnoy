@@ -109,9 +109,16 @@ test.describe('ring menu drill-down', () => {
       await expect(settlement.tooltip).toBeHidden();
 
       const categoryTexts = categoryRects.map((r) => r.text);
-      const firstCategoryRect = categoryRects[0];
+      // A hex whose categories each hold a single building (a forest: the Lumberjack) has nothing to fan out: try the next one.
+      const drillable = settlement.ring.drillableCategoryBubbles;
+      if ((await drillable.count()) === 0) {
+        await page.mouse.click(20, 20);
+        await page.waitForTimeout(80);
+        continue;
+      }
+      const firstCategoryRect = (await rectsOf(drillable))[0];
       const categoryDist = distanceFrom(firstCategoryRect, cx + dx, cy + dy);
-      await settlement.ring.hover(categoryBubbles.first());
+      await settlement.ring.hover(drillable.first());
       await page.waitForTimeout(250);
       await expect(settlement.ring.childBubbles).toHaveCount(0);
       await settlement.ring.press();
