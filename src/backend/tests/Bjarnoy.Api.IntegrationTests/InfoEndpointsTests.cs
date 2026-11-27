@@ -99,13 +99,52 @@ public sealed class InfoEndpointsTests
     [InlineData("main")]
     [InlineData("v1.2.3")]
     [InlineData(BuildInfoOptions.Unknown)]
-    public async Task A_production_build_refuses_an_anonymous_caller(string branch)
+    public async Task A_production_build_answers_without_a_token_during_2026(string branch)
     {
-        // A release cut from a tag, and a build that cannot say what it is, are
-        // treated as production too: the surface opens only for a build that
-        // can prove it is a branch deployment.
+        // Temporary: the live deployment has to be identifiable without logging in.
         await using var factory = BjarnoyApiFactory.Sqlite()
             .WithBuild(version: "1.2.3", commit: Commit, branch: branch, builtAt: "now");
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync(new Uri("/api/v1/info", UriKind.Relative), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task The_temporary_public_default_turns_into_an_error_after_2026()
+    {
+        // So the decision whether it stays public is made again, not forgotten.
+        await using var factory = BjarnoyApiFactory.Sqlite()
+            .WithBuild(version: "1.2.3", commit: Commit, branch: "main", builtAt: "now");
+        factory.Time.Advance(TimeSpan.FromDays(366));
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync(new Uri("/api/v1/info", UriKind.Relative), Ct);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Contains("expired", await response.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_branch_build_keeps_answering_after_2026()
+    {
+        await using var factory = BjarnoyApiFactory.Sqlite()
+            .WithBuild(version: "0.0.0", commit: Commit, branch: "claude/some-branch", builtAt: "now");
+        factory.Time.Advance(TimeSpan.FromDays(366));
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync(new Uri("/api/v1/info", UriKind.Relative), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_deployment_can_still_close_it_on_a_production_build()
+    {
+        await using var factory = BjarnoyApiFactory.Sqlite()
+            .WithBuild(version: "1.2.3", commit: Commit, branch: "main", builtAt: "now")
+            .WithDiagnostics(publicBuildInfo: false);
         using var client = factory.CreateClient();
 
         using var response = await client.GetAsync(new Uri("/api/v1/info", UriKind.Relative), Ct);
