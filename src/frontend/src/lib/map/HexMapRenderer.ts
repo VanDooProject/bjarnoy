@@ -3091,6 +3091,7 @@ export class HexMapRenderer {
     // check per frame, and it can only ever do work on the first frame after
     // the gesture that owes it ends.
     if (this.waterMaskDirty && !this.dragging && !this.wheeling && !this.keyPanning) this.maybeBakeWaterMask();
+    this.waterLayer.setHexScreenSize(this.camera.zoom * TILE_W * this.app!.renderer.resolution);
     this.waterLayer.tick(this.mapAnimMs);
     this.bogLakeLayer.tick(this.animClockMs);
     const now = performance.now();

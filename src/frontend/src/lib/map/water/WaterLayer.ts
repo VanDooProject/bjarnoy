@@ -7,7 +7,7 @@ import { noiseLatticeTexture } from '../shaderNoise';
 import { hexToRgb01, placeholderDryTexture } from '../shaderResources';
 import { FOAM_REACH_TILES, NEAR_SPAN_TILES, groundSquash, type WaterMask } from './waterMask';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
-import { WaterMeshBuffers, seaAndShoreHexes } from './waterCoverage';
+import { WaterMeshBuffers, nextWaterCoverage, seaAndShoreHexes, type WaterCoverage } from './waterCoverage';
 import { WATER_FRAGMENT, WATER_VERTEX } from './waterShader';
 import { RiverFlowMesh } from './riverFlowMesh';
 
@@ -330,6 +330,10 @@ export class WaterLayer {
   private noFoamTexture: Texture | null = null;
   private retiredNoFoamTexture: Texture | null = null;
   private hasMask = false;
+  // The mask the mesh was last built from, kept so a coverage switch can rebuild the mesh without a re-bake.
+  private mask: WaterMask | null = null;
+  // Hexagons or one quad, by how big a hex is on screen — see setHexScreenSize.
+  private coverage: WaterCoverage = 'hexes';
   // The shader's own clock, accumulated rather than read off performance.now()
   // — same rationale as FogField.tick's: the wave-speed slider changes the
   // *rate* from wherever the pattern currently is, instead of rescaling the
@@ -551,13 +555,41 @@ export class WaterLayer {
 
     this.river.setMask(this.texture!.source, mask.region.rect);
 
-    // The mesh covers only the hexes the shader can draw on (waterCoverage.ts), not the whole baked rect.
-    const hexes = seaAndShoreHexes(mask, this.tileWidth, this.tileHeight);
-    const { positions, uvs, indices } = this.meshBuffers.fill(hexes, this.tileWidth, this.tileHeight, mask.region.rect);
+    this.mask = mask;
+    this.rebuildMesh();
+    this.hasMask = true;
+  }
+
+  /** Which cover the mesh currently uses (waterCoverage.ts). */
+  get meshCoverage(): WaterCoverage {
+    return this.coverage;
+  }
+
+  /**
+   * Tells the layer how many device pixels across a hex is on screen (zoom x
+   * tile width x resolution). Far enough out it draws one quad over the mask's
+   * rect instead of a hexagon per hex (`nextWaterCoverage`, with hysteresis);
+   * a switch rebuilds the mesh from the current mask. Cheap when nothing
+   * switches, so it is called every frame.
+   */
+  setHexScreenSize(hexScreenPx: number): void {
+    const next = nextWaterCoverage(this.coverage, hexScreenPx);
+    if (next === this.coverage) return;
+    this.coverage = next;
+    if (this.mask) this.rebuildMesh();
+  }
+
+  private rebuildMesh(): void {
+    const mask = this.mask!;
+    // Normally the mesh covers only the hexes the shader can draw on (waterCoverage.ts), not the whole baked rect;
+    // zoomed far out, one quad over the rect, where the shader's own discard leaves the land alone.
+    const { positions, uvs, indices } =
+      this.coverage === 'quad'
+        ? this.meshBuffers.fillQuad(mask.region.rect)
+        : this.meshBuffers.fill(seaAndShoreHexes(mask, this.tileWidth, this.tileHeight), this.tileWidth, this.tileHeight, mask.region.rect);
     this.geometry.getBuffer('aPosition').data = positions;
     this.geometry.getBuffer('aUV').data = uvs;
     this.geometry.indexBuffer.data = indices;
-    this.hasMask = true;
   }
 
   /**

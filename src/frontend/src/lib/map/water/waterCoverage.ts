@@ -24,6 +24,12 @@
 // shared lattice coordinates, so neighbouring hexes share bit-identical edge
 // vertices: the rasteriser leaves no crack and draws no pixel twice, which is
 // why there is no outward margin to overdraw (the blend is not idempotent).
+//
+// Zoomed far out the hexagons are a few pixels across and the per-hex mesh
+// turns into the cost itself: hundreds of thousands of tiny triangles, each
+// paying the GPU's 2x2-quad overdraw. There the mesh is one quad over the
+// mask's rect instead (`nextWaterCoverage`); the shader already discards on
+// land away from the shore, so the picture is the same.
 import { isoTopPoints } from '../../hex/geometry';
 import type { WaterMask } from './waterMask';
 import type { WorldRect } from './waterMaskLayout';
@@ -101,6 +107,24 @@ export function seaAndShoreHexes(mask: WaterMask, tileWidth: number, tileHeight:
   return hexes;
 }
 
+/** How the water mesh covers the mask's rect: a hexagon per sea/shore hex, or one quad over all of it. */
+export type WaterCoverage = 'hexes' | 'quad';
+
+/**
+ * Below this many device pixels across a hex, the mesh switches to the single quad. At 168-wide tiles and a
+ * device pixel ratio of 1 that is a zoom under ~0.12: the world map's far zoom-out and the zoomed-out
+ * settlement view, not either view's default.
+ */
+export const WATER_QUAD_BELOW_HEX_PX = 20;
+/** Above this many device pixels across a hex, the mesh goes back to hexagons; the gap to the switch down keeps it from flapping. */
+export const WATER_HEXES_ABOVE_HEX_PX = 24;
+
+/** The coverage for a hex `hexScreenPx` device pixels across, given the current one (hysteresis between the two thresholds). */
+export function nextWaterCoverage(current: WaterCoverage, hexScreenPx: number): WaterCoverage {
+  if (current === 'hexes') return hexScreenPx < WATER_QUAD_BELOW_HEX_PX ? 'quad' : 'hexes';
+  return hexScreenPx > WATER_HEXES_ABOVE_HEX_PX ? 'hexes' : 'quad';
+}
+
 /** Vertices and indices per hex: the top-face hexagon as a fan of four triangles. */
 const VERTS_PER_HEX = 6;
 const INDICES_PER_HEX = 12;
@@ -110,6 +134,23 @@ export class WaterMeshBuffers {
   private positions = new Float32Array(0);
   private uvs = new Float32Array(0);
   private indices = new Uint32Array(0);
+
+  /**
+   * Fills the buffers with one quad over the whole rect, UVs 0..1 — the low-zoom
+   * cover. Shares the buffers with `fill`, so switching back and forth allocates nothing.
+   */
+  fillQuad(rect: WorldRect): { positions: Float32Array; uvs: Float32Array; indices: Uint32Array } {
+    if (this.positions.length < VERTS_PER_HEX * 2) {
+      this.positions = new Float32Array(VERTS_PER_HEX * 2);
+      this.uvs = new Float32Array(VERTS_PER_HEX * 2);
+      this.indices = new Uint32Array(INDICES_PER_HEX);
+    }
+    const { positions, uvs, indices } = this;
+    positions.set([rect.minX, rect.minY, rect.maxX, rect.minY, rect.maxX, rect.maxY, rect.minX, rect.maxY]);
+    uvs.set([0, 0, 1, 0, 1, 1, 0, 1]);
+    indices.set([0, 1, 2, 0, 2, 3]);
+    return { positions: positions.subarray(0, 8), uvs: uvs.subarray(0, 8), indices: indices.subarray(0, 6) };
+  }
 
   /**
    * Fills the buffers with one hexagon per hex and returns views of exactly
