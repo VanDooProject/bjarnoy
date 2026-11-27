@@ -55,6 +55,8 @@ const props = defineProps<{
    * plain dial without the cross and the fade-out, so the marker stays as it was (`BLOCKED_DIAL_OPTIONS`).
    */
   blockedAtMs?: number;
+  /** The elapsed arc runs counter-clockwise (a raze); an upgrade's runs clockwise. */
+  counterClockwise?: boolean;
 }>();
 
 const RING_COLOR: Record<HudRing, string> = { ready: '#5fd08a', blocked: '#e2705f', upgrading: '#fff', max: '#ffd23f', none: '#fff' };
@@ -85,8 +87,10 @@ const geometry = computed(() => {
   };
   const hexAt = (rr: number) => fmt([0, 1, 2, 3, 4, 5].map((i) => vertex(i, rr)));
   const hex = [0, 1, 2, 3, 4, 5].map((i) => vertex(i, r));
-  // The arc is this outline (from the top vertex, clockwise, closed), drawn `progress` of the way round by its dash offset.
-  const outline = `M${hex.map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' L')} Z`;
+  // The arc is this outline (from the top vertex, clockwise or, for a raze, counter-clockwise; closed), drawn `progress` of the
+  // way round by its dash offset.
+  const arcHex = props.counterClockwise ? [hex[0]!, ...hex.slice(1).reverse()] : hex;
+  const outline = `M${arcHex.map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' L')} Z`;
   const font = props.time ? (14.4 * r) / 27.5 : dialLevelFontPx(r);
   return { sw, size: 2 * c, c, hex: fmt(hex), hexAt, outline, font, unit: sw / 6 };
 });
