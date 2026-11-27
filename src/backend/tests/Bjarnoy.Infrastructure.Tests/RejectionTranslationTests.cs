@@ -9,10 +9,15 @@ using Bjarnoy.Infrastructure.Services.PlotReservations;
 namespace Bjarnoy.Infrastructure.Tests;
 
 /// <summary>
-/// Every rejection code the API puts on the wire (the <c>rejection</c> extension of a ProblemDetails) has a player text in the
+/// The rejection codes of the enums below (sent as the <c>rejection</c> extension of a ProblemDetails) have a player text in the
 /// frontend's <c>apiErrors.rejections</c>, in English and German. Without one the UI shows only its generic fallback
 /// ("Dispatch failed.") and the player never learns why the order was refused.
 /// </summary>
+/// <remarks>
+/// <c>GuildRejection</c> is left out: the guild screens show the error message directly and never go through
+/// <c>apiErrorMessage</c>. The single string codes (<c>WorldPaused</c>, <c>UsernameTaken</c>, <c>RouteRateLimited</c>) and
+/// <c>RecallOutcome</c> are not enum-wide either and are not covered here.
+/// </remarks>
 public class RejectionTranslationTests
 {
     public static TheoryData<string> Locales => new() { "en", "de" };
