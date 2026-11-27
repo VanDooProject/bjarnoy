@@ -66,7 +66,7 @@ public class GoldenRegenerationTests
 
         Candidate Smallest(string what, Func<Candidate, bool> filter) =>
             candidates.Where(filter).OrderBy(c => c.Island.TileCount).ThenBy(c => c.Seed).FirstOrDefault()
-            ?? throw new InvalidOperationException($"no candidate island for '{what}' in seeds 1-40");
+            ?? throw new InvalidOperationException($"no candidate island for '{what}' in seeds {(what == "valley stream" ? "1-8" : "1-40")}");
 
         var scenarios = new (string Name, Candidate Pick)[]
         {

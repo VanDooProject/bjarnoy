@@ -139,6 +139,43 @@ public sealed class AdminGodModeTests
     }
 
     [Fact]
+    public void Admin_edit_dropping_a_waiting_head_starts_the_smaller_order_behind_it()
+    {
+        // Longhouse level 4: 3 slots. Two builds run, the longhouse upgrade (2 slots) waits at the head, a one-slot build
+        // waits behind it although the free slot would fit it.
+        var centre = new HexCoord(0, 0);
+        var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 4)]);
+        var settlement = new Settlement
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Bjornstad",
+            Centre = centre,
+            Buildings = [new PlacedBuilding(centre, BuildingType.Longhouse, 4)],
+            Resources = ResourcePool.Create(ResourceAmounts.Uniform(1_000_000), production, capacity, Start),
+        };
+        var running1 = settlement.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, Start, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var s1 = settlement.Enqueue(running1.Order!, Start);
+        var running2 = s1.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(-1, 0), Terrain.Grass, Start, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var s2 = s1.Enqueue(running2.Order!, Start);
+        var head = s2.PlanBuild(BuildingType.Longhouse, centre, Terrain.Grass, Start, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var s3 = s2.Enqueue(head.Order!, Start);
+        var behind = s3.PlanBuild(BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, Start, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var s4 = s3.Enqueue(behind.Order!, Start);
+        Assert.True(s4.Queue.Single(o => o.Id == head.Order!.Id).IsWaiting);
+        Assert.True(s4.Queue.Single(o => o.Id == behind.Order!.Id).IsWaiting);
+
+        var now = Start + TimeSpan.FromMinutes(1);
+        var edited = s4.PlaceBuilding(centre, BuildingType.Longhouse, 4, Terrain.Grass, false, now, terrainAt: Grass);
+
+        Assert.True(edited.Accepted);
+        var queue = edited.Settlement!.Queue;
+        Assert.DoesNotContain(queue, o => o.Id == head.Order!.Id);
+        var started = queue.Single(o => o.Id == behind.Order!.Id);
+        Assert.False(started.IsWaiting);
+        Assert.Equal(now, started.StartedAt);
+    }
+
+    [Fact]
     public void Placing_a_building_puts_it_on_an_empty_claimed_hex()
     {
         var settlement = NewSettlement();

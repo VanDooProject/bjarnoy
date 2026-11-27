@@ -12,6 +12,8 @@ import catalogue from '../../data/building-catalogue.json';
 import type { BuildingDefinitionResponse } from '../../api/types';
 import { createTestI18n } from '../../test/i18n';
 import enDocs from '../../i18n/locales/en/docs.json';
+import enHud from '../../i18n/locales/en/hud.json';
+import enCatalogue from '../../i18n/locales/en/catalogue.json';
 
 const byType: Record<string, BuildingDefinitionResponse[]> = {};
 for (const definition of catalogue.data as BuildingDefinitionResponse[]) {
@@ -20,7 +22,7 @@ for (const definition of catalogue.data as BuildingDefinitionResponse[]) {
 for (const list of Object.values(byType)) list.sort((a, b) => a.level - b.level);
 
 const mountGraph = () =>
-  mount(TechTreeGraph, { props: { byType }, global: { plugins: [createTestI18n({ docs: enDocs })] } });
+  mount(TechTreeGraph, { props: { byType }, global: { plugins: [createTestI18n({ docs: enDocs, hud: enHud, catalogue: enCatalogue })] } });
 const card = (wrapper: ReturnType<typeof mountGraph>, type: string) => wrapper.get(`a[href="#${type}"]`);
 
 describe('TechTreeGraph', () => {

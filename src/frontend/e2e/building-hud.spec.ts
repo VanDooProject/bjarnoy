@@ -35,7 +35,7 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     await expect(hud.marker(wall)).toHaveCount(0);
   });
 
-  test('zooming in grows a marker from the bare ring to the dial with its number, the box, then the full box', async ({ page }) => {
+  test('zooming in grows a marker from the bare ring to its level, the dial, the box, then the full box', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
     const { hud } = settlement;
@@ -44,11 +44,17 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     const farm = (await settlement.findHex({ terrain: 'grass' })).hex;
     await hud.standBuildingAt(farm, 'farm', 1);
 
-    // zs = camera zoom / 0.85 (the default); the tiers start at zs 0.69 (number), 0.91 (box) and 1.3 (full box).
-    await settlement.zoomTo(0.45);
+    // zs = camera zoom / 0.85 (the default); the tiers start at zs 0.51 (level), 0.69 (countdown), 0.91 (box) and 1.3 (full box).
+    await settlement.zoomTo(0.35);
     await expect(hud.marker(hex)).toHaveAttribute('data-tier', 'far');
     await expect(hud.dial(hex)).toBeVisible();
     await expect(hud.dialLabel(hex)).toHaveCount(0);
+    await expect(hud.box(hex)).toHaveCount(0);
+
+    // The level's larger number still reads where a countdown would not.
+    await settlement.zoomTo(0.5);
+    await expect(hud.marker(hex)).toHaveAttribute('data-tier', 'level');
+    await expect(hud.dialLabel(hex)).toHaveText('1');
     await expect(hud.box(hex)).toHaveCount(0);
 
     await settlement.zoomTo(0.68);
@@ -99,7 +105,7 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     await expect(reloaded.hud.toggle).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test('a marker never takes the pointer: the hex under its dial opens its ring, while the tile tooltip stays away', async ({ page }) => {
+  test("a marker never takes the pointer, yet a click on it opens its own building's ring, while the tile tooltip stays away", async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
     const { hud } = settlement;
@@ -119,9 +125,13 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     await expect(hud.marker(hex)).toHaveAttribute('style', /scale\((1\.9|2\.)/);
     await expect(settlement.tooltip).toHaveCount(0);
 
-    await page.mouse.click(at.x, at.y);
+    // A click on the box, drawn over the hexes right of the longhouse, still opens the longhouse's own ring.
+    const box = await hud.box(hex).boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.click(box!.x + box!.width * 0.75, box!.y + box!.height / 2);
     await settlement.ring.waitForOpen();
     await expect(settlement.ring.backdrop).toHaveCount(1);
+    await expect(page.locator('.hub-sub')).toContainText(`${hex.q}, ${hex.r}`);
   });
 
   test('while building info is on, the marker dial shows a running upgrade; off, the same dial is a dial-only marker', async ({ page }) => {
