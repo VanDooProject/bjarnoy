@@ -1633,15 +1633,12 @@ function quickUpgradeAt(coord: AxialCoord, tile: Tile) {
   void upgradeAt(coord, tile);
 }
 
-// Holding the ring's Upgrade bubble turns the quick upgrade mode on, closes the ring and orders that building's upgrade (or shows
-// the refusal chip, with the mode staying on).
+// Holding the ring's Upgrade bubble turns the quick upgrade mode on and closes the ring. It orders nothing: the mode switch is
+// all the hold does.
 function onRingHold(id: string) {
-  if (id !== 'upgrade' || !selectedCoord.value || !selectedTile.value) return;
-  const coord = selectedCoord.value;
-  const tile = selectedTile.value;
+  if (id !== 'upgrade') return;
   quickUpgrade.start();
   closeRing();
-  quickUpgradeAt(coord, tile);
 }
 
 // The mode's ways out that live on the map: a long press anywhere on the canvas (the renderer reports it only while the mode is
