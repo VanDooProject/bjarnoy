@@ -115,7 +115,7 @@ public sealed record BuildingDefinition
 
     /// <summary>
     /// Alongside <see cref="RequiresCoastalWater"/>: bog tile kinds this building may stand on instead of coastal water. The
-    /// Fishing Hut stands on a lake's half shore (<see cref="World.BogTileKind.Half"/>, three water edges) with its lake art.
+    /// Fishing Hut stands on a lake's shore (<see cref="World.BogTileKind.Shore"/>, two water edges) or half shore (<see cref="World.BogTileKind.Half"/>, three water edges) with its lake art.
     /// <see langword="null"/> (the default) means coastal water only.
     /// </summary>
     public IReadOnlySet<World.BogTileKind>? LakeShoreKinds { get; init; }

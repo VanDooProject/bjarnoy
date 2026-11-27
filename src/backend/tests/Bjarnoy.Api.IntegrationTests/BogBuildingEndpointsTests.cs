@@ -174,18 +174,19 @@ public sealed class BogBuildingEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task The_fishing_hut_is_placed_on_a_lake_half_shore_and_on_no_other_bog_hex()
+    public async Task The_fishing_hut_is_placed_on_a_lake_shore_or_half_shore_and_on_no_other_bog_hex()
     {
         var (client, settlement, hexes) = await SetUpAsync();
         using var _ = client;
 
-        foreach (var hex in new[] { "moss1", "creek", "shore", "lake", "grass" })
+        foreach (var hex in new[] { "moss1", "creek", "lake", "grass" })
         {
             var response = await Build(client, settlement.Id, "fishinghut", hexes[hex]);
             Assert.Equal("TerrainNotAllowed", await response.RejectionAsync(Ct));
         }
 
         Assert.Equal(HttpStatusCode.Accepted, (await Build(client, settlement.Id, "fishinghut", hexes["half"])).StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, (await Build(client, settlement.Id, "fishinghut", hexes["shore"])).StatusCode);
     }
 
     [Fact]

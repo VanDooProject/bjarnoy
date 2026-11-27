@@ -899,7 +899,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Equal("military", Of("smithy").RingCategory);
         Assert.Equal(["grass"], Of("smithy").AllowedTerrain);
         Assert.Equal(["creek"], Of("hammerschmiede").RequiresBogKinds);
-        Assert.Equal(["half"], Of("fishinghut").LakeShoreKinds);
+        Assert.Equal(["half", "shore"], Of("fishinghut").LakeShoreKinds);
         Assert.Equal(["bend", "bend60", "straight"], Of("sawmill").RequiresRiverShapes);
         Assert.Equal(["loop"], Of("sawmill").ExcludedRiverVariants);
         Assert.Equal(["straight"], Of("cropmill").RequiresRiverShapes);
