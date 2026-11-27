@@ -3,10 +3,10 @@ import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 
 /**
- * While a ring menu is open, the markers beneath it (the construction dials, which are HTML dial-only markers, and the canvas
- * realm name badge) are hidden so they don't show through between the DOM bubbles; markers outside the ring's footprint
+ * While a ring menu is open, the markers beneath it (the construction dials, which are HTML dial-only markers, and the DOM realm
+ * name badge) are hidden so they don't show through between the DOM bubbles; markers outside the ring's footprint
  * stay, and everything is back once the ring closes. The geometry is unit-tested (markerOcclusion.test.ts); this is the
- * wiring from the open ring to the markers: a dial's opacity in the DOM, the badge through the renderer's `markerVisibility()`.
+ * wiring from the open ring to the markers: a dial's opacity in the DOM, the badge's opacity in the label overlay.
  */
 test.describe('markers beneath the ring menu', { tag: '@g2' }, () => {
   interface DemoWorld {
@@ -61,10 +61,11 @@ test.describe('markers beneath the ring menu', { tag: '@g2' }, () => {
       return { near: nearHex, far: farHex, settlementId: world.selectedSettlementId };
     });
     const { hud } = settlement;
+    const badge = page.locator(`[data-map-label="badge:${settlementId}"]`);
+    // Hidden (visibility) counts as 0: the overlay hides a badge once its fade has run out.
     const badgeAlpha = async () => {
-      const badges = await page.evaluate(() => window.__settlementRenderer().markerVisibility().badges);
-      // Absent from the map = fully visible.
-      return badges[settlementId] ?? 1;
+      if (!(await badge.isVisible())) return 0;
+      return Number(await badge.evaluate((el) => getComputedStyle(el).opacity));
     };
 
     // Ring closed: everything shows.

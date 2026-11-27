@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { IdleKeyedPool } from './idleKeyedPool';
 import {
   MAX_ART_OVERHANG,
   REBUILD_MOVE_THRESHOLD,
@@ -6,7 +7,6 @@ import {
   armyMarkerColor,
   armyMarkerAt,
   ArmyStaticCache,
-  IdleKeyedPool,
   TILE_H,
   TILE_W,
   cartWorldPoint,
@@ -23,6 +23,8 @@ import {
   fadeAlphaAt,
   hoverSubjectFor,
   isIslandNearViewport,
+  islandLabelAnchor,
+  islandLabelHidden,
   isWaypointTap,
   wheelPassesToPage,
   landfallBurstFrames,
@@ -1526,5 +1528,25 @@ describe('cartWorldPoint', () => {
   it('heads the way it travels', () => {
     expect(cartWorldPoint(cart({ fromQ: 3, toQ: 0 }), 1500).heading.x).toBeLessThan(0);
     expect(cartWorldPoint(cart(), 1500).heading.x).toBeGreaterThan(0);
+  });
+});
+
+describe('island name labels', () => {
+  it('hang centred under the island bottom with 10 world units of clearance', () => {
+    expect(islandLabelAnchor({ x: 100, y: 40 }, 500)).toEqual({ x: 100 + TILE_W / 2, y: 510 });
+  });
+
+  it('are hidden when the hex under the label is unexplored although the island centre is explored', () => {
+    const grid = isoGridPosition({ q: 3, r: -2 }, TILE_W, TILE_H);
+    const anchor = islandLabelAnchor(grid, grid.y + TILE_H + 4 * TILE_H);
+    const under = isoPixelToAxial(anchor, TILE_W, TILE_H);
+    const centreExplored = (q: number, r: number) => q === 3 && r === -2;
+    expect(centreExplored(3, -2)).toBe(true);
+    expect(islandLabelHidden(anchor, true, centreExplored)).toBe(true);
+    expect(islandLabelHidden(anchor, true, (q, r) => q === under.q && r === under.r)).toBe(false);
+  });
+
+  it('never hide without fog', () => {
+    expect(islandLabelHidden({ x: 0, y: 0 }, false, () => false)).toBe(false);
   });
 });
