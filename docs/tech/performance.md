@@ -77,9 +77,9 @@ freezes water/fog in place rather than hiding them.
 
 | Setting | Result |
 | --- | --- |
-| **Auto** (default) | Off at first. Enabled only once the map has run at ≥ 30 fps for 10 s *without* animations. Turned off again if it then drops below 30 fps for 5 s, and stays off for the rest of the page session. Off outright under reduced motion or data saver. |
+| **Auto** (default) | Off at first. Enabled only once the map has run at ≥ 30 fps for 10 s *without* animations. Turned off again if it then drops below 30 fps for 5 s. After a drop there is one retry: ≥ 60 fps for 30 s turns them on again. A second drop latches them off for the rest of the page session. Off outright under reduced motion or data saver. |
 | **On** | Always on, on this device, even with reduced motion or data saver: the player chose it explicitly. |
-| **Off** | Always off. |
+| **Off** | Always off. Releases the anim textures. |
 
 Why these rules:
 
@@ -94,13 +94,22 @@ Why these rules:
   so a normal desktop gets there instead of losing the streak to an
   occasional slow second (55 fps for 30 s rarely finished on real hardware).
 - **Shown live.** Under "Building animations" the Graphics settings show the
-  last second's fps and how many of the 10 s are collected
-  (`animationPreference.progress`).
-- **Latch off.** Animations themselves cost frames. Without the latch, a
-  device on the edge would load them, drop below 30, unload, recover, load
-  again, and pay the download and decode each time.
-- **Measured on the map, in both modes.** The renderer feeds the governor
-  every Pixi tick (`animationPreference.feedFrame`), on the world map as well
+  last second's fps and how many seconds of the current window (enable, retry
+  or drop) are collected (`animationPreference.progress`).
+- **One retry, then latch off.** Animations themselves cost frames. A device
+  on the edge would otherwise load them, drop below 30, recover (nothing is
+  drawing), load again and drop again. After a drop the stricter retry window
+  (≥ 60 fps for 30 s) must show real headroom; a second drop stays off for
+  the session.
+- **Auto drops keep the textures.** An Auto drop parks the loaded clips
+  (`HexMapRenderer.parkedAnimTop`) instead of unloading the atlases, so the
+  retry costs no decode. Setting Off, reduced motion and data saver release
+  them.
+- **Order with the resolution.** Animations go first both ways: resolution
+  climbs only once animations are on or latched off, and drops only once
+  animations are off (see "Render resolution").
+- **Measured on the map, in both modes.** The renderer feeds the governors
+  every Pixi tick (`feedFrame` in `lib/perf/frameGovernors.ts`), on the world map as well
   as in a settlement: it is judging the device's general frame cost, so a
   session that starts on the world map arrives at its first settlement with
   the measurement already under way.
@@ -112,8 +121,9 @@ Why these rules:
 Turning animations off (by setting, or auto dropping them) releases the
 anim pages' textures (`unloadAtlasCategory`, `Assets.unload`), so the memory
 really comes back rather than just stopping playback. The code is in
-`src/frontend/src/lib/perf/animationPreference.ts` (setting, governor,
-resolution), `HexMapRenderer.setAnimationsEnabled`/`syncAnimationAtlases`
+`src/frontend/src/lib/perf/animationPreference.ts` (setting and resolution
+of the state), `lib/perf/fpsGovernor.ts` (the stepped governor),
+`HexMapRenderer.setAnimationsEnabled`/`syncAnimationAtlases`
 (load and unload) and `components/settings/AnimationPreferences.vue` (shown
 in the Settings dialog, `components/settings/SettingsModal.vue` →
 `components/settings/DeviceSettings.vue`).
@@ -135,10 +145,70 @@ leaderboards, ...) covers the whole screen with an opaque panel, and starts
 again when it closes (`useMapCover` -> `HexMapRenderer.setCovered`). A desktop
 modal leaves the map visible behind its backdrop and keeps it running.
 
-The fps governor ignores frames while hidden and restarts its current
-window when the tab comes back, so neither the throttled frames a browser
-gives background tabs nor the long first frame after returning count
-against the device.
+### Active and background frames
+
+Both fps governors (animations and resolution) count only active frames.
+`lib/perf/frameActivity.ts` classifies every frame; a background frame counts
+for nothing, and every edge between active and background restarts the
+governors' running windows (`feedFrame` in `lib/perf/frameGovernors.ts`).
+A frame is background when:
+
+- the tab is hidden (`document.hidden`);
+- the window is not focused (`document.hasFocus()` is false: another window in
+  front, a second monitor). The renderer keeps rendering; only the counting
+  stops;
+- its interval is over 250 ms (a resumed or stalled frame);
+- the frame rate looks capped by the browser: the last 30 intervals average
+  30–36 ms (about 30 fps) with a standard deviation under 1.5 ms (Chrome
+  battery saver, Safari Low Power mode at 30 fps). A struggling GPU jitters;
+  a cap does not. A steady slower rate (e.g. 20 fps) is a slow device and
+  counts.
+
+After any background stretch the first 1000 ms of active frame time is
+settling and counts as background too.
+
+Limit of the cap heuristic: a device that is genuinely locked at exactly 30 fps
+(half of a 60 Hz refresh) also looks metronomic. Its frames are neither counted as
+good nor as bad, so such a device stays where it is.
+
+The Graphics settings replace the measure lines with a "counting paused" line
+(by reason) while frames are background (`frameActivityState`).
+
+## Render resolution
+
+The canvas's resolution (device pixels per CSS pixel) is a **per-device**
+setting (localStorage `bjarnoy.resolution`), Graphics → Resolution:
+**Auto** or one of the levels the screen offers, highest first. An explicit
+value is clamped to the highest level the screen has.
+
+- **Levels** (`resolutionLevels`, computed once at load from
+  `devicePixelRatio`): the cap is `min(dpr, 2)`; the levels are 1, 1.5 and 2
+  up to the cap, plus the cap itself when it is above the last one (1.25 gives
+  1, 1.25; 1.75 gives 1, 1.5, 1.75; 3 gives 1, 1.5, 2). A screen with a cap of
+  1 has one level and Auto reads "your screen's maximum". A monitor change
+  while the page is open is not followed.
+- **Auto** starts at the lowest level, 1×. It steps up one level after 10 s at
+  ≥ 30 fps and down one level after 5 s under 30 fps. A level it dropped out of
+  once needs the retry window (≥ 60 fps for 30 s) to be entered again; after a
+  second drop out of it, the level is closed for the session. Every step starts
+  its window afresh. The governor is the same `FpsGovernor` as the
+  animations' (`lib/perf/fpsGovernor.ts`), with one level per resolution.
+- **Order.** Animations go first both ways. Resolution climbs only when the
+  animation governor is at its top or its next step is latched (while it still
+  waits for a normal or retry window, resolution waits too), and drops only
+  once animations are off. With the animation setting forced, resolution
+  moves freely. A level change of one governor restarts the other's running
+  window, since its measurement ran under other conditions.
+- **Applied in place.** `HexMapRenderer.setResolution` calls
+  `renderer.resize(width, height, resolution)`; `autoDensity` keeps the CSS
+  size, so the map is not remounted. The initial resolution at mount is the
+  effective one. The fog's desaturation filter has `resolution: 'inherit'` and
+  follows. The fog field and the water/dry-mask render textures are
+  world-anchored with resolution 1 and do not depend on the canvas, and Pixi's
+  event system picks the new resolution up for pointer positions.
+- **Code.** `lib/perf/resolutionPreference.ts` (setting, levels, governor),
+  `lib/perf/frameGovernors.ts` (the coordinator), `composables/useHexMapRenderer.ts`
+  (the watch) and `components/settings/AnimationPreferences.vue`.
 
 ## Compression on the wire
 

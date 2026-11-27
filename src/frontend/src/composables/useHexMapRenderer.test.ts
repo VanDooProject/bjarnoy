@@ -3,6 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h, ref } from "vue";
 import { mount } from "@vue/test-utils";
 
+// The resolution levels are fixed at module load from the screen's pixel ratio.
+vi.hoisted(() => {
+  Object.defineProperty(window, "devicePixelRatio", { value: 2, configurable: true });
+});
+
 // HexMapRenderer needs Pixi + a real GPU context; the composable's mount/
 // retry orchestration is what's under test here, so the renderer is a fake
 // whose mount() outcome each test scripts.
@@ -14,6 +19,8 @@ const instances: Array<{
   setFogMotion: ReturnType<typeof vi.fn>;
   setLakeMotion: ReturnType<typeof vi.fn>;
   setCovered: ReturnType<typeof vi.fn>;
+  setAnimationsEnabled: ReturnType<typeof vi.fn>;
+  setResolution: ReturnType<typeof vi.fn>;
 }> = [];
 
 vi.mock("../lib/map/HexMapRenderer", () => ({
@@ -26,6 +33,7 @@ vi.mock("../lib/map/HexMapRenderer", () => ({
     destroy = vi.fn();
     resize = vi.fn();
     setAnimationsEnabled = vi.fn();
+    setResolution = vi.fn();
     setWaterMotion = vi.fn();
     setFogMotion = vi.fn();
     setLakeMotion = vi.fn();
@@ -38,6 +46,7 @@ vi.mock("../lib/map/HexMapRenderer", () => ({
 
 import { useHexMapRenderer } from "./useHexMapRenderer";
 import { motionPreferences } from "../lib/perf/motionPreferences";
+import { resolutionPreference } from "../lib/perf/resolutionPreference";
 import { effectScope } from "vue";
 import { useCoversMap } from "./useMapCover";
 
@@ -139,6 +148,23 @@ describe("useHexMapRenderer mount failure + retry", () => {
     motionPreferences.water = "auto";
     motionPreferences.lakes = "auto";
     motionPreferences.fog = "auto";
+    wrapper.unmount();
+  });
+
+  it("applies a resolution change in place, without a remount", async () => {
+    resolutionPreference.setting = "1";
+    const { wrapper } = mountHost();
+    await flush();
+    expect(instances).toHaveLength(1);
+    expect(instances[0]!.setResolution).toHaveBeenLastCalledWith(1);
+
+    resolutionPreference.setting = "1.5";
+    await flush();
+    expect(instances[0]!.setResolution).toHaveBeenLastCalledWith(1.5);
+    expect(instances).toHaveLength(1);
+    expect(instances[0]!.mount).toHaveBeenCalledTimes(1);
+    expect(instances[0]!.destroy).not.toHaveBeenCalled();
+    resolutionPreference.setting = "auto";
     wrapper.unmount();
   });
 

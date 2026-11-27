@@ -56,6 +56,7 @@ describe('DeviceSettings', () => {
       'Bar position',
       'Menu size',
       'Building animations',
+      'Resolution',
       'Water motion',
       'Lake motion',
       'Fog drift',

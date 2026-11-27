@@ -2,6 +2,7 @@ import { onBeforeUnmount, onMounted, shallowRef, watch, type Ref } from 'vue';
 import { HexMapRenderer, READY_LOAD_STATE, type HexMapRendererOptions, type MapLoadState } from '../lib/map/HexMapRenderer';
 import { mapCovered } from './useMapCover';
 import { animationPreference } from '../lib/perf/animationPreference';
+import { resolutionPreference } from '../lib/perf/resolutionPreference';
 import { motionPreferences } from '../lib/perf/motionPreferences';
 
 /**
@@ -52,6 +53,7 @@ export function useHexMapRenderer(
   const mountError = shallowRef<unknown>(null);
   let resizeObserver: ResizeObserver | null = null;
   let stopAnimationWatch: (() => void) | null = null;
+  let stopResolutionWatch: (() => void) | null = null;
   let stopWaterMotionWatch: (() => void) | null = null;
   let stopLakeMotionWatch: (() => void) | null = null;
   let stopFogMotionWatch: (() => void) | null = null;
@@ -66,6 +68,8 @@ export function useHexMapRenderer(
     resizeObserver = null;
     stopAnimationWatch?.();
     stopAnimationWatch = null;
+    stopResolutionWatch?.();
+    stopResolutionWatch = null;
     stopWaterMotionWatch?.();
     stopWaterMotionWatch = null;
     stopLakeMotionWatch?.();
@@ -115,7 +119,13 @@ export function useHexMapRenderer(
     // resolved to (most commonly 'measuring'/off, on a fresh mount) right
     // away, rather than leaving the renderer's own `animationsEnabled`
     // default until the preference happens to change for some other reason.
-    stopAnimationWatch = watch(() => animationPreference.effective, (enabled) => r.setAnimationsEnabled(enabled), {
+    stopAnimationWatch = watch(
+      [() => animationPreference.effective, () => animationPreference.keepLoaded],
+      ([enabled, keepLoaded]) => r.setAnimationsEnabled(enabled, keepLoaded),
+      { immediate: true },
+    );
+    // The render resolution (forced, or stepped by the Auto governor) is applied in place: no remount.
+    stopResolutionWatch = watch(() => resolutionPreference.effective, (resolution) => r.setResolution(resolution), {
       immediate: true,
     });
     // Water / fog freeze per the player's own motion settings (auto follows

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-// Graphics preferences (per device, localStorage): the motion settings and
-// "Smooth edges". Buildings = the map's `buildings-anim` clip art
-// (lib/perf/animationPreference.ts); water, fog and HUD menus are
+// Graphics preferences (per device, localStorage): the motion settings, the
+// render resolution and "Smooth edges". Buildings = the map's
+// `buildings-anim` clip art (lib/perf/animationPreference.ts); resolution is
+// lib/perf/resolutionPreference.ts; water, fog and HUD menus are
 // lib/perf/motionPreferences.ts. Each motion row is Auto | On | Off, where
 // Auto follows the device's own "reduce motion" setting, shown at the top so
 // the player can see what Auto resolves to and where to change it. Same
@@ -12,10 +13,13 @@ import { useI18n } from 'vue-i18n';
 import { animationPreference, type AnimationSetting } from '../../lib/perf/animationPreference';
 import { antialiasPreference, type AntialiasSetting } from '../../lib/perf/antialiasPreference';
 import { currentDeviceOs } from '../../lib/perf/deviceOs';
+import { frameActivityState } from '../../lib/perf/frameGovernors';
+import type { GovernorProgress } from '../../lib/perf/fpsGovernor';
 import { motionPreferences, type MotionSetting } from '../../lib/perf/motionPreferences';
+import { resolutionPreference, type ResolutionSetting } from '../../lib/perf/resolutionPreference';
 import type { MessageSchema } from '../../i18n/schema';
 
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, n } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const SETTINGS: AnimationSetting[] = ['auto', 'on', 'off'];
 const ANTIALIAS_SETTINGS: AntialiasSetting[] = ['on', 'off'];
@@ -34,36 +38,91 @@ const STATUS_KEY = {
   'auto-off-slow': 'autoOffSlow',
 } as const;
 
+const RESOLUTION_STATUS_KEY = {
+  forced: 'forced',
+  'device-max': 'deviceMax',
+  measuring: 'measuring',
+  'auto-max': 'autoMax',
+  'auto-down': 'autoDown',
+} as const;
+
 const statusText = computed(() => t(`profile.graphics.status.${STATUS_KEY[animationPreference.reason]}`));
 
-// Live readout of the 'auto' fps measurement (animationPreference's governor).
-const measureText = computed(() => {
-  const { fps, goodMs, requiredMs, thresholdFps } = animationPreference.progress;
+const resolutionValue = (value: number) => t('profile.graphics.resolutionValue', { value: n(value, 'scale') });
+const resolutionStatusText = computed(() =>
+  t(`profile.graphics.resolutionStatus.${RESOLUTION_STATUS_KEY[resolutionPreference.reason]}`, {
+    value: resolutionValue(resolutionPreference.effective),
+  }),
+);
+
+/** The one formatter of a governor's live readout, for the buildings and the resolution row. */
+function measureLine(progress: GovernorProgress): string {
+  const { fps, window, goodMs, requiredMs, thresholdFps } = progress;
   if (fps === null) return t('profile.graphics.measure.none');
-  return t('profile.graphics.measure.fps', {
+  if (window === null) return t('profile.graphics.measure.current', { fps: Math.round(fps) });
+  return t(`profile.graphics.measure.${window}`, {
     fps: Math.round(fps),
     good: Math.floor(goodMs / 1000),
     required: Math.round(requiredMs / 1000),
     threshold: thresholdFps,
   });
-});
+}
+
+// Counting pauses while frames do not measure the device (hidden tab, unfocused window, browser frame cap, just resumed).
+function liveMeasureText(progress: GovernorProgress): string {
+  if (frameActivityState.mode === 'background' && frameActivityState.reason) {
+    return t(`profile.graphics.measure.paused.${frameActivityState.reason}`);
+  }
+  return measureLine(progress);
+}
+
+const measureText = computed(() => liveMeasureText(animationPreference.progress));
+const resolutionMeasureText = computed(() => liveMeasureText(resolutionPreference.progress));
 
 const deviceReduced = computed(() => animationPreference.reducedMotion);
 const osHint = computed(() => t(`profile.graphics.device.hint.${currentDeviceOs()}`));
 
 interface MotionRow {
-  id: 'buildings' | 'water' | 'lakes' | 'fog' | 'menus';
+  id: 'buildings' | 'resolution' | 'water' | 'lakes' | 'fog' | 'menus';
   group: 'map' | 'hud';
-  current: () => MotionSetting;
-  set: (value: MotionSetting) => void;
+  options: () => { value: string; label: string; active: boolean }[];
+  set: (value: string) => void;
+}
+
+function motionOptions(current: () => MotionSetting) {
+  return () => SETTINGS.map((value) => ({ value, label: t(`profile.graphics.${value}`), active: current() === value }));
+}
+
+// Auto, then the levels this screen offers from the highest to the lowest.
+function resolutionOptions() {
+  const auto = resolutionPreference.setting === 'auto';
+  return [
+    { value: 'auto', label: t('profile.graphics.auto'), active: auto },
+    ...[...resolutionPreference.levels].reverse().map((level) => ({
+      value: String(level),
+      label: resolutionValue(level),
+      active: !auto && resolutionPreference.effective === level,
+    })),
+  ];
 }
 
 const ROWS: MotionRow[] = [
-  { id: 'buildings', group: 'map', current: () => animationPreference.setting, set: (v) => (animationPreference.setting = v) },
-  { id: 'water', group: 'map', current: () => motionPreferences.water, set: (v) => (motionPreferences.water = v) },
-  { id: 'lakes', group: 'map', current: () => motionPreferences.lakes, set: (v) => (motionPreferences.lakes = v) },
-  { id: 'fog', group: 'map', current: () => motionPreferences.fog, set: (v) => (motionPreferences.fog = v) },
-  { id: 'menus', group: 'hud', current: () => motionPreferences.hud, set: (v) => (motionPreferences.hud = v) },
+  {
+    id: 'buildings',
+    group: 'map',
+    options: motionOptions(() => animationPreference.setting),
+    set: (v) => (animationPreference.setting = v as AnimationSetting),
+  },
+  {
+    id: 'resolution',
+    group: 'map',
+    options: resolutionOptions,
+    set: (v) => (resolutionPreference.setting = v as ResolutionSetting),
+  },
+  { id: 'water', group: 'map', options: motionOptions(() => motionPreferences.water), set: (v) => (motionPreferences.water = v as MotionSetting) },
+  { id: 'lakes', group: 'map', options: motionOptions(() => motionPreferences.lakes), set: (v) => (motionPreferences.lakes = v as MotionSetting) },
+  { id: 'fog', group: 'map', options: motionOptions(() => motionPreferences.fog), set: (v) => (motionPreferences.fog = v as MotionSetting) },
+  { id: 'menus', group: 'hud', options: motionOptions(() => motionPreferences.hud), set: (v) => (motionPreferences.hud = v as MotionSetting) },
 ];
 const GROUPS = ['map', 'hud'] as const;
 </script>
@@ -85,27 +144,36 @@ const GROUPS = ['map', 'hud'] as const;
 
     <template v-for="group in GROUPS" :key="group">
       <p class="group-label">{{ t(group === 'map' ? 'profile.graphics.groupMap' : 'profile.graphics.groupHud') }}</p>
-      <div v-for="row in ROWS.filter((r) => r.group === group)" :key="row.id" class="row">
+      <div
+        v-for="row in ROWS.filter((r) => r.group === group)"
+        :key="row.id"
+        class="row"
+        :data-testid="row.id === 'resolution' ? 'graphics-resolution' : undefined"
+      >
         <p class="field-label">
           <span :id="`motion-${row.id}-label`">{{ t(`profile.graphics.${row.id}`) }}</span>
           <span class="sub">{{ t(`profile.graphics.${row.id}Sub`) }}</span>
         </p>
         <div class="setting-toggle" role="group" :aria-labelledby="`motion-${row.id}-label`" :data-testid="`motion-${row.id}`">
           <button
-            v-for="setting in SETTINGS"
-            :key="setting"
+            v-for="option in row.options()"
+            :key="option.value"
             type="button"
             class="option"
-            :class="{ active: row.current() === setting }"
-            :aria-pressed="row.current() === setting"
-            @click="row.set(setting)"
+            :class="{ active: option.active }"
+            :aria-pressed="option.active"
+            @click="row.set(option.value)"
           >
-            {{ t(`profile.graphics.${setting}`) }}
+            {{ option.label }}
           </button>
         </div>
         <template v-if="row.id === 'buildings'">
           <p class="status muted">{{ statusText }}</p>
           <p class="status muted small" data-testid="animation-measure">{{ measureText }}</p>
+        </template>
+        <template v-else-if="row.id === 'resolution'">
+          <p class="status muted" data-testid="resolution-status">{{ resolutionStatusText }}</p>
+          <p class="status muted small" data-testid="resolution-measure">{{ resolutionMeasureText }}</p>
         </template>
       </div>
     </template>
@@ -145,6 +213,7 @@ const GROUPS = ['map', 'hud'] as const;
 }
 .setting-toggle {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 .option {

@@ -49,6 +49,16 @@
     "groupHud": "HUD",
     "buildings": "Building animations",
     "buildingsSub": "Camps, workshops, giants",
+    "resolution": "Resolution",
+    "resolutionSub": "Sharpness of the map; lower is faster",
+    "resolutionValue": "{value}×",
+    "resolutionStatus": {
+      "forced": "{value} (this device)",
+      "deviceMax": "Auto — {value}, your screen’s maximum",
+      "measuring": "Auto — {value}, measuring whether the next step holds",
+      "autoMax": "Auto — {value}, the highest this screen offers",
+      "autoDown": "Auto — {value}, frame rate dropped below 30 fps"
+    },
     "water": "Water motion",
     "waterSub": "Waves, shore surge, caustics, flowing rivers",
     "lakes": "Lake motion",
@@ -69,8 +79,17 @@
       "autoOffSlow": "Auto — off, frame rate dropped below 30 fps"
     },
     "measure": {
-      "fps": "Measured: {fps} fps · {good} of {required} s at {threshold} fps or more",
-      "none": "No measurement yet. It runs while the map is on screen."
+      "up": "Measured: {fps} fps · {good} of {required} s at {threshold} fps or more",
+      "retry": "Measured: {fps} fps · {good} of {required} s at {threshold} fps or more",
+      "down": "Measured: {fps} fps · {good} of {required} s under {threshold} fps",
+      "current": "Measured: {fps} fps",
+      "none": "No measurement yet. It runs while the map is on screen.",
+      "paused": {
+        "hidden": "Counting paused: the tab is in the background",
+        "unfocused": "Counting paused: the window is not focused",
+        "throttled": "Counting paused: the browser is limiting the frame rate (power saving)",
+        "settling": "Counting resumes in a moment"
+      }
     }
   },
   "bio": {
