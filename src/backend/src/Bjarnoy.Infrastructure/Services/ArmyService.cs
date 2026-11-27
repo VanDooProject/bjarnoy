@@ -385,6 +385,9 @@ public sealed class ArmyService(
         }
 
         var isPremium = await IsPremiumAsync(callerUserId, cancellationToken).ConfigureAwait(false);
+        var isFleetOrder = groups.SelectMany(g => g.Units).Any(u => u.Count > 0 && UnitCatalogue.Get(u.Type).Class == UnitClass.Ship);
+        var isUnexplored = await BuildIsUnexploredAsync(
+            settlement.WorldId, settlement.OwnerId, isFleetOrder, mission, waypoints, effectiveDestination, sampler.TerrainAt, cancellationToken).ConfigureAwait(false);
         var targetSettlement = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null;
         var targetBuilding = mission is ArmyMission.Attack or ArmyMission.Raid or ArmyMission.Support ? targetBuildingCoord : null;
 
@@ -401,7 +404,7 @@ public sealed class ArmyService(
                 mission, targetSettlement, targetBuilding, targetClaimDiscs,
                 isHexFoundable, renownAndSlotAllowed, session.SpeedFactor, rivers.IsRiver, rivers.IsWide,
                 dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater,
-                targetCampIsSand: targetCampIsSand, targetSpots: targetSpots, isCampSiteOccupied: isCampSiteOccupied, isPremium: isPremium);
+                targetCampIsSand: targetCampIsSand, targetSpots: targetSpots, isCampSiteOccupied: isCampSiteOccupied, isPremium: isPremium, isUnexplored: isUnexplored);
             if (!decision.Accepted)
             {
                 // Even a refused dispatch may have completed queued work while
@@ -421,7 +424,7 @@ public sealed class ArmyService(
                 mission, targetSettlement, targetBuilding, targetClaimDiscs,
                 isHexFoundable, renownAndSlotAllowed, session.SpeedFactor, rivers.IsRiver, rivers.IsWide,
                 dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater,
-                targetCampIsSand: targetCampIsSand, targetSpots: targetSpots, isCampSiteOccupied: isCampSiteOccupied, isPremium: isPremium);
+                targetCampIsSand: targetCampIsSand, targetSpots: targetSpots, isCampSiteOccupied: isCampSiteOccupied, isPremium: isPremium, isUnexplored: isUnexplored);
             if (!decision.Accepted)
             {
                 await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
@@ -813,6 +816,39 @@ public sealed class ArmyService(
         && await _authService.GetIsPremiumAsync(userId, cancellationToken).ConfigureAwait(false) == true;
 
     /// <summary>
+    /// Whether the player never explored a hex, for the waypoints (and a plain Move's destination) a route names that are off-terrain for
+    /// the unit kind: the planners move such a hex to the nearest shore instead of refusing it (<see cref="Army.FogShoreSnapRadius"/>).
+    /// <see langword="null"/> (everything explored) when no such hex is named, so the explored area is only read when it matters; only
+    /// those hexes are looked up, never the world.
+    /// </summary>
+    private async Task<Func<HexCoord, bool>?> BuildIsUnexploredAsync(
+        Guid worldId, string ownerId, bool isFleet, ArmyMission mission, IReadOnlyList<HexCoord> waypoints, HexCoord destination,
+        Func<HexCoord, Terrain> terrainAt, CancellationToken cancellationToken)
+    {
+        var isLandUnit = !isFleet;
+        var candidates = waypoints.ToList();
+        if (mission == ArmyMission.Move)
+        {
+            candidates.Add(destination);
+        }
+
+        candidates = [.. candidates.Where(hex => !terrainAt(hex).IsTraversable(isLandUnit)).Distinct()];
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        var area = await _exploredAreaService.GetAsync(worldId, ownerId, persist: false, cancellationToken).ConfigureAwait(false);
+        if (area is null)
+        {
+            return null;
+        }
+
+        var explored = await _exploredAreaService.ExploredAmongAsync(area, candidates, cancellationToken).ConfigureAwait(false);
+        return hex => !explored.Contains(hex);
+    }
+
+    /// <summary>
     /// Sends an army already out in the field onward (issue #156) — "move on" once it has arrived and is standing, "append
     /// goal" while it is still travelling — on a Move, Attack, Support, Hunt or Raid, optionally taking only part of a
     /// standing army along. See <see cref="Army.PlanFieldOrder"/> for the domain rule this wraps.
@@ -935,11 +971,17 @@ public sealed class ArmyService(
                 worldId, effectiveDestination, standingHex, now, sampler.TerrainAt, cancellationToken).ConfigureAwait(false);
         }
 
+        var isFleetOrder = units is { } leavingUnits
+            ? leavingUnits.Any(u => u.Count > 0 && UnitCatalogue.Get(u.Type).Class == UnitClass.Ship)
+            : domain.IsFleet;
+        var isUnexplored = await BuildIsUnexploredAsync(
+            worldId, army.OwnerId, isFleetOrder, mission, waypoints, effectiveDestination, sampler.TerrainAt, cancellationToken).ConfigureAwait(false);
+
         var result = Army.PlanFieldOrder(
             domain, waypoints, effectiveDestination, home, now, sampler.TerrainAt, isPremium,
             army.World.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls,
             mission, targetSettlementId, targetBuildingCoord, targetClaimDiscs, targetCampCoord, targetCampIsWater, targetCampIsSand,
-            giants, units, Guid.CreateVersion7(), targetSpots);
+            giants, units, Guid.CreateVersion7(), targetSpots, isUnexplored: isUnexplored);
 
         if (!result.Accepted)
         {
