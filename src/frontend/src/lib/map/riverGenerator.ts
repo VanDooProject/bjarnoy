@@ -46,12 +46,16 @@ export const RIVER_TILES_PER_SPRING = 500;
 export const MAX_SPRINGS_PER_ISLAND = 24;
 /** Springs are picked farthest-first until the best is closer than this — mirrors `WorldGenerationOptions.MinSpringSpacing`. */
 export const MIN_SPRING_SPACING = 8;
-/** Land tiles an island needs per river outlet — mirrors `WorldGenerationOptions.OutletTilesPer`. */
-export const OUTLET_TILES_PER = 2000;
+/** Springs an island gets per river mouth (outlets = round(springs / this), at least 1) — mirrors `WorldGenerationOptions.SpringsPerOutlet`. */
+export const SPRINGS_PER_OUTLET = 3;
 /** Most outlets one island gets — mirrors `WorldGenerationOptions.MaxOutlets`. */
 export const MAX_OUTLETS = 12;
 /** Outlets are picked farthest-first until the best is closer than this — mirrors `WorldGenerationOptions.MinOutletSpacing`. */
-export const MIN_OUTLET_SPACING = 25;
+export const MIN_OUTLET_SPACING = 12;
+/** Extra drainage cost of an interior tile next to the coast (half that one tile further in) — mirrors `WorldGenerationOptions.ShoreCost`. */
+export const SHORE_COST = 6.0;
+/** Extra cost, per earlier-river neighbour of a candidate tile, in the walk's choice of out-direction — mirrors `WorldGenerationOptions.WalkCrowdingCost`. */
+export const WALK_CROWDING_COST = 1.0;
 /** Weight of the per-tile noise in a drainage step's cost — mirrors `WorldGenerationOptions.DrainageNoise`. */
 export const DRAINAGE_NOISE = 1.5;
 /** Weight of the smooth valley noise in a drainage step's cost — mirrors `WorldGenerationOptions.ValleyNoise`. */
@@ -76,6 +80,8 @@ export const MEANDER_MAX_STRETCH = 16;
 export const MERGE_SLACK = 6.0;
 /** Drainage cost within which a tributary looks for a trunk to join — mirrors `WorldGenerationOptions.MergeReach`. */
 export const MERGE_REACH = 20.0;
+/** Fewest hexes between a new river mouth and any other sea mouth — mirrors `WorldGenerationOptions.MinMouthSpacing`. */
+export const MIN_MOUTH_SPACING = 4;
 /** Cost a junction search takes off a wide-Y junction into a river-width trunk — mirrors `WorldGenerationOptions.RiverStreamBonus`. */
 export const RIVER_STREAM_BONUS = 3.0;
 
@@ -765,8 +771,7 @@ class Drainage {
     const isBlocked = new Array<boolean>(n).fill(false);
     if (blocked) for (let i = 0; i < n; i++) isBlocked[i] = blocked.has(this.tiles[i]!);
     for (let i = 0; i < n; i++) {
-      const tile = this.tiles[i]!;
-      const ns = neighbors(tile);
+      const ns = neighbors(this.tiles[i]!);
       for (let d = 0; d < 6; d++) {
         // Water never flows into a blocked tile (a bog): it is as good as not being there.
         const idx = this.index.get(coordKey(ns[d]!));
@@ -780,11 +785,36 @@ class Drainage {
       }
       if (isBlocked[i]) coastal[i] = false;
       this.interior[i] = !coastal[i] && !isBlocked[i];
+    }
+
+    // Sea distance 2: an interior tile with a coastal neighbour; sea distance 3: an interior tile next to one of those.
+    const shore = new Array<boolean>(n).fill(false);
+    for (let i = 0; i < n; i++) {
+      if (!this.interior[i]!) continue;
+      for (let d = 0; d < 6; d++) {
+        const nb = this.neighbour[i * 6 + d]!;
+        if (nb >= 0 && coastal[nb]!) shore[i] = true;
+      }
+    }
+
+    for (let i = 0; i < n; i++) {
+      const tile = this.tiles[i]!;
+      let shoreCost = 0.0;
+      if (this.interior[i]!) {
+        if (shore[i]!) shoreCost = SHORE_COST;
+        else {
+          for (let d = 0; d < 6; d++) {
+            const nb = this.neighbour[i * 6 + d]!;
+            if (nb >= 0 && shore[nb]!) shoreCost = SHORE_COST * 0.5;
+          }
+        }
+      }
       this.step[i] =
         1.0 +
         DRAINAGE_NOISE * hash2(tile.q, tile.r, seed + 53) +
         VALLEY_NOISE * valueNoise(tile.q, tile.r, seed + 61, VALLEY_SCALE) +
-        (terrainOf(tile) === 'mountain' ? MOUNTAIN_COST : 0.0);
+        (terrainOf(tile) === 'mountain' ? MOUNTAIN_COST : 0.0) +
+        shoreCost;
     }
 
     for (let i = 0; i < n; i++) {
@@ -855,21 +885,54 @@ class Drainage {
     return { out: best, cost: bestCost };
   }
 
+  /** Earlier-river neighbours of a free tile (0 for an earlier river's own tile: reaching it is a join, not running beside) — mirrors `Drainage.ClaimedAround`. */
+  claimedAround(tile: number, claims: (Claim | null)[]): number {
+    if (claims[tile] !== null) return 0;
+    let count = 0;
+    for (let d = 0; d < 6; d++) {
+      const n = this.neighbour[tile * 6 + d]!;
+      if (n >= 0 && claims[n] !== null) count++;
+    }
+    return count;
+  }
+
   /**
-   * Like `bestOut` but pulled towards `target`: a direction costs `MEANDER_STEER` extra when it is not the target (half that
-   * when 60 degrees off it), and tiles on the walk are not offered. -1 when nothing qualifies — mirrors `Drainage.SteeredOut`.
+   * `bestOut` for the walk: each candidate also pays `WALK_CROWDING_COST` per earlier-river neighbour, so a river that runs on alone
+   * does not drift along another one; tiles marked in `beside` (beside the walk's own earlier course) are not offered — mirrors `Drainage.CrowdedOut`. The static field and `bestOut` stay as they are.
    */
-  steeredOut(tile: number, inDir: number, target: number, onPath: boolean[]): number {
+  crowdedOut(tile: number, inDir: number, claims: (Claim | null)[], beside: boolean[]): number {
     let best = -1;
     let bestCost = Infinity;
     for (let o = 0; o < 6; o++) {
       const n = this.neighbour[tile * 6 + o]!;
       if (n < 0 || (inDir >= 0 && o === inDir)) continue;
       const d = this.dist[n * 6 + ((o + 3) % 6)]!;
-      if (d === Infinity || onPath[n]!) continue;
+      if (d === Infinity || beside[n]!) continue;
+      const cost = d + this.step[n]! + this.turnCost(inDir, o) + this.edge[tile * 6 + o]! + WALK_CROWDING_COST * this.claimedAround(n, claims);
+      if (cost < bestCost) {
+        bestCost = cost;
+        best = o;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Like `bestOut` but pulled towards `target`: a direction costs `MEANDER_STEER` extra when it is not the target (half that
+   * when 60 degrees off it), and tiles on the walk or beside its own earlier course (`beside`) are not offered. -1 when nothing qualifies — mirrors `Drainage.SteeredOut`.
+   */
+  steeredOut(tile: number, inDir: number, target: number, onPath: boolean[], beside: boolean[], claims: (Claim | null)[] | null): number {
+    let best = -1;
+    let bestCost = Infinity;
+    for (let o = 0; o < 6; o++) {
+      const n = this.neighbour[tile * 6 + o]!;
+      if (n < 0 || (inDir >= 0 && o === inDir)) continue;
+      const d = this.dist[n * 6 + ((o + 3) % 6)]!;
+      if (d === Infinity || onPath[n]! || beside[n]!) continue;
       const off = Math.min((o - target + 6) % 6, (target - o + 6) % 6);
       const steer = off === 0 ? 0.0 : off === 1 ? MEANDER_STEER * 0.5 : MEANDER_STEER;
-      const cost = d + this.step[n]! + this.turnCost(inDir, o) + this.edge[tile * 6 + o]! + steer;
+      const crowd = claims === null ? 0.0 : WALK_CROWDING_COST * this.claimedAround(n, claims);
+      const cost = d + this.step[n]! + this.turnCost(inDir, o) + this.edge[tile * 6 + o]! + steer + crowd;
       if (cost < bestCost) {
         bestCost = cost;
         best = o;
@@ -905,7 +968,7 @@ class Drainage {
     const outlets: number[] = [];
     if (candidates.length === 0) return outlets;
 
-    const k = Math.min(MAX_OUTLETS, Math.max(1, Math.floor(this.tiles.length / OUTLET_TILES_PER + 0.5)));
+    const k = Math.min(MAX_OUTLETS, Math.max(1, Math.floor(plannedSprings(this.tiles.length) / SPRINGS_PER_OUTLET + 0.5)));
     let first = 0;
     for (let i = 1; i < candidates.length; i++) if (score[i]! > score[first]!) first = i;
 
@@ -1024,6 +1087,8 @@ function traceDrainageWalk(
   let len = left;
   const path: AxialCoord[] = [spring];
   const tiles: number[] = [];
+  // Tiles beside the walk's own course up to the third to last tile: the next step may touch only the last two.
+  const besideWalk = new Array<boolean>(drainage.tiles.length).fill(false);
   let current = drainage.index.get(coordKey(spring))!;
   tiles.push(current);
   onPath[current] = true;
@@ -1035,6 +1100,13 @@ function traceDrainageWalk(
       path.push(drainage.tiles[to]!);
       tiles.push(to);
       onPath[to] = true;
+      if (path.length >= 3) {
+        const older = drainage.index.get(coordKey(path[path.length - 3]!))!;
+        for (let d = 0; d < 6; d++) {
+          const nb = drainage.neighbour[older * 6 + d]!;
+          if (nb >= 0) besideWalk[nb] = true;
+        }
+      }
       current = to;
       inDir = (dir + 3) % 6;
     };
@@ -1056,7 +1128,11 @@ function traceDrainageWalk(
       const { out: naturalOut, cost: naturalCost } = drainage.bestOut(current, inDir, null);
       if (naturalOut < 0) return null;
 
-      let outDir = naturalOut;
+      // The walk's own pick also keeps off earlier rivers; the junction searches are priced with the plain natural cost.
+      const crowdClaims = anyClaims ? claims : null;
+      const walkOut = crowdClaims === null ? drainage.bestOut(current, inDir, (n) => besideWalk[n]!).out : drainage.crowdedOut(current, inDir, crowdClaims, besideWalk);
+      if (walkOut < 0) return null; // every way on runs back beside the walk's own course
+      let outDir = walkOut;
       if (steer && inDir >= 0) {
         // Each stretch of the walk bends to one side through its middle half, then the side flips: the river arcs.
         if (left <= 0) {
@@ -1068,31 +1144,27 @@ function traceDrainageWalk(
         left--;
         const at = len - 1 - left;
         const bent = at >= len * 0.25 && at < len * 0.75;
-        const target = bent ? (((naturalOut + side) % 6) + 6) % 6 : naturalOut;
-        const steered = drainage.steeredOut(current, inDir, target, onPath);
+        const target = bent ? (((walkOut + side) % 6) + 6) % 6 : walkOut;
+        const steered = drainage.steeredOut(current, inDir, target, onPath, besideWalk, crowdClaims);
         if (steered >= 0) outDir = steered;
       }
 
       const next = drainage.neighbour[current * 6 + outDir]!;
-      if (!taken(next)) {
-        if (!anyClaims || crowding(drainage, claims, next) === 0.0) {
-          step(next, outDir);
-          continue;
-        }
-
-        // About to run alongside an earlier river: join it if a drawable Y is near.
-        const beside = searchJunction(drainage, path, claims, onPath, naturalCost + MERGE_SLACK, MERGE_REACH, RIVER_STREAM_BONUS);
-        if (beside) {
-          path.push(...beside);
-          return { path, merged: true };
-        }
-
+      // A free tile with no earlier river beside it is a plain step. Beside an earlier river (or onto one) the walk joins
+      // it at a drawable Y if one is near, else runs on alone: a river never runs along another one.
+      if (!taken(next) && (!anyClaims || crowding(drainage, claims, next) === 0.0)) {
         step(next, outDir);
         continue;
       }
 
       const claim = claims[next];
-      if (claim && joinable(claim) && confluenceKind(claim.in1, (outDir + 3) % 6, claim.out) !== null) {
+      if (
+        claim &&
+        joinable(claim) &&
+        confluenceKind(claim.in1, (outDir + 3) % 6, claim.out) !== null &&
+        touchesOnlyJoin(drainage, claims, current, next, claim) &&
+        touchesOnlyJoin(drainage, claims, drainage.index.get(coordKey(path[0]!))!, next, claim)
+      ) {
         path.push(drainage.tiles[next]!);
         return { path, merged: true };
       }
@@ -1105,9 +1177,19 @@ function traceDrainageWalk(
         }
       }
 
+      if (anyClaims) {
+        // Next to an existing mouth naturalCost is ~0, so the slack above rejects every junction: join the trunk
+        // upstream whatever it costs rather than end a second river beside the first one's mouth.
+        const upstream = searchJunction(drainage, path, claims, onPath, Infinity, MERGE_REACH, RIVER_STREAM_BONUS);
+        if (upstream) {
+          path.push(...upstream);
+          return { path, merged: true };
+        }
+      }
+
       // No drawable junction: run on alone to the nearest free coast (a new mouth). Head-on mouths are rarer than
       // any coastal tile, so the reach is 10x MERGE_REACH: at 3x about 2% more rivers found none and were dropped.
-      const alone = searchJunction(drainage, path, claims, onPath, Infinity, MERGE_REACH * 10.0, 0.0, true);
+      const alone = searchJunction(drainage, path, claims, onPath, Infinity, MERGE_REACH * 10.0, 0.0, true, MIN_MOUTH_SPACING);
       if (alone) {
         path.push(...alone);
         return { path, merged: false };
@@ -1119,6 +1201,17 @@ function traceDrainageWalk(
   } finally {
     for (const t of tiles) onPath[t] = false;
   }
+}
+
+/** Whether every earlier-river neighbour of the approach `tile` is the joined trunk tile or the one before or after it — mirrors `RiverGenerator.TouchesOnlyJoin`. */
+function touchesOnlyJoin(drainage: Drainage, claims: (Claim | null)[], tile: number, joined: number, claim: Claim): boolean {
+  const before = drainage.neighbour[joined * 6 + claim.in1]!;
+  const after = drainage.neighbour[joined * 6 + claim.out]!;
+  for (let d = 0; d < 6; d++) {
+    const c = drainage.neighbour[tile * 6 + d]!;
+    if (c >= 0 && claims[c] !== null && c !== joined && c !== before && c !== after) return false;
+  }
+  return true;
 }
 
 /**
@@ -1135,7 +1228,33 @@ function searchJunction(
   reach: number,
   riverStreamBonus: number,
   toMouth = false,
+  minMouthSpacing = 0,
 ): AxialCoord[] | null {
+  // A new mouth keeps its distance from every existing sea mouth: all outlets (used or not) and the end of every committed river that reaches the sea.
+  const mouths: AxialCoord[] = [];
+  if (toMouth && minMouthSpacing > 0) {
+    for (let i = 0; i < drainage.tiles.length; i++) {
+      const c = claims[i];
+      if (drainage.outlet[i] || (c && c.out < 0 && !c.spring)) mouths.push(drainage.tiles[i]!);
+    }
+  }
+
+  // A route never runs back beside the walk's own course: tiles next to any earlier tile of it are off limits. Only the
+  // last two tiles may be touched, and only by the first steps: the first route tile touches the last one, and a sharp
+  // bend touches the tile before it (the first route tile) or the one after (the second).
+  const besideOwn = new Array<boolean>(drainage.tiles.length).fill(false);
+  const besideLast = new Array<boolean>(drainage.tiles.length).fill(false);
+  const besideLast2 = new Array<boolean>(drainage.tiles.length).fill(false);
+  for (let i = 0; i < path.length; i++) {
+    const pi = drainage.index.get(coordKey(path[i]!))!;
+    const mark = i === path.length - 1 ? besideLast : i === path.length - 2 ? besideLast2 : besideOwn;
+    for (let d = 0; d < 6; d++) {
+      const nb = drainage.neighbour[pi * 6 + d]!;
+      if (nb >= 0) mark[nb] = true;
+    }
+  }
+
+  const first = drainage.index.get(coordKey(path[0]!))!;
   const last = path[path.length - 1]!;
   const start = drainage.index.get(coordKey(last))!;
   const startIn = path.length > 1 ? directionIndex(last, path[path.length - 2]!) : -1;
@@ -1149,12 +1268,18 @@ function searchJunction(
   let bestTotal = limit;
   let bestState = -1;
   let bestJunction = -1;
+  let depth = 0;
+  const touchesOwn = (n: number) => besideOwn[n]! || (depth > 1 && besideLast[n]!) || (depth > 0 && besideLast2[n]!);
   while (heap.count > 0) {
     const { priority: d, item: state } = heap.pop();
     if (d > cost.get(state)! || d > bestTotal || d > reach) continue;
 
     const tile = Math.floor(state / 6);
     const inDir = state === startKey ? startIn : state % 6;
+
+    // A tile beside an earlier river is only ever the final approach of a junction: it may join, never run on.
+    depth = state === startKey ? 0 : parent.get(state) === startKey ? 1 : 2;
+    const approachOnly = !toMouth && state !== startKey && drainage.claimedAround(tile, claims) > 0;
     for (let dir = 0; dir < 6; dir++) {
       const turn = drainage.turnCost(inDir, dir);
       const n = drainage.neighbour[tile * 6 + dir]!;
@@ -1163,11 +1288,12 @@ function searchJunction(
       const claim = claims[n];
       if (toMouth) {
         // Alone to the sea: any free coastal tile with sea straight ahead is a new mouth.
-        if (claim || onPath[n]) continue;
+        if (claim || onPath[n] || touchesOwn(n) || drainage.claimedAround(n, claims) > 0) continue;
         if (!drainage.interior[n]) {
           // A new mouth must be head-on too: the sea straight ahead of the step.
           if (!drainage.seaAt[n * 6 + dir]) continue;
-          const total = d + turn + drainage.step[n]! + drainage.edge[tile * 6 + dir]! + crowding(drainage, claims, n);
+          if (mouths.some((m) => hexDistance(drainage.tiles[n]!, m) < minMouthSpacing)) continue;
+          const total = d + turn + drainage.step[n]! + drainage.edge[tile * 6 + dir]!;
           if (!found || total < bestTotal) {
             found = true;
             bestTotal = total;
@@ -1178,6 +1304,9 @@ function searchJunction(
         }
       } else if (claim) {
         if (!joinable(claim) || confluenceKind(claim.in1, (dir + 3) % 6, claim.out) === null) continue;
+
+        // The approach tile (and the spring) may touch the trunk only at the join: its tile and the tiles right before and after it.
+        if (!touchesOnlyJoin(drainage, claims, tile, n, claim) || !touchesOnlyJoin(drainage, claims, first, n, claim)) continue;
 
         const total = d + turn + drainage.step[n]! + drainage.edge[tile * 6 + dir]! + drainage.dist[n * 6 + claim.in1]!;
 
@@ -1193,10 +1322,11 @@ function searchJunction(
         continue;
       }
 
-      if (!drainage.interior[n] || onPath[n] || claim) continue;
+      if (approachOnly || !drainage.interior[n] || onPath[n] || claim || touchesOwn(n)) continue;
+      if (toMouth && drainage.claimedAround(n, claims) > 0) continue;
 
       const key = n * 6 + ((dir + 3) % 6);
-      const nd = d + turn + drainage.step[n]! + drainage.edge[tile * 6 + dir]! + (toMouth ? crowding(drainage, claims, n) : 0.0);
+      const nd = d + turn + drainage.step[n]! + drainage.edge[tile * 6 + dir]!;
       const known = cost.get(key);
       if (nd <= reach && (known === undefined || nd < known)) {
         cost.set(key, nd);
@@ -1211,8 +1341,26 @@ function searchJunction(
   const route: AxialCoord[] = [drainage.tiles[bestJunction]!];
   for (let cur = bestState; cur >= 0 && cur !== startKey; cur = parent.get(cur)!) route.unshift(drainage.tiles[Math.floor(cur / 6)]!);
 
-  // A shortest route in state space can, rarely, cross its own tile in another state.
-  return new Set(route.map((c) => coordKey(c))).size === route.length ? route : null;
+  // A shortest route in state space can, rarely, cross its own tile in another state, or fold back beside the walk or itself.
+  if (new Set(route.map((c) => coordKey(c))).size !== route.length) return null;
+  const along = new Map<string, number>();
+  for (const c of [...path, ...route]) along.set(coordKey(c), along.size);
+
+  // The water goes on down the trunk: the tile after the join counts as part of the course.
+  const trunkOut = toMouth ? -1 : claims[bestJunction]!.out;
+  const afterTile = trunkOut >= 0 ? drainage.neighbour[bestJunction * 6 + trunkOut]! : -1;
+  if (afterTile >= 0) {
+    const afterKey = coordKey(drainage.tiles[afterTile]!);
+    if (!along.has(afterKey)) along.set(afterKey, along.size);
+  }
+  for (const [key, i] of along) {
+    for (const nb of neighbors(parseKey(key))) {
+      const j = along.get(coordKey(nb));
+      if (j !== undefined && j > i + 2) return null;
+    }
+  }
+
+  return route;
 }
 
 /** Extra cost per neighbour that is an earlier river, for a walk running on alone — mirrors `RiverGenerator.CrowdingCost`. */
@@ -1226,6 +1374,11 @@ function crowding(drainage: Drainage, claims: (Claim | null)[], tile: number): n
     if (n >= 0 && claims[n] !== null) total += CROWDING_COST;
   }
   return total;
+}
+
+/** How many springs an island of this size gets — mirrors `RiverGenerator.PlannedSprings`. */
+function plannedSprings(islandTileCount: number): number {
+  return Math.min(MAX_SPRINGS_PER_ISLAND, Math.max(1, Math.floor(islandTileCount / RIVER_TILES_PER_SPRING + 0.5)));
 }
 
 /** Spring candidates — mirrors `RiverGenerator.SpringCandidates`. */
@@ -1271,7 +1424,7 @@ function pickSprings(
   if (candidates.length === 0) return springs;
 
   const hash = candidates.map((c) => hash2(c.q, c.r, seed + 41));
-  const k = Math.min(MAX_SPRINGS_PER_ISLAND, Math.max(1, Math.floor(islandTileCount / RIVER_TILES_PER_SPRING + 0.5)));
+  const k = plannedSprings(islandTileCount);
 
   let first = 0;
   let firstDepth = depthAt(candidates[0]!) ?? 0;
@@ -1865,7 +2018,7 @@ function carveValleyStreams(
         const nk = coordKey(n);
         const j = at.get(nk);
         const beside = riverAt.get(nk);
-        if (j !== undefined ? Math.abs(i - j) !== 1 : beside !== undefined && (joinedRoot === null || rootOf(beside) !== joinedRoot)) layoutOk = false;
+        if (j !== undefined ? Math.abs(i - j) > 2 : beside !== undefined && (joinedRoot === null || rootOf(beside) !== joinedRoot)) layoutOk = false;
       }
     }
     if (!layoutOk) {
