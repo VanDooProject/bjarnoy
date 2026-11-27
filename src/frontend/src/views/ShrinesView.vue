@@ -208,7 +208,7 @@ thead th {
   font-weight: 600;
 }
 .favour {
-  min-width: 180px;
+  min-width: 160px;
   color: var(--muted);
 }
 .value {
@@ -217,9 +217,6 @@ thead th {
 }
 .line {
   display: block;
-}
-.needs {
-  white-space: nowrap;
 }
 .wip {
   display: inline-block;

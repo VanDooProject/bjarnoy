@@ -59,7 +59,7 @@ describe("DocsNeeds", () => {
     expect(text).toBe("Crop Mill 5 (pumpkin soil: Pumpkin Farm 15)");
   });
 
-  it("prefixes each part with a bullet in a cell that already holds another entry", () => {
+  it("prefixes each plain part with a bullet in a cell that already holds another entry, not the variant line below", () => {
     const text = render(
       [
         { type: "farm", level: 5, soil: "wheat" },
@@ -67,7 +67,7 @@ describe("DocsNeeds", () => {
       ],
       true,
     );
-    expect(text).toBe("· Farm 5 · (pumpkin soil: Pumpkin Farm 5)");
+    expect(text).toBe("· Farm 5 (pumpkin soil: Pumpkin Farm 5)");
   });
 
   it("words the variant in German", () => {
