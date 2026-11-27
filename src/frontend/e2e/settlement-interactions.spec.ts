@@ -140,14 +140,11 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // Forest only offers what BuildingCatalogue.cs's AllowedTerrain actually
     // permits there — Lumberjack (Resource), since shrines are Grass-only —
     // rather than grass's four-category spread; see SettlementView's
-    // categoriesFor (the catalogue's ringCategory). The root "Build" action it shares a
-    // label with is gone by now: the 2a ring swaps the inner lane on
-    // drill-down instead of orbiting outside it.
-    await settlement.ring.openFirstCategory();
-
-    const lumberjackBubble = settlement.ring.child('Lumberjack').first();
+    // categoriesFor (the catalogue's ringCategory). A category with a single building has no
+    // second step: the Lumberjack stands on the Build lane in place of its Resource category.
+    const lumberjackBubble = settlement.ring.category('Lumberjack').first();
     await expect(lumberjackBubble).toBeVisible();
-    await lumberjackBubble.click();
+    await settlement.ring.click(lumberjackBubble);
 
     await expect.poll(() => settlement.buildingTypeAt(target.hex), { timeout: 5_000 }).toBe('lumberjack');
   });

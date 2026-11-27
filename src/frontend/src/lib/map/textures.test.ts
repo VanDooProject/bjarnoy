@@ -1952,6 +1952,11 @@ describe('bog buildings and lake decorations', () => {
     expect(textureKeyFor(tower({ terrain: 'bog', bog: bog('bog', [], null) }))).toBe('towerbog');
   });
 
+  it('maps the Harbour to its own art family and the Shipyard to the dockyard one', () => {
+    expect(KEY_FAMILY.harbour).toBe('harbour');
+    expect(KEY_FAMILY.shipyard).toBe('dockyard');
+  });
+
   it('draws a Longhouse on sand with its own beach art and keeps the grass one on grass', () => {
     expect(KEY_FAMILY.longhousesand).toBe('greathall_sand');
     const hall = (terrain: 'sand' | 'grass'): Tile => ({ q: 0, r: 0, terrain, buildingType: 'longhouse', buildingLevel: 1 });

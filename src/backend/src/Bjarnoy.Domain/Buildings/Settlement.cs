@@ -1413,11 +1413,11 @@ public sealed record Settlement
     /// <see cref="Settlement"/> has no notion of its siblings.
     /// </param>
     /// <param name="islandSoil">
-    /// Which crop this settlement's island grows (<see cref="SoilType"/>) —
-    /// only <see cref="BuildingType.PumpkinFarm"/> cares: it's only buildable
-    /// on a Pumpkin-soil island, the bonus a "more fertile" island unlocks.
-    /// <see cref="BuildingType.Farm"/> stays buildable everywhere regardless
-    /// of soil. The caller resolves this once from the island's centre
+    /// Which crop this settlement's island grows (<see cref="SoilType"/>). A building with a
+    /// <see cref="BuildingDefinition.RequiredSoil"/> (<see cref="BuildingType.Farm"/> and <see cref="BuildingType.CropMill"/>
+    /// on Wheat, <see cref="BuildingType.PumpkinFarm"/> on Pumpkin) is only newly buildable on that soil, and a
+    /// <see cref="BuildingPrerequisite.Soil"/>-tagged prerequisite applies only on its soil. <see langword="null"/> (soil
+    /// unknown) refuses nothing and skips the soil-tagged prerequisites. The caller resolves this once from the island's centre
     /// (<c>SettlementService.QueueBuildAsync</c>, <see cref="TerrainSampler.SoilAt"/>).
     /// </param>
     /// <param name="realm">
@@ -1644,15 +1644,11 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.ShrineGodAlreadyOnIsland);
         }
 
-        // Farm is the settlement's always-available staple — never gated.
-        // PumpkinFarm is the bonus crop a Pumpkin-soil island additionally
-        // unlocks (see SoilType), which is what makes such an island "more
-        // fertile" rather than just different. Only gates a *new*
-        // PumpkinFarm (!occupied); leveling up one already standing here is
-        // always allowed, so a settlement from before this rule existed
-        // never gets bricked by its own earlier build.
-        if (!occupied && type == BuildingType.PumpkinFarm
-            && islandSoil is { } soil && soil == SoilType.Wheat)
+        // Each island grows one crop (see SoilType): Farm and Crop Mill need Wheat soil, PumpkinFarm Pumpkin soil
+        // (BuildingDefinition.RequiredSoil). Only gates a *new* building (!occupied); levelling up one already
+        // standing here is always allowed. Unknown soil (null) never refuses.
+        if (!occupied && islandSoil is { } soil
+            && definition.RequiredSoil is { } requiredSoil && requiredSoil != soil)
         {
             return BuildDecision.Rejected(BuildRejection.WrongCropForIslandSoil);
         }
@@ -1693,6 +1689,12 @@ public sealed record Settlement
         // answer.
         foreach (var prerequisite in definition.Prerequisites)
         {
+            // A soil-tagged prerequisite applies only on that soil; on an unknown soil only the untagged ones do.
+            if (prerequisite.Soil is { } prerequisiteSoil && prerequisiteSoil != islandSoil)
+            {
+                continue;
+            }
+
             // A linked realm is one realm: a prerequisite standing in another member counts.
             var highest = Math.Max(
                 HighestLevelOf(prerequisite.Type),

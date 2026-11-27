@@ -10,8 +10,8 @@ Premium only. Upgrades a building's next level without going through the ring me
   next level's cost and build time.
 
 ## Quick upgrade mode
-- On: hold the Upgrade bubble in a building's ring menu. A gold ring fills around it; when it closes, that building's upgrade
-  is ordered and the mode is on. Letting go earlier is a normal Upgrade.
+- On: hold the Upgrade bubble in a building's ring menu. A gold ring fills around it; when it closes, the mode is on and the
+  ring closes. The hold orders no upgrade itself. Letting go earlier is a normal Upgrade.
 - While on: a tap on one of your own buildings orders its next level; each tap one more level. A tap on anything else opens
   the ring. Markers show the upgrade state as with Shift.
 - Off: a long-press anywhere on the map (buildings included), the ✕ on the mode chip, Esc, leaving the settlement view,

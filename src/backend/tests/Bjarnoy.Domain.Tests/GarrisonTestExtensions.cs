@@ -85,10 +85,11 @@ internal static class TestArmy
         HexCoord? fromSpot = null,
         bool targetCampIsSand = false,
         int routeSearchBudget = HexPathfinder.MaxExpandedNodes,
-        bool isPremium = false) =>
+        bool isPremium = false,
+        Func<HexCoord, bool>? isUnexplored = null) =>
         Army.PlanDispatch(
             settlement, fromSpot ?? settlement.SpotOf(requestedUnits), requestedUnits, provisions, waypoints, destination, now, armyId,
             terrainAt, mission, targetSettlementId, targetBuildingCoord, targetClaimDiscs, isHexFoundable, renownAndSlotAllowed,
             speedFactor, isRiver, isWideRiver, giants, walls, targetCampCoord, targetCampIsWater, targetCampIsSand, targetSpots,
-            routeSearchBudget: routeSearchBudget, isPremium: isPremium);
+            routeSearchBudget: routeSearchBudget, isPremium: isPremium, isUnexplored: isUnexplored);
 }

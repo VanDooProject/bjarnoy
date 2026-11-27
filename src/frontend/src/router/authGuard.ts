@@ -4,6 +4,8 @@ import type { RouteLocationNormalized, RouteLocationRaw } from 'vue-router';
 export interface AuthGuardState {
   isAuthenticated: boolean;
   isAdmin: boolean;
+  /** The server rejected the stored refresh token and the returning-player login is loading (`endRejectedSession`). */
+  sessionEnded: boolean;
 }
 
 declare module 'vue-router' {
@@ -23,11 +25,16 @@ declare module 'vue-router' {
  * - Authenticated-non-admin hitting `requiresAdmin` → `/` (not `/login`, so
  *   as not to leak that an admin-only route exists to someone who is merely
  *   not an admin).
+ * - A session that just ended on a rejected refresh token → no navigation at
+ *   all (`false`): the page is already being replaced by the returning-player
+ *   login, and rendering the target first would start its polls with no JWT.
  */
 export function resolveAuthGuard(
   to: RouteLocationNormalized,
   auth: AuthGuardState,
-): RouteLocationRaw | true {
+): RouteLocationRaw | boolean {
+  if (auth.sessionEnded) return false;
+
   const needsAuth = to.meta.requiresAuth === true || to.meta.requiresAdmin === true;
 
   if (needsAuth && !auth.isAuthenticated) {

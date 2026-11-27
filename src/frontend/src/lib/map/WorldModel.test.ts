@@ -1051,7 +1051,7 @@ describe('WorldModel.soilForSettlement / soilAtIslandCentre', () => {
   });
 });
 
-describe('WorldModel.placeBuilding — PumpkinFarm soil gate', () => {
+describe('WorldModel.placeBuilding — farm soil gate', () => {
   it('refuses a new PumpkinFarm on a Wheat-soil island', () => {
     const model = new WorldModel(11);
     const { settlement, at } = foundLandedSettlement(model);
@@ -1082,7 +1082,7 @@ describe('WorldModel.placeBuilding — PumpkinFarm soil gate', () => {
     expect(model.placeBuilding(settlement.id, spot, 'pumpkinfarm')).toBe(true);
   });
 
-  it('never refuses Farm, on either soil', () => {
+  it('accepts a new Farm on a Wheat-soil island', () => {
     const model = new WorldModel(11);
     const { settlement, at } = foundLandedSettlement(model);
     const centre = findIslandCentreWithSoil(model.seed, 'wheat');
@@ -1095,6 +1095,21 @@ describe('WorldModel.placeBuilding — PumpkinFarm soil gate', () => {
     if (!spot) throw new Error('no empty land near founding — pick a different test seed');
 
     expect(model.placeBuilding(settlement.id, spot, 'farm')).toBe(true);
+  });
+
+  it('refuses a new Farm on a Pumpkin-soil island', () => {
+    const model = new WorldModel(11);
+    const { settlement, at } = foundLandedSettlement(model);
+    const centre = findIslandCentreWithSoil(model.seed, 'pumpkin');
+    settlement.islandId = 'isl-pumpkin';
+    model.setIslands([{ id: 'isl-pumpkin', name: 'Pumpkinisle', q: centre.q, r: centre.r }]);
+
+    const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
+      (c) => isEmptyGrass(model, c),
+    );
+    if (!spot) throw new Error('no empty land near founding — pick a different test seed');
+
+    expect(model.placeBuilding(settlement.id, spot, 'farm')).toBe(false);
   });
 
   it('allows PumpkinFarm when the settlement has no resolvable island (permissive default)', () => {

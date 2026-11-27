@@ -483,7 +483,10 @@ public sealed record WorldClockResponse(
 /// Another building the settlement must already have standing, at
 /// <paramref name="Level"/> or higher, before this one may be placed.
 /// </summary>
-public sealed record BuildingPrerequisiteResponse(string Type, int Level);
+/// <param name="Soil">
+/// <c>wheat</c> or <c>pumpkin</c> when the prerequisite applies only on islands of that soil; null when it applies everywhere.
+/// </param>
+public sealed record BuildingPrerequisiteResponse(string Type, int Level, string? Soil = null);
 
 /// <param name="AllowedTerrain">
 /// Empty both for "any land" and for a <paramref name="RequiresCoastalWater"/>
@@ -508,6 +511,10 @@ public sealed record BuildingPrerequisiteResponse(string Type, int Level);
 /// <param name="LakeShoreKinds">Bog tile kinds a coastal-water building may stand on instead of coastal water (the Fishing Hut: inlet, shore and half shore).</param>
 /// <param name="RequiresRiverShapes">River tile shapes a river building's own hex must have (empty: no river building; the bridge's shapes too).</param>
 /// <param name="ExcludedRiverVariants">River art variants that disqualify an otherwise matching shape (the Sawmill: the hairpin loop).</param>
+/// <param name="RequiredSoil">
+/// <c>wheat</c> or <c>pumpkin</c> when the building can only be newly placed on an island with that soil (Farm, Crop Mill: wheat;
+/// Pumpkin Farm: pumpkin); null for any island.
+/// </param>
 /// <param name="Prerequisites">
 /// Other buildings that must stand before this one may be placed — <em>all</em>
 /// of them, not any one. Empty when there are none. These gate placement, so
@@ -531,6 +538,7 @@ public sealed record BuildingDefinitionResponse(
     bool OccupiesMostSlots,
     int ClaimRadius,
     IReadOnlyList<BuildingPrerequisiteResponse> Prerequisites,
+    string? RequiredSoil,
     string? RingCategory,
     int RingOrder,
     bool NewPlacementDisabled,
@@ -559,7 +567,8 @@ public sealed record BuildingDefinitionResponse(
             definition.SlotCost,
             definition.OccupiesMostSlots,
             definition.ClaimRadius,
-            [.. definition.Prerequisites.Select(p => new BuildingPrerequisiteResponse(p.Type.ToWireName(), p.Level))],
+            [.. definition.Prerequisites.Select(p => new BuildingPrerequisiteResponse(p.Type.ToWireName(), p.Level, p.Soil?.ToString().ToLowerInvariant()))],
+            definition.RequiredSoil?.ToString().ToLowerInvariant(),
             definition.RingCategory?.ToString().ToLowerInvariant(),
             definition.RingOrder,
             BuildingCatalogue.NewPlacementDisabled.Contains(definition.Type),

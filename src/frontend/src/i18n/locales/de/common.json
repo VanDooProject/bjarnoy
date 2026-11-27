@@ -27,5 +27,10 @@
     "label": "Sprache",
     "en": "English",
     "de": "Deutsch"
+  },
+  "notFound": {
+    "title": "Seite nicht gefunden",
+    "body": "Unter dieser Adresse gibt es keine Seite.",
+    "home": "Zurück zum Start"
   }
 }

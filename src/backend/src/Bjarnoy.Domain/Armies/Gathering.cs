@@ -357,6 +357,7 @@ public sealed partial record Army
     /// <param name="newId">Makes the ids of the armies and gatherings.</param>
     /// <param name="routeSearchBudget">Node expansions every route search of this order shares; see <see cref="PlanDispatch"/>.</param>
     /// <param name="isPremium">Whether the player has a premium account (waypoint cap); see <see cref="PlanDispatch"/>.</param>
+    /// <param name="isUnexplored">Whether the player never explored a hex; see <see cref="PlanDispatch"/>.</param>
     public static GatheredDispatchDecision PlanGatheredDispatch(
         Settlement settlement,
         IReadOnlyList<(HexCoord Spot, IReadOnlyList<UnitStack> Units)> groups,
@@ -383,7 +384,8 @@ public sealed partial record Army
         IReadOnlyList<GarrisonSpot>? targetSpots = null,
         Func<HexCoord, bool>? isCampSiteOccupied = null,
         int routeSearchBudget = HexPathfinder.MaxExpandedNodes,
-        bool isPremium = false)
+        bool isPremium = false,
+        Func<HexCoord, bool>? isUnexplored = null)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(groups);
@@ -429,11 +431,15 @@ public sealed partial record Army
             dispatchedFrom = dispatchedFrom with { Resources = paidForCamp };
         }
 
-        var endpointRejection = ValidateEndpoints(isFleet, mission, targetCampIsSand, routeDestination, waypoints, terrainAt);
+        var (endpointRejection, routeWaypoints, snappedDestination) = ResolveStops(
+            isFleet, mission, targetCampIsSand, groups[0].Spot, routeDestination, waypoints, terrainAt, isUnexplored);
         if (endpointRejection != DispatchRejection.None)
         {
             return GatheredDispatchDecision.Rejected(endpointRejection);
         }
+
+        waypoints = routeWaypoints;
+        routeDestination = snappedDestination;
 
         var spots = settlementDecision.GroupStacks!;
         var router = new Router(terrainAt, speedFactor, isRiver, isWideRiver, walls, routeSearchBudget);

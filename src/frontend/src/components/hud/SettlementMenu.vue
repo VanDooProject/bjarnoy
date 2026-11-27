@@ -223,6 +223,19 @@ function onLeave(el: Element, done: () => void) {
 .menu-trigger.open::before {
   content: '\25B4';
 }
+/* Desktop bar: the arrow is a larger box in its own column of the `.titles` grid, spanning the name and the caption rows, with
+   a gap to the text; the text rows truncate instead of pushing it. The room is tight: the desktop resource bar collapses to
+   its compact pills when the full row no longer fits beside the brand (at 1280px it has ~11px to spare over the old 30px box
+   + 4px gap), so box + gap stay within 45px. */
+.menu-trigger:not(.menu-trigger--touch) {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  width: 36px;
+  height: 36px;
+  margin-left: 6px;
+  font-size: 14px;
+}
 .menu-trigger:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;

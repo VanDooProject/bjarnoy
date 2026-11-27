@@ -7,13 +7,12 @@
 // added is exactly the kind of thing that quietly rots. A real navigation
 // re-runs the whole app from scratch instead: the next load's
 // `stablePlayerId()` (stores/player.ts) mints a fresh local identity since
-// `forgetLocalIdentity` below has just cleared the old one.
+// `forgetLocalIdentity` (lib/leaveSession.ts) has just cleared the old one.
 import { useAuthStore } from '../stores/auth';
-import { usePlayerStore } from '../stores/player';
+import { leaveToReturningLogin } from '../lib/leaveSession';
 
 export function useLogout() {
   const auth = useAuthStore();
-  const player = usePlayerStore();
 
   async function logout() {
     const lastAccountName = auth.user?.userName ?? '';
@@ -22,8 +21,7 @@ export function useLogout() {
     // full load below replaces this page — each would come back 403. The
     // load drops the token with the rest of the in-memory state.
     await auth.revokeSession();
-    player.forgetLocalIdentity(lastAccountName);
-    window.location.assign('/');
+    leaveToReturningLogin(lastAccountName);
   }
 
   return { logout };

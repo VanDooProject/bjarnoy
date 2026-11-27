@@ -11,7 +11,7 @@
 //   only working by accident against whatever was open in an editor at the
 //   time.
 import { describe, expect, it } from 'vitest';
-import { buildingArt, buildingArtByFamily, buildingLayers, buildingLayersForType, terrainArt, terrainVariantArt } from './buildingArt';
+import { buildingArt, buildingArtByFamily, buildingLayers, buildingLayersForType, forestLookLayers, terrainArt, terrainLookLayers, terrainLooksOf, terrainVariantArt } from './buildingArt';
 
 describe('buildingArtByFamily', () => {
   it('resolves art for each of the sawmill families', () => {
@@ -100,6 +100,17 @@ describe('buildingLayersForType', () => {
     expect(buildingLayersForType('fishinghut', 1)?.top).toBeDefined();
   });
 
+  it('draws the Harbour with its own harbour art and the Shipyard with the old dockyard art', () => {
+    for (const level of [1, 2, 3, 4]) {
+      const harbour = buildingLayers('harbour', level);
+      const dockyard = buildingLayers('dockyard', level);
+      expect(harbour.top).toBeDefined();
+      expect(dockyard.top).toBeDefined();
+      expect(buildingLayersForType('harbour', level)).toEqual(harbour);
+      expect(buildingLayersForType('shipyard', level)).toEqual(dockyard);
+    }
+  });
+
   it('is undefined for an unmapped type', () => {
     expect(buildingLayersForType('not-a-real-type', 1)).toBeUndefined();
   });
@@ -122,5 +133,53 @@ describe('terrainArt', () => {
   it('shows an inland lake with the sea art, not the grass fallback', () => {
     expect(terrainArt('inlandlake')).toEqual(terrainArt('sea'));
     expect(terrainArt('inlandlake')).not.toEqual(terrainArt('grass'));
+  });
+});
+
+// Back the tiles docs page's grass / coastal water look pickers: they list exactly the looks the pack ships (the
+// generator rolls slots 0..N-1 of `variantAt`; a slot with no art is never drawn, so it is never listed).
+describe('terrainLooksOf', () => {
+  it('lists the plain look plus every shipped variant of grass', () => {
+    expect(terrainLooksOf('grasstile')).toEqual([null, 0, 1, 2]);
+  });
+
+  it('lists the plain look plus both variants of coastal water', () => {
+    expect(terrainLooksOf('coastalwatertile')).toEqual([null, 0, 1]);
+  });
+
+  it('lists nothing for a family the pack does not have', () => {
+    expect(terrainLooksOf('no-such-tile')).toEqual([]);
+  });
+});
+
+describe('terrainLookLayers', () => {
+  it('resolves every shipped look of grass and coastal water, bottom layer first', () => {
+    for (const [family, variants] of [['grasstile', [null, 0, 1, 2]], ['coastalwatertile', [null, 0, 1]]] as const) {
+      for (const variant of variants) {
+        expect(terrainLookLayers(family, variant)?.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('is undefined for a look the pack does not ship', () => {
+    expect(terrainLookLayers('grasstile', 99)).toBeUndefined();
+  });
+});
+
+// Backs the tiles docs page's forest picker: every wood has the plain look plus variant000-002, each a base slab under a
+// swaying-trees clip.
+describe('forestLookLayers', () => {
+  it('resolves all four looks of every wood with a base and a clip', () => {
+    for (const family of ['forest_taiga', 'forest_birch', 'forest_mixed']) {
+      for (const variant of [null, 0, 1, 2]) {
+        const layers = forestLookLayers(family, variant);
+        expect(layers?.base).toBeDefined();
+        expect(layers?.clip?.frameRects.length).toBeGreaterThan(1);
+      }
+    }
+  });
+
+  it('is undefined for a look the pack does not ship', () => {
+    expect(forestLookLayers('forest_birch', 99)).toBeUndefined();
   });
 });

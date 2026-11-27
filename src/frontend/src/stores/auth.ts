@@ -4,7 +4,8 @@ import type { AuthResponse, UserResponse } from '../api/types';
 import { API_BASE_URL } from '../config';
 import { setLocale } from '../i18n';
 import { isSupportedLocale } from '../i18n/locale';
-import { clearStoredRefreshToken, readStoredRefreshToken, storeRefreshToken } from '../lib/storedLogin';
+import { leaveToReturningLogin } from '../lib/leaveSession';
+import { clearStoredRefreshToken, readStoredAccountName, readStoredRefreshToken, storeLogin } from '../lib/storedLogin';
 
 // Auth endpoints are called directly with fetch, not through `api` in
 // api/client.ts: that module's `request()` attaches the access token and
@@ -57,6 +58,17 @@ async function getMe(accessToken: string): Promise<UserResponse> {
 // Module-level, not store state: it is a promise, not something to serialise or devtools-inspect.
 let refreshInFlight: Promise<boolean> | null = null;
 
+/**
+ * Tabs share the stored refresh token, and the server spends it on first use. Two tabs refreshing at once (a browser
+ * restart restoring both) would get one of them rejected, and a rejection ends the session and forgets the local
+ * identity that the other tab just renewed. The Web Lock makes the tabs take turns, so the second one reads the token
+ * the first one stored. Browsers only offer `navigator.locks` in a secure context; without it the refresh runs as is.
+ */
+function withRefreshLock(run: () => Promise<boolean>): Promise<boolean> {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  return locks ? locks.request('bjarnoy.auth.refresh', run) : run();
+}
+
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null as UserResponse | null,
@@ -73,6 +85,9 @@ export const useAuthStore = defineStore('auth', {
     // Set when any API call comes back 403 { error: "user_locked" } — see
     // `AccountRestrictedBanner.vue`, which reads this to show its banner.
     accountLocked: false,
+    // Set when the server rejected the stored refresh token: the page is being replaced by the returning-player login
+    // (see `endRejectedSession`), so the router guard lets no navigation through in the meantime.
+    sessionEnded: false,
   }),
   getters: {
     isAuthenticated: (state) => state.user !== null,
@@ -83,7 +98,7 @@ export const useAuthStore = defineStore('auth', {
     applyAuthResponse(response: AuthResponse) {
       this.user = response.user;
       this.accessToken = response.accessToken;
-      storeRefreshToken(response.refreshToken);
+      storeLogin(response.refreshToken, response.user.userName);
       this.applyUserLocale(response.user);
     },
     // The account's saved locale (if any) wins over whatever was already
@@ -145,11 +160,12 @@ export const useAuthStore = defineStore('auth', {
      * session. A network error or 5xx leaves the stored token alone so the next
      * call can retry it. A rejection while another tab has meanwhile replaced
      * the stored token is retried once with that token (the single-flight
-     * promise is per tab; the token in localStorage is shared across tabs).
+     * promise is per tab; the token in localStorage is shared across tabs, and
+     * `withRefreshLock` serialises the tabs where the browser allows it).
      */
     tryRefresh(): Promise<boolean> {
       if (!refreshInFlight) {
-        refreshInFlight = this.performRefresh().finally(() => {
+        refreshInFlight = withRefreshLock(() => this.performRefresh()).finally(() => {
           refreshInFlight = null;
         });
       }
@@ -157,7 +173,12 @@ export const useAuthStore = defineStore('auth', {
     },
     async performRefresh(): Promise<boolean> {
       let refreshToken = readStoredRefreshToken();
-      if (!refreshToken) return false;
+      if (!refreshToken) {
+        // Another tab logged out or had its refresh rejected, which removed the shared token: this tab's session is
+        // over too. (On a reload no user is loaded yet, so a visitor without a token just stays anonymous.)
+        if (this.user !== null) this.endRejectedSession();
+        return false;
+      }
 
       // At most one retry: see the comment on `tryRefresh` for why.
       for (let attempt = 0; ; attempt++) {
@@ -177,10 +198,21 @@ export const useAuthStore = defineStore('auth', {
             refreshToken = stored;
             continue;
           }
-          this.clearSession();
+          this.endRejectedSession();
           return false;
         }
       }
+    },
+    /**
+     * The server says the stored refresh token is no good (expired, revoked, or already used elsewhere). The page
+     * cannot go on: the realm only answers to this account's JWT, so every call and poll would come back 403. Same
+     * exit as logging out — forget the local identity and load the returning-player login for this account.
+     */
+    endRejectedSession() {
+      const accountName = this.user?.userName ?? readStoredAccountName() ?? '';
+      this.clearSession();
+      this.sessionEnded = true;
+      leaveToReturningLogin(accountName);
     },
     async fetchMe() {
       if (!this.accessToken) return;

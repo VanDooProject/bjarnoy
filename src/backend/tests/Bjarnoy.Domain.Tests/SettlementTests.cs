@@ -247,14 +247,12 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.ArcheryRange, BuildingType.Barracks, 5)]
     [InlineData(BuildingType.SiegeWorkshop, BuildingType.ArcheryRange, 3)]
     [InlineData(BuildingType.CartWorkshop, BuildingType.TownSquare, 3)]
-    [InlineData(BuildingType.Meadery, BuildingType.Farm, 5)]
     [InlineData(BuildingType.DruidHut, BuildingType.TownSquare, 5)]
     [InlineData(BuildingType.Smithy, BuildingType.Barracks, 10)]
     [InlineData(BuildingType.GreatStorehouse, BuildingType.StorageHouse, 25)]
     [InlineData(BuildingType.Sawmill, BuildingType.Lumberjack, 10)]
     [InlineData(BuildingType.CropMill, BuildingType.Farm, 10)]
     [InlineData(BuildingType.ShrineOfUllr, BuildingType.Sawmill, 5)]
-    [InlineData(BuildingType.ShrineOfFreyja, BuildingType.CropMill, 5)]
     [InlineData(BuildingType.ShrineOfNjord, BuildingType.Harbour, 10)]
     [InlineData(BuildingType.ShrineOfThor, BuildingType.Smithy, 5)]
     public void The_catalogue_carries_the_agreed_prerequisites(
@@ -263,6 +261,42 @@ public class BuildingCatalogueTests
         Assert.Contains(
             new BuildingPrerequisite(required, requiredLevel),
             BuildingCatalogue.Get(type, 1).Prerequisites);
+    }
+
+    [Fact]
+    public void The_meadery_and_the_shrine_of_freyja_ask_for_a_different_feeder_per_soil()
+    {
+        Assert.Equal(
+            [new BuildingPrerequisite(BuildingType.Farm, 5, SoilType.Wheat), new BuildingPrerequisite(BuildingType.PumpkinFarm, 5, SoilType.Pumpkin)],
+            BuildingCatalogue.Get(BuildingType.Meadery, 1).Prerequisites);
+        Assert.Equal(
+            [new BuildingPrerequisite(BuildingType.CropMill, 5, SoilType.Wheat), new BuildingPrerequisite(BuildingType.PumpkinFarm, 15, SoilType.Pumpkin)],
+            BuildingCatalogue.Get(BuildingType.ShrineOfFreyja, 1).Prerequisites);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Farm, SoilType.Wheat)]
+    [InlineData(BuildingType.CropMill, SoilType.Wheat)]
+    [InlineData(BuildingType.PumpkinFarm, SoilType.Pumpkin)]
+    public void A_soil_bound_building_names_its_soil_on_every_level(BuildingType type, SoilType soil)
+    {
+        for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
+        {
+            Assert.Equal(soil, BuildingCatalogue.Get(type, level).RequiredSoil);
+        }
+    }
+
+    [Fact]
+    public void Only_the_soil_bound_buildings_name_a_soil()
+    {
+        var bound = new HashSet<BuildingType> { BuildingType.Farm, BuildingType.CropMill, BuildingType.PumpkinFarm };
+        foreach (var type in Enum.GetValues<BuildingType>())
+        {
+            if (BuildingCatalogue.TryGet(type, 1) is { } definition && !bound.Contains(type))
+            {
+                Assert.Null(definition.RequiredSoil);
+            }
+        }
     }
 
     [Theory]
@@ -1529,7 +1563,8 @@ public class SettlementTests
         var settlement = FoundAtLonghouseLevel(25, (BuildingType.CropMill, 5));
 
         var decision = settlement.PlanBuild(
-            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            islandSoil: SoilType.Wheat);
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
@@ -1542,7 +1577,8 @@ public class SettlementTests
             25, (BuildingType.Farm, 25), (BuildingType.PumpkinFarm, 25), (BuildingType.Meadery, 20));
 
         var decision = settlement.PlanBuild(
-            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            islandSoil: SoilType.Wheat);
 
         Assert.Equal(BuildRejection.RequiredBuildingTooLow, decision.Rejection);
         Assert.Equal(BuildingType.CropMill, decision.MissingPrerequisite?.Type);
@@ -1715,19 +1751,38 @@ public class SettlementTests
     }
 
     [Fact]
-    public void A_new_farm_is_never_refused_by_island_soil_either_way()
+    public void A_new_farm_is_accepted_on_a_wheat_soil_island()
     {
-        // Farm is the always-available staple crop — soil only ever gates
-        // PumpkinFarm, the bonus a "more fertile" island unlocks.
         var settlement = FoundAtLonghouseLevel(4, (BuildingType.ReindeerHerder, 3));
 
-        var onWheat = settlement.PlanBuild(
+        var decision = settlement.PlanBuild(
             BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Wheat);
-        var onPumpkin = settlement.PlanBuild(
-            BuildingType.Farm, new HexCoord(2, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Pumpkin);
 
-        Assert.True(onWheat.Accepted, $"expected accept, got {onWheat.Rejection}");
-        Assert.True(onPumpkin.Accepted, $"expected accept, got {onPumpkin.Rejection}");
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_new_farm_is_refused_on_a_pumpkin_soil_island()
+    {
+        // Each island grows one crop: a Pumpkin-soil island gets PumpkinFarm instead of Farm.
+        var settlement = FoundAtLonghouseLevel(4, (BuildingType.ReindeerHerder, 3));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Pumpkin);
+
+        Assert.Equal(BuildRejection.WrongCropForIslandSoil, decision.Rejection);
+    }
+
+    [Fact]
+    public void Leveling_up_an_existing_farm_is_not_refused_even_on_pumpkin_soil()
+    {
+        var settlement = FoundAtLonghouseLevel(4, (BuildingType.Farm, 1));
+        var farmCoord = new HexCoord(-2, 0); // FoundAtLonghouseLevel's first `standing` entry
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Farm, farmCoord, Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Pumpkin);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
 
     [Fact]
@@ -1756,6 +1811,128 @@ public class SettlementTests
         var pumpkin = settlement.PlanBuild(BuildingType.PumpkinFarm, new HexCoord(2, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.True(pumpkin.Accepted, $"expected accept, got {pumpkin.Rejection}");
+    }
+
+    [Fact]
+    public void A_new_crop_mill_is_refused_on_a_pumpkin_soil_island_even_with_a_level_10_farm()
+    {
+        var settlement = FoundAtLonghouseLevel(20, (BuildingType.Farm, 10));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.CropMill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            riverShapeAt: RiverTileShape.Straight, islandSoil: SoilType.Pumpkin);
+
+        Assert.Equal(BuildRejection.WrongCropForIslandSoil, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_new_crop_mill_is_accepted_on_a_wheat_soil_island_and_still_needs_a_level_10_farm()
+    {
+        var withFarm = FoundAtLonghouseLevel(20, (BuildingType.Farm, 10)).PlanBuild(
+            BuildingType.CropMill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            riverShapeAt: RiverTileShape.Straight, islandSoil: SoilType.Wheat);
+        var withoutFarm = FoundAtLonghouseLevel(20).PlanBuild(
+            BuildingType.CropMill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            riverShapeAt: RiverTileShape.Straight, islandSoil: SoilType.Wheat);
+
+        Assert.True(withFarm.Accepted, $"expected accept, got {withFarm.Rejection}");
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, withoutFarm.Rejection);
+        Assert.Equal(BuildingType.Farm, withoutFarm.MissingPrerequisite?.Type);
+    }
+
+    [Fact]
+    public void Leveling_up_a_crop_mill_already_standing_is_not_refused_on_pumpkin_soil()
+    {
+        var settlement = FoundAtLonghouseLevel(20, (BuildingType.CropMill, 1));
+        var mill = new HexCoord(-2, 0); // FoundAtLonghouseLevel's first `standing` entry
+
+        var decision = settlement.PlanBuild(
+            BuildingType.CropMill, mill, Terrain.Grass, T0, Guid.CreateVersion7(),
+            riverShapeAt: RiverTileShape.Straight, islandSoil: SoilType.Pumpkin);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void The_meadery_on_a_pumpkin_soil_island_needs_a_level_5_pumpkin_farm_not_a_farm()
+    {
+        var withPumpkinFarm = FoundAtLonghouseLevel(11, (BuildingType.PumpkinFarm, 5)).PlanBuild(
+            BuildingType.Meadery, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Pumpkin);
+        var tooLow = FoundAtLonghouseLevel(11, (BuildingType.PumpkinFarm, 4)).PlanBuild(
+            BuildingType.Meadery, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Pumpkin);
+        var onlyFarm = FoundAtLonghouseLevel(11, (BuildingType.Farm, 5)).PlanBuild(
+            BuildingType.Meadery, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Pumpkin);
+
+        Assert.True(withPumpkinFarm.Accepted, $"expected accept, got {withPumpkinFarm.Rejection}");
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, tooLow.Rejection);
+        Assert.Equal(new BuildingPrerequisite(BuildingType.PumpkinFarm, 5, SoilType.Pumpkin), tooLow.MissingPrerequisite);
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, onlyFarm.Rejection);
+    }
+
+    [Fact]
+    public void The_meadery_on_a_wheat_soil_island_needs_a_level_5_farm_not_a_pumpkin_farm()
+    {
+        var withFarm = FoundAtLonghouseLevel(11, (BuildingType.Farm, 5)).PlanBuild(
+            BuildingType.Meadery, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Wheat);
+        var onlyPumpkinFarm = FoundAtLonghouseLevel(11, (BuildingType.PumpkinFarm, 5)).PlanBuild(
+            BuildingType.Meadery, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Wheat);
+
+        Assert.True(withFarm.Accepted, $"expected accept, got {withFarm.Rejection}");
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, onlyPumpkinFarm.Rejection);
+        Assert.Equal(BuildingType.Farm, onlyPumpkinFarm.MissingPrerequisite?.Type);
+    }
+
+    [Fact]
+    public void The_shrine_of_freyja_on_a_pumpkin_soil_island_needs_a_level_15_pumpkin_farm()
+    {
+        var withPumpkinFarm = FoundAtLonghouseLevel(25, (BuildingType.PumpkinFarm, 15)).PlanBuild(
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Pumpkin);
+        var tooLow = FoundAtLonghouseLevel(25, (BuildingType.PumpkinFarm, 14)).PlanBuild(
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Pumpkin);
+        // A Crop Mill cannot stand on pumpkin soil, so one in a linked wheat member does not stand in for the Pumpkin Farm.
+        var linkedCropMill = (FoundAtLonghouseLevel(25) with
+        {
+            Linked = new LinkedQueueContext(0, [], 25, 0, 0, [new PlacedBuilding(new HexCoord(5, 0), BuildingType.CropMill, 5)]),
+        }).PlanBuild(
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Pumpkin);
+
+        Assert.True(withPumpkinFarm.Accepted, $"expected accept, got {withPumpkinFarm.Rejection}");
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, tooLow.Rejection);
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, linkedCropMill.Rejection);
+        Assert.Equal(BuildingType.PumpkinFarm, linkedCropMill.MissingPrerequisite?.Type);
+    }
+
+    [Fact]
+    public void The_shrine_of_freyja_on_a_wheat_soil_island_needs_a_level_5_crop_mill_not_a_pumpkin_farm()
+    {
+        var onlyPumpkinFarm = FoundAtLonghouseLevel(25, (BuildingType.PumpkinFarm, 25)).PlanBuild(
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Wheat);
+        var linkedCropMill = (FoundAtLonghouseLevel(25) with
+        {
+            Linked = new LinkedQueueContext(0, [], 25, 0, 0, [new PlacedBuilding(new HexCoord(5, 0), BuildingType.CropMill, 5)]),
+        }).PlanBuild(
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Wheat);
+
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, onlyPumpkinFarm.Rejection);
+        Assert.Equal(BuildingType.CropMill, onlyPumpkinFarm.MissingPrerequisite?.Type);
+        Assert.True(linkedCropMill.Accepted, $"expected accept, got {linkedCropMill.Rejection}");
+    }
+
+    [Fact]
+    public void An_unknown_island_soil_applies_only_the_untagged_prerequisites()
+    {
+        // No island to resolve (islandSoil: null): neither soil's feeder is asked for, nothing is refused over soil.
+        var meadery = FoundAtLonghouseLevel(11).PlanBuild(
+            BuildingType.Meadery, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+        var freyja = FoundAtLonghouseLevel(25).PlanBuild(
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+        // Untagged prerequisites still apply: the Shrine of Thor needs its Weaponsmith whatever the soil.
+        var thor = FoundAtLonghouseLevel(25).PlanBuild(
+            BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.True(meadery.Accepted, $"expected accept, got {meadery.Rejection}");
+        Assert.True(freyja.Accepted, $"expected accept, got {freyja.Rejection}");
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, thor.Rejection);
     }
 
     [Fact]

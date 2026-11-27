@@ -3,7 +3,7 @@
 // as it loads. Everything the map and the ring decide about terrain, bog kinds, river shapes and categories reads from this one
 // registry, so no client table repeats `BuildingCatalogue.cs`. Before the catalogue has loaded the registry is empty and nothing
 // can be placed or offered.
-import type { BuildingDefinitionResponse } from '../../api/types';
+import type { BuildingDefinitionResponse, IslandSoil } from '../../api/types';
 
 export interface PlacementRule {
   type: string;
@@ -23,6 +23,8 @@ export interface PlacementRule {
   requiresRiverShapes: readonly string[];
   excludedRiverVariants: readonly string[];
   newPlacementDisabled: boolean;
+  /** The island soil the building can be newly placed on, or null for any island. */
+  requiredSoil: IslandSoil | null;
 }
 
 /**
@@ -44,6 +46,7 @@ const DEMO_ONLY_RULES: readonly PlacementRule[] = [
     requiresRiverShapes: [],
     excludedRiverVariants: [],
     newPlacementDisabled: false,
+    requiredSoil: null,
   },
 ];
 
@@ -69,6 +72,7 @@ export function setPlacementRules(definitions: readonly BuildingDefinitionRespon
       requiresRiverShapes: d.requiresRiverShapes,
       excludedRiverVariants: d.excludedRiverVariants,
       newPlacementDisabled: d.newPlacementDisabled,
+      requiredSoil: d.requiredSoil ?? null,
     });
   }
   rules = next;

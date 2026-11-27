@@ -5,6 +5,8 @@
   "saveError": "Could not save.",
   "statusError": "Could not update status.",
   "premiumError": "Could not update premium status.",
+  "renownError": "Could not update renown.",
+  "renownInvalid": "Renown must be a number of zero or more.",
   "searchPlaceholder": "Search username or display name",
   "search": "Search",
   "filters": {
@@ -19,6 +21,7 @@
     "role": "Role",
     "status": "Status",
     "premium": "Premium",
+    "renown": "Renown",
     "settlements": "Settlements",
     "created": "Created",
     "lastLogin": "Last login",
@@ -39,6 +42,7 @@
   },
   "actions": {
     "save": "Save",
+    "setRenown": "Set",
     "unlockUnban": "Unlock/unban",
     "lock": "Lock",
     "ban": "Ban"

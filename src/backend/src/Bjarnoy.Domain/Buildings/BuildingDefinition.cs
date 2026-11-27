@@ -9,7 +9,13 @@ namespace Bjarnoy.Domain.Buildings;
 /// listing it may be placed. See <see cref="BuildingDefinition.Prerequisites"/>
 /// for how a list of these is read.
 /// </summary>
-public readonly record struct BuildingPrerequisite(BuildingType Type, int Level = 1);
+/// <param name="Type">The building that has to stand.</param>
+/// <param name="Level">The level it has to stand at.</param>
+/// <param name="Soil">
+/// When set, the prerequisite applies only on islands of that <see cref="SoilType"/> — a building can ask for a different
+/// feeder per soil (Meadery: Farm on wheat, Pumpkin Farm on pumpkin). <see langword="null"/> applies on every island.
+/// </param>
+public readonly record struct BuildingPrerequisite(BuildingType Type, int Level = 1, SoilType? Soil = null);
 
 /// <summary>
 /// What one building at one level costs, takes, and gives.
@@ -182,6 +188,13 @@ public sealed record BuildingDefinition
     /// </para>
     /// </remarks>
     public IReadOnlyList<BuildingPrerequisite> Prerequisites { get; init; } = [];
+
+    /// <summary>
+    /// The island soil this building can be newly placed on, or <see langword="null"/> for any island: Farm and Crop Mill
+    /// on <see cref="SoilType.Wheat"/>, Pumpkin Farm on <see cref="SoilType.Pumpkin"/>. Levelling one already standing is
+    /// never refused by it (see <see cref="Settlement.PlanBuild"/>'s islandSoil parameter).
+    /// </summary>
+    public SoilType? RequiredSoil { get; init; }
 
     /// <summary>
     /// How many construction slots one order for this building occupies while
