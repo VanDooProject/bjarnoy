@@ -576,6 +576,21 @@ describe('RingMenu', () => {
       expect(wrapper.emitted('select')).toBeUndefined();
     });
 
+    it('says the queue is locked when orders still wait and there is no premium room', async () => {
+      const wrapper = ringWith({
+        availability: availability({
+          construction: { slots: 3, slotsUsed: 1, maxWaitingOrders: 0, waitingOrders: 1 },
+        }),
+      });
+      await hoverHut(wrapper);
+      const card = wrapper.get('.ring-card');
+      expect(card.get('[data-testid="ring-card-status"]').text()).toBe(
+        'Builds are still waiting. Without Premium you can add more once they have started.',
+      );
+      expect(card.text()).toContain('QUEUE LOCKED');
+      expect(card.text()).not.toContain('NO FREE BUILD SLOT');
+    });
+
     it('shows full slots as the same waiting look, with the free count and time until the next slot', async () => {
       const wrapper = ringWith({
         availability: availability({
@@ -625,6 +640,15 @@ describe('RingMenu', () => {
       await hoverHut(wrapper);
       expect(wrapper.get('.ring-card').text()).toContain('+15 Brick/h');
       expect(wrapper.get('[data-testid="ring-card-total"]').text()).toBe('· 90 total');
+    });
+
+    it('draws a resource-rate gain with the resource icon instead of its name', async () => {
+      const wrapper = ringWith({ gives: '+15 Brick/h', givesOutput: { kind: 'resourceRate', resource: 'stone', amount: 15 }, givesTotal: '90 total' });
+      await hoverHut(wrapper);
+      const card = wrapper.get('.ring-card');
+      expect(card.find('.output-rate svg.resource-icon').exists()).toBe(true);
+      expect(card.text()).toContain('+15');
+      expect(card.text()).not.toContain('Brick/h');
     });
 
     it('lets a premium player queue when slots are full, with a gold footer, and no clock badge', async () => {

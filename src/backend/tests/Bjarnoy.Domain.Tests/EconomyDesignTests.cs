@@ -218,7 +218,7 @@ public class EconomyDesignTests
     [Fact]
     public void Producer_cost_output_and_time_follow_the_design_formulas()
     {
-        // The Lumberjack is a start building (no brick before level 6); the Farm shows the plain producer cost from level 4 on
+        // The Lumberjack is a start building (no brick before level 9); the Farm shows the plain producer cost from level 4 on
         // (levels 1 to 3 are discounted, see The_first_three_producer_levels_cost_a_discounted_share_of_the_formula).
         var one = BuildingCatalogue.Get(BuildingType.Farm, 1);
         var ten = BuildingCatalogue.Get(BuildingType.Farm, 10);
@@ -261,13 +261,14 @@ public class EconomyDesignTests
     }
 
     [Theory]
-    [InlineData(BuildingType.Longhouse)]
-    [InlineData(BuildingType.Tower)]
-    [InlineData(BuildingType.Lumberjack)]
-    [InlineData(BuildingType.ReindeerHerder)]
-    public void The_start_buildings_cost_no_brick_at_levels_1_to_5_and_the_normal_brick_from_level_6(BuildingType type)
+    [InlineData(BuildingType.Longhouse, 10)]
+    [InlineData(BuildingType.Tower, 8)]
+    [InlineData(BuildingType.Lumberjack, 8)]
+    [InlineData(BuildingType.ReindeerHerder, 8)]
+    public void The_start_buildings_cost_no_brick_up_to_their_brick_free_level_and_the_normal_brick_after(BuildingType type, int brickFreeLevels)
     {
-        for (var level = 1; level <= 5; level++)
+        var max = BuildingCatalogue.MaxLevelFor(type);
+        for (var level = 1; level <= Math.Min(brickFreeLevels, max); level++)
         {
             var cost = BuildingCatalogue.Get(type, level).Cost;
             Assert.Equal(0, cost.Stone);
@@ -275,9 +276,25 @@ public class EconomyDesignTests
         }
 
         // The Tower tops out at level 5, so it never pays brick at all.
-        if (BuildingCatalogue.MaxLevelFor(type) >= 6)
+        if (max > brickFreeLevels)
         {
-            Assert.True(BuildingCatalogue.Get(type, 6).Cost.Stone > 0);
+            Assert.True(BuildingCatalogue.Get(type, brickFreeLevels + 1).Cost.Stone > 0);
+        }
+    }
+
+    [Fact]
+    public void Brick_phases_in_over_the_three_levels_after_the_brick_free_ones()
+    {
+        // Stone at 25%, 50%, 75% of the formula, then the full value; the Longhouse from level 11, the Lumberjack from level 9.
+        double LonghouseStone(int level) => 100 * Math.Pow(1.34, 9) * Math.Pow(1.60, level - 10);
+        foreach (var (level, share) in new[] { (11, 0.25), (12, 0.5), (13, 0.75), (14, 1.0), (15, 1.0) })
+        {
+            Assert.Equal(BuildingCatalogue.NiceRound(LonghouseStone(level) * share), BuildingCatalogue.Get(BuildingType.Longhouse, level).Cost.Stone, 6);
+        }
+
+        foreach (var (level, share) in new[] { (9, 0.25), (10, 0.5), (11, 0.75), (12, 1.0) })
+        {
+            Assert.Equal(BuildingCatalogue.NiceRound(49 * Math.Pow(1.30, level - 1) * share), BuildingCatalogue.Get(BuildingType.Lumberjack, level).Cost.Stone, 6);
         }
     }
 
@@ -301,11 +318,11 @@ public class EconomyDesignTests
     {
         var one = BuildingCatalogue.Get(BuildingType.Longhouse, 1);
         var five = BuildingCatalogue.Get(BuildingType.Longhouse, 5);
-        var six = BuildingCatalogue.Get(BuildingType.Longhouse, 6);
+        var eleven = BuildingCatalogue.Get(BuildingType.Longhouse, 11);
 
         Assert.Equal(new ResourceAmounts(120, 0, 60, 0), one.Cost);
         Assert.Equal(BuildingCatalogue.NiceRound(120 * Math.Pow(1.34, 4)), five.Cost.Wood, 6);
-        Assert.Equal(BuildingCatalogue.NiceRound(100 * Math.Pow(1.34, 5)), six.Cost.Stone, 6);
+        Assert.Equal(BuildingCatalogue.NiceRound(100 * Math.Pow(1.34, 9) * 1.60 * 0.25), eleven.Cost.Stone, 6);
         Assert.Equal(TimeSpan.FromMinutes(32), five.BuildDuration);
         Assert.Equal(new ResourceAmounts(15 * 5, 0, 15 * 5, 0), five.ProductionPerHour);
         Assert.Equal(ResourceAmounts.Uniform(250 * 5), five.StorageCapacity);
@@ -498,12 +515,13 @@ public class EconomyDesignTests
     [Fact]
     public void Each_producers_own_resource_is_the_smallest_share_of_its_level_1_cost()
     {
-        // The Bog-ore works produce iron, which no building costs, so there is no share to compare. Read at level 6: the start
-        // buildings and the Clay Brickworks hide their stone at level 1, and every level grows by the same factor.
+        // The Bog-ore works produce iron, which no building costs, so there is no share to compare. Read at level 12: the start
+        // buildings hide their stone up to level 8 and phase it in over levels 9-11 (the Clay Brickworks: level 1), and every
+        // level grows by the same factor.
         foreach (var type in Producers.Where(t => t != BuildingType.BogOreWorks))
         {
             var produced = BuildingCatalogue.Get(type, 1).ProductionPerHour;
-            var cost = BuildingCatalogue.Get(type, 6).Cost;
+            var cost = BuildingCatalogue.Get(type, 12).Cost;
             var own = produced.Wood > 0 ? cost.Wood : produced.Stone > 0 ? cost.Stone : cost.Food;
 
             Assert.True(own <= Math.Min(cost.Wood, Math.Min(cost.Stone, cost.Food)), $"{type}: own resource {own} is not the cheapest of {cost}");

@@ -2581,6 +2581,8 @@ export class HexMapRenderer {
   private hoverPointer: { x: number; y: number } | null = null;
   /** Told of every touch/pen tap on the map (canvas px) without taking it over; see `setTapObserver`. */
   private tapObserver: ((screen: { x: number; y: number }) => void) | null = null;
+  /** The hex an HTML marker under a tap stands for (it covers another hex); see `setTapTarget`. */
+  private tapTarget: ((screen: { x: number; y: number }) => AxialCoord | null) | null = null;
   private frameObserver: (() => void) | null = null;
   /** Screen-space circle (canvas px) of an open ring menu; markers beneath it fade out. See `setMarkerOcclusion`. */
   private markerOcclusion: OcclusionCircle | null = null;
@@ -4053,8 +4055,8 @@ export class HexMapRenderer {
       const handled = this.options.onArmyTap?.(armyId, screen);
       if (armyTapStopsHere(this.armyOverlay?.armies ?? [], handled)) return;
     }
-    const world = screenToWorld(this.camera, screen, this.viewport);
-    const coord = isoPixelToAxial(world, TILE_W, TILE_H);
+    // A tap on an HTML marker (the building HUD's dial or box) means the hex it belongs to, not the one it is drawn over.
+    const coord = this.tapTarget?.(screen) ?? isoPixelToAxial(screenToWorld(this.camera, screen, this.viewport), TILE_W, TILE_H);
     const tile = this.options.worldModel.getTile(coord.q, coord.r);
     // Issue #16 "ring menu on click of tile": the ring anchors on the
     // clicked hex's own screen centre (same point the hover tooltip anchors
@@ -6470,6 +6472,15 @@ export class HexMapRenderer {
    */
   setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null) {
     this.tapObserver = fn;
+  }
+
+  /**
+   * The HTML markers take no pointer input, so a click on one lands on whatever hex it is drawn over (usually the one north of
+   * its building). `fn` returns the hex the marker under canvas point `screen` belongs to, or null for none: a click or tap
+   * there then reaches that hex (ring menu, quick upgrade) instead. `null` clears it.
+   */
+  setTapTarget(fn: ((screen: { x: number; y: number }) => AxialCoord | null) | null) {
+    this.tapTarget = fn;
   }
 
   /**
