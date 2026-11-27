@@ -17,8 +17,10 @@
 - Up to three missing prerequisites are listed; from four on, two are listed plus "+n more".
 - Overlapping markers stack left to right: the right-most is on top. Hovering or tapping a marker brings it to the front,
   enlarged.
-- The building info can be switched off (icon button: on desktop the top icon of the panel icon column at the map's bottom left (it moves right of the left panel columns when they reach
-  down to it), on phones at the top left of the map; or H). While it is on, the building's own dial shows every order on an existing building:
+- The building HUD has three modes: levels and details (dial and box), levels only (the dials alone; the hovered or tapped
+  marker shows its box) and off. The icon button (on desktop the top icon of the panel icon column at the map's bottom left
+  (it moves right of the left panel columns when they reach down to it), on phones at the top left of the map) and H step
+  through them in that order and start over; the choice is remembered. While building info shows, the building's own dial shows every order on an existing building:
   running upgrade, waiting (`#place`), just clicked (sweep and dots), refused (red flash and cross), raze and the finish
   animation. A construction dial on a hex without a marker (a new build with no building standing yet, a wall) is a dial-only
   marker: just the dial, placed, scaled, hovered, tapped and faded under the ring menu like every marker. With the info off
@@ -26,10 +28,12 @@
   yellow in its last minute. Switching the info on or off hands each hex over marker by marker, so a hex always shows exactly
   one dial. The map canvas draws no construction dial itself; the landing page's live settlement preview shows its dial-only
   markers too (no building markers there).
-- Markers never block the map's wheel and drags. Hovering, clicking or tapping a marker's dial or box means the marker's own
-  building hex (its outline, its ring menu, its quick upgrade), not the hex it is drawn over; while a route is plotted or the
-  send picker is open, the pointer stays on the hex under it. A marker
-  grows (at least 1.3x; at the smallest zoom to the size where its compact box with text shows) when the mouse is on its dial,
-  its box or its hex, or when a touch taps it (on its dial or its box). The mouse directly on a marker's dial or box wins over the hex under it: only that marker
+- Markers never block the map's wheel and drags. Hovering, clicking or tapping a marker's dial means the marker's own building
+  hex (its outline, its ring menu, its quick upgrade), not the hex it is drawn over; while a route is plotted or the send
+  picker is open, the pointer stays on the hex under it. The box takes no pointer: hovering, clicking or tapping it reaches
+  the hex under it, and while the mouse is on it (off every dial) the box turns see-through (fill about half strength, no
+  shadow) and its marker does not count as hovered. A marker grows (at least 1.3x; at the smallest zoom to the size where its
+  compact box with text shows) when the mouse is on its dial or its hex, or when a touch taps its dial. The mouse directly on
+  a marker's dial wins over the hex under it: only that marker
   grows, and where several overlap the one on top (the hovered one, else the right-most) takes it. The box text stands on its
   own, there are no tooltips on it. While a marker is hovered, the map's tile tooltip does not show.
