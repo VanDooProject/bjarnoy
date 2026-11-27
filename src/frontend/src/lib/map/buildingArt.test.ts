@@ -100,6 +100,17 @@ describe('buildingLayersForType', () => {
     expect(buildingLayersForType('fishinghut', 1)?.top).toBeDefined();
   });
 
+  it('draws the Harbour with its own harbour art and the Shipyard with the old dockyard art', () => {
+    for (const level of [1, 2, 3, 4]) {
+      const harbour = buildingLayers('harbour', level);
+      const dockyard = buildingLayers('dockyard', level);
+      expect(harbour.top).toBeDefined();
+      expect(dockyard.top).toBeDefined();
+      expect(buildingLayersForType('harbour', level)).toEqual(harbour);
+      expect(buildingLayersForType('shipyard', level)).toEqual(dockyard);
+    }
+  });
+
   it('is undefined for an unmapped type', () => {
     expect(buildingLayersForType('not-a-real-type', 1)).toBeUndefined();
   });
