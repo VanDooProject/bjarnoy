@@ -1,5 +1,5 @@
 {
-  "_comment": "Cross-language parity fixture for the endgame map (EndgameGenerator.PlaceCore backend / placeEndgame frontend): given a real wasted island's tiles (with terrain), its river (lava) tiles, its giants (anchor and family), its camp hexes, a world seed and an island index, both sides must place the same Utgard wall hexes (the natural wall loops through each ring band: ring, piece, camera file, gate flag, level) and the same Jotun watchtowers, in the same order. Covers: the island the docs Utgard example shows (docs_utgard_example: both wall lines, a tower between them, a lava stream), an island with two rings, shore ends and two gates per ring, one with a single ring, a big island with the maximum six towers (the two-ring island with the fewest open ends), and the island whose rings are cut into the most runs (land ends and shore ends). Every scenario is a real wasted island of a real WorldGenerator.Generate() run at radius 1000 (the smallest of seeds 1-40 with the wanted feature). Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). EndgamePlacementGoldenTests.cs (backend) and endgamePlacement.golden.test.ts (frontend) each compute against this fixture with their own production implementation, then assert the frozen `walls` and `towers` lists (order matters: walls by ring then ring order, towers in placement order).",
+  "_comment": "Cross-language parity fixture for the endgame map (EndgameGenerator.PlaceCore backend / placeEndgame frontend): given a real wasted island's tiles (with terrain), its river (lava) tiles, its giants (anchor and family), its camp hexes, a world seed and an island index, both sides must place the same Utgard wall hexes (the natural wall loops through each ring band: ring, piece, camera file, gate flag, level) and the same Jotun watchtowers, in the same order, and the same Naglfar anchor (or none) given `otherLand`, the land hexes of the neighbouring islands within 6 hexes of this island (Naglfar needs open sea). Covers: the island the docs Utgard example shows (docs_utgard_example: both wall lines, a tower between them, a lava stream), an island with two rings, shore ends and two gates per ring, one with a single ring, a big island with the maximum six towers (the two-ring island with the fewest open ends), and the island whose rings are cut into the most runs (land ends and shore ends). Every scenario is a real wasted island of a real WorldGenerator.Generate() run at radius 1000 (the smallest of seeds 1-40 with the wanted feature). Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). EndgamePlacementGoldenTests.cs (backend) and endgamePlacement.golden.test.ts (frontend) each compute against this fixture with their own production implementation, then assert the frozen `walls`, `towers` and `naglfar` (order matters: walls by ring then ring order, towers in placement order).",
   "scenarios": [
     {
       "name": "wasted_island_two_rings_with_gates",
@@ -235,6 +235,47 @@
       "camps": [
 
       ],
+      "otherLand": [
+        [-700, 341],
+        [-700, 342],
+        [-700, 343],
+        [-700, 344],
+        [-699, 343],
+        [-699, 344],
+        [-699, 345],
+        [-698, 342],
+        [-698, 343],
+        [-698, 344],
+        [-698, 345],
+        [-697, 343],
+        [-697, 344],
+        [-697, 345],
+        [-696, 342],
+        [-696, 343],
+        [-696, 344],
+        [-696, 345],
+        [-695, 343],
+        [-695, 344],
+        [-695, 345],
+        [-694, 342],
+        [-694, 343],
+        [-694, 344],
+        [-694, 345],
+        [-693, 342],
+        [-693, 343],
+        [-693, 344],
+        [-693, 345],
+        [-692, 342],
+        [-692, 343],
+        [-692, 344],
+        [-692, 345],
+        [-691, 343],
+        [-691, 344],
+        [-691, 345],
+        [-690, 342],
+        [-690, 343],
+        [-690, 344]
+      ],
       "walls": [
         {"q": -688, "r": 333, "ring": "inner", "piece": "end", "dir": "SE", "gate": false, "level": 2},
         {"q": -687, "r": 334, "ring": "inner", "piece": "end", "dir": "NW", "gate": false, "level": 2},
@@ -304,7 +345,8 @@
       "towers": [
         [-686, 323],
         [-693, 338]
-      ]
+      ],
+      "naglfar": {"q": -685, "r": 337}
     },
     {
       "name": "wasted_island_one_ring",
@@ -478,6 +520,9 @@
       "camps": [
         [364, -519]
       ],
+      "otherLand": [
+
+      ],
       "walls": [
         {"q": 361, "r": -528, "ring": "inner", "piece": "bend120", "dir": "NW", "gate": false, "level": 2},
         {"q": 362, "r": -528, "ring": "inner", "piece": "straight180", "dir": "NW", "gate": false, "level": 2},
@@ -506,7 +551,8 @@
         [363, -519],
         [369, -520],
         [366, -525]
-      ]
+      ],
+      "naglfar": {"q": 369, "r": -531}
     },
     {
       "name": "wasted_island_closed_two_rings_max_towers",
@@ -4842,6 +4888,9 @@
         [-675, -59],
         [-677, -5]
       ],
+      "otherLand": [
+
+      ],
       "walls": [
         {"q": -682, "r": -9, "ring": "inner", "piece": "bend120", "dir": "SE", "gate": false, "level": 2},
         {"q": -682, "r": -8, "ring": "inner", "piece": "straight180", "dir": "E", "gate": false, "level": 2},
@@ -4940,7 +4989,8 @@
         [-733, 20],
         [-671, -53],
         [-725, 43]
-      ]
+      ],
+      "naglfar": {"q": -669, "r": -13}
     },
     {
       "name": "wasted_island_most_open_ends",
@@ -10705,6 +10755,9 @@
         [-694, 75],
         [-660, 124]
       ],
+      "otherLand": [
+        [-721, 88]
+      ],
       "walls": [
         {"q": -717, "r": 139, "ring": "inner", "piece": "end", "dir": "NW", "gate": false, "level": 2},
         {"q": -716, "r": 139, "ring": "inner", "piece": "end", "dir": "SE", "gate": false, "level": 2},
@@ -10785,7 +10838,8 @@
         [-661, 127],
         [-722, 183],
         [-674, 103]
-      ]
+      ],
+      "naglfar": {"q": -736, "r": 156}
     },
     {
       "name": "docs_utgard_example",
@@ -11102,6 +11156,9 @@
       "camps": [
 
       ],
+      "otherLand": [
+
+      ],
       "walls": [
         {"q": -174, "r": -396, "ring": "inner", "piece": "bend120", "dir": "NW", "gate": false, "level": 2},
         {"q": -173, "r": -396, "ring": "inner", "piece": "straight180", "dir": "NW", "gate": false, "level": 2},
@@ -11179,7 +11236,8 @@
         [-177, -398],
         [-171, -390],
         [-161, -399]
-      ]
+      ],
+      "naglfar": {"q": -168, "r": -410}
     }
   ]
 }

@@ -13,6 +13,18 @@ import AnimationPausedNote from "../components/docs/AnimationPausedNote.vue";
 import { findAtlasFrame, type AtlasFrameRect } from "../lib/map/atlas";
 import { giantFamilyHasClip } from "../lib/docs/wastedIsland";
 import { TILE_ORIENTATIONS, type TileOrientation } from "../lib/map/types";
+import { campGuardRange } from "../lib/map/campPlacement";
+import {
+  BEAST_TIERS,
+  EndgameCalmHours,
+  EndgameTakenGraceHours,
+  NaglfarLootPool,
+  NaglfarRegrowHours,
+  beastStats,
+  fullGarrison,
+  lootPoolByKind,
+} from "../lib/map/campRules";
+import { beastName } from "../i18n/catalogueNames";
 
 const { t, locale } = useI18n<{ message: MessageSchema }>({
   useScope: "global",
@@ -244,6 +256,28 @@ function defensePower(garrison: readonly number[]): number {
     0,
   );
 }
+
+// --- Naglfar (docs/design/endgame.md "Naglfar"): every number comes from the camp rules mirror (`campRules.ts`) ---
+
+/** How far off the island's coast Naglfar lies, in hexes (`EndgameGenerator`'s Naglfar placement). */
+const NAGLFAR_COAST = { min: 2, max: 4 } as const;
+/** Naglfar's crew in the order the table lists it: the Naglfar itself, then its rime ships. */
+const NAGLFAR_CREW = (["alpha", "adult"] as const).map((tier) => ({
+  tier,
+  count: fullGarrison("naglfar", 1)[tier],
+  ...beastStats("naglfar", tier),
+}));
+const naglfarTotals = BEAST_TIERS.reduce(
+  (sum, tier) => ({
+    attack: sum.attack + fullGarrison("naglfar", 1)[tier] * beastStats("naglfar", tier).attack,
+    defense: sum.defense + fullGarrison("naglfar", 1)[tier] * beastStats("naglfar", tier).defense,
+  }),
+  { attack: 0, defense: 0 },
+);
+/** A Snekkja has attack 60 (`unit-catalogue`): the spec's "about 1 000 Snekkjas" is the crew's attack over that. */
+const SNEKKJA_ATTACK = 60;
+const naglfarLoot = lootPoolByKind("naglfar", 1);
+const fmt = (n: number) => n.toLocaleString(locale.value);
 </script>
 
 <template>
@@ -469,6 +503,91 @@ function defensePower(garrison: readonly number[]): number {
           </tr>
         </tbody>
       </table>
+
+      <section id="naglfar" class="naglfar-section">
+        <h3>{{ $t("docs.wastedLands.naglfar.heading") }}</h3>
+        <p>
+          {{
+            $t("docs.wastedLands.naglfar.body", {
+              min: NAGLFAR_COAST.min,
+              max: NAGLFAR_COAST.max,
+            })
+          }}
+        </p>
+        <DocsHistoryNote
+          ><p>{{ $t("docs.wastedLands.naglfar.history") }}</p></DocsHistoryNote
+        >
+        <h4>{{ $t("docs.wastedLands.naglfar.crew.heading") }}</h4>
+        <table class="endgame-table" data-testid="naglfar-crew">
+          <thead>
+            <tr>
+              <th>{{ $t("docs.wastedLands.naglfar.crew.ship") }}</th>
+              <th>{{ $t("docs.wastedLands.naglfar.crew.count") }}</th>
+              <th>{{ $t("docs.wastedLands.naglfar.crew.attack") }}</th>
+              <th>{{ $t("docs.wastedLands.naglfar.crew.defense") }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in NAGLFAR_CREW" :key="row.tier">
+              <td>{{ beastName("naglfar", row.tier) }}</td>
+              <td>{{ fmt(row.count) }}</td>
+              <td>{{ fmt(row.attack) }}</td>
+              <td>{{ fmt(row.defense) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          {{
+            $t("docs.wastedLands.naglfar.crew.total", {
+              attack: fmt(naglfarTotals.attack),
+              defense: fmt(naglfarTotals.defense),
+              snekkjas: fmt(Math.round(naglfarTotals.attack / SNEKKJA_ATTACK)),
+            })
+          }}
+        </p>
+        <ul class="endgame-rules">
+          <li>
+            {{
+              $t("docs.wastedLands.naglfar.rules.guard", {
+                range: campGuardRange("naglfar", 1),
+              })
+            }}
+          </li>
+          <li>
+            {{
+              $t("docs.wastedLands.naglfar.rules.calm", {
+                n: EndgameCalmHours,
+              })
+            }}
+          </li>
+          <li>
+            {{
+              $t("docs.wastedLands.naglfar.rules.beaten", {
+                grace: EndgameTakenGraceHours,
+                regrow: NaglfarRegrowHours,
+              })
+            }}
+          </li>
+          <li>{{ $t("docs.wastedLands.naglfar.rules.noGate") }}</li>
+          <li>
+            {{
+              $t("docs.wastedLands.naglfar.rules.loot", {
+                pool: fmt(NaglfarLootPool),
+                iron: fmt(naglfarLoot.iron),
+                wood: fmt(naglfarLoot.wood),
+                brick: fmt(naglfarLoot.stone),
+              })
+            }}
+          </li>
+        </ul>
+        <DocsAdminNote>{{
+          $t("docs.wastedLands.naglfar.placementNote", {
+            min: NAGLFAR_COAST.min,
+            max: NAGLFAR_COAST.max,
+          })
+        }}</DocsAdminNote>
+        <DocsAdminNote>{{ $t("docs.wastedLands.naglfar.artNote") }}</DocsAdminNote>
+      </section>
     </section>
 
     <DocsAdminNote id="island" as="section" class="island-section">

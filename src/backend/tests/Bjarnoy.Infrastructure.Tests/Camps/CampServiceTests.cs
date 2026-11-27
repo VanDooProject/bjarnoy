@@ -119,11 +119,36 @@ public sealed class CampServiceTests : IDisposable
         await db.SaveChangesAsync(Ct);
         var service = new CampService(db);
 
-        Assert.Equal(2, (await service.LoadCampsAsync(world.Id, T0, cancellationToken: Ct)).Count);
+        Assert.Equal(2, (await service.LoadCampsAsync(world.Id, T0, includeWasted: true, cancellationToken: Ct)).Count);
         Assert.Equal(a.Id, (await service.LoadCampsAsync(world.Id, T0, a.Id, cancellationToken: Ct)).Single().IslandId);
         Assert.Equal(
             CampFamilies.Wolfden,
             (await service.LoadCampsAsync(world.Id, T0, includeWasted: false, cancellationToken: Ct)).Single().Camp.Family);
+    }
+
+    [Fact]
+    public async Task The_camps_of_wasted_islands_stay_hidden_until_the_endboss_has_triggered()
+    {
+        await using var db = CreateContext();
+        var world = NewWorld();
+        db.Worlds.Add(world);
+        var wasted = NewIsland(world.Id, 0, Record(50, 0, CampFamilies.Naglfar));
+        wasted.IsWasted = true;
+        db.Islands.AddRange(NewIsland(world.Id, 1, Record(10, 0)), wasted);
+        await db.SaveChangesAsync(Ct);
+        var service = new CampService(db);
+
+        // Before the reveal the default load, the single-camp lookup and the building-block index all ignore the hidden island.
+        Assert.Equal(CampFamilies.Wolfden, (await service.LoadCampsAsync(world.Id, T0, cancellationToken: Ct)).Single().Camp.Family);
+        Assert.Null(await service.FindCampAsync(world.Id, new HexCoord(50, 0), T0, Ct));
+        Assert.False((await service.LoadBlockingIndexAsync(world.Id, T0, Ct)).TryGetCamp(new HexCoord(50, 0), out _));
+
+        world.EndbossTriggeredAt = T0;
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(2, (await service.LoadCampsAsync(world.Id, T0, cancellationToken: Ct)).Count);
+        Assert.Equal(CampFamilies.Naglfar, (await service.FindCampAsync(world.Id, new HexCoord(50, 0), T0, Ct))!.Camp.Family);
+        Assert.True((await service.LoadBlockingIndexAsync(world.Id, T0, Ct)).TryGetCamp(new HexCoord(50, 0), out _));
     }
 
     [Fact]

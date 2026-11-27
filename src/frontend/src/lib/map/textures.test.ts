@@ -35,6 +35,8 @@ import {
   selectVariantFrames,
   type FamilyFrame,
   type TileTextures,
+  keptOrientation,
+  giantOrientationFor,
 } from './textures';
 import { PALISADE_FAMILY } from './palisadeTiles';
 import { bend60OrientationOf, bendOrientationOf, TILE_ORIENTATIONS } from './types';
@@ -2761,6 +2763,26 @@ describe('coastal water props', () => {
         expect(frames).toContain(look);
         expect(frames).toContain(`${look}_base`);
       }
+    }
+  });
+});
+
+describe('kept orientations', () => {
+  it('maps every orientation onto the views the art ships, by modulo', () => {
+    const kept = ['NE', 'SE'] as const;
+    expect(TILE_ORIENTATIONS.map((o) => keptOrientation(o, kept))).toEqual(
+      TILE_ORIENTATIONS.map((_o, i) => kept[i % 2]),
+    );
+    expect(keptOrientation('NW', [])).toBe('NW');
+  });
+
+  it('draws a giant whose pack ships only NE and SE in one of those two, and a full pack in its own orientation', () => {
+    const map = (os: readonly string[]) =>
+      Object.fromEntries(TILE_ORIENTATIONS.map((o) => [o, os.includes(o) ? { C: `c_${o}` } : {}]));
+    const textures = { giants: { 'naglfar#1': map(['NE', 'SE']), giantutgard: map(TILE_ORIENTATIONS) } } as unknown as TileTextures;
+    for (const o of TILE_ORIENTATIONS) {
+      expect(['NE', 'SE']).toContain(giantOrientationFor(textures, 'naglfar#1', o));
+      expect(giantOrientationFor(textures, 'giantutgard', o)).toBe(o);
     }
   });
 });

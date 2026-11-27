@@ -150,6 +150,32 @@ Garrisons sit at every watchtower and at Utgard. Jötnar are a second garrison f
   it is calm for `EndgameCalm` = 1 h.
 - Garrisons and sites only exist once the endboss has triggered; before that the wasted islands are hidden.
 
+## Naglfar
+
+- When the endboss fires, **Naglfar**, the giants' ship built from the nails of the dead, lies anchored off every wasted island
+  with Utgard, steered by the giant **Hrym**. It is a jötnar sea garrison and a water site like the whale road: only fleets can
+  fight it (a hunt with ships; land units are refused). It exists only once the endboss has triggered.
+- **Where**: a 7-hex footprint (anchor and its six neighbours) of open sea, 2 to 4 hexes off the island's coast, the one closest
+  to Utgard's anchor (ties to the lower q, then r). It is generated with the world after the watchtowers, deterministic in C# and
+  TS, and pinned by the endgame golden. Fights and the guard range are measured from the anchor.
+- **Crew** (ship fight only, there is no land fight at sea):
+
+  | Ship (en / de) | Count | Attack / Defense |
+  |---|---|---|
+  | Naglfar / Naglfar | 1 | 30 000 / 30 000 |
+  | Rime ship / Reifschiff | 100 | 300 / 300 |
+
+  That totals 60 000 / 60 000, about 1 000 Snekkjas.
+- **Guard range 8**: a fleet whose route enters it is ambushed in a **full battle** (Naglfar's attack against the fleet's ship
+  defence). After a fight it is calm for `EndgameCalm` = 1 h.
+- **Every fight is a full battle**, like every endgame fight: the loser loses everything, the winner `(loser/winner)^1.5`. Losses
+  stay with the crew, which regrows linearly per ship over **48 h**. Nobody holds a sea hex, so nothing stops the regrowth.
+  Naglfar is beaten when its whole crew is gone. It then stays empty for `TakenGrace` = 1 h and starts to regrow.
+- **No gate**: fleets can land at Utgard's island whether Naglfar is beaten or not.
+- **Loot**: the fleet that beats Naglfar takes 6 000 resources, split iron 50 % / wood 25 % / brick 25 %, up to the surviving
+  ships' carry capacity. The rest is lost. Beating it gives nothing beyond the loot.
+- Reports: the camp report (hunt and ambush), with Naglfar's crew.
+
 ## Utgard and the end of the age
 
 - **Gate rule**: Utgard can be assaulted only while **every watchtower on its island is taken** (no jötnar) at
