@@ -50,6 +50,7 @@ const LABELS: Record<WaterDebugToggle, string> = {
   bogLakeSheen: 'Bog lakes: gust sheen',
   bogLakeCatsPaws: "Bog lakes: gust cat's paws",
   bogLakeBlops: 'Bog lakes: blops (ripple crescents)',
+  bogLakeShore: 'Bog lakes: shore band',
 };
 
 // Brackets the shipped values on both sides, so "is this too wide / too still"
@@ -108,6 +109,9 @@ const SLIDERS: {
   { key: 'bogLakeBlopsStrength', label: 'Bog lake blops: strength', needs: 'bogLakeBlops', range: BOG_LAKE_STRENGTH, format: times },
   { key: 'bogLakeBlopDensity', label: 'Bog lake blops: density', needs: 'bogLakeBlops', range: { min: 0, max: 1, step: 0.05 }, format: times },
   { key: 'bogLakeBlopSize', label: 'Bog lake blops: size', needs: 'bogLakeBlops', range: { min: 0.4, max: 2.5, step: 0.05 }, format: times },
+  { key: 'bogLakeShoreStrength', label: 'Bog lake shore band: strength', needs: 'bogLakeShore', range: { min: 0, max: 2, step: 0.05 }, format: times },
+  { key: 'bogLakeShoreEdge', label: 'Bog lake shore band: inner edge', needs: 'bogLakeShore', range: { min: 0.55, max: 0.98, step: 0.01 }, format: (v) => v.toFixed(2) },
+  { key: 'bogLakeShoreWobble', label: 'Bog lake shore band: wobble', needs: 'bogLakeShore', range: { min: 0, max: 3, step: 0.05 }, format: times },
   { key: 'bogLakeSheenStrength', label: 'Bog lake sheen: strength', needs: 'bogLakeSheen', range: BOG_LAKE_STRENGTH, format: times },
   { key: 'bogLakeCatsPawsStrength', label: "Bog lake cat's paws: strength", needs: 'bogLakeCatsPaws', range: BOG_LAKE_STRENGTH, format: times },
   { key: 'mapAnimationSpeed', label: 'All map animations: playback speed', needs: 'water', range: { min: 0, max: 1.5, step: 0.05 }, format: times },

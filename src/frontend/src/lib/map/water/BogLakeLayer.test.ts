@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BufferImageSource, Texture } from 'pixi.js';
+import { BufferImageSource, Texture, type Renderer } from 'pixi.js';
 import { BogLakeLayer } from './BogLakeLayer';
 import { BOG_LAKE_FRAGMENT } from './bogLakeShader';
 import { GUST_LAKE_PHASE_OFFSET, GUST_PEAK_PHASE, gustTime } from './bogLakeGust';
@@ -23,6 +23,11 @@ function lakeTexture(): Texture {
   return new Texture({ source: new BufferImageSource({ resource: new Uint8Array(4), width: 1, height: 1 }) });
 }
 
+// Only records what is drawn: whether the shore texture is rebuilt, not what Pixi puts in it.
+function fakeRenderer() {
+  return { render: vi.fn() } as unknown as Renderer & { render: ReturnType<typeof vi.fn> };
+}
+
 describe('BogLakeLayer', () => {
   beforeEach(() => {
     Object.assign(waterDebugFlags, DEFAULT_FLAGS);
@@ -35,10 +40,69 @@ describe('BogLakeLayer', () => {
     const layer = new BogLakeLayer(TILE_W);
     expect(layer.mesh.shader!.resources.uLakeMask).toBeDefined();
     const mask = lakeTexture();
-    layer.setLake(mask, { minX: 0, minY: 0, maxX: 1, maxY: 1 });
+    layer.setLake(fakeRenderer(), mask, { minX: 0, minY: 0, maxX: 1, maxY: 1 });
     expect(layer.mesh.shader!.resources.uLakeMask).toBe(mask.source);
-    layer.setLake(null, null);
+    layer.setLake(null, null, null);
     expect(layer.mesh.shader!.resources.uLakeMask).not.toBe(mask.source);
+  });
+
+  it('declares the shore sampler up front and binds the blurred mask to it after setLake', () => {
+    const layer = new BogLakeLayer(TILE_W);
+    const placeholder = layer.mesh.shader!.resources.uShoreMask;
+    expect(placeholder).toBeDefined();
+    layer.setLake(fakeRenderer(), lakeTexture(), { minX: 0, minY: 0, maxX: 1, maxY: 1 });
+    const shore = layer.mesh.shader!.resources.uShoreMask;
+    expect(shore).toBeDefined();
+    expect(shore).not.toBe(placeholder);
+    expect(shore).not.toBe(layer.mesh.shader!.resources.uLakeMask);
+    layer.setLake(null, null, null);
+    expect(layer.mesh.shader!.resources.uShoreMask).toBe(placeholder);
+  });
+
+  it('rebuilds the shore texture when the lake is set, not per frame', () => {
+    const layer = new BogLakeLayer(TILE_W);
+    const renderer = fakeRenderer();
+    layer.setLake(renderer, lakeTexture(), { minX: 0, minY: 0, maxX: 1, maxY: 1 });
+    expect(renderer.render).toHaveBeenCalledTimes(1);
+    layer.tick(0);
+    layer.tick(16);
+    expect(renderer.render).toHaveBeenCalledTimes(1);
+    layer.setLake(renderer, lakeTexture(), { minX: 0, minY: 0, maxX: 1, maxY: 1 });
+    expect(renderer.render).toHaveBeenCalledTimes(2);
+    const call = renderer.render.mock.calls[1][0] as { clear: boolean };
+    expect(call.clear).toBe(true);
+  });
+
+  it('blurs the shore water it is given, not the lake mask (whose lily pads and reed islands would get the band too)', () => {
+    const layer = new BogLakeLayer(TILE_W);
+    const renderer = fakeRenderer();
+    const lake = lakeTexture();
+    const lakeShore = lakeTexture();
+    const mouth = lakeTexture();
+    const drawnTextures = () => {
+      const { container } = renderer.render.mock.calls.at(-1)![0] as { container: { children: { texture: unknown }[] } };
+      return container.children.map((c) => c.texture);
+    };
+    layer.setLake(renderer, lake, { minX: 0, minY: 0, maxX: 1, maxY: 1 }, [lakeShore, mouth]);
+    expect(drawnTextures()).toEqual([lakeShore, mouth]);
+    layer.setLake(renderer, lake, { minX: 0, minY: 0, maxX: 1, maxY: 1 }, [lakeShore]);
+    expect(drawnTextures()).toEqual([lakeShore]);
+  });
+
+  it('turns the shore band off with its flag, scales it with its strength and passes edge and wobble through', () => {
+    const layer = new BogLakeLayer(TILE_W);
+    layer.tick(0);
+    expect(uniformsOf(layer).uShore).toBe(1); // ships on
+    waterDebugTuning.bogLakeShoreStrength = 1.5;
+    waterDebugTuning.bogLakeShoreEdge = 0.7;
+    waterDebugTuning.bogLakeShoreWobble = 2;
+    layer.tick(0);
+    expect(uniformsOf(layer).uShore).toBe(1.5);
+    expect(uniformsOf(layer).uShoreEdge).toBe(0.7);
+    expect(uniformsOf(layer).uShoreWobble).toBe(2);
+    waterDebugFlags.bogLakeShore = false;
+    layer.tick(0);
+    expect(uniformsOf(layer).uShore).toBe(0);
   });
 
   it('is hidden until there is a lake, and puts the quad on the lakes\' rect', () => {
@@ -46,19 +110,19 @@ describe('BogLakeLayer', () => {
     layer.tick(0);
     expect(layer.mesh.visible).toBe(false);
 
-    layer.setLake(lakeTexture(), { minX: 10, minY: 20, maxX: 110, maxY: 220 });
+    layer.setLake(fakeRenderer(), lakeTexture(), { minX: 10, minY: 20, maxX: 110, maxY: 220 });
     layer.tick(16);
     expect(layer.mesh.visible).toBe(true);
     expect(Array.from(layer.mesh.geometry.getBuffer('aPosition').data as Float32Array)).toEqual([10, 20, 110, 20, 110, 220, 10, 220]);
 
-    layer.setLake(null, null);
+    layer.setLake(null, null, null);
     layer.tick(32);
     expect(layer.mesh.visible).toBe(false);
   });
 
   it('follows the water switch and suppression', () => {
     const layer = new BogLakeLayer(TILE_W);
-    layer.setLake(lakeTexture(), { minX: 0, minY: 0, maxX: 10, maxY: 10 });
+    layer.setLake(fakeRenderer(), lakeTexture(), { minX: 0, minY: 0, maxX: 10, maxY: 10 });
     waterDebugFlags.water = false;
     layer.tick(0);
     expect(layer.mesh.visible).toBe(false);
@@ -121,7 +185,7 @@ describe('BogLakeLayer', () => {
 
   it('gives the shader the lake mask\'s world rect', () => {
     const layer = new BogLakeLayer(TILE_W);
-    layer.setLake(lakeTexture(), { minX: 10, minY: 20, maxX: 110, maxY: 220 });
+    layer.setLake(fakeRenderer(), lakeTexture(), { minX: 10, minY: 20, maxX: 110, maxY: 220 });
     expect(Array.from(uniformsOf(layer).uLakeOrigin as Float32Array)).toEqual([10, 20]);
     expect(Array.from(uniformsOf(layer).uLakeSize as Float32Array)).toEqual([100, 200]);
   });
@@ -165,7 +229,7 @@ describe('BogLakeLayer', () => {
 
   it('is hidden, not frozen, while lake wind motion is off', () => {
     const layer = new BogLakeLayer(TILE_W);
-    layer.setLake(lakeTexture(), { minX: 0, minY: 0, maxX: 10, maxY: 10 });
+    layer.setLake(fakeRenderer(), lakeTexture(), { minX: 0, minY: 0, maxX: 10, maxY: 10 });
     layer.setMotion(false);
     layer.tick(9000);
     expect(layer.mesh.visible).toBe(false);
