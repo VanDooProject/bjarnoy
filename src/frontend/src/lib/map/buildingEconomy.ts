@@ -3,7 +3,7 @@
 // same "current stats" for a tile instead of two formulas drifting apart.
 import type { ResourceLine } from '../../api/types';
 import { neighbors, type AxialCoord } from '../hex/coords';
-import type { Terrain, Tile } from './types';
+import { isLakeFishingHut, type Terrain, type Tile } from './types';
 
 export type BuildingKind = NonNullable<Tile['buildingType']>;
 
@@ -286,7 +286,7 @@ export function boostContextAt(
   const boostTerrain = BOOST_TERRAIN[type];
   return {
     matchingNeighbours: boostTerrain ? matchingNeighbourCount(tile, boostTerrain, getTile) : 0,
-    onLake: type === 'fishinghut' && tile.bog?.kind === 'half',
+    onLake: isLakeFishingHut({ buildingType: type, bog: tile.bog }),
   };
 }
 

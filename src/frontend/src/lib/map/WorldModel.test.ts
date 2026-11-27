@@ -2308,12 +2308,13 @@ describe('WorldModel bog buildings', () => {
     expect(model.getTile(hex(1).q, hex(1).r).buildingType).toBe('hammerschmiede');
   });
 
-  it('places the Fishing Hut on a lake half shore, and on no other bog hex', () => {
+  it('places the Fishing Hut on a lake shore or half shore, and on no other bog hex', () => {
     const { model, settlement, hex } = bogSettlement();
-    for (const i of [0, 1, 3, 4, 5, 6, 7]) {
+    for (const i of [0, 1, 4, 5, 6, 7]) {
       expect(model.placeBuilding(settlement.id, hex(i), 'fishinghut'), `hex ${i}`).toBe(false);
     }
     expect(model.placeBuilding(settlement.id, hex(2), 'fishinghut')).toBe(true);
+    expect(model.placeBuilding(settlement.id, hex(3), 'fishinghut')).toBe(true);
   });
 
   it('refuses every grass building on bog ground (the PR3 open point)', () => {
@@ -2360,7 +2361,7 @@ describe('WorldModel bog buildings', () => {
 
   describe('lake decorations', () => {
     /** A lake of radius 3 whose shore ring holds half-shore tiles; the settlement (LH 3, radius 3) claims the ring's near side. */
-    function lakeWorld(seed: number) {
+    function lakeWorld(seed: number, shoreKind: 'shore' | 'half' = 'half') {
       const model = new WorldModel(seed);
       const at = model.findLandfall({ q: 0, r: 0 })!;
       const settlement = model.foundSettlement('p1', 'Tester', 'Testerhold', at);
@@ -2368,7 +2369,7 @@ describe('WorldModel bog buildings', () => {
       model.claimTerritory(settlement.id);
       const centre = { q: at.q + 6, r: at.r };
       const lake = hexesInRadius(centre, 3).map((c) => bogTile(c.q, c.r, 'lake'));
-      const shore = hexRing(centre, 4).map((c) => bogTile(c.q, c.r, 'half', [], null, ['E', 'NE', 'NW']));
+      const shore = hexRing(centre, 4).map((c) => bogTile(c.q, c.r, shoreKind, [], null, shoreKind === 'half' ? ['E', 'NE', 'NW'] : ['E', 'NE']));
       model.setBogTiles([...lake, ...shore]);
       const huts = shore.filter((s) => model.placeBuilding(settlement.id, s, 'fishinghut'));
       return { model, settlement, lake, shore, huts, centre };
@@ -2388,6 +2389,22 @@ describe('WorldModel bog buildings', () => {
           expect(model.getTile(l.q, l.r).lakeProp, `seed ${seed} at ${l.q},${l.r}`).toBe(expected.get(`${l.q},${l.r}`));
           expect(model.lakePropAt(l.q, l.r)).toBe(expected.get(`${l.q},${l.r}`));
         }
+        seen += expected.size;
+      }
+      expect(seen).toBeGreaterThan(0);
+    });
+
+    it('asks for props for a hut on a two-edge shore just as for one on a half shore', () => {
+      let seen = 0;
+      for (const seed of [1, 2, 3, 7, 42, DEMO_SEED]) {
+        const { model, lake, huts } = lakeWorld(seed, 'shore');
+        if (huts.length === 0) continue;
+        const expected = placeLakeProps(
+          seed,
+          lake,
+          huts.map((h) => ({ q: h.q, r: h.r, type: 'fishinghut' as const })),
+        );
+        for (const l of lake) expect(model.getTile(l.q, l.r).lakeProp, `seed ${seed} at ${l.q},${l.r}`).toBe(expected.get(`${l.q},${l.r}`));
         seen += expected.size;
       }
       expect(seen).toBeGreaterThan(0);

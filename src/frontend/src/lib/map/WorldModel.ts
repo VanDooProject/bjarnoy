@@ -64,6 +64,7 @@ import {
   type RiverTile,
   type RiverTileShape,
   type Terrain,
+  isLakeFishingHut,
   type Settlement,
   type Tile,
   type TileOrientation,
@@ -611,8 +612,8 @@ export class WorldModel {
     const buildings: LakePropBuilding[] = [];
     if (openLake.length > 0) {
       for (const tile of this.tiles.values()) {
-        if (tile.buildingType === 'bogoreworks' || (tile.buildingType === 'fishinghut' && tile.bog?.kind === 'half')) {
-          buildings.push({ q: tile.q, r: tile.r, type: tile.buildingType });
+        if (tile.buildingType === 'bogoreworks' || isLakeFishingHut(tile)) {
+          buildings.push({ q: tile.q, r: tile.r, type: isLakeFishingHut(tile) ? 'fishinghut' : 'bogoreworks' });
         }
       }
     }

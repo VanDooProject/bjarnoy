@@ -177,16 +177,11 @@ export function isBogBoundBuilding(type: string | undefined): boolean {
   return (placementRuleFor(type)?.requiresBogKinds.length ?? 0) > 0;
 }
 
-/** Whether a Fishing Hut on `tile` is a lake hut (stands on a bog lake's half shore) rather than a coastal one. */
-export function isLakeShoreHut(tile: { buildingType?: string; bog?: { kind: BogTileKind } }): boolean {
-  return placementRuleFor(tile.buildingType)?.lakeShoreKinds.includes(tile.bog?.kind ?? 'bog') === true;
-}
-
 /**
  * Whether `type` may stand on this one hex, from its terrain, coastal-water flag and bog kind — the client side of
  * `BuildingDefinition.AllowsHex`, read from the catalogue's placement rules (river shape and soil rules are separate, see
  * `riverBuildingAllowedHere`/`cropAllowedHere`). Nothing stands on a lake; a coastal-water building stands on coastal water, or on
- * the bog kinds its `lakeShoreKinds` name (the Fishing Hut on a lake's half shore), or on an inland-lake hex beside land
+ * the bog kinds its `lakeShoreKinds` name (the Fishing Hut on a lake's shore or half shore), or on an inland-lake hex beside land
  * (`alsoOnInlandLakeShore`, the Fishing Hut only); a wall's sea end (`alsoOnCoastalWater`) also on
  * coastal water; bog ground takes only what names its kind, never anything a grass building would. Whether a hex then takes a wall is
  * the wall rules' (`WorldModel.palisadePlacement`).
@@ -212,7 +207,7 @@ export function buildingAllowedOnHex(
 
 /**
  * Buildings that stand directly on a coastal-water hex instead of on land (`requiresCoastalWater` in the catalogue; the Fishing Hut
- * also stands on a lake's half shore, see `buildingAllowedOnHex`). Placement (`WorldModel.placeBuilding`) and the building modal's
+ * also stands on a lake's shore or half shore, see `buildingAllowedOnHex`). Placement (`WorldModel.placeBuilding`) and the building modal's
  * "can this hex be inspected/upgraded" check both read it.
  */
 export function isWaterOnlyBuilding(type: string | undefined): boolean {

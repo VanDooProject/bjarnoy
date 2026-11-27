@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, hexOccupant, cropAllowedHere, formatBuildTime, formatMissingResources, scaledBuildSeconds, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, greatStorehouseLock, towerLimitLock } from './ringCatalogue';
+import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isWaterOnlyBuilding, tileIsBuildable, hexOccupant, cropAllowedHere, formatBuildTime, formatMissingResources, scaledBuildSeconds, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, greatStorehouseLock, towerLimitLock } from './ringCatalogue';
 
 describe('scaledBuildSeconds', () => {
   it('divides the catalogue time by the world speed factor and applies Odin\'s Wisdom', () => {
@@ -253,11 +253,12 @@ describe('buildingAllowedOnHex', () => {
     expect(buildingAllowedOnHex('hammerschmiede', { terrain: 'sea', isCoastalWater: true })).toBe(false);
   });
 
-  it('the Fishing Hut keeps the coast and also stands on a lake half shore, nowhere else on the bog', () => {
+  it('the Fishing Hut keeps the coast and also stands on a lake shore and half shore, nowhere else on the bog', () => {
     expect(buildingAllowedOnHex('fishinghut', { terrain: 'sea', isCoastalWater: true })).toBe(true);
     expect(buildingAllowedOnHex('fishinghut', { terrain: 'sea', isCoastalWater: false })).toBe(false);
     expect(buildingAllowedOnHex('fishinghut', bogHex('half'))).toBe(true);
-    for (const kind of ALL_KINDS.filter((k) => k !== 'half')) {
+    expect(buildingAllowedOnHex('fishinghut', bogHex('shore'))).toBe(true);
+    for (const kind of ALL_KINDS.filter((k) => k !== 'half' && k !== 'shore')) {
       expect(buildingAllowedOnHex('fishinghut', bogHex(kind)), `on ${kind}`).toBe(false);
     }
     // A coastal hut on land is not a thing: grass is not water (the caller filters non-coastal terrain separately).
@@ -305,9 +306,6 @@ describe('buildingAllowedOnHex', () => {
   it('names the bog-bound buildings and tells a lake hut from a coastal one', () => {
     expect(['claybrickworks', 'bogoreworks', 'hammerschmiede'].every(isBogBoundBuilding)).toBe(true);
     expect(isBogBoundBuilding('fishinghut')).toBe(false);
-    expect(isLakeShoreHut({ buildingType: 'fishinghut', bog: { kind: 'half' } })).toBe(true);
-    expect(isLakeShoreHut({ buildingType: 'fishinghut' })).toBe(false);
-    expect(isLakeShoreHut({ buildingType: 'farm', bog: { kind: 'half' } })).toBe(false);
   });
 });
 
@@ -392,9 +390,10 @@ describe('buildingAllowedOnHex — the catalogue\'s terrain per building', () =>
     for (const type of ['tower', 'palisade', 'palisadegate']) expect(buildingAllowedOnHex(type, { terrain: 'sand' }), type).toBe(true);
   });
 
-  it('keeps the lake Fishing Hut on a bog lake\'s half shore only', () => {
+  it('keeps the lake Fishing Hut on a bog lake\'s shore and half shore only', () => {
     expect(buildingAllowedOnHex('fishinghut', { terrain: 'bog', bog: { kind: 'half' } })).toBe(true);
-    for (const kind of ['bog', 'lake', 'inlet', 'shore', 'mouth', 'creek', 'creekspring'] as const) {
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'bog', bog: { kind: 'shore' } })).toBe(true);
+    for (const kind of ['bog', 'lake', 'inlet', 'mouth', 'creek', 'creekspring'] as const) {
       expect(buildingAllowedOnHex('fishinghut', { terrain: 'bog', bog: { kind } }), kind).toBe(false);
     }
   });

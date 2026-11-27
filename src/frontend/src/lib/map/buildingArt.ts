@@ -10,7 +10,7 @@
 // level for yet (e.g. `hut`/vikinghut isn't in showcase at all) fall back
 // to the older, lower-res per-level hextiles/ PNG.
 import { findAtlasFrame, findAtlasClip, type AtlasClip, type AtlasFrameRect } from './atlas';
-import { TILE_ORIENTATIONS as TILE_DIRECTIONS, type TileOrientation } from './types';
+import { TILE_ORIENTATIONS as TILE_DIRECTIONS, isLakeFishingHut, type TileOrientation } from './types';
 
 /** Either a showcase atlas frame (preferred) or a plain PNG URL fallback — <AtlasSprite>/<img> render either uniformly. */
 export type ArtRef = { kind: 'atlas'; frame: AtlasFrameRect } | { kind: 'png'; url: string };
@@ -176,8 +176,8 @@ export function buildingArt(type: string, level = 1): ArtRef | undefined {
 }
 
 /**
- * `buildingArt` for a building standing on `tile`: a Fishing Hut on a bog lake's half shore is the lake hut
- * (`fisherhut_lake`), a Hammer Forge on a creek bend the bend mill (`hammerschmiede_bend`; the river mill is the
+ * `buildingArt` for a building standing on `tile`: a Fishing Hut on a bog lake's shore or half shore is the lake hut
+ * (`fisherhut_lakeshore` or `fisherhut_lake`), a Hammer Forge on a creek bend the bend mill (`hammerschmiede_bend`; the river mill is the
  * placeholder art for now), a tower on sand, forest or plain bog moss the stave tower made for that ground, a Longhouse on sand the beach longhouse. Everything else is `buildingArt`.
  */
 export function buildingArtOnTile(
@@ -189,7 +189,9 @@ export function buildingArtOnTile(
   if (type === 'tower' && tile.terrain === 'forest') return buildingArtByFamily('stavetower_forest', level);
   if (type === 'tower' && tile.terrain === 'sand') return buildingArtByFamily('stavetower_sand', level);
   if (type === 'longhouse' && tile.terrain === 'sand') return buildingArtByFamily('greathall_sand', level);
-  if (type === 'fishinghut' && tile.bog?.kind === 'half') return buildingArtByFamily('fisherhut_lake', level);
+  if (isLakeFishingHut({ buildingType: type, bog: tile.bog })) {
+    return buildingArtByFamily(tile.bog?.kind === 'shore' ? 'fisherhut_lakeshore' : 'fisherhut_lake', level);
+  }
   if (type === 'hammerschmiede' && tile.bog?.kind === 'creek') {
     const straight =
       tile.bog.inDirections[0] !== undefined &&

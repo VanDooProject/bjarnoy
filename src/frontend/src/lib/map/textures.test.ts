@@ -1933,6 +1933,7 @@ describe('bog buildings and lake decorations', () => {
     expect(KEY_FAMILY.hammerschmiede).toBe('hammerschmiede');
     expect(KEY_FAMILY.hammerschmiedebend).toBe('hammerschmiede_bend');
     expect(KEY_FAMILY.fisherhutlake).toBe('fisherhut_lake');
+    expect(KEY_FAMILY.fisherhutlakeshore).toBe('fisherhut_lakeshore');
     expect(KEY_FAMILY.claybrickworks).toBe('claybrickworks');
   });
 
@@ -1969,6 +1970,18 @@ describe('bog buildings and lake decorations', () => {
     expect(shoreOrientation).not.toBe('NW');
     expect(baseTextureFor(textures, half)).toBe(`fisherhutlake-base-${shoreOrientation}`);
     expect(topTextureFor(textures, half)).toBe(`fisherhutlake-top-${shoreOrientation}`);
+  });
+
+  it('draws a Fishing Hut on a shore with the lake shore art, turned like the shore, and never on other bog kinds', () => {
+    const shore: Tile = { q: 0, r: 0, terrain: 'bog', orientation: 'NW', buildingType: 'fishinghut', buildingLevel: 2, bog: bog('shore', [], null, ['SE', 'E']) };
+    expect(textureKeyFor(shore)).toBe('fisherhutlakeshore');
+    expect(textureKeyFor({ ...shore, bog: bog('inlet', [], null, ['SE']) })).toBe('fishinghut');
+
+    const textures = labelled(['fisherhutlakeshore']);
+    const shoreOrientation = bogOrientationFor(shore.bog!, 'NW');
+    expect(shoreOrientation).not.toBe('NW');
+    expect(baseTextureFor(textures, shore)).toBe(`fisherhutlakeshore-base-${shoreOrientation}`);
+    expect(topTextureFor(textures, shore)).toBe(`fisherhutlakeshore-top-${shoreOrientation}`);
   });
 
   it('draws a Hammer Forge on a creek as the straight or bend river mill, turned like the creek', () => {

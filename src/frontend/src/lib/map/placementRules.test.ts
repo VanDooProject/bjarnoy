@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import catalogue from '../../data/building-catalogue.json';
 import type { BuildingDefinitionResponse } from '../../api/types';
 import { categoriesFor } from '../../composables/useBuildRing';
-import { buildingAllowedOnHex, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, newPlacementDisabled, riverBuildingAllowedHere } from './ringCatalogue';
+import { buildingAllowedOnHex, isBogBoundBuilding, isWaterOnlyBuilding, newPlacementDisabled, riverBuildingAllowedHere } from './ringCatalogue';
 import { placementRuleFor, setPlacementRules } from './placementRules';
 import type { Tile } from './types';
 
@@ -16,7 +16,7 @@ describe('the placement rules come from the building catalogue', () => {
   it('registers the level-1 entry of every catalogue building, plus the demo-only hut', () => {
     expect(placementRuleFor('tower')).toMatchObject({ category: 'defense', alsoOnBogKinds: ['bog'] });
     expect(placementRuleFor('hammerschmiede')).toMatchObject({ requiresBogKinds: ['creek'] });
-    expect(placementRuleFor('fishinghut')).toMatchObject({ requiresCoastalWater: true, lakeShoreKinds: ['half'] });
+    expect(placementRuleFor('fishinghut')).toMatchObject({ requiresCoastalWater: true, lakeShoreKinds: ['half', 'shore'] });
     expect(placementRuleFor('sawmill')).toMatchObject({ requiresRiverShapes: ['bend', 'bend60', 'straight'], excludedRiverVariants: ['loop'] });
     expect(placementRuleFor('hut')).toMatchObject({ category: null, allowedTerrain: ['grass'] });
     expect(placementRuleFor('nonsense')).toBeUndefined();
@@ -63,8 +63,6 @@ describe('the placement rules come from the building catalogue', () => {
     expect(isBogBoundBuilding('claybrickworks')).toBe(true);
     expect(isBogBoundBuilding('farm')).toBe(false);
     expect(isWaterOnlyBuilding('harbour')).toBe(true);
-    expect(isLakeShoreHut({ buildingType: 'fishinghut', bog: { kind: 'half' } })).toBe(true);
-    expect(isLakeShoreHut({ buildingType: 'fishinghut' })).toBe(false);
     expect(riverBuildingAllowedHere('cropmill', 'straight')).toBe(true);
     expect(riverBuildingAllowedHere('cropmill', 'bend')).toBe(false);
     expect(riverBuildingAllowedHere('sawmill', 'bend60', 'loop')).toBe(false);
