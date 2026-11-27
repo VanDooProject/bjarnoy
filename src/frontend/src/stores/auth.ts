@@ -4,7 +4,8 @@ import type { AuthResponse, UserResponse } from '../api/types';
 import { API_BASE_URL } from '../config';
 import { setLocale } from '../i18n';
 import { isSupportedLocale } from '../i18n/locale';
-import { clearStoredRefreshToken, readStoredRefreshToken, storeRefreshToken } from '../lib/storedLogin';
+import { leaveToReturningLogin } from '../lib/leaveSession';
+import { clearStoredRefreshToken, readStoredAccountName, readStoredRefreshToken, storeLogin } from '../lib/storedLogin';
 
 // Auth endpoints are called directly with fetch, not through `api` in
 // api/client.ts: that module's `request()` attaches the access token and
@@ -73,6 +74,9 @@ export const useAuthStore = defineStore('auth', {
     // Set when any API call comes back 403 { error: "user_locked" } — see
     // `AccountRestrictedBanner.vue`, which reads this to show its banner.
     accountLocked: false,
+    // Set when the server rejected the stored refresh token: the page is being replaced by the returning-player login
+    // (see `endRejectedSession`), so the router guard lets no navigation through in the meantime.
+    sessionEnded: false,
   }),
   getters: {
     isAuthenticated: (state) => state.user !== null,
@@ -83,7 +87,7 @@ export const useAuthStore = defineStore('auth', {
     applyAuthResponse(response: AuthResponse) {
       this.user = response.user;
       this.accessToken = response.accessToken;
-      storeRefreshToken(response.refreshToken);
+      storeLogin(response.refreshToken, response.user.userName);
       this.applyUserLocale(response.user);
     },
     // The account's saved locale (if any) wins over whatever was already
@@ -177,10 +181,21 @@ export const useAuthStore = defineStore('auth', {
             refreshToken = stored;
             continue;
           }
-          this.clearSession();
+          this.endRejectedSession();
           return false;
         }
       }
+    },
+    /**
+     * The server says the stored refresh token is no good (expired, revoked, or already used elsewhere). The page
+     * cannot go on: the realm only answers to this account's JWT, so every call and poll would come back 403. Same
+     * exit as logging out — forget the local identity and load the returning-player login for this account.
+     */
+    endRejectedSession() {
+      const accountName = this.user?.userName ?? readStoredAccountName() ?? '';
+      this.clearSession();
+      this.sessionEnded = true;
+      leaveToReturningLogin(accountName);
     },
     async fetchMe() {
       if (!this.accessToken) return;

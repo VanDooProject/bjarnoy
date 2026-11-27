@@ -11,6 +11,6 @@ describe('/settings route', () => {
     expect(resolved.name).toBe('settings');
     expect(isModalRouteName(resolved.name)).toBe(true);
     expect(resolved.meta.requiresAuth).toBeFalsy();
-    expect(resolveAuthGuard(resolved as Parameters<typeof resolveAuthGuard>[0], { isAuthenticated: false, isAdmin: false })).toBe(true);
+    expect(resolveAuthGuard(resolved as Parameters<typeof resolveAuthGuard>[0], { isAuthenticated: false, isAdmin: false, sessionEnded: false })).toBe(true);
   });
 });

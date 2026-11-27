@@ -29,11 +29,16 @@ async function loadStore() {
   return useAuthStore();
 }
 
+// A rejected refresh token ends in a full page load (lib/leaveSession.ts).
+const assign = vi.fn();
+vi.stubGlobal('window', { location: { assign } });
+
 describe('auth store tryRefresh', () => {
   beforeEach(() => {
     storage.clear();
     storage.set('bjarnoy.refreshToken', 'rt-1');
     vi.restoreAllMocks();
+    assign.mockReset();
   });
 
   it('shares one /auth/refresh call between concurrent callers', async () => {
@@ -154,5 +159,81 @@ describe('auth store tryRefresh', () => {
 
     expect(await auth.tryRefresh()).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// The UX-review bug (A36): a reload whose stored refresh token the server rejects used to drop only the token. The
+// player store still held the claimed realm, so /settlement loaded as an anonymous visitor: every call came back 403
+// (the realm only answers to the account's JWT), the pollers kept firing, raw API paths showed in error banners and
+// the "Name your jarl" nudge came back. A rejected refresh now ends the session the way logging out does.
+describe('auth store: a rejected refresh token ends the session', () => {
+  beforeEach(() => {
+    storage.clear();
+    storage.set('bjarnoy.refreshToken', 'rt-1');
+    storage.set('bjarnoy.accountName', 'ragnar42');
+    storage.set('bjarnoy.playerId', 'player_old');
+    storage.set('bjarnoy.settlementId', 'settlement-1');
+    storage.set('bjarnoy.settlementsByWorld', JSON.stringify({ 'world-1': 'settlement-1' }));
+    storage.set('bjarnoy.onboardingComplete', '1');
+    storage.set('bjarnoy.worldId', 'world-1');
+    vi.restoreAllMocks();
+    assign.mockReset();
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(401, { error: 'invalid_refresh_token' })));
+  });
+
+  it('on reload: forgets the local identity and loads the returning-player login for the stored account', async () => {
+    const auth = await loadStore();
+
+    await auth.ensureInitialized();
+
+    expect(assign).toHaveBeenCalledExactlyOnceWith('/');
+    expect(auth.sessionEnded).toBe(true);
+    expect(auth.isAuthenticated).toBe(false);
+    expect(storage.get('bjarnoy.lastAccount')).toBe('ragnar42');
+    for (const key of ['bjarnoy.refreshToken', 'bjarnoy.accountName', 'bjarnoy.playerId', 'bjarnoy.settlementId', 'bjarnoy.settlementsByWorld', 'bjarnoy.onboardingComplete']) {
+      expect(storage.has(key), key).toBe(false);
+    }
+    // The device's world stays, like on logout: logging back in restores the realm there.
+    expect(storage.get('bjarnoy.worldId')).toBe('world-1');
+  });
+
+  it('mid-session (access token expired): uses the loaded account and leaves the page the same way', async () => {
+    storage.delete('bjarnoy.accountName');
+    const auth = await loadStore();
+    auth.user = { ...user, userName: 'astrid' } as never;
+    auth.accessToken = 'expired';
+
+    expect(await auth.tryRefresh()).toBe(false);
+
+    expect(assign).toHaveBeenCalledExactlyOnceWith('/');
+    expect(auth.accessToken).toBeNull();
+    expect(storage.get('bjarnoy.lastAccount')).toBe('astrid');
+    expect(storage.has('bjarnoy.settlementId')).toBe(false);
+  });
+
+  it.each([
+    ['a network error', () => Promise.reject(new TypeError('Failed to fetch'))],
+    ['a 503', () => Promise.resolve(jsonResponse(503, {}))],
+  ])('does not leave on %s', async (_name, respond) => {
+    vi.stubGlobal('fetch', vi.fn(respond));
+    const auth = await loadStore();
+
+    await auth.ensureInitialized();
+
+    expect(assign).not.toHaveBeenCalled();
+    expect(auth.sessionEnded).toBe(false);
+    expect(storage.get('bjarnoy.settlementId')).toBe('settlement-1');
+  });
+
+  it('remembers the account name with the refresh token, and forgets both together', async () => {
+    storage.clear();
+    const auth = await loadStore();
+
+    auth.applyAuthResponse(authResponse('rt-9') as never);
+    expect(storage.get('bjarnoy.accountName')).toBe('admin');
+
+    auth.clearSession();
+    expect(storage.has('bjarnoy.accountName')).toBe(false);
+    expect(storage.has('bjarnoy.refreshToken')).toBe(false);
   });
 });
