@@ -115,7 +115,8 @@ import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
 import { DOUBLE_TAP_MS, DOUBLE_TAP_ZOOM_MS, doubleTapZoomLog, isDoubleTap, type Tap } from './doubleTap';
 import { LongPressTracker } from './longPress';
-import { animationPreference } from '../perf/animationPreference';
+import { resolutionPreference } from '../perf/resolutionPreference';
+import { feedFrame } from '../perf/frameGovernors';
 import { prefersReducedMotion } from '../motion';
 import { antialiasPreference } from '../perf/antialiasPreference';
 import { advanceClipFrame, clipTimingOf, phasedStart, sharedClockPlayback, swayPeriodOffset } from './clipPlayback';
@@ -2511,6 +2512,13 @@ export class HexMapRenderer {
    * disable in between has already queued for `Assets.unload`.
    */
   private animGeneration = 0;
+  /**
+   * `setAnimationsEnabled(false, keepLoaded = true)` (an Auto drop) parks the
+   * loaded clips here instead of unloading the atlases, so the governor's
+   * retry costs no decode. Null when nothing is parked.
+   */
+  private parkedAnimTop: TileTextures['animTop'] | null = null;
+  private keepAnimLoaded = false;
 
   private camera: Camera;
   private viewport = { width: 0, height: 0 };
@@ -2834,7 +2842,8 @@ export class HexMapRenderer {
       canvas,
       width,
       height,
-      resolution: Math.min(window.devicePixelRatio || 1, 2),
+      // A per-device setting (resolutionPreference.ts); `setResolution` changes it later without a remount.
+      resolution: resolutionPreference.effective,
       autoDensity: true,
       backgroundAlpha: 0,
       // A per-device setting (antialiasPreference.ts): MSAA multiplies the fill cost of every blended pixel, which a slow renderer feels.
@@ -2996,6 +3005,22 @@ export class HexMapRenderer {
     if (!this.app) return;
     this.viewport = { width, height };
     this.app.renderer.resize(width, height);
+    this.afterCanvasResize(width, height);
+  }
+
+  /**
+   * Switches the canvas's render resolution in place (the player's
+   * "Resolution" setting, or the Auto governor stepping): the canvas keeps
+   * its CSS size (`autoDensity`), only its backing store changes. No remount.
+   */
+  setResolution(resolution: number) {
+    if (!this.app || resolution === this.app.renderer.resolution) return;
+    this.app.renderer.resize(this.viewport.width, this.viewport.height, resolution);
+    this.afterCanvasResize(this.viewport.width, this.viewport.height);
+  }
+
+  /** What follows any canvas resize or resolution change, one path for both. */
+  private afterCanvasResize(width: number, height: number) {
     // The filter's area is the screen rectangle (see FogDesaturateFilter): pinned so Pixi never measures the world.
     this.underFogLayer.filterArea = fogFilterArea(width, height);
     // A locked preview must stay fit to the island on every resize/rotation —
@@ -3043,14 +3068,15 @@ export class HexMapRenderer {
     this.mapAnimMs += this.app!.ticker.deltaMS * waterDebugTuning.mapAnimationSpeed;
     this.advanceTopAnimations(clampAnimationDeltaMs(this.app!.ticker.deltaMS) * waterDebugTuning.mapAnimationSpeed);
     this.advanceTransitionFades(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
-    // Feeds the 'auto' animation governor (animationPreference.ts) — in both
+    // Feeds both 'auto' fps governors (frameGovernors.ts: building animations and render resolution) — in both
     // modes, not just settlement: the governor is measuring this device's
     // general Pixi frame rate (worldModel.tick, fog, markers, the camera
     // transform), not specifically building-clip cost, so a world-map
     // session still warms up a useful measurement rather than starting from
-    // zero the moment the player first opens a settlement. Dropped while the
-    // tab is hidden by animationPreference.feedFrame itself.
-    animationPreference.feedFrame(performance.now(), this.app!.ticker.deltaMS);
+    // zero the moment the player first opens a settlement. Frames that don't
+    // measure the device (hidden tab, unfocused window, throttled, just
+    // resumed) are filtered out by feedFrame itself.
+    feedFrame(performance.now(), this.app!.ticker.deltaMS);
     // Every camera move of this tick comes before the markers: they are drawn in screen pixels from this.camera, so
     // drawing them first would leave them a frame behind the world (a pointer drag moves the camera before the tick).
     if (this.idleDrift) {
@@ -4276,16 +4302,18 @@ export class HexMapRenderer {
 
   /**
    * Turns `buildings-anim` art on/off, per the `animationPreference`
-   * singleton (see `useHexMapRenderer`'s wiring). Just records the wanted
+   * singleton (see `useHexMapRenderer`'s wiring); `keepLoaded` parks the
+   * loaded art instead of releasing it when disabling. Just records the wanted
    * state and defers the actual load/unload to `syncAnimationAtlases`
    * (already run from every `rebuildAll`) so it applies once `this.textures`
    * exists and covers a later mode switch into settlement or wasted-pack
    * reveal the same way `maybeLoadWastedPack` does — rather than duplicating
    * those readiness checks here.
    */
-  setAnimationsEnabled(enabled: boolean) {
-    if (this.animationsEnabled === enabled) return;
+  setAnimationsEnabled(enabled: boolean, keepLoaded = false) {
+    if (this.animationsEnabled === enabled && this.keepAnimLoaded === keepLoaded) return;
     this.animationsEnabled = enabled;
+    this.keepAnimLoaded = keepLoaded;
     // rebuildAll() itself calls syncAnimationAtlases() (see below) — routing
     // through it here too, rather than calling that directly, is what makes
     // a toggle that arrives before this.textures exists yet safe: this is a
@@ -4315,22 +4343,23 @@ export class HexMapRenderer {
 
     if (this.animationsEnabled) {
       const generation = this.animGeneration;
+      if (this.parkedAnimTop) {
+        const parked = this.parkedAnimTop;
+        this.parkedAnimTop = null;
+        this.textures = { ...this.textures, animTop: { ...this.textures.animTop, ...parked } };
+      }
       if (!this.animCoreReady) {
         this.animCoreReady = true;
         loadAnimAtlases(
           (partial) => {
             // Clips arrive page by page; merge each batch as it lands (same
             // guards as the final result below).
-            if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
-            this.textures = mergeTileTextures(this.textures, partial);
-            this.rebuildAll();
+            this.landAnimTextures(generation, partial);
           },
           (loaded, total) => this.options.onAnimationLoad?.({ loaded, total }),
         )
           .then((anim) => {
-            if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
-            this.textures = mergeTileTextures(this.textures, anim);
-            this.rebuildAll();
+            this.landAnimTextures(generation, anim);
           })
           .catch((err) => {
             this.animCoreReady = false;
@@ -4340,14 +4369,10 @@ export class HexMapRenderer {
       if (!this.wastedAnimReady && this.options.worldModel.isWastedRevealed()) {
         this.wastedAnimReady = true;
         loadPackAnimAtlases('wasted', (partial) => {
-          if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
-          this.textures = mergeTileTextures(this.textures, partial);
-          this.rebuildAll();
+          this.landAnimTextures(generation, partial);
         })
           .then((anim) => {
-            if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
-            this.textures = mergeTileTextures(this.textures, anim);
-            this.rebuildAll();
+            this.landAnimTextures(generation, anim);
           })
           .catch((err) => {
             this.wastedAnimReady = false;
@@ -4358,20 +4383,23 @@ export class HexMapRenderer {
     }
 
     if (this.animCoreReady || this.wastedAnimReady) {
+      if (this.keepAnimLoaded) {
+        // Park, don't unload: keep the atlases and the ready flags, so a later
+        // enable restores the clips without reloading. Idempotent: every
+        // rebuildAll re-runs this.
+        if (!this.parkedAnimTop) {
+          this.parkedAnimTop = this.textures.animTop;
+          this.textures = { ...this.textures, animTop: {} };
+          this.releaseAllTopAnims();
+        }
+        return;
+      }
+      this.parkedAnimTop = null;
       this.animCoreReady = false;
       this.wastedAnimReady = false;
       this.animGeneration++;
       this.textures = { ...this.textures, animTop: {} };
-      // The rebuild below only re-syncs the top sprites it actually redraws
-      // (a deep-fog-only viewport redraws none), so drop every clip's
-      // playback state here: `advanceTopAnimations` must never assign one of
-      // the anim textures about to be unloaded to a sprite again.
-      // A released sprite goes blank until that rebuild hands it its static
-      // texture — never left on a frame that is about to be destroyed.
-      for (const [key, state] of [...this.topAnimState]) {
-        state.sprite.texture = Texture.EMPTY;
-        this.releaseTopAnim(key);
-      }
+      this.releaseAllTopAnims();
       // The next rebuildAll (this method's own callers already trigger one)
       // re-syncs every currently-animated sprite back to static via
       // syncTopAnim before this releases the atlas's GPU memory below —
@@ -4380,6 +4408,38 @@ export class HexMapRenderer {
         unloadAnimAtlases();
         unloadPackAnimAtlases('wasted');
       });
+    }
+  }
+
+  /**
+   * An animation atlas batch landed. Enabled: merge and redraw. Parked
+   * (disabled with `keepLoaded`): the clips go into the parked set, so
+   * re-enabling needs no reload; everything else stays as before the park.
+   * A batch from an older generation (unloaded in between) is dropped.
+   */
+  private landAnimTextures(generation: number, loaded: TileTextures) {
+    if (this.destroyed || !this.textures || generation !== this.animGeneration) return;
+    if (this.animationsEnabled) {
+      this.textures = mergeTileTextures(this.textures, loaded);
+      this.rebuildAll();
+    } else if (this.parkedAnimTop) {
+      this.parkedAnimTop = { ...this.parkedAnimTop, ...loaded.animTop };
+      this.textures = mergeTileTextures(this.textures, { ...loaded, animTop: {} });
+    }
+  }
+
+  /**
+   * Drops every clip's playback state: the rebuild that follows only re-syncs
+   * the top sprites it actually redraws (a deep-fog-only viewport redraws
+   * none), so `advanceTopAnimations` must never assign one of the clip
+   * textures that are parked or about to be unloaded to a sprite again. A
+   * released sprite goes blank until that rebuild hands it its static
+   * texture — never left on a frame that is about to be destroyed.
+   */
+  private releaseAllTopAnims() {
+    for (const [key, state] of [...this.topAnimState]) {
+      state.sprite.texture = Texture.EMPTY;
+      this.releaseTopAnim(key);
     }
   }
 
