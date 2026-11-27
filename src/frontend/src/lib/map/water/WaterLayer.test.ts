@@ -510,6 +510,40 @@ describe('WaterLayer', () => {
     expect(layer.mesh.geometry.getBuffer('aPosition').data.length).toBe(0);
   });
 
+  it('draws one quad over the mask rect once a hex is small on screen, and hexagons again when it grows', () => {
+    const layer = new WaterLayer('world', TILE_W, TILE_H);
+    const mask = seaMaskOver(-400, -250, 600, 350);
+    layer.setMask(mask);
+    const hexValues = layer.mesh.geometry.getBuffer('aPosition').data.length;
+    expect(hexValues).toBeGreaterThan(8);
+
+    // Zoomed out without a re-bake: the switch rebuilds the mesh from the mask it already has.
+    layer.setHexScreenSize(8);
+    expect(layer.meshCoverage).toBe('quad');
+    const { rect } = mask.region;
+    expect(Array.from(layer.mesh.geometry.getBuffer('aPosition').data)).toEqual([
+      rect.minX, rect.minY, rect.maxX, rect.minY, rect.maxX, rect.maxY, rect.minX, rect.maxY,
+    ]);
+    expect(Array.from(layer.mesh.geometry.getBuffer('aUV').data)).toEqual([0, 0, 1, 0, 1, 1, 0, 1]);
+    expect(layer.mesh.geometry.indexBuffer.data.length).toBe(6);
+
+    // A re-bake while zoomed out stays a quad, even over an all-land mask (the shader discards there).
+    layer.setMask(maskOver(-400, -250, 600, 350));
+    expect(layer.mesh.geometry.getBuffer('aPosition').data.length).toBe(8);
+
+    layer.setMask(mask);
+    layer.setHexScreenSize(60);
+    expect(layer.meshCoverage).toBe('hexes');
+    expect(layer.mesh.geometry.getBuffer('aPosition').data.length).toBe(hexValues);
+  });
+
+  it('picks the cover before the first mask arrives, so the first mesh is already the right one', () => {
+    const layer = new WaterLayer('world', TILE_W, TILE_H);
+    layer.setHexScreenSize(8);
+    layer.setMask(seaMaskOver(-400, -250, 600, 350));
+    expect(layer.mesh.geometry.indexBuffer.data.length).toBe(6);
+  });
+
   it('follows the camera by re-placing the mesh, not by moving it', () => {
     // The mesh is a child of the camera-transformed `world` container, so it
     // must never carry a transform of its own — mask UV and world position stay

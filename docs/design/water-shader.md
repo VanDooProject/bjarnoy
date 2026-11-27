@@ -506,6 +506,13 @@ covered hexes.
 Rivers are not part of it: `RiverFlowMesh` draws them on its own quad over the river rect (§4.4e), so an
 inland river hex has no water mesh under it.
 
+**Zoomed far out the mesh is one quad over the mask's rect instead.** There a hex is a few pixels across, and
+hundreds of thousands of tiny triangles (each paying the GPU's 2×2-quad overdraw) cost more than the land fill the
+hexagons save. The switch reads a hex's width in device pixels (zoom × tile width × renderer resolution): under 20 px
+it draws the quad, over 24 px hexagons again, and in between it keeps what it has (`nextWaterCoverage`). On the quad
+the shader's own discard keeps the land clear, so the picture is the same; the `showWaterMask` debug view then covers
+the whole rect. Numbers in `docs/tech/performance.md`, "Water mesh at low zoom".
+
 Each hexagon is the tile's exact top face (`isoTopPoints`) with UVs taken from
 world position against the mask rect, so the fragment shader sees the same
 inputs it saw on the quad. Corners are computed from integer lattice

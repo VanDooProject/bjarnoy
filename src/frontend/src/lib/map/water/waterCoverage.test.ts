@@ -5,7 +5,14 @@ import { bakeWaterMask, NEAR_SPAN_TILES } from './waterMask';
 import { FOAM_WIDTH_RANGE } from './waterDebug';
 import { FOAM_LAND_REACH } from './WaterLayer';
 import { waterMaskRegion } from './waterMaskLayout';
-import { HEX_ACROSS_FLATS_TILES, WaterMeshBuffers, seaAndShoreHexes } from './waterCoverage';
+import {
+  HEX_ACROSS_FLATS_TILES,
+  WATER_HEXES_ABOVE_HEX_PX,
+  WATER_QUAD_BELOW_HEX_PX,
+  WaterMeshBuffers,
+  nextWaterCoverage,
+  seaAndShoreHexes,
+} from './waterCoverage';
 
 const TILE_W = 168;
 const TILE_H = (TILE_W * 92) / 200;
@@ -155,5 +162,54 @@ describe('WaterMeshBuffers', () => {
     expect(small.positions.length).toBe(12);
     expect(small.positions.buffer).toBe(big.positions.buffer);
     expect(small.indices.length).toBe(12);
+  });
+});
+
+describe('WaterMeshBuffers.fillQuad', () => {
+  const rect = { minX: -100, minY: -50, maxX: 900, maxY: 450 };
+
+  it('covers the rect with one quad whose UVs span the mask 0..1', () => {
+    const { positions, uvs, indices } = new WaterMeshBuffers().fillQuad(rect);
+    expect(Array.from(positions)).toEqual([-100, -50, 900, -50, 900, 450, -100, 450]);
+    expect(Array.from(uvs)).toEqual([0, 0, 1, 0, 1, 1, 0, 1]);
+    expect(Array.from(indices)).toEqual([0, 1, 2, 0, 2, 3]);
+  });
+
+  it('shares the hexagon buffers, so switching between the two allocates nothing', () => {
+    const buffers = new WaterMeshBuffers();
+    const hexes = buffers.fill([{ col: 0, row: 0 }, { col: 1, row: 0 }], TILE_W, TILE_H, rect);
+    const quad = buffers.fillQuad(rect);
+    expect(quad.positions.buffer).toBe(hexes.positions.buffer);
+    expect(quad.indices.buffer).toBe(hexes.indices.buffer);
+    // And a hexagon fill after the quad still gets its full hexagons back.
+    expect(buffers.fill([{ col: 0, row: 0 }], TILE_W, TILE_H, rect).positions.length).toBe(12);
+  });
+});
+
+describe('nextWaterCoverage', () => {
+  it('switches to the quad only below the lower threshold, and back only above the upper one', () => {
+    expect(WATER_QUAD_BELOW_HEX_PX).toBeLessThan(WATER_HEXES_ABOVE_HEX_PX);
+    expect(nextWaterCoverage('hexes', WATER_QUAD_BELOW_HEX_PX)).toBe('hexes');
+    expect(nextWaterCoverage('hexes', WATER_QUAD_BELOW_HEX_PX - 0.1)).toBe('quad');
+    expect(nextWaterCoverage('quad', WATER_HEXES_ABOVE_HEX_PX)).toBe('quad');
+    expect(nextWaterCoverage('quad', WATER_HEXES_ABOVE_HEX_PX + 0.1)).toBe('hexes');
+  });
+
+  it('does not flap while the hex size wobbles between the thresholds', () => {
+    let coverage = nextWaterCoverage('hexes', WATER_QUAD_BELOW_HEX_PX - 1);
+    const mid = (WATER_QUAD_BELOW_HEX_PX + WATER_HEXES_ABOVE_HEX_PX) / 2;
+    for (const px of [mid - 1, mid + 1, mid - 1, mid + 1]) {
+      coverage = nextWaterCoverage(coverage, px);
+      expect(coverage).toBe('quad');
+    }
+  });
+
+  it('keeps the default settlement and world zooms on hexagons and the far zoom-outs on the quad', () => {
+    // 168-wide tiles at a device pixel ratio of 1: the framings of docs/tech/performance.md's rendering baseline.
+    const px = (zoom: number) => zoom * TILE_W;
+    expect(nextWaterCoverage('hexes', px(0.34))).toBe('hexes');
+    expect(nextWaterCoverage('hexes', px(0.22))).toBe('hexes');
+    expect(nextWaterCoverage('hexes', px(0.09))).toBe('quad');
+    expect(nextWaterCoverage('hexes', px(0.05))).toBe('quad');
   });
 });
