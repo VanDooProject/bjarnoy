@@ -3,7 +3,8 @@
 // same "current stats" for a tile instead of two formulas drifting apart.
 import type { ResourceLine } from '../../api/types';
 import { neighbors, type AxialCoord } from '../hex/coords';
-import { isLakeFishingHut, type Terrain, type Tile } from './types';
+import { isLakeFishingHut } from './placementRules';
+import type { Terrain, Tile } from './types';
 
 export type BuildingKind = NonNullable<Tile['buildingType']>;
 

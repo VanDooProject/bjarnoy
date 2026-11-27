@@ -754,7 +754,7 @@
         },
         "shore": {
           "name": "Ufer",
-          "body": "Ein Ufer mit zwei Wasserkanten, auf dem auch die Seefischerhütte stehen kann. Eine Variante hat eine Lehmbank."
+          "body": "Ein Ufer mit zwei Wasserkanten. Hier kannst du auch die Fischerhütte bauen. Eine Variante hat eine Lehmbank."
         },
         "half": {
           "name": "Halbes Ufer",
@@ -775,11 +775,11 @@
       },
       "fisherhut": {
         "name": "Fischerhütte (Halbufer)",
-        "body": "Die Fischerhütte steht auf Pfählen am Ufer eines Moorsees, auf einem Feld, das an zwei oder drei Seiten ans Wasser grenzt. Diese Grafik gehört zum Feld mit Wasser an drei Seiten. Sie ist dasselbe Gebäude wie an der Küste, nur mit eigener Grafik, und zählt die Seefelder um sich herum, so wie die Küstenhütte das Meer zählt."
+        "body": "Die Fischerhütte auf Pfählen am Halbufer, einem Feld mit Wasser an drei Seiten. Sie ist dasselbe Gebäude wie an der Küste, nur mit eigener Grafik, und zählt die Seefelder um sich herum, so wie die Küstenhütte das Meer zählt."
       },
       "fisherhutshore": {
         "name": "Fischerhütte (Ufer)",
-        "body": "Die Fischerhütte steht auf Pfählen am Ufer eines Moorsees, auf einem Feld, das an zwei oder drei Seiten ans Wasser grenzt. Diese Grafik gehört zum Feld mit Wasser an zwei Seiten. Sie ist dasselbe Gebäude wie an der Küste, nur mit eigener Grafik, und zählt die Seefelder um sich herum, so wie die Küstenhütte das Meer zählt."
+        "body": "Die Fischerhütte auf Pfählen am Ufer, einem Feld mit Wasser an zwei Seiten. Weil hier weniger Wasser ist, bleibt ihr Steg kürzer – sonst gleicht sie der Hütte am Halbufer."
       },
       "hammerschmiede": {
         "name": "Hammerschmiede",

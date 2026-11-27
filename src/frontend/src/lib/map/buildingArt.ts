@@ -10,7 +10,8 @@
 // level for yet (e.g. `hut`/vikinghut isn't in showcase at all) fall back
 // to the older, lower-res per-level hextiles/ PNG.
 import { findAtlasFrame, findAtlasClip, type AtlasClip, type AtlasFrameRect } from './atlas';
-import { TILE_ORIENTATIONS as TILE_DIRECTIONS, isLakeFishingHut, type TileOrientation } from './types';
+import { isLakeFishingHut } from './placementRules';
+import { TILE_ORIENTATIONS as TILE_DIRECTIONS, type TileOrientation } from './types';
 
 /** Either a showcase atlas frame (preferred) or a plain PNG URL fallback — <AtlasSprite>/<img> render either uniformly. */
 export type ArtRef = { kind: 'atlas'; frame: AtlasFrameRect } | { kind: 'png'; url: string };

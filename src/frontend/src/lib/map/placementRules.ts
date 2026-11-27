@@ -74,6 +74,16 @@ export function setPlacementRules(definitions: readonly BuildingDefinitionRespon
   rules = next;
 }
 
+/**
+ * Whether the building on `tile` stands on a bog lake's shore by its catalogue rule (`lakeShoreKinds`, the backend's
+ * `BuildingDefinition.LakeShoreKinds`): today the lake Fishing Hut, on a shore (two water edges, `fisherhut_lakeshore`) or a half
+ * shore (three, `fisherhut_lake`), rather than on the coast. The one place the client tells a lake hut from a coastal one.
+ */
+export function isLakeFishingHut(tile: { buildingType?: string; bog?: { kind: string } }): boolean {
+  const kind = tile.bog?.kind;
+  return kind !== undefined && (placementRuleFor(tile.buildingType)?.lakeShoreKinds.includes(kind) ?? false);
+}
+
 export function placementRuleFor(type: string | undefined): PlacementRule | undefined {
   return type === undefined ? undefined : rules.get(type);
 }

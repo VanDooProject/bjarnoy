@@ -557,15 +557,6 @@ export interface RiverTile {
 export type BogTileKind = 'bog' | 'lake' | 'inlet' | 'shore' | 'half' | 'mouth' | 'creek' | 'creekspring';
 
 /**
- * Whether the building on `tile` is a lake Fishing Hut: a Fishing Hut on a bog lake's shore (two water edges, `fisherhut_lakeshore`)
- * or half shore (three, `fisherhut_lake`) rather than on the coast. The one place that tells a lake hut from a coastal one
- * (mirrors `BuildingCatalogue.cs`'s `LakeShoreKinds` for the Fishing Hut).
- */
-export function isLakeFishingHut(tile: { buildingType?: string; bog?: { kind: string } }): boolean {
-  return tile.buildingType === 'fishinghut' && (tile.bog?.kind === 'shore' || tile.bog?.kind === 'half');
-}
-
-/**
  * A single hex of an island's bogland, as served by the backend (`BogTileResponse`) or generated locally in demo mode
  * (`bogGenerator.ts`). A `lake` hex reads as terrain `lake`, every other kind as terrain `bog`. `inDirections` /
  * `outDirection` are the flow of a creek, mouth or spring (like a river tile's); `waterEdges` are the lake neighbours of

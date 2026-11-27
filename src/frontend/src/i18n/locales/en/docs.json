@@ -754,7 +754,7 @@
         },
         "shore": {
           "name": "Shore",
-          "body": "A shore with two water edges, where the lake Fishing Hut may also stand; one look has a clay bank."
+          "body": "A shore with two water edges. You can build the Fishing Hut here too. One look has a clay bank."
         },
         "half": {
           "name": "Half shore",
@@ -775,11 +775,11 @@
       },
       "fisherhut": {
         "name": "Fishing Hut (half shore)",
-        "body": "The Fishing Hut, on stilts over a bog-lake shore (a field with water on two or three sides); this art is for the field with water on three sides. The same building as the coastal one, with its own art; it counts the lake tiles around it the way the coastal hut counts sea."
+        "body": "The Fishing Hut on stilts on a half shore, a field with water on three sides. The same building as the coastal one, with its own art; it counts the lake tiles around it the way the coastal hut counts sea."
       },
       "fisherhutshore": {
         "name": "Fishing Hut (shore)",
-        "body": "The Fishing Hut, on stilts over a bog-lake shore (a field with water on two or three sides); this art is for the field with water on two sides. The same building as the coastal one, with its own art; it counts the lake tiles around it the way the coastal hut counts sea."
+        "body": "The Fishing Hut on stilts on a shore, a field with water on two sides. Less water means a shorter pier; otherwise it is the same as the hut on a half shore."
       },
       "hammerschmiede": {
         "name": "Hammer Forge",

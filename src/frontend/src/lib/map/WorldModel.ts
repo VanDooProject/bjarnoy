@@ -64,11 +64,11 @@ import {
   type RiverTile,
   type RiverTileShape,
   type Terrain,
-  isLakeFishingHut,
   type Settlement,
   type Tile,
   type TileOrientation,
 } from './types';
+import { isLakeFishingHut } from './placementRules';
 
 /**
  * Demo mode's client-only trade offer — mirrors the shape of the backend's
