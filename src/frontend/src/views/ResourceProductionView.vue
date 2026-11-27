@@ -7,6 +7,7 @@ import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
 import DocsPageLink from '../components/docs/DocsPageLink.vue';
 import DocsToc from '../components/docs/DocsToc.vue';
 import BuildingLink from '../components/docs/BuildingLink.vue';
+import DocsNeeds from '../components/docs/DocsNeeds.vue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { resourceName, terrainName } from '../i18n/catalogueNames';
 import { buildingStatsFor, maxLevelFor, type BuildingKind } from '../lib/map/buildingEconomy';
@@ -170,9 +171,7 @@ const tocLinks = computed(() =>
               </td>
               <td class="unlock">
                 <BuildingLink type="longhouse" /> {{ row.unlock.longhouse }}
-                <template v-for="need in row.unlock.needs" :key="need.type">
-                  · <BuildingLink :type="need.type" /> {{ need.level }}
-                </template>
+                <DocsNeeds :needs="row.unlock.needs" bullet />
               </td>
             </tr>
             <tr data-producer="longhouse">
@@ -245,9 +244,7 @@ const tocLinks = computed(() =>
               <td>{{ $t(`docs.production.mills.stands.${row.stands}`) }}</td>
               <td class="unlock">
                 <BuildingLink type="longhouse" /> {{ row.unlock.longhouse }}
-                <template v-for="need in row.unlock.needs" :key="need.type">
-                  · <BuildingLink :type="need.type" /> {{ need.level }}
-                </template>
+                <DocsNeeds :needs="row.unlock.needs" bullet />
               </td>
               <td v-for="cell in row.cells" :key="cell.level" class="cell">
                 {{ $t('docs.production.mills.cell', { percent: cell.percent }, cell.rings) }}
@@ -284,9 +281,7 @@ const tocLinks = computed(() =>
               </td>
               <td class="unlock">
                 <BuildingLink type="longhouse" /> {{ row.unlock.longhouse }}
-                <template v-for="need in row.unlock.needs" :key="need.type">
-                  · <BuildingLink :type="need.type" /> {{ need.level }}
-                </template>
+                <DocsNeeds :needs="row.unlock.needs" bullet />
               </td>
             </tr>
           </tbody>

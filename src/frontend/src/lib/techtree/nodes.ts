@@ -2,7 +2,7 @@
 // what it gives, the longhouse level it needs, and its prerequisites as
 // chips. Everything here is real catalogue data — the only thing this file
 // decides is how to word it.
-import type { BuildingDefinitionResponse } from '../../api/types';
+import type { BuildingDefinitionResponse, BuildingPrerequisiteResponse, IslandSoil } from '../../api/types';
 import {
   buildingStatsFor,
   type BuildingKind,
@@ -42,9 +42,17 @@ export const MERGED_CARDS: Readonly<Record<string, { label: string; absorbs: rea
   palisade: { label: 'Palisade / Gate', absorbs: ['palisadegate'] },
 };
 
+/** The graph stays English like the rest of its card text. */
+function soilLabel(soil: IslandSoil): string {
+  return soil === 'pumpkin' ? 'Pumpkin soil' : 'Wheat soil';
+}
+
 export interface TechTreeChip {
   text: string;
-  kind: 'longhouse' | 'building' | 'anchor';
+  /** The chip's longer wording, shown as its tooltip. */
+  title?: string;
+  /** `soil`: what an island of another soil needs instead of the card's plain prerequisites. */
+  kind: 'longhouse' | 'building' | 'anchor' | 'soil';
 }
 
 export interface TechTreeNode {
@@ -73,8 +81,35 @@ export function unlockLevel(definitions: readonly BuildingDefinitionResponse[]):
 export function prerequisitesOf(
   byType: Record<string, BuildingDefinitionResponse[] | undefined>,
   type: string,
-): readonly { type: string; level: number }[] {
+): readonly BuildingPrerequisiteResponse[] {
   return byType[type]?.[0]?.prerequisites ?? [];
+}
+
+/** The soil the docs treat as the standard one: its prerequisites read as the plain ones, the other soil's as the variant. */
+const DEFAULT_SOIL: IslandSoil = 'wheat';
+
+export interface PrerequisiteGroups {
+  /** What every island needs plus what the standard (wheat) soil needs. */
+  main: BuildingPrerequisiteResponse[];
+  /** What another soil needs instead, one entry per soil, e.g. pumpkin soil: Pumpkin Farm 15. */
+  variants: { soil: IslandSoil; needs: BuildingPrerequisiteResponse[] }[];
+}
+
+/**
+ * Splits a building's prerequisites for the docs: the ones a player always reads (untagged and wheat-soil) and, per other soil,
+ * the variant that replaces the wheat one there. Text only; the tech-tree graph never draws the variants (they name buildings that
+ * have no card of their own, see `buildGraph`).
+ */
+export function prerequisiteGroups(prerequisites: readonly BuildingPrerequisiteResponse[]): PrerequisiteGroups {
+  const main = prerequisites.filter((p) => !p.soil || p.soil === DEFAULT_SOIL);
+  const variants: PrerequisiteGroups['variants'] = [];
+  for (const p of prerequisites) {
+    if (!p.soil || p.soil === DEFAULT_SOIL) continue;
+    const group = variants.find((v) => v.soil === p.soil);
+    if (group) group.needs.push(p);
+    else variants.push({ soil: p.soil, needs: [p] });
+  }
+  return { main, variants };
 }
 
 /**
@@ -98,10 +133,20 @@ export function buildTechTreeNodes(
       chips.push({ text: 'Anchor', kind: 'anchor' });
     } else {
       chips.push({ text: `LH ${unlockLevel(definitions)}`, kind: 'longhouse' });
-      for (const prerequisite of prerequisitesOf(byType, type)) {
+      const { main, variants } = prerequisiteGroups(prerequisitesOf(byType, type));
+      for (const prerequisite of main) {
         chips.push({
           text: `${shortLabel(prerequisite.type)} ${prerequisite.level}`,
           kind: 'building',
+        });
+      }
+      // One chip per other soil, kept short so the card does not grow a second row of chips: "Pumpkin 15" in a dashed chip, with
+      // the full wording ("Pumpkin soil: Pumpkin farm 15") as its tooltip.
+      for (const variant of variants) {
+        chips.push({
+          text: `${variant.needs.map((p) => `${shortLabel(p.type)} ${p.level}`).join(', ')}`,
+          title: `${soilLabel(variant.soil)}: ${variant.needs.map((p) => `${typeLabel(p.type)} ${p.level}`).join(', ')}`,
+          kind: 'soil',
         });
       }
     }

@@ -225,7 +225,7 @@ function clear() {
             </span>
           </span>
           <span class="chips">
-            <span v-for="chip in card.chips" :key="chip.text" :class="['chip', `chip--${chip.kind}`]">
+            <span v-for="chip in card.chips" :key="chip.text" :class="['chip', `chip--${chip.kind}`]" :title="chip.title">
               {{ chip.text }}
             </span>
           </span>
@@ -433,6 +433,11 @@ function clear() {
   color: var(--gold);
   background: rgba(255, 197, 92, 0.12);
   border-color: rgba(255, 197, 92, 0.4);
+}
+.chip--soil {
+  border-style: dashed;
+  /* A hair tighter so "Crop mill 5" and "Pumpkin 15" still share a row with the longhouse chip. */
+  padding-inline: 4px;
 }
 .chip--anchor {
   color: #20160a;

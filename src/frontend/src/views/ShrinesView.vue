@@ -5,6 +5,7 @@ import type { MessageSchema } from '../i18n/schema';
 import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
 import BuildingLink from '../components/docs/BuildingLink.vue';
+import DocsNeeds from '../components/docs/DocsNeeds.vue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { runeRarityName, runeTypeName, terrainName } from '../i18n/catalogueNames';
 import { maxLevelFor, type BuildingKind } from '../lib/map/buildingEconomy';
@@ -101,9 +102,7 @@ const slotRows = [
                 </template>
               </td>
               <td class="needs">
-                <template v-for="need in row.needs" :key="need.type">
-                  <BuildingLink :type="need.type" /> {{ need.level }}
-                </template>
+                <DocsNeeds :needs="row.needs" />
               </td>
               <td>{{ row.standsOn }}</td>
             </tr>
