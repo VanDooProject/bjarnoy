@@ -1,3 +1,5 @@
+using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -94,5 +96,35 @@ public class FogOverviewServiceTests : IDisposable
         using var bitmap = SKBitmap.Decode(after.Png!);
         var texel = FogMaskLayout.ToTexel(new HexCoord(0, 0));
         Assert.Equal(0, bitmap.GetPixel(texel.U - after.Bounds.MinU, texel.V - after.Bounds.MinV).Red);
+    }
+
+    [Fact]
+    public async Task Reflects_the_current_discs_without_writing_any_explored_row()
+    {
+        var worldId = AddWorld(30);
+        _dbContext.Islands.Add(new IslandEntity { Id = worldId, WorldId = worldId, Name = "Home Isle" });
+        _dbContext.Settlements.Add(new SettlementEntity
+        {
+            Id = Guid.NewGuid(),
+            WorldId = worldId,
+            IslandId = worldId,
+            UserId = SystemUserIds.Abandoned,
+            Name = "Home",
+            OwnerName = "player-1",
+            OwnerId = "player-1",
+            CentreQ = 0,
+            CentreR = 0,
+            FoundedAt = DateTimeOffset.UnixEpoch,
+            Buildings = [new PlacedBuildingEntity { Q = 0, R = 0, Type = BuildingType.Longhouse, Level = 1 }],
+        });
+        await _dbContext.SaveChangesAsync(Ct);
+
+        var result = await NewService().GetAsync(worldId, "player-1", Ct);
+
+        Assert.True(result.Accepted);
+        using var bitmap = SKBitmap.Decode(result.Png!);
+        var texel = FogMaskLayout.ToTexel(new HexCoord(0, 0));
+        Assert.Equal(0, bitmap.GetPixel(texel.U - result.Bounds.MinU, texel.V - result.Bounds.MinV).Red);
+        Assert.Empty(_dbContext.PlayerExploredChunks.ToList());
     }
 }

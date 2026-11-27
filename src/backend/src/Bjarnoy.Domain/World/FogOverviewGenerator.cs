@@ -14,18 +14,21 @@ public sealed record FogOverview(int Factor, MaskBounds Bounds, FogMaskBuffer Gr
 
 /// <summary>
 /// Pure generator for the coarse whole-world fog overview (<c>docs/design/map-fog-v2.md</c> §3, "Overview").
-/// R / G of a block are the share of its hexes that are unexplored / out of sight; B is 0. Cost scales with the
+/// R / G of a block are the share of its hexes that are unexplored / out of sight; B is 128 (the lump channel's neutral centre, as the shader's tier alpha reads it). Cost scales with the
 /// stored chunks, the source discs and the grid size, never with the world's full-resolution area.
 /// </summary>
 public static class FogOverviewGenerator
 {
     /// <summary>Bump when the output for the same inputs changes (part of the served version).</summary>
-    public const int Version = 1;
+    public const int Version = 2;
 
     /// <summary>The most overview texels per axis.</summary>
     public const int MaxSide = 1024;
 
     private const int MaxFactor = 64;
+
+    /// <summary>B of every cell: the lump noise is centred on 0.5 in the shader, so 0 would bias block edges clearer.</summary>
+    private const byte LumpNeutral = 128;
 
     /// <summary>The smallest power of two in [1, 64] whose overview grid fits <see cref="MaxSide"/> on both axes (64 if none).</summary>
     public static int FactorFor(int worldRadius)
@@ -143,8 +146,8 @@ public static class FogOverviewGenerator
                 var index = (row * width) + col;
                 var total = HexTexelsInBlock(bounds.MinU + (col * factor), bounds.MinV + (row * factor), factor);
                 cells[index] = total == 0
-                    ? new FogMaskCell(255, 255, 0)
-                    : new FogMaskCell(Complement(exploredCount[index], total), Complement(visibleCount[index], total), 0);
+                    ? new FogMaskCell(255, 255, LumpNeutral)
+                    : new FogMaskCell(Complement(exploredCount[index], total), Complement(visibleCount[index], total), LumpNeutral);
             }
         }
 

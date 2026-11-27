@@ -320,6 +320,13 @@ export class FogField {
     this.dirty = true;
   }
 
+  /** Drops the overview (the world it belonged to is gone): the shader reads "no overview" again, past the window too. */
+  clearOverviewTexture(): void {
+    this.uniforms.uniforms.uHasOverview = 0;
+    this.mesh.shader!.resources.uMaskOverview = placeholderTexture().source;
+    this.dirty = true;
+  }
+
   /**
    * §1c: uploads this frame's live army vision sources — world-space points,
    * already resolved by HexMapRenderer from its own army render-position

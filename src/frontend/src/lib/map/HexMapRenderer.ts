@@ -6571,13 +6571,8 @@ export class HexMapRenderer {
    * already default an unbound mask to fully-unknown, so there's nothing
    * useful to do before the first real fetch resolves.
    */
-  setFogMask(bounds: MaskBounds, bitmap: ImageBitmap | null, coverage: FogCoverageLookup) {
+  setFogMask(bounds: MaskBounds, bitmap: ImageBitmap | null) {
     if (!bitmap) return;
-
-    const { worldModel } = this.options;
-    const previousSignature = worldModel.getFogCoverage()?.signature;
-    worldModel.setFogCoverage(coverage);
-    if (coverage.signature !== previousSignature) this.forceRebuild();
 
     const placement = fogMaskPlacement(bounds, TILE_W, TILE_H);
 
@@ -6595,6 +6590,17 @@ export class HexMapRenderer {
   }
 
   /**
+   * The mask as per-hex lookups (window and overview, `FogCoverage`): the world model keeps it (`isExplored`) and the
+   * terrain cull, borders and markers read it, so they are rebuilt when its clear set changes (its `signature`).
+   */
+  setFogCoverage(coverage: FogCoverageLookup) {
+    const { worldModel } = this.options;
+    const previousSignature = worldModel.getFogCoverage()?.signature;
+    worldModel.setFogCoverage(coverage);
+    if (coverage.signature !== previousSignature) this.forceRebuild();
+  }
+
+  /**
    * Hands the field shader the whole-world coarse mask (the store's `fogOverviewBitmap`), which it samples wherever
    * the chunk window has no data and blends over the window's outer edge (fogShader.ts's sampleMask). `bounds` is the
    * overview's extent in detailed-texel units; the placement comes from the same `fogMaskPlacement` as the window's.
@@ -6605,6 +6611,13 @@ export class HexMapRenderer {
     this.fogField.setOverviewTexture(texture, fogMaskPlacement(bounds, TILE_W, TILE_H));
     this.fogOverviewTexture?.destroy(true);
     this.fogOverviewTexture = texture;
+  }
+
+  /** Drops the overview (the store cleared it on a world switch); the shader then reads "no overview" past the window. */
+  clearFogOverview() {
+    this.fogField.clearOverviewTexture();
+    this.fogOverviewTexture?.destroy(true);
+    this.fogOverviewTexture = null;
   }
 
   /**

@@ -45,7 +45,7 @@ public sealed class FogOverviewService(GameDbContext dbContext, IMemoryCache cac
 
     public async Task<FogOverviewResult> GetAsync(Guid worldId, string ownerId, CancellationToken cancellationToken = default)
     {
-        var area = await _exploredArea.GetAsync(worldId, ownerId, persist: true, cancellationToken).ConfigureAwait(false);
+        var area = await _exploredArea.GetAsync(worldId, ownerId, persist: false, cancellationToken).ConfigureAwait(false);
         if (area is null)
         {
             return new FogOverviewResult(FogOverviewRejection.WorldNotFound);
@@ -53,16 +53,21 @@ public sealed class FogOverviewService(GameDbContext dbContext, IMemoryCache cac
 
         var (min, max) = FogChunkLayout.WorldChunkRange(area.WorldRadius);
         var history = await _exploredArea.LoadRectAsync(worldId, ownerId, min, max, cancellationToken).ConfigureAwait(false);
-        foreach (var (chunk, data) in area.MergedChunks)
+
+        // Read-only: the current discs are laid over the stored history in memory with the same merge the fog chunk read
+        // persists, so this poll writes nothing (only the fog chunk read owns "exploring").
+        foreach (var (chunk, next, _) in ExploredAreaService.MergeDiscs(
+            ExploredAreaService.GroupDiscsByChunk(area.Discs),
+            c => history.TryGetValue(c, out var existing) ? existing : ExploredChunkData.None))
         {
-            history[chunk] = data;
+            history[chunk] = next;
         }
 
         var factor = FogOverviewGenerator.FactorFor(area.WorldRadius);
         var bounds = FogOverviewGenerator.OverviewBounds(area.WorldRadius, factor);
         var width = bounds.Width / factor;
         var height = bounds.Height / factor;
-        var version = ComputeVersion(factor, history, area.VisionSources);
+        var version = ComputeVersion(factor, bounds, history, area.VisionSources);
 
         var cacheKey = $"fog-overview:{worldId}:{ownerId}:{version}";
         if (!_cache.TryGetValue<byte[]>(cacheKey, out var png))
@@ -76,11 +81,11 @@ public sealed class FogOverviewService(GameDbContext dbContext, IMemoryCache cac
     }
 
     /// <summary>
-    /// Hash of exactly the inputs that shape the overview: both generator versions, the factor, the explored
+    /// Hash of exactly the inputs that shape the overview: both generator versions, the factor, the overview bounds, the explored
     /// history (sorted chunk tokens) and the vision sources (sorted).
     /// </summary>
     private static string ComputeVersion(
-        int factor, IReadOnlyDictionary<FogChunkCoord, ExploredChunkData> history, IReadOnlyList<FogVisionSource> sources)
+        int factor, MaskBounds bounds, IReadOnlyDictionary<FogChunkCoord, ExploredChunkData> history, IReadOnlyList<FogVisionSource> sources)
     {
         var chunks = history
             .Where(kv => !kv.Value.IsEmpty)
@@ -89,7 +94,7 @@ public sealed class FogOverviewService(GameDbContext dbContext, IMemoryCache cac
         var sourceTokens = sources
             .OrderBy(s => s.Coord.Q).ThenBy(s => s.Coord.R).ThenBy(s => s.VisibleRadius)
             .Select(s => $"({s.Coord.Q},{s.Coord.R},{s.VisibleRadius})");
-        var canonical = $"v{FogMaskGenerator.Version}.{FogOverviewGenerator.Version}#{factor}#{string.Join('|', chunks)}#{string.Join('|', sourceTokens)}";
+        var canonical = $"v{FogMaskGenerator.Version}.{FogOverviewGenerator.Version}#{factor}#{bounds.MinU},{bounds.MinV},{bounds.MaxU},{bounds.MaxV}#{string.Join('|', chunks)}#{string.Join('|', sourceTokens)}";
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)))[..16];
     }
 }

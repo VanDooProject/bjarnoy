@@ -58,7 +58,20 @@ public class FogOverviewGeneratorTests
         Assert.Equal(16, overview.Factor);
         Assert.Equal(overview.Bounds.Width / 16, overview.Grid.Bounds.Width);
         Assert.Equal(overview.Bounds.Height / 16, overview.Grid.Bounds.Height);
-        Assert.All(overview.Grid.Cells, c => Assert.Equal(new FogMaskCell(255, 255, 0), c));
+        Assert.All(overview.Grid.Cells, c => Assert.Equal(new FogMaskCell(255, 255, 128), c));
+    }
+
+    [Fact]
+    public void Every_cell_carries_the_neutral_lump_value_so_block_edges_are_not_biased_clearer()
+    {
+        var chunk = new FogChunkCoord(0, 0);
+        var history = new Dictionary<FogChunkCoord, ExploredChunkData> { [chunk] = ExploredChunkData.Full };
+        var source = new FogVisionSource(new HexCoord(0, 0), ExploredRadius: 10, VisibleRadius: 20);
+
+        var overview = FogOverviewGenerator.Generate(4000, history, [source]);
+
+        Assert.All(overview.Grid.Cells, c => Assert.Equal(128, c.Lump));
+        Assert.Equal(2, FogOverviewGenerator.Version);
     }
 
     [Fact]

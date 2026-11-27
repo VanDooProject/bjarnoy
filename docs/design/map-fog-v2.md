@@ -954,10 +954,10 @@ panel rewrite.
 
 The chunk window is capped (`FogChunkService.MaxChunksPerRequest` = 256, a 16 x 16 window), so a zoomed-out viewport can be larger than it. Beyond the window the client samples a whole-world, coarse **overview** instead of showing a hard fog edge.
 
-- **Endpoint:** `GET /api/v1/worlds/{id}/fog-overview` (same realm scoping as `fog-chunks`) returns `{ factor, minU, minV, width, height, version, png }`. `minU`/`minV` are in detailed texels; `png` is a base64 RGBA8 PNG of `width` x `height`.
+- **Endpoint:** `GET /api/v1/worlds/{id}/fog-overview` (same realm scoping as `fog-chunks`; read-only, the current discs are laid over the stored history in memory and nothing is persisted) returns `{ factor, minU, minV, width, height, version, png }`. `minU`/`minV` are in detailed texels; `png` is a base64 RGBA8 PNG of `width` x `height`.
 - **Factor:** the smallest power of two `f` in 1..64 for which the grid (the world's texel bounds floored/ceiled to multiples of `f`, divided by `f`) is at most 1024 on both axes (64 if none fits). `f` divides the 64-texel chunk, so a chunk covers whole blocks. Radius 4000 gives 16.
 - **Pixels:** one texel per `f x f` block of detailed texels. R = 255 - 255 x (explored hex texels / hex texels in the block); G = 255 - 255 x (hexes within a source's `VisibleRadius`, same euclidean distance as the detailed out-of-sight ramp, counted once across sources / hex texels in the block); B = 0. A block with nothing is 255/255, the client's "unknown" default. Nothing is baked at full resolution: cost scales with the stored chunks, the source discs and the grid.
-- **Caching:** the version is a hash of `FogMaskGenerator.Version`, `FogOverviewGenerator.Version`, the factor, the sorted explored-chunk tokens and the sorted sources. It is the ETag (an unchanged world is a 304) and keys a 10-minute sliding `IMemoryCache` entry, like a chunk.
+- **Caching:** the version is a hash of `FogMaskGenerator.Version`, `FogOverviewGenerator.Version`, the factor, the overview bounds, the sorted explored-chunk tokens and the sorted sources. It is the ETag (an unchanged world is a 304) and keys a 10-minute sliding `IMemoryCache` entry, like a chunk.
 - **Client:** samples the overview wherever the chunk window has no data, blending it over the window's outer 16 texels so the hand-over has no seam.
 
 ### Sequencing — dynamic chunking, not a deferred 1×1 shortcut

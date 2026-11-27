@@ -1,5 +1,5 @@
 import { createPinia, setActivePinia } from 'pinia';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { generationResponse } from '../lib/map/testing/generationFixture';
 import { isPendingOrder, makePendingOrder } from '../lib/hud/pendingBuild';
 
@@ -2013,6 +2013,113 @@ describe('useWorldStore fetchFogOverview', () => {
     expect(first.close).toHaveBeenCalledTimes(1);
     expect(store.fogOverviewBitmap).not.toBe(first);
     warn.mockRestore();
+  });
+
+  it('rebuilds the fog coverage when the overview arrives, without touching the window mask', async () => {
+    resetOverviewMocks();
+    getFogChunks.mockResolvedValueOnce(fogChunksResponse(ORIGIN_WINDOW, '"e1"'));
+    // One overview block (u 300..308, v 0..8) fully explored; the rest unknown.
+    const far = { ...OVERVIEW, minU: 300, minV: 0, width: 4, height: 6 };
+    decodeMaskPng.mockImplementation(async (_png: unknown, w: number, h: number) => {
+      const pixels = new Uint8ClampedArray(w * h * 4).fill(255);
+      pixels[0] = 0;
+      return pixels;
+    });
+    getFogOverview.mockResolvedValueOnce({ notModified: false, etag: '"o1"', data: far });
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    await store.fetchFogMask();
+    const windowBitmap = store.fogMaskBitmap;
+    const before = store.fogCoverage!;
+    // Hex (300, -150) has texel (300, 0): past the window, inside the overview's first block.
+    expect(before.isExplored(300, -150)).toBe(false);
+
+    await store.fetchFogOverview();
+
+    expect(store.fogCoverage).not.toBe(before);
+    expect(store.fogCoverage!.isExplored(300, -150)).toBe(true);
+    expect(store.fogCoverage!.isOpaque(300, -150)).toBe(false);
+    expect(store.fogCoverage!.signature).not.toBe(before.signature);
+    // The window texture itself is untouched: same bitmap, not re-stitched.
+    expect(store.fogMaskBitmap).toBe(windowBitmap);
+  });
+
+  it('builds the coverage with the held overview when the window arrives after it', async () => {
+    resetOverviewMocks();
+    const far = { ...OVERVIEW, minU: 300, minV: 0, width: 4, height: 6 };
+    decodeMaskPng.mockImplementation(async (_png: unknown, w: number, h: number) => {
+      const pixels = new Uint8ClampedArray(w * h * 4).fill(255);
+      pixels[0] = 0;
+      return pixels;
+    });
+    getFogOverview.mockResolvedValueOnce({ notModified: false, etag: '"o1"', data: far });
+    getFogChunks.mockResolvedValueOnce(fogChunksResponse(ORIGIN_WINDOW, '"e1"'));
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    await store.fetchFogOverview();
+    expect(store.fogCoverage).toBeNull();
+    await store.fetchFogMask();
+
+    expect(store.fogCoverage!.isExplored(300, -150)).toBe(true);
+  });
+
+  it('drops an overview that resolves after the world switched', async () => {
+    resetOverviewMocks();
+    let resolve!: (value: unknown) => void;
+    getFogOverview.mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    const pending = store.fetchFogOverview();
+    store.worldId = 'world-2';
+    resolve({ notModified: false, etag: '"o1"', data: OVERVIEW });
+    await pending;
+
+    expect(store.fogOverviewBitmap).toBeNull();
+    expect(store.fogOverviewBounds).toBeNull();
+    // The stale ETag was not kept either: the new world asks unconditionally.
+    getFogOverview.mockResolvedValueOnce({ notModified: false, etag: '"o2"', data: OVERVIEW });
+    await store.fetchFogOverview();
+    expect(getFogOverview).toHaveBeenLastCalledWith('world-2', 'player-1', null);
+  });
+
+  describe('polling', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('is fetched once at start and then on its own 30 s interval, not on every live poll', async () => {
+      vi.useFakeTimers();
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      resetOverviewMocks();
+      getFogChunks.mockResolvedValue(fogChunksResponse(ORIGIN_WINDOW, '"e1"'));
+      getFogOverview.mockResolvedValue({ notModified: true });
+      const store = await loadStoreModule(false);
+      store.worldId = 'world-1';
+      store.ownerId = 'player-1';
+
+      store.startHudSync();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(getFogOverview).toHaveBeenCalledTimes(1);
+
+      // Several live polls (4 s) pass without another overview request.
+      await vi.advanceTimersByTimeAsync(28_000);
+      expect(getFogChunks.mock.calls.length).toBeGreaterThan(3);
+      expect(getFogOverview).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(getFogOverview).toHaveBeenCalledTimes(2);
+
+      store.stopHudSync();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(getFogOverview).toHaveBeenCalledTimes(2);
+      warn.mockRestore();
+    });
   });
 });
 
