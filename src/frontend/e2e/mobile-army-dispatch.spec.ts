@@ -3,8 +3,10 @@ import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 import { RingMenuComponent } from './pages/RingMenuComponent';
-import { gotoWorldMap, layoutOverflow, loginTestUser } from './helpers';
-import { DOUBLE_TAP_SLOP_PX } from '../src/lib/map/doubleTap';
+import { gotoWorldMap } from './helpers';
+import { layoutOverflow } from './support/geometry';
+import { hexCenterScreen } from './support/renderer';
+import { loginTestUser } from './support/session';
 
 /**
  * Issue: mobile army dispatch. Phones (<=768px) get no ArmyPanel — a 260px
@@ -18,13 +20,6 @@ import { DOUBLE_TAP_SLOP_PX } from '../src/lib/map/doubleTap';
 
 const PHONE = { width: 390, height: 844 };
 
-interface DemoWindow {
-  __demoWorld: () => any;
-  __settlementRenderer: () => {
-    hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number };
-  };
-}
-
 /**
  * The draft/selection fields these tests read, as a plain JSON copy. Returning
  * the Pinia store itself makes Playwright serialize its whole reactive graph,
@@ -33,7 +28,7 @@ interface DemoWindow {
  */
 function demoWorld(page: Page): Promise<{ dispatchDraft: any; sendPicker: any; selectedArmyId: string | null }> {
   return page.evaluate(() => {
-    const world = (window as unknown as DemoWindow).__demoWorld();
+    const world = window.__demoWorld();
     return JSON.parse(
       JSON.stringify({
         dispatchDraft: world.dispatchDraft ?? null,
@@ -44,9 +39,36 @@ function demoWorld(page: Page): Promise<{ dispatchDraft: any; sendPicker: any; s
   });
 }
 
+/** A standing army of the open realm on its centre hex: a second source besides the garrison, so the picker stays a choice. */
+async function seedStandingArmy(page: Page) {
+  await page.evaluate(() => {
+    const world = window.__demoWorld() as { model: any; selectedSettlementId: string; armies: unknown[] };
+    const home = world.model.getSettlement(world.selectedSettlementId);
+    const at = { q: home.q, r: home.r };
+    const arrived = new Date(Date.now() - 60_000).toISOString();
+    world.armies = [
+      {
+        id: 'standing-1',
+        settlementId: world.selectedSettlementId,
+        mission: 'move',
+        targetSettlementId: null,
+        atHome: false,
+        supporting: false,
+        position: at,
+        provisions: 1_000_000,
+        totalSpeed: 2,
+        totalUpkeepPerHour: 1,
+        visionRadius: 2,
+        stacks: [{ unit: 'spearman', count: 5 }],
+        movement: { path: [at, at], isReturning: false, departedAt: arrived, arrivesAt: arrived },
+      },
+    ];
+  });
+}
+
 async function seedGarrison(page: Page) {
   await page.evaluate(() => {
-    const world = (window as unknown as DemoWindow).__demoWorld();
+    const world = window.__demoWorld();
     world.hud.garrison = [{ unit: 'spearman', count: 10 }];
     // The one garrison spot the demo has: the longhouse on the settlement's centre hex.
     const home = world.model.getSettlement(world.selectedSettlementId);
@@ -81,8 +103,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect(ring.action('Send army here')).toBeVisible();
 
     await ring.action('Send army here').click();
-    // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
-    await page.locator('.send-picker [data-source^="home:"] .send-row-head').click();
+    // The ring opens the source picker; the garrison is the only source that can go, so it hands over to the dispatch form on its own.
 
     const sheet = page.locator('.dispatch-sheet');
     await expect(sheet).toBeVisible();
@@ -103,7 +124,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     // suppressed while composing (the dispatch draft claims the click).
     const second = await page.evaluate((from) => {
       const at = { q: from.q + 2, r: from.r + 1 };
-      return { hex: at, screen: (window as unknown as DemoWindow).__settlementRenderer().hexCenterScreen(at) };
+      return { hex: at, screen: window.__settlementRenderer().hexCenterScreen(at) };
     }, first.hex);
     await settlement.clickHex(second);
     await expect.poll(async () => (await demoWorld(page)).dispatchDraft?.route).toEqual([first.hex, second.hex]);
@@ -112,7 +133,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     // Tap (not drag) the first pin to remove it. The map slid when the ring opened (it makes room for the full
     // circle), so the pin is where the renderer says it is now, not where `first` found it.
     await settlement.clickHex(
-      await page.evaluate((hex) => (window as unknown as DemoWindow).__settlementRenderer().hexCenterScreen(hex), first.hex),
+      await hexCenterScreen(page, first.hex),
     );
     await expect.poll(async () => (await demoWorld(page)).dispatchDraft?.route).toEqual([second.hex]);
 
@@ -135,6 +156,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
     await seedGarrison(page);
+    await seedStandingArmy(page);
     const ring = new RingMenuComponent(page);
 
     const first = await settlement.findHex();
@@ -145,7 +167,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
 
     // A hex near the first one that sits on screen above the picker sheet (it covers the lower half on a phone).
     const second = await page.evaluate((from) => {
-      const renderer = (window as unknown as DemoWindow).__settlementRenderer();
+      const renderer = window.__settlementRenderer();
       for (const [dq, dr] of [[1, -2], [2, -2], [-1, -1], [2, -3], [0, -2], [1, -1]]) {
         const at = { q: from.q + dq!, r: from.r + dr! };
         const screen = renderer.hexCenterScreen(at);
@@ -171,7 +193,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     const ring = new RingMenuComponent(page);
 
     const rival = await page.evaluate(() => {
-      const world = (window as unknown as DemoWindow).__demoWorld();
+      const world = window.__demoWorld();
       const home = world.model.getSettlement(world.selectedSettlementId);
       const at = { q: home.q + 6, r: home.r - 3 };
       world.model.registerSettlement({
@@ -187,7 +209,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
         foundedAt: Date.now(),
       });
       world.model.claimTerritory('rival-1');
-      return { at, screen: (window as unknown as DemoWindow).__settlementRenderer().hexCenterScreen(at) };
+      return { at, screen: window.__settlementRenderer().hexCenterScreen(at) };
     });
 
     const box = await settlement.canvasBox();
@@ -195,8 +217,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect(ring.action('Attack')).toBeVisible();
 
     await ring.action('Attack').click();
-    // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
-    await page.locator('.send-picker [data-source^="home:"] .send-row-head').click();
+    // The ring opens the source picker; the garrison is the only source that can go, so it hands over to the dispatch form on its own.
 
     await expect(page.locator('.dispatch-sheet')).toBeVisible();
     const draft = await demoWorld(page).then((w) => w.dispatchDraft);
@@ -230,8 +251,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     const hex = await settlement.findHex();
     await settlement.clickHex(hex);
     await ring.action('Send army here').click();
-    // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
-    await page.locator('.send-picker [data-source^="home:"] .send-row-head').click();
+    // The ring opens the source picker; the garrison is the only source that can go, so it hands over to the dispatch form on its own.
 
     const sheet = page.locator('.dispatch-sheet');
     await expect(sheet).toBeVisible();
@@ -246,12 +266,12 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     expect(overflow.offscreen).toEqual([]);
   });
 
-  test('QueueDrawer lists a seeded army with its ETA; a row tap selects it and keeps the drawer open; a double tap closes the drawer and centres the camera', async ({ page }) => {
+  test('QueueDrawer lists a seeded army with its ETA; a row tap selects it and opens its detail; Show on map closes the drawer and centres the camera', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await SettlementPage.found(page);
 
     const seeded = await page.evaluate(() => {
-      const world = (window as unknown as DemoWindow).__demoWorld();
+      const world = window.__demoWorld();
       const home = world.model.getSettlement(world.selectedSettlementId);
       const at = { q: home.q + 5, r: home.r - 2 };
       world.armies = [
@@ -290,49 +310,38 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
       return { at };
     });
 
-    const before = await page.evaluate(
-      (coord) => (window as unknown as DemoWindow).__settlementRenderer().hexCenterScreen(coord),
-      seeded.at,
-    );
+    const before = await hexCenterScreen(page, seeded.at);
     const canvasBox = (await page.locator('canvas').boundingBox())!;
     const canvasCentre = { x: canvasBox.width / 2, y: canvasBox.height / 2 };
     expect(Math.hypot(before.x - canvasCentre.x, before.y - canvasCentre.y)).toBeGreaterThan(80);
 
     await page.locator('.queue-drawer-handle').click();
-    const armyRow = page.locator('.army-row', { hasText: 'Spearman' });
+    const armyRow = page.getByTestId('army-row-head').filter({ has: page.locator('[title="Spearman"]') });
     await expect(armyRow).toBeVisible();
-    await expect(armyRow.locator('.status-row-time')).not.toHaveText('—');
+    await expect(armyRow.getByTestId('army-row-time')).not.toHaveText('—');
 
-    // The single tap lands on the row's left end and the double tap below on
-    // its centre, further apart than DOUBLE_TAP_SLOP_PX: the spec runs the two
-    // gestures back to back, often within one double-tap window (DOUBLE_TAP_MS),
-    // so at the same point the double tap's first click could pair with this
-    // tap instead.
-    // The drawer would then close a click early and the double tap's second
-    // click would land on the map underneath, opening a ring menu whose
-    // make-room pan moves the camera off the army.
-    const rowButton = armyRow.locator('.status-row-click');
-    const rowBox = (await rowButton.boundingBox())!;
-    expect(rowBox.width / 2 - 8).toBeGreaterThan(DOUBLE_TAP_SLOP_PX);
-    await rowButton.click({ position: { x: 8, y: rowBox.height / 2 } });
+    await armyRow.click();
 
     await expect.poll(async () => (await demoWorld(page)).selectedArmyId).toBe('army-1');
     await expect(page.locator('#queue-drawer-body')).toHaveAttribute('aria-hidden', 'false');
+    // The detail replaces the list; back returns to it.
+    await expect(page.getByTestId('army-detail')).toBeVisible();
+    await expect(armyRow).toHaveCount(0);
+    await page.getByTestId('army-detail-back').click();
+    await expect(armyRow).toBeVisible();
+    await armyRow.click();
 
-    await rowButton.dblclick();
+    await page.getByTestId('army-show-on-map').click();
 
     await expect(page.locator('#queue-drawer-body')).toHaveAttribute('aria-hidden', 'true');
     await expect.poll(async () => (await demoWorld(page)).selectedArmyId).toBe('army-1');
     await expect
       .poll(async () => {
-        const after = await page.evaluate(
-          (coord) => (window as unknown as DemoWindow).__settlementRenderer().hexCenterScreen(coord),
-          seeded.at,
-        );
+        const after = await hexCenterScreen(page, seeded.at);
         return Math.hypot(after.x - canvasCentre.x, after.y - canvasCentre.y);
       })
       .toBeLessThan(40);
-    // Checked once the camera has settled: no click of the double tap reached the map underneath.
+    // Checked once the camera has settled: nothing of the taps reached the map underneath.
     await expect(new RingMenuComponent(page).bubbles).toHaveCount(0);
   });
 });

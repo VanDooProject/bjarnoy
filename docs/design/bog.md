@@ -58,8 +58,7 @@ grass at a hex edge, like the wasteland does.
 
 1. **Pockets first.** Enclosed sea pockets of an island (3 to `BogPocketMaxTiles` tiles) are found before rivers
    are traced. The pocket ring and the filled lake tiles are blocked for the drainage and count as land for
-   rivers, so rivers sink into the pocket. A pocket's bog ring may touch sand (it lies inside the island); a pocket
-   that is too thin or touches open sea is left as it is.
+   rivers, so rivers sink into the pocket. A pocket's bog ring never touches sand (R7 holds for pockets too). A pocket that is too thin, or whose ring would touch sand or the open sea, becomes an inland lake (see world-generation-rules.md). So do pockets below 3 or above `BogPocketMaxTiles` tiles.
 2. **Through-river sites.** After tracing, before the width pass, sites are placed on scratch state: a lake with
    its shore tiles, and a creek from the lake's mouth to a river tile. Each site is validated with a trial
    `AssignWidths` (R11: the feeding river must have widened before the creek meets it) and committed only when
@@ -79,7 +78,7 @@ grass at a hex edge, like the wasteland does.
    avoids what cannot be padded: shore, creek and spring tiles take no mountain neighbour (`MountainFree`), creek routes avoid
    foreign river tiles beside them, the shore ring takes no foreign river, and a spawned river is traced with the creeks' and the
    lake ring's neighbours blocked. A pocket's two inner rings must be free of mountains and open sea (not only the first), else the
-   pocket stays sea.
+   pocket becomes an inland lake.
 5. **Holes** (`FillHoles`) once all sites, sinks, spawns, pockets, and the guarantee are done: any group of non-bog island tiles with no
    path out that does not cross bog or lake turns its grass and forest (river tiles stay) into plain moss. Mountains inside stay
    mountains. The noisy region outline used to leave such patches, which made one bog look like two.
@@ -125,6 +124,8 @@ grass or forest all round it (no mountain beside a shore or creek, no foreign ri
 | grass/forest tiles filled into bogs by the hole fill | - | 26 |
 | pockets found / filled (a pocket's two inner rings must be mountain- and sea-free) | 48 / 41 | 48 / 37 |
 | R1-R11 violations, inland river mouths | 0, 0 | 0, 0 |
+
+*Pockets in the inland-lakes PR* (seeds 1-8 at radius 1000, 482 islands, `bog-stats.ts`; a pocket's ring may no longer touch sand): pockets found / filled 83 / 27, so 56 found pockets became inland lakes; with 15 more outside 3 to `BogPocketMaxTiles` tiles, 71 inland-lake pockets with 3 977 tiles in all. R1-R12 violations 0.
 
 The "sites dropped" row is small because the search steers clear of unpaddable ground up front; the real cost is in the second row from
 the top and in the normal pass (124 to 100 bogs): rivers start on mountains and most candidate lakes have one near. The 37 islands with a
@@ -224,6 +225,8 @@ candidate and no bog are 21 islands under `BogGuaranteeMinTiles` (no lower islan
 11, of 150 to 354 tiles: the smallest island the guarantee helped has 190 tiles. Each of the 11 is narrow or mountainous: its land is
 at most 2 to 8 hexes from the coast, and its grass and forest more than two hexes in from sand and sea (R7) is too little for a lake with
 its shore ring. Normal-pass numbers are unchanged: 124 through-river bogs, 165 lakes before (217 now), 48 pockets found, 41 filled.
+
+*Inland lakes* (inland-lakes PR, seeds 1-8 at radius 1000, 482 islands, `bog-stats.ts`; the numbers above are older terrain and bog states): pockets found / filled 83 / 27; pockets that became inland lakes 71, with 3 977 tiles (the 56 found but not filled, and 15 outside the size range); R1-R12 violations 0.
 
 **The 20% rule.** The owner's rule is that a bog spawns or sinks a river as an exception, below 20%. The rolled sinks and spawns
 together are 7.4% of all bogs and 10.5% of the normal pass's, unchanged. A guarantee spawn bog is a bog that spawns a river by

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// One fight of a battle report: the attack and defence power and the two line tables. A land army's report is one of these, a
+// One fight of a battle report: the attack and defence power, the volley power of each side when ranged units struck first, and the two line tables. A land army's report is one of these, a
 // fleet's two (the ship fight, then the land fight). BattleReportCard.vue is the only user.
+import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { BattleReportAttackerLine, BattleReportDefenderLine } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
@@ -9,13 +10,19 @@ import { unitName } from '../../i18n/catalogueNames';
 export interface BattleFightData {
   attackPower: number;
   defensePower: number;
+  /** The ranged attack each side threw in the volley before the main fight; absent (a ship fight) or 0 without ranged units. */
+  attackerVolleyPower?: number;
+  defenderVolleyPower?: number;
   attackerLines: BattleReportAttackerLine[];
   defenderLines: BattleReportDefenderLine[];
 }
 
-defineProps<{ fight: BattleFightData }>();
+const props = defineProps<{ fight: BattleFightData }>();
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+
+// A fight without ranged units has no volley: its tables keep the single "Lost" column.
+const hasVolley = computed(() => (props.fight.attackerVolleyPower ?? 0) > 0 || (props.fight.defenderVolleyPower ?? 0) > 0);
 </script>
 
 <template>
@@ -29,6 +36,16 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
         <span class="power-label">{{ t('hud.battleReport.defensePower') }}</span>
         <span class="power-value">{{ Math.round(fight.defensePower) }}</span>
       </div>
+      <template v-if="hasVolley">
+        <div class="power" data-testid="attacker-volley-power">
+          <span class="power-label">{{ t('hud.battleReport.attacker') }} · {{ t('hud.battleReport.volleyPower') }}</span>
+          <span class="power-value">{{ Math.round(fight.attackerVolleyPower ?? 0) }}</span>
+        </div>
+        <div class="power" data-testid="defender-volley-power">
+          <span class="power-label">{{ t('hud.battleReport.defender') }} · {{ t('hud.battleReport.volleyPower') }}</span>
+          <span class="power-value">{{ Math.round(fight.defenderVolleyPower ?? 0) }}</span>
+        </div>
+      </template>
     </div>
 
     <div class="sides">
@@ -40,7 +57,11 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
               <tr>
                 <th>{{ t('hud.battleReport.unit') }}</th>
                 <th>{{ t('hud.battleReport.sent') }}</th>
-                <th>{{ t('hud.battleReport.lost') }}</th>
+                <template v-if="hasVolley">
+                  <th>{{ t('hud.battleReport.lostVolley') }}</th>
+                  <th>{{ t('hud.battleReport.lostFight') }}</th>
+                </template>
+                <th v-else>{{ t('hud.battleReport.lost') }}</th>
                 <th>{{ t('hud.battleReport.survived') }}</th>
               </tr>
             </thead>
@@ -48,11 +69,15 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
               <tr v-for="line in fight.attackerLines" :key="line.unit">
                 <td>{{ unitName(line.unit) }}</td>
                 <td>{{ line.sent }}</td>
-                <td class="lost">{{ line.lost }}</td>
+                <template v-if="hasVolley">
+                  <td class="lost" data-testid="lost-volley">{{ line.volleyLost }}</td>
+                  <td class="lost" data-testid="lost-fight">{{ line.lost - line.volleyLost }}</td>
+                </template>
+                <td v-else class="lost">{{ line.lost }}</td>
                 <td class="survived">{{ line.survived }}</td>
               </tr>
               <tr v-if="!fight.attackerLines.length">
-                <td colspan="4" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
+                <td :colspan="hasVolley ? 5 : 4" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
               </tr>
             </tbody>
           </table>
@@ -66,18 +91,26 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
             <thead>
               <tr>
                 <th>{{ t('hud.battleReport.unit') }}</th>
-                <th>{{ t('hud.battleReport.lost') }}</th>
+                <template v-if="hasVolley">
+                  <th>{{ t('hud.battleReport.lostVolley') }}</th>
+                  <th>{{ t('hud.battleReport.lostFight') }}</th>
+                </template>
+                <th v-else>{{ t('hud.battleReport.lost') }}</th>
                 <th>{{ t('hud.battleReport.survived') }}</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="line in fight.defenderLines" :key="line.unit">
                 <td>{{ unitName(line.unit) }}</td>
-                <td class="lost">{{ line.lost }}</td>
+                <template v-if="hasVolley">
+                  <td class="lost" data-testid="lost-volley">{{ line.volleyLost }}</td>
+                  <td class="lost" data-testid="lost-fight">{{ line.lost - line.volleyLost }}</td>
+                </template>
+                <td v-else class="lost">{{ line.lost }}</td>
                 <td class="survived">{{ line.survived }}</td>
               </tr>
               <tr v-if="!fight.defenderLines.length">
-                <td colspan="3" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
+                <td :colspan="hasVolley ? 4 : 3" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
               </tr>
             </tbody>
           </table>
@@ -90,7 +123,8 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 <style scoped>
 .power-row {
   display: flex;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 12px 24px;
   margin-bottom: 20px;
 }
 .power {

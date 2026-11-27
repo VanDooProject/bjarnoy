@@ -12,6 +12,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The same helper the API integration tests use to read an island with its start positions and terrain. -->
+    <Compile Include="..\Bjarnoy.Api.IntegrationTests\Infrastructure\FullIslands.cs" Link="FullIslands.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Referenced (not just run against) so this project sees the generated
          `Projects.Bjarnoy_AppHost` type that DistributedApplicationTestingBuilder
          needs, and the API's response contracts for asserting against the

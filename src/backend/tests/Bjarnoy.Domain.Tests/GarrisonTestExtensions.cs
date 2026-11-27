@@ -7,7 +7,7 @@ using Bjarnoy.Domain.World;
 namespace Bjarnoy.Domain.Tests;
 
 /// <summary>
-/// Test helpers for garrisons that stand at spots: land units at the centre, ships at the first spot that can hold ships (a Dockyard,
+/// Test helpers for garrisons that stand at spots: land units at the centre, ships at the first spot that can hold ships (a Harbour,
 /// or a harbouring centre), and dispatching from the spot the requested units stand at.
 /// </summary>
 internal static class GarrisonTestExtensions
@@ -83,9 +83,12 @@ internal static class TestArmy
         bool targetCampIsWater = false,
         IReadOnlyList<GarrisonSpot>? targetSpots = null,
         HexCoord? fromSpot = null,
-        bool targetCampIsSand = false) =>
+        bool targetCampIsSand = false,
+        int routeSearchBudget = HexPathfinder.MaxExpandedNodes,
+        bool isPremium = false) =>
         Army.PlanDispatch(
             settlement, fromSpot ?? settlement.SpotOf(requestedUnits), requestedUnits, provisions, waypoints, destination, now, armyId,
             terrainAt, mission, targetSettlementId, targetBuildingCoord, targetClaimDiscs, isHexFoundable, renownAndSlotAllowed,
-            speedFactor, isRiver, isWideRiver, giants, walls, targetCampCoord, targetCampIsWater, targetCampIsSand, targetSpots);
+            speedFactor, isRiver, isWideRiver, giants, walls, targetCampCoord, targetCampIsWater, targetCampIsSand, targetSpots,
+            routeSearchBudget: routeSearchBudget, isPremium: isPremium);
 }

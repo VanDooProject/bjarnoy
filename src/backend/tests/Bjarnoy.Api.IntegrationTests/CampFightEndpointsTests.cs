@@ -9,6 +9,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -47,8 +48,7 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
         HttpClient client, string family = CampFamilies.Harewarren, int level = 1, int axemen = 20)
     {
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -99,9 +99,14 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
     private async Task<CampStateResponse> CampAtAsync(HttpClient client, Guid worldId, HexCoord hex) =>
         (await CampsAsync(client, worldId))!.Single(c => (c.Q, c.R) == (hex.Q, hex.R));
 
-    private Task<List<CampReportResponse>?> CampReportsAsync(HttpClient client, Guid settlementId) =>
-        client.GetFromJsonAsync<List<CampReportResponse>>(
-            $"/api/v1/settlements/{settlementId}/camp-reports", SqliteApiFixture.StrictJson, Ct);
+    /// <summary>The camp reports of the player owning <paramref name="settlementId"/>, from the player's inbox of its world.</summary>
+    private async Task<List<CampReportResponse>?> CampReportsAsync(HttpClient client, Guid settlementId)
+    {
+        var settlement = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlementId}", SqliteApiFixture.StrictJson, Ct);
+        return await client.GetFromJsonAsync<List<CampReportResponse>>(
+            $"/api/v1/worlds/{settlement!.WorldId}/camp-reports", SqliteApiFixture.StrictJson, Ct);
+    }
 
     /// <summary>Lets the army arrive, fight and walk home; reading it is what settles it (a folded army is a 404).</summary>
     private async Task ResolveHuntAsync(HttpClient client, Guid armyId)
@@ -383,7 +388,7 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_camp_report_is_only_readable_by_the_settlements_owner()
+    public async Task A_camp_report_is_only_readable_by_its_player()
     {
         using var client = Client();
         var (_, settlement, campHex, _) = await SetUpAsync(client);
@@ -395,7 +400,9 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
         stranger.DefaultRequestHeaders.Add("X-Owner-Id", "someone-else");
 
         Assert.Equal(HttpStatusCode.Forbidden, (await stranger.GetAsync($"/api/v1/camp-reports/{report.Id}", Ct)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await stranger.GetAsync($"/api/v1/settlements/{settlement.Id}/camp-reports", Ct)).StatusCode);
+        // The stranger's own inbox in that world is empty — the owner's report is not in it.
+        Assert.Empty((await stranger.GetFromJsonAsync<List<CampReportResponse>>(
+            $"/api/v1/worlds/{settlement.WorldId}/camp-reports", SqliteApiFixture.StrictJson, Ct))!);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/camp-reports/{Guid.NewGuid()}", Ct)).StatusCode);
     }
 }

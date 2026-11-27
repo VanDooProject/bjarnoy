@@ -50,7 +50,10 @@ function army(overrides: Partial<AdminArmyResponse['army']> = {}): AdminArmyResp
         turnAroundAt: '2026-01-01T20:00:00Z',
         returnArrivesAt: '2026-01-02T06:00:00Z',
         isReturning: false,
+        isStranded: false,
+        isFleeing: false,
       },
+      starvesAt: null,
       ...overrides,
     },
   };
@@ -91,7 +94,7 @@ describe('ArmyEditor', () => {
     expect(headers).toEqual(expect.arrayContaining(['Mission', 'Units', 'Provisions', 'Loot carried', 'Position']));
     const row = wrapper.find('tr.summary');
     expect(row.find('.provisions').text()).toBe('120');
-    expect(row.find('.loot').text()).toBe('38 wood, 2 stone, 3 food, 4 iron');
+    expect(row.find('.loot').text()).toBe('38 wood, 2 brick, 3 food, 4 iron');
   });
 
   it('says so when a settlement has no armies in the field', async () => {

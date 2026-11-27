@@ -158,7 +158,7 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
             var settlement = MakeSettlement(worldId, islandId, ownerId, centre, food: 10, (BuildingType.Tower, tower));
             var army = PlantArmy(settlement, tower, tower, centre, returning: true, provisions: 100, new UnitStack(UnitType.Spearman, 5));
             db.Settlements.Add(settlement);
-            db.Armies.Add(army);
+            db.AddArmyRows(army);
             await db.SaveChangesAsync(Ct);
             settlementId = settlement.Id;
             armyId = army.Id;
@@ -240,7 +240,7 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
             var near = PlantArmy(settlement, tower, tower, new HexCoord(6, 0), returning: false, provisions: 500, new UnitStack(UnitType.Spearman, 5));
             var stranded = PlantArmy(settlement, tower, tower, new HexCoord(6, 0), returning: false, provisions: 0, new UnitStack(UnitType.Spearman, 5));
             db.Settlements.Add(settlement);
-            db.Armies.AddRange(near, stranded);
+            db.AddArmyRows(near, stranded);
             await db.SaveChangesAsync(Ct);
             settlementId = settlement.Id;
             nearId = near.Id;
@@ -280,12 +280,12 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
             var (worldId, islandId) = await AddWorldAsync(db, SmallIslandOptions);
-            var settlement = MakeSettlement(worldId, islandId, ownerId, centre, food: 400, (BuildingType.Dockyard, dock));
+            var settlement = MakeSettlement(worldId, islandId, ownerId, centre, food: 400, (BuildingType.Harbour, dock));
             var fleet = PlantArmy(
                 settlement, dock, new HexCoord(-58, -42), dock, returning: true, provisions: 200,
                 new UnitStack(UnitType.Karve, 2), new UnitStack(UnitType.Spearman, 6));
             db.Settlements.Add(settlement);
-            db.Armies.Add(fleet);
+            db.AddArmyRows(fleet);
             await db.SaveChangesAsync(Ct);
             settlementId = settlement.Id;
             fleetId = fleet.Id;
@@ -328,7 +328,7 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
             var (worldId, islandId) = await AddWorldAsync(db);
-            var host = MakeSettlement(worldId, islandId, hostOwner, hostCentre, food: 400, (BuildingType.Tower, hostTower), (BuildingType.Dockyard, hostDock));
+            var host = MakeSettlement(worldId, islandId, hostOwner, hostCentre, food: 400, (BuildingType.Tower, hostTower), (BuildingType.Harbour, hostDock));
             var guestHome = MakeSettlement(worldId, islandId, guestOwner, new HexCoord(0, 0), food: 400);
             guestHome.Garrison.Add(Stack(guestHome, new HexCoord(0, 0), UnitType.Spearman, 5));
             db.Settlements.AddRange(host, guestHome);
@@ -404,17 +404,18 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_dispatch_listing_units_at_two_spots_is_refused_as_units_at_several_spots()
+    public async Task A_dispatch_listing_units_at_a_second_hex_that_is_no_garrison_spot_is_refused_for_that_spot()
     {
         var (client, homeId, home, support) = await SupportSetupAsync();
         using var _ = client;
 
+        // (3,0) is no spot of the home settlement: sending from several spots is allowed, every one of them must be a spot.
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{homeId}/armies",
             support([new(home, [new UnitCountRequest("spearman", 3)]), new(new HexPointRequest(3, 0), [new UnitCountRequest("spearman", 2)])]), Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Equal("UnitsAtSeveralSpots", await response.RejectionAsync(Ct));
+        Assert.Equal("NotAGarrisonSpot", await response.RejectionAsync(Ct));
     }
 
     [Fact]

@@ -5,7 +5,7 @@
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BuildingHudDial from './BuildingHudDial.vue';
-import type { ConstructionDial } from '../../lib/map/constructionDial';
+import { CONSTRUCTION_DIAL_REJECT_COLOR, type ConstructionDial } from '../../lib/map/constructionDial';
 import { animationPreference } from '../../lib/perf/animationPreference';
 import { motionPreferences } from '../../lib/perf/motionPreferences';
 import { installFakeAnimate, type FakeAnimate } from '../../test/fakeAnimate';
@@ -109,5 +109,219 @@ describe('BuildingHudDial arc', () => {
     await wrapper!.vm.$nextTick();
     expect(fake.animations).toHaveLength(0);
     expect(arc().exists()).toBe(false);
+  });
+});
+
+describe('BuildingHudDial blocked refusal', () => {
+  let wrapper: VueWrapper | undefined;
+  const RED = `#${CONSTRUCTION_DIAL_REJECT_COLOR.toString(16).padStart(6, '0')}`;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date', 'requestAnimationFrame', 'cancelAnimationFrame'] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    wrapper?.unmount();
+    wrapper = undefined;
+    motionPreferences.hud = 'auto';
+    vi.useRealTimers();
+  });
+
+  // The track is the dial's outline: the last plain stroked polygon of the dial body.
+  const track = (w: VueWrapper) => w.findAll('polygon').filter((p) => p.attributes('fill') === 'none').at(-1)!;
+
+  it('turns a green ring red while the refusal plays, and green again once it has played out on its own', async () => {
+    wrapper = mount(BuildingHudDial, { props: { radius: 20, ring: 'ready', label: '3', blockedAtMs: NOW } });
+    expect(track(wrapper).attributes('stroke')?.toLowerCase()).toBe(RED);
+
+    vi.advanceTimersByTime(1_600);
+    await wrapper.vm.$nextTick();
+    expect(track(wrapper).attributes('stroke')?.toLowerCase()).toBe('#5fd08a');
+  });
+
+  it('turns the ring red with the HUD motion off too, and back afterwards', async () => {
+    motionPreferences.hud = 'off';
+    wrapper = mount(BuildingHudDial, { props: { radius: 20, ring: 'ready', label: '3', blockedAtMs: NOW } });
+    expect(track(wrapper).attributes('stroke')?.toLowerCase()).toBe(RED);
+
+    vi.advanceTimersByTime(1_600);
+    await wrapper.vm.$nextTick();
+    expect(track(wrapper).attributes('stroke')?.toLowerCase()).toBe('#5fd08a');
+  });
+});
+
+describe('BuildingHudDial quick look: the level hex and the switch', () => {
+  let wrapper: VueWrapper | undefined;
+  let fake: FakeAnimate | undefined;
+  const R = 27.5;
+
+  afterEach(() => {
+    wrapper?.unmount();
+    wrapper = undefined;
+    fake?.restore();
+    fake = undefined;
+    motionPreferences.hud = 'auto';
+    vi.restoreAllMocks();
+  });
+
+  // The label's fade runs in <Transition>'s hooks, so the tests that check it mount with the real Transition, not the stub.
+  const mountDial = (props: Record<string, unknown>, global: { stubs?: Record<string, boolean> } = {}) => {
+    wrapper = mount(BuildingHudDial, { props: { radius: R, ring: 'ready', level: 7, label: '7', ...props }, attachTo: document.body, global });
+    return wrapper;
+  };
+  const levelHex = () => wrapper!.find('.hud-dial__level');
+  const centre = (points: string) => {
+    const pts = points.split(' ').map((p) => p.split(',').map(Number) as [number, number]);
+    return [pts.reduce((a, p) => a + p[0], 0) / pts.length, pts.reduce((a, p) => a + p[1], 0) / pts.length] as const;
+  };
+
+  it('draws the level in a hex on the dial\'s lower right corner point, in the ring colour, only while a glyph shows', () => {
+    mountDial({ glyph: 'up', label: '' });
+    const hex = levelHex();
+    expect(hex.exists()).toBe(true);
+    expect(hex.find('text').text()).toBe('7');
+    expect(hex.find('polygon[fill="none"]').attributes('stroke')).toBe('#5fd08a');
+    // At rest it is the dial's copy at 0.6 scale, moved to the corner point (0.866 R, 0.5 R, times 0.98).
+    const style = hex.attributes('style')!;
+    expect(style).toContain('scale(0.6)');
+    expect(style).toContain(`translate(${(0.866 * R * 0.98).toFixed(2)}px, ${(0.5 * R * 0.98).toFixed(2)}px)`);
+    wrapper!.unmount();
+    mountDial({ label: '7' });
+    expect(levelHex().exists()).toBe(false);
+  });
+
+  it('keeps the dial where it was: the hex is centred on the svg centre, and the svg size does not depend on the glyph', async () => {
+    mountDial({});
+    const plain = wrapper!.get('svg');
+    const size = plain.attributes('width');
+    const centrePlain = centre(plain.get('polygon.hud-dial__body').attributes('points')!);
+    await wrapper!.setProps({ glyph: 'wait', label: '' });
+    expect(wrapper!.get('svg').attributes('width')).toBe(size);
+    expect(centre(wrapper!.get('polygon.hud-dial__body').attributes('points')!)).toEqual(centrePlain);
+    expect(centrePlain[0]).toBeCloseTo(Number(size) / 2, 1);
+  });
+
+  it('slides a copy of the dial to the corner when the glyph comes on, over 450 ms', async () => {
+    fake = installFakeAnimate();
+    mountDial({});
+    await wrapper!.setProps({ glyph: 'up', label: '' });
+    await wrapper!.vm.$nextTick();
+    const copy = fake.animations.find((a) => a.target === levelHex().element)!;
+    expect(copy.timing).toMatchObject({ duration: 450, easing: 'cubic-bezier(.3, 0, .2, 1)', fill: 'both', direction: 'normal' });
+    expect(copy.frames[0]!.transform).toBe('translate(0px, 0px) scale(1)');
+    expect(copy.frames[1]!.transform).toContain('scale(0.6)');
+    // The dial turns gold and the glyph fades in, starting 120 ms in.
+    const body = fake.animations.find((a) => a.target === wrapper!.get('.hud-dial__body').element)!;
+    expect(body.frames.map((f) => f.fill)).toEqual(['#0b1720', '#ffc55c']);
+    const glyph = fake.animations.find((a) => a.target === wrapper!.get('.hud-dial__glyph').element)!;
+    expect(glyph.frames[1]).toMatchObject({ opacity: 0, offset: 120 / 450 });
+    expect(glyph.frames[2]).toMatchObject({ opacity: 1, offset: 1 });
+    fake.finishAll();
+    expect(fake.running()).toHaveLength(0);
+    expect(levelHex().exists()).toBe(true);
+  });
+
+  it('plays the reverse when the glyph goes away, then shows the plain dial; a change mid-way reverses from where it is', async () => {
+    fake = installFakeAnimate();
+    mountDial({});
+    await wrapper!.setProps({ glyph: 'up', label: '' });
+    await wrapper!.vm.$nextTick();
+    // Mid-way out of the switch-in: the same animations run backwards.
+    const inAnims = fake.animations.slice();
+    await wrapper!.setProps({ glyph: undefined, label: '7' });
+    expect(fake.animations).toHaveLength(inAnims.length);
+    expect(inAnims.every((a) => a.reversed && a.playState === 'running')).toBe(true);
+    expect(levelHex().exists()).toBe(true);
+    // And back in again.
+    await wrapper!.setProps({ glyph: 'up', label: '' });
+    expect(inAnims.every((a) => !a.reversed)).toBe(true);
+    // Out for good: from the settled state a reverse set of animations plays, and the dial is plain when it lands.
+    fake.finishAll();
+    const before = fake.animations.length;
+    await wrapper!.setProps({ glyph: undefined, label: '7' });
+    const out = fake.animations.slice(before);
+    expect(out.length).toBeGreaterThan(0);
+    expect(out.every((a) => a.timing.direction === 'reverse' && a.timing.duration === 450)).toBe(true);
+    expect(levelHex().exists()).toBe(true);
+    expect(wrapper!.find('.hud-dial__glyph').exists()).toBe(true);
+    fake.finishAll();
+    await wrapper!.vm.$nextTick();
+    expect(levelHex().exists()).toBe(false);
+    expect(wrapper!.find('.hud-dial__glyph').exists()).toBe(false);
+  });
+
+  it('keeps the dial\'s own level hidden until the copy has slid back onto it, then shows it without a fade', async () => {
+    fake = installFakeAnimate();
+    const labelFade = vi.fn((_el: Element, _dir: 'in' | 'out', done: () => void) => done());
+    mountDial({ labelFade }, { stubs: { transition: false } });
+    const label = () => wrapper!.find('.hud-dial__label');
+    expect(label().text()).toBe('7');
+    // Shift down: the copy takes the level over at once.
+    await wrapper!.setProps({ glyph: 'up', label: '' });
+    expect(label().exists()).toBe(false);
+    fake.finishAll();
+    // Shift up: the layer hands the level back as the label right away, but the copy still carries it on its way back.
+    await wrapper!.setProps({ glyph: undefined, label: '7' });
+    expect(levelHex().exists()).toBe(true);
+    expect(label().exists()).toBe(false);
+    fake.finishAll();
+    await wrapper!.vm.$nextTick();
+    await wrapper!.vm.$nextTick();
+    expect(levelHex().exists()).toBe(false);
+    expect(label().text()).toBe('7');
+    expect(labelFade).not.toHaveBeenCalled();
+  });
+
+  it('keeps the dial\'s own level hidden while a switch-out reverses back in, and fades in a label other than the level', async () => {
+    fake = installFakeAnimate();
+    const labelFade = vi.fn((_el: Element, _dir: 'in' | 'out', done: () => void) => done());
+    mountDial({ labelFade }, { stubs: { transition: false } });
+    const label = () => wrapper!.find('.hud-dial__label');
+    await wrapper!.setProps({ glyph: 'up', label: '' });
+    fake.finishAll();
+    await wrapper!.setProps({ glyph: undefined, label: '7' });
+    await wrapper!.setProps({ glyph: 'up', label: '' });
+    expect(label().exists()).toBe(false);
+    // Out again, and an order takes its place before the copy lands: `#2` fades in as usual.
+    await wrapper!.setProps({ glyph: undefined, label: '#2' });
+    expect(label().exists()).toBe(false);
+    fake.finishAll();
+    await wrapper!.vm.$nextTick();
+    await wrapper!.vm.$nextTick();
+    expect(label().text()).toBe('#2');
+    expect(labelFade).toHaveBeenCalledTimes(1);
+    expect(labelFade.mock.calls[0]![1]).toBe('in');
+  });
+
+  it('swaps up and wait without the switch animation', async () => {
+    fake = installFakeAnimate();
+    mountDial({ glyph: 'up', label: '' });
+    await wrapper!.setProps({ glyph: 'wait' });
+    await wrapper!.vm.$nextTick();
+    expect(fake.animations).toHaveLength(0);
+    expect(wrapper!.find('.hud-dial__glyph--wait').exists()).toBe(true);
+  });
+
+  it('starts no animation when it mounts already in the quick look', async () => {
+    fake = installFakeAnimate();
+    mountDial({ glyph: 'up', label: '' });
+    await wrapper!.vm.$nextTick();
+    expect(fake.animations).toHaveLength(0);
+    expect(levelHex().exists()).toBe(true);
+  });
+
+  it('shows the end state at once, without animations, when the HUD plays reduced motion', async () => {
+    fake = installFakeAnimate();
+    motionPreferences.hud = 'off';
+    mountDial({});
+    await wrapper!.setProps({ glyph: 'up', label: '' });
+    await wrapper!.vm.$nextTick();
+    expect(fake.animations).toHaveLength(0);
+    expect(levelHex().exists()).toBe(true);
+    expect(wrapper!.find('.hud-dial__glyph--up').exists()).toBe(true);
+    await wrapper!.setProps({ glyph: undefined, label: '7' });
+    expect(fake.animations).toHaveLength(0);
+    expect(levelHex().exists()).toBe(false);
+    expect(wrapper!.find('.hud-dial__glyph').exists()).toBe(false);
   });
 });

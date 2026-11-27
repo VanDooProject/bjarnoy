@@ -119,6 +119,16 @@ public sealed class AuthService(
                 settlement.UserId = user.Id;
             }
 
+            // An army carries its owner itself (it can outlive its home), so it is claimed with the settlements.
+            var armiesToClaim = await _dbContext.Armies
+                .Where(a => a.OwnerId == existingOwnerId && a.UserId == SystemUserIds.Abandoned)
+                .ToListAsync(cancellationToken);
+
+            foreach (var army in armiesToClaim)
+            {
+                army.UserId = user.Id;
+            }
+
             claimedWorldIds = [.. toClaim.Select(s => s.WorldId).Distinct()];
         }
 
@@ -281,10 +291,10 @@ public sealed class AuthService(
     {
         var found = await _dbContext.Users
             .Where(u => u.Id == id)
-            .Select(u => new { u.IsPremium })
+            .Select(u => new { u.IsPremium, u.PremiumUntil })
             .FirstOrDefaultAsync(cancellationToken);
 
-        return found?.IsPremium;
+        return found is null ? null : found.IsPremium || (found.PremiumUntil is { } until && until > _timeProvider.GetUtcNow());
     }
 
     /// <summary>

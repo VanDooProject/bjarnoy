@@ -11,6 +11,7 @@ using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -39,8 +40,7 @@ public sealed class QuestEndpointsTests : IAsyncLifetime
     private async Task<SettlementResponse> FoundAsync(HttpClient client)
     {
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -83,6 +83,66 @@ public sealed class QuestEndpointsTests : IAsyncLifetime
         Assert.Equal(250, settlement.Quests.Single(q => q.Id == "longhouse2").Reward.Wood);
         Assert.Equal(new QuestProgressResponse(0, 3), settlement.Quests.Single(q => q.Id == "tower3").Progress);
         Assert.Null(settlement.Quests.Single(q => q.Id == "hunt1").Progress);
+    }
+
+    [Fact]
+    public async Task The_register_quest_waits_before_the_tower_quest_until_the_player_registers()
+    {
+        using var client = _factory.CreateClient();
+        var settlement = await FoundAsync(client);
+
+        var ids = settlement.Quests.Select(q => q.Id).ToList();
+        Assert.Equal(ids.IndexOf("tower3") - 1, ids.IndexOf("register"));
+        var register = settlement.Quests.Single(q => q.Id == "register");
+        Assert.False(register.Completed);
+        Assert.Equal(14, register.PremiumDays);
+
+        var refused = await client.PostAsync(ClaimUrl(settlement.Id, "register"), null, Ct);
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Contains("NotCompleted", await refused.Content.ReadAsStringAsync(Ct));
+    }
+
+    [Fact]
+    public async Task Registering_opens_the_register_quest_first_and_claiming_it_grants_two_weeks_of_premium_once()
+    {
+        using var client = _factory.CreateClient();
+        var settlement = await FoundAsync(client);
+
+        var userName = Unique("reg");
+        var registered = await client.PostJsonAsync(
+            "/api/v1/auth/register", new RegisterRequest(userName, "correct-horse-battery", OwnerId), Ct);
+        Assert.Equal(HttpStatusCode.OK, registered.StatusCode);
+        var auth = await registered.ReadStrictAsync<AuthResponse>(Ct);
+        Assert.False(auth.User.IsPremium);
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", auth.AccessToken);
+
+        var before = (await GetAsync(client, settlement.Id))!;
+        Assert.Equal("register", before.Quests[0].Id);
+        Assert.True(before.Quests[0].Completed);
+
+        var claim = await client.PostAsync(ClaimUrl(settlement.Id, "register"), null, Ct);
+        Assert.Equal(HttpStatusCode.OK, claim.StatusCode);
+        var after = await claim.Content.ReadFromJsonAsync<SettlementResponse>(SqliteApiFixture.StrictJson, Ct);
+        Assert.True(after!.Quests.Single(q => q.Id == "register").Claimed);
+        Assert.Equal(before.Resources.Stock.Wood, after.Resources.Stock.Wood, 1);
+
+        var now = _factory.Time.GetUtcNow();
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var user = await db.Users.AsNoTracking().SingleAsync(u => u.Id == auth.User.Id, Ct);
+            Assert.False(user.IsPremium);
+            Assert.Equal(now.AddDays(14), user.PremiumUntil);
+            Assert.True(user.IsPremiumAt(now));
+            Assert.False(user.IsPremiumAt(now.AddDays(14).AddSeconds(1)));
+        }
+
+        var me = await client.GetFromJsonAsync<UserResponse>("/api/v1/auth/me", SqliteApiFixture.StrictJson, Ct);
+        Assert.True(me!.IsPremium);
+
+        var again = await client.PostAsync(ClaimUrl(settlement.Id, "register"), null, Ct);
+        Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+        Assert.Contains("AlreadyClaimed", await again.Content.ReadAsStringAsync(Ct));
     }
 
     [Fact]

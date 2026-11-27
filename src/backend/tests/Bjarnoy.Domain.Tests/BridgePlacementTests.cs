@@ -55,10 +55,10 @@ public sealed class BridgePlacementTests
 
         (int Level, ResourceAmounts Cost, TimeSpan Time)[] expected =
         [
-            (1, new(Wood: 120, Stone: 0, Food: 20, Iron: 0), TimeSpan.FromMinutes(10)),
-            (2, new(Wood: 220, Stone: 0, Food: 30, Iron: 0), TimeSpan.FromMinutes(20)),
-            (3, new(Wood: 380, Stone: 160, Food: 40, Iron: 0), TimeSpan.FromMinutes(45)),
-            (4, new(Wood: 660, Stone: 340, Food: 60, Iron: 0), TimeSpan.FromMinutes(90)),
+            (1, new(Wood: 120, Stone: 0, Food: 20, Iron: 0), TimeSpan.FromMinutes(30)),
+            (2, new(Wood: 220, Stone: 0, Food: 30, Iron: 0), TimeSpan.FromMinutes(80)),
+            (3, new(Wood: 380, Stone: 160, Food: 40, Iron: 0), TimeSpan.FromMinutes(130)),
+            (4, new(Wood: 660, Stone: 340, Food: 60, Iron: 0), TimeSpan.FromMinutes(180)),
         ];
         foreach (var (level, cost, time) in expected)
         {
@@ -149,7 +149,7 @@ public sealed class BridgePlacementTests
         var next = Plan(level1);
         Assert.True(next.Accepted, next.Rejection.ToString());
         Assert.Equal(2, next.Order!.TargetLevel);
-        Assert.Equal(TimeSpan.FromMinutes(20), next.Order.BaseDuration);
+        Assert.Equal(TimeSpan.FromMinutes(80), next.Order.BaseDuration);
 
         Assert.Equal(BuildRejection.MaxLevelReached, Plan(Home(extra: [(Span, BuildingType.Bridge, 4)])).Rejection);
     }

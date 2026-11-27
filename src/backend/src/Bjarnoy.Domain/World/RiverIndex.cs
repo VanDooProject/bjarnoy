@@ -1,14 +1,17 @@
+using System.Collections.Concurrent;
+
 namespace Bjarnoy.Domain.World;
 
 /// <summary>
 /// A world's river tiles as the two lookups a land army's pathfinding needs
 /// (<see cref="Movement.HexPathfinder.FindPath"/>'s <c>isRiver</c> and <c>isWideRiver</c>):
-/// built once per request from the persisted tiles, like the terrain sampler.
+/// built from the persisted tiles; one instance per world is kept and shared (<c>WorldRivers</c>), so it is thread-safe.
 /// </summary>
 public sealed class RiverIndex
 {
     private readonly Dictionary<HexCoord, RiverTile> _tiles;
-    private readonly Dictionary<HexCoord, bool> _wide = [];
+    // Concurrent: one index per world is cached and shared by every request (WorldRivers).
+    private readonly ConcurrentDictionary<HexCoord, bool> _wide = new();
 
     public RiverIndex(IEnumerable<RiverTile> tiles)
     {
@@ -34,12 +37,6 @@ public sealed class RiverIndex
             return false;
         }
 
-        if (!_wide.TryGetValue(hex, out var wide))
-        {
-            wide = RiverGenerator.IsWideRiver(tile, _tiles);
-            _wide[hex] = wide;
-        }
-
-        return wide;
+        return _wide.GetOrAdd(hex, _ => RiverGenerator.IsWideRiver(tile, _tiles));
     }
 }

@@ -47,15 +47,13 @@ public sealed class CampAmbushService(
         ArgumentNullException.ThrowIfNull(armyEntity);
         ArgumentNullException.ThrowIfNull(domain);
 
-        if (domain.Location is not ArmyLocation.InTransit { Movement: var movement }
-            || movement.RetreatImmune)
+        if (domain.Location is not ArmyLocation.InTransit { Movement: var movement })
         {
             return CampAmbushOutcome.None;
         }
 
-        var settlement = armyEntity.Settlement!;
-        var world = settlement.World!;
-        var worldId = settlement.WorldId;
+        var world = armyEntity.World!;
+        var worldId = armyEntity.WorldId;
 
         var camps = await _campService.LoadCampsAsync(worldId, now, cancellationToken: cancellationToken).ConfigureAwait(false);
         // Land armies are only met by land camps, fleets only by water camps (the whale road): a fleet is
@@ -93,8 +91,10 @@ public sealed class CampAmbushService(
 
         var report = CampReport.From(
             Guid.CreateVersion7(), worldId, CampReportKind.Ambush, ambush.At, camp, effectiveLevel,
-            armyEntity.SettlementId, armyEntity.Id, domain.Stacks, garrison, plan, seed);
-        _dbContext.CampReports.Add(CampReportEntity.FromDomain(report));
+            armyEntity.SettlementId ?? Guid.Empty, armyEntity.Id, domain.Stacks, garrison, plan, seed);
+        var reportEntity = CampReportEntity.FromDomain(report);
+        reportEntity.OwnerId = armyEntity.OwnerId;
+        _dbContext.CampReports.Add(reportEntity);
 
         _logger.LogInformation(
             "{Family} camp at {Camp} ambushed army {ArmyId} at {Hex}: {Winner} won ({ArmyPower} vs {CampPower}); "
@@ -122,8 +122,13 @@ public sealed class CampAmbushService(
         }
 
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
-        var home = settlement.HomeHexFor(survivors);
-        armyEntity.ApplyDomain(survivors.ForceFieldRetreat(ambush.At, ambush.Hex, home, sampler.TerrainAt, world.SpeedFactor));
+        var home = survivors.Home;
+        var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, worldId, sampler.TerrainAt, rivers.IsWide, ambush.At, cancellationToken).ConfigureAwait(false))
+            .ForOwner(armyEntity.WallOwnerKey);
+        armyEntity.ApplyDomain(survivors.ForceFieldRetreat(
+            ambush.At, ambush.Hex, home, sampler.TerrainAt, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls,
+            provisionsAtBattle: domain.ProvisionsAt(ambush.At)));
         return CampAmbushOutcome.Fought;
     }
 

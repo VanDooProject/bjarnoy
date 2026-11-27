@@ -164,6 +164,14 @@ persisted:
 - **start positions** — plots a first settlement may be founded on: a grass hex
   with a forest and two more grass hexes adjacent, and no water within two hexes
 
+An island's bog tiles, river tiles and start positions are written once, when the world is created or reseeded. The
+server therefore keeps what it derives from them per world in memory (`PerWorldCache<T>`, at most eight worlds, least
+recently used out first): the bog overlay (`WorldTerrain`), the river index (`WorldRivers`), and the serialized, gzipped
+terrain chunks and start positions served by the endpoints below. Everything that replaces a world's islands calls
+`WorldIslandCaches.Invalidate(worldId)`, which clears all of them. A cached load outlives the request that starts it and is
+awaited by others, so every loader reads through a `GameDbContext` of its own (`WorldIslandCaches.LoadAsync`), never the
+first caller's; a load that faults or is canceled is dropped so the next call retries.
+
 Generation is pure and takes its seed as a parameter, so two worlds can be
 generated at once. The legacy generator could not: it set a static
 `Noise.Seed`, which two concurrent calls would corrupt.
@@ -297,7 +305,10 @@ development.
 |---|---|
 | `GET /api/v1/worlds` | list worlds (minimal: name, status, joinability, player count, free slots; creating one is admin-only via `POST /api/v1/admin/worlds`; worlds still being created or failed are left out for non-admins) |
 | `GET /api/v1/worlds/{id}` | one world |
-| `GET /api/v1/worlds/{id}/islands` | its islands and their start positions |
+| `GET /api/v1/worlds/{id}/islands` | its islands: name, centre, tile count, giants, camps (only for islands the caller has seen), Utgard walls and Jötun towers. No tiles and no start positions: those are big and only change on a reseed, so they have their own cached endpoints below. Not cached (camps and walls change); the query leaves the bog, river and start-position columns out of its `SELECT` |
+| `GET /api/v1/worlds/{id}/terrain-chunks` | manifest of the islands' river and bog tiles: chunk size, chunk count and each chunk's ETag |
+| `GET /api/v1/worlds/{id}/terrain-chunks/{n}` | the river and bog tiles of chunk `n`: the `64n`-th to the `(64n + 63)`-th island of the listed islands in index order (wasted islands are filtered out first, by the same hiding rule as `/islands`, so this is not index `64n` to `64n + 63`), same tile shapes as before. Serialized and gzipped once per world and kept in memory (serving a chunk reads only the world row by primary key, for the endboss state that decides the wasted-island hiding, and no island data), sent with `Content-Encoding: gzip`, `ETag` and `Cache-Control: no-cache`; a matching `If-None-Match` answers `304`, a client without gzip gets it decompressed |
+| `GET /api/v1/worlds/{id}/start-positions` | every island's founding plots, cached and sent the same way |
 | `GET /api/v1/worlds/{id}/tiles?qMin=&qMax=&rMin=&rMax=` | terrain for a window |
 | `POST /api/v1/worlds/{id}/settlements` | found a settlement on a start position |
 | `GET /api/v1/worlds/{id}/settlements` | settlements in a world the caller can see (their own plus explored rivals'); `mine` marks the caller's own. Every longhouse is listed (the map draws them), each with `realmId` (the oldest member of its linked realm) and the realm's name |

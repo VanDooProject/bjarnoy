@@ -1,6 +1,8 @@
 // See RingMenuComponent.ts for why `expect` is not imported from `../fixtures`.
 import { type Locator, type Page } from '@playwright/test';
-import { captureCanvas, foundSettlement, gotoWorldMap, loginTestUser } from '../helpers';
+import { foundSettlement, gotoWorldMap } from '../helpers';
+import { captureCanvas } from '../support/render';
+import { loginTestUser } from '../support/session';
 import type { ScreenPoint } from './SettlementPage';
 
 /**

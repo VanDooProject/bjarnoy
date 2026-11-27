@@ -29,7 +29,7 @@ public class BattleReportTests
     [Fact]
     public void A_land_armys_report_is_its_one_fight_as_before_with_no_ship_fight()
     {
-        var (sent, plan) = Fight([new(UnitType.Axeman, 20)], home: [new(UnitType.Spearman, 10), new(UnitType.Longship, 3)]);
+        var (sent, plan) = Fight([new(UnitType.Axeman, 20)], home: [new(UnitType.Spearman, 10), new(UnitType.Snekkja, 3)]);
 
         var report = ReportOf(sent, plan);
 
@@ -48,7 +48,7 @@ public class BattleReportTests
     public void A_fleets_report_has_a_ship_section_and_the_land_fight_of_the_passengers_still_aboard()
     {
         // 2 Longships against 2: one ship is lost, 20 of the 40 spearmen drown, the other 20 fight on land.
-        var (sent, plan) = Fight([new(UnitType.Longship, 2), new(UnitType.Spearman, 40)], home: [new(UnitType.Longship, 2)]);
+        var (sent, plan) = Fight([new(UnitType.Snekkja, 2), new(UnitType.Spearman, 40)], home: [new(UnitType.Snekkja, 2)]);
 
         var report = ReportOf(sent, plan);
 
@@ -57,8 +57,8 @@ public class BattleReportTests
         Assert.Equal(80, ship.DefensePower);
         Assert.Equal(BattleWinner.Attacker, ship.Winner);
         var shipLine = Assert.Single(ship.AttackerLines);
-        Assert.Equal(new BattleReportAttackerLine(UnitType.Longship, 2, 1, 1), shipLine);
-        Assert.Equal(UnitType.Longship, Assert.Single(ship.DefenderLines).Type);
+        Assert.Equal(new BattleReportAttackerLine(UnitType.Snekkja, 2, 1, 1), shipLine);
+        Assert.Equal(UnitType.Snekkja, Assert.Single(ship.DefenderLines).Type);
 
         Assert.Equal(new UnitStack(UnitType.Spearman, 20), Assert.Single(report.Drowned));
         // The land fight's line covers the 20 that were still aboard, not the 40 sent.
@@ -68,15 +68,15 @@ public class BattleReportTests
     [Fact]
     public void A_fire_ship_attack_records_the_ships_burned_and_the_fire_siege_and_no_land_fight()
     {
-        var dockyard = new PlacedBuilding(SeaHex, BuildingType.Dockyard, 3);
-        var (sent, plan) = Fight([new(UnitType.FireShip, 25)], extra: [dockyard], target: SeaHex);
+        var harbour = new PlacedBuilding(SeaHex, BuildingType.Harbour, 3);
+        var (sent, plan) = Fight([new(UnitType.FireHulk, 25)], extra: [harbour], target: SeaHex);
 
         var report = ReportOf(sent, plan);
 
         Assert.Equal(20, report.FireShipsBurned);
         var fire = report.FireSiege!;
         Assert.Equal(SeaHex, fire.TargetCoord);
-        Assert.Equal(BuildingType.Dockyard, fire.TargetType);
+        Assert.Equal(BuildingType.Harbour, fire.TargetType);
         Assert.Equal((3, 1), (fire.LevelBefore, fire.LevelAfter));
         Assert.Null(report.ShipFight);
         Assert.Empty(report.AttackerLines);
@@ -87,7 +87,7 @@ public class BattleReportTests
     [Fact]
     public void A_lost_ship_fight_is_the_reports_winner_and_has_no_land_fight()
     {
-        var (sent, plan) = Fight([new(UnitType.Karve, 5), new(UnitType.Spearman, 10)], home: [new(UnitType.Longship, 100)]);
+        var (sent, plan) = Fight([new(UnitType.Karve, 5), new(UnitType.Spearman, 10)], home: [new(UnitType.Snekkja, 100)]);
 
         var report = ReportOf(sent, plan);
 

@@ -60,7 +60,7 @@ export function nextUpgradeLevel(
  * off, docs/design/construction-slots.md) or a raze. The server refuses an upgrade there with `AlreadyQueuedOnHex`.
  */
 export function hexTakesNoOrder(
-  queue: Pick<BuildOrderResponse, 'q' | 'r' | 'kind'>[],
+  queue: readonly Pick<BuildOrderResponse, 'q' | 'r' | 'kind'>[],
   at: AxialCoord,
   maxOrdersPerHex: number,
 ): boolean {

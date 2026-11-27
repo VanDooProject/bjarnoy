@@ -5,7 +5,7 @@
     "goTo": "Zu {name}",
     "rename": "Umbenennen …",
     "realms": "Deine Reiche",
-    "current": "Aktuell"
+    "longhouse": "Langhaus {level}"
   },
   "settlementRename": {
     "label": "Name der Siedlung",
@@ -66,6 +66,7 @@
     "output": "Ertrag",
     "modifier": "Modifikator",
     "outputResourceRate": "+{amount} {resource}/Std",
+    "outputResourceRateIcon": "+{amount} {icon}/Std",
     "outputPopulationCapacity": "+{amount} Bevölkerungskapazität",
     "outputStorageCapacity": "+{amount} Lagerkapazität",
     "outputVisionRing": "Sichtradius {amount} (erkundet bis {explored})",
@@ -109,7 +110,7 @@
   },
   "ringMenu": {
     "shrineLimitLock": "Dein Gebiet hat bereits einen Schrein",
-    "storageHouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
+    "greatStorehouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
     "occupiedLock": {
       "giant": "Von einem Riesenwahrzeichen belegt",
       "camp": "Hier hausen wilde Tiere – räum erst ihr Lager",
@@ -180,12 +181,15 @@
       "upgradeSub": "{building} · Stufe {from} → {to}",
       "givesTotal": "gesamt {amount}",
       "needResources": "Es fehlen {resources}",
+      "needResourcesIn": "Es fehlen {resources} · reicht in {time}",
       "needSlots": "Braucht {needed} Bauplatz · {free} von {total} frei | Braucht {needed} Bauplätze · {free} von {total} frei",
       "needSlotsNext": "Braucht {needed} Bauplatz · {free} von {total} frei · nächster frei in {time} | Braucht {needed} Bauplätze · {free} von {total} frei · nächster frei in {time}",
       "willQueue": "Wird hinter den laufenden Bauten eingereiht ({waiting} von {max} wartend)",
+      "queueLocked": "Es warten noch Bauten. Ohne Premium kannst du erst Neues bauen, wenn alle gestartet sind.",
       "queueFull": "Die Warteschlange ist voll ({waiting} von {max})",
       "badgeNoResources": "Nicht genug Rohstoffe",
       "badgeNoSlot": "Kein freier Bauplatz",
+      "badgeQueueLocked": "Warteschlange gesperrt",
       "requiresBuilding": "Benötigt {building} Stufe {level}",
       "razeTitle": "Abriss auf Stufe {level}",
       "razeTitleRemove": "Abreißen",
@@ -201,6 +205,7 @@
       "raze": "{name} noch einmal antippen, um abzureißen"
     },
     "errors": {
+      "couldNotSwitchRealm": "Der Wechsel in dieses Reich ist fehlgeschlagen.",
       "couldNotQueueBuild": "Der Bau konnte nicht eingereiht werden.",
       "couldNotQueueUpgrade": "Der Ausbau konnte nicht eingereiht werden.",
       "couldNotQueueRaze": "Der Abriss konnte nicht eingereiht werden."
@@ -217,7 +222,7 @@
     "hexSubtext": "Hex {q}-{r}",
     "cancel": "✕",
     "cancelError": "Der Auftrag konnte nicht storniert werden.",
-    "reservedFooter": "Reserviert für laufende Bauaufträge: {wood}H {stone}S {food}N {iron}E",
+    "reservedFooter": "Reserviert für laufende Bauaufträge: {wood}H {stone}Z {food}N {iron}E",
     "razeOrderName": "Abriss {name} → {level}",
     "razeRemoveOrderName": "Abriss {name}"
   },
@@ -235,7 +240,13 @@
     "sendHome": "Heimschicken",
     "sendingHome": "Wird heimgeschickt…",
     "sendHomeError": "Die Armee konnte nicht heimgeschickt werden.",
-    "unknownSettlement": "Unbekannte Siedlung"
+    "unknownSettlement": "Unbekannte Siedlung",
+    "upkeep": "Unterhalt",
+    "upkeepPerHour": "−{amount}/h",
+    "foodPerHour": "{amount}/h",
+    "foodRunsOut": "Nahrung reicht noch {time}",
+    "showRates": "Tippen für Nahrung je Einheit",
+    "hideRates": "Tippen zum Ausblenden"
   },
   "queueDrawer": {
     "title": "Warteschlangen",
@@ -269,7 +280,7 @@
     "unslotRuneError": "Die Rune konnte nicht entfernt werden.",
     "notEnoughResources": "Nicht genügend Ressourcen verfügbar (einige sind eventuell für laufende Bauaufträge reserviert).",
     "feastTitle": "Fest",
-    "feastDesc": "Verwandle überschüssiges Holz, Stein und Essen in Ruhm. Die Kosten werden sofort bezahlt, der Ruhm kommt, wenn das Fest endet.",
+    "feastDesc": "Verwandle überschüssiges Holz, Ziegel und Essen in Ruhm. Die Kosten werden sofort bezahlt, der Ruhm kommt, wenn das Fest endet.",
     "feastCost": "Kosten",
     "feastDuration": "Dauer",
     "feastHours": "{hours} Std.",
@@ -308,12 +319,40 @@
     "demoNote": "Die Ausbildung erfordert das echte Backend und ist im Demo-Modus noch nicht eingerichtet.",
     "reservedNote": "{amount} Ressourcen für laufende Bauaufträge reserviert.",
     "attackDefense": "Ang {attack} · Vtd {defense}",
-    "requiresCoastal": "erfordert eine Küstensiedlung",
-    "requiresLonghouse": "erfordert Langhaus {level}",
-    "requiresUnit": "und {unit}",
+    "needBuildingLevel": "{building} {required} (jetzt {current})",
+    "needLonghouse": "Langhaus {required} (jetzt {current})",
+    "needUnit": "{unit} freigeschaltet",
+    "needCoast": "Küste",
+    "needs": "Benötigt",
+    "quantity": "Anzahl {unit}",
+    "fewer": "Weniger",
+    "more": "Mehr",
+    "minus": "−",
+    "plus": "+",
+    "max": "Max",
+    "countOfMax": "/ {max}",
+    "trainOrders": "{count} Auftrag ausbilden | {count} Aufträge ausbilden",
+    "pickUnits": "Wähle Einheiten zum Ausbilden",
+    "footerOrders": "{count} Auftrag · {free} von {max} Plätzen frei | {count} Aufträge · {free} von {max} Plätzen frei",
+    "tooManyOrders": "Für {count} Aufträge sind hier nicht genug Plätze frei.",
+    "cantAfford": "Dafür reichen die Ressourcen nicht.",
     "training": "Wird ausgebildet…",
-    "train": "Ausbilden",
-    "trainingFailed": "Ausbildung fehlgeschlagen."
+    "trainingFailed": "Ausbildung fehlgeschlagen.",
+    "queueTitle": "Wird hier ausgebildet",
+    "queueSlots": "{used} von {max} Plätzen belegt",
+    "queueEmpty": "Hier wird gerade nichts ausgebildet.",
+    "queueNow": "Läuft",
+    "cancelOrder": "Auftrag abbrechen",
+    "cancelAsk": "{count}× {unit} abbrechen?",
+    "cancelRefund": "Du bekommst {amount} zurück (50 %).",
+    "cancelKept": "{count} bereits ausgebildete bleiben.",
+    "cancelNothing": "Es gibt nichts zurück.",
+    "cancelConfirm": "Auftrag abbrechen",
+    "cancelKeep": "Behalten",
+    "cancelFailed": "Der Auftrag ließ sich nicht abbrechen.",
+    "ladderTitle": "Freischaltungen",
+    "ladderLevel": "Stufe {level}",
+    "ladderNow": "jetzt"
   },
   "battleReport": {
     "buildings": {
@@ -328,7 +367,8 @@
       "pumpkinfarm": "Kürbisfarm",
       "palisade": "Palisade",
       "palisadegate": "Palisadentor",
-      "dockyard": "Werft",
+      "harbour": "Hafen",
+      "shipyard": "Werft",
       "shrineofnjord": "Schrein des Njörd"
     },
     "missionAttack": "Angriff",
@@ -348,6 +388,9 @@
     "unit": "Einheit",
     "sent": "Entsandt",
     "lost": "Verloren",
+    "volleyPower": "Salvenkraft",
+    "lostVolley": "Verloren (Salve)",
+    "lostFight": "Verloren (Kampf)",
     "survived": "Überlebt",
     "noStacksRecorded": "Keine Truppen erfasst.",
     "lootTaken": "Beute",
@@ -388,21 +431,32 @@
     "supportingNamed": "Unterstützt {name}",
     "supporting": "Unterstützt",
     "returning": "Kehrt zurück",
+    "standingAt": "Steht auf ({q}, {r})",
+    "headsHomeIn": "kehrt in {eta} um",
+    "waitingToGather": "Wartet bei ({q}, {r}) auf die anderen Gruppen",
+    "movesOnIn": "zieht in {eta} weiter",
     "inTransit": "Unterwegs",
     "hunting": "Auf der Jagd",
-    "buildingCamp": "Baut das Strandlager, fertig um {time} Uhr"
+    "cannotGetHome": "Kein Weg nach Hause",
+    "starvesIn": "verhungert in {eta}",
+    "buildingCamp": "Baut das Strandlager, fertig um {time} Uhr",
+    "arrivesIn": "kommt in {eta} an",
+    "homeIn": "in {eta} zu Hause",
+    "campReadyIn": "Lager fertig in {eta}",
+    "campReady": "Lager fertig",
+    "movingOn": "Zieht weiter"
   },
   "garrisonSpots": {
     "longhouse": "Langhaus",
     "tower": "Wachturm",
-    "dock": "Werft",
+    "dock": "Hafen oder Werft",
     "beachcamp": "Strandlager",
-    "from": "aus: {spots}",
-    "severalSpots": "Diese Einheiten stehen an mehreren Orten. Von mehreren Orten gleichzeitig loszuschicken, ist bald möglich."
+    "from": "aus: {spots}"
   },
   "armyPanel": {
     "title": "Armeen",
     "demoNote": "Die Entsendung von Armeen erfordert das echte Backend und ist im Demo-Modus noch nicht eingerichtet.",
+    "withoutHome": "Ohne Zuhause",
     "noArmies": "Keine Armeen unterwegs.",
     "dispatchArmy": "Armee entsenden",
     "premiumRedirectTitle": "Premium erforderlich, um eine noch reisende Armee umzuleiten",
@@ -414,7 +468,7 @@
     "fieldOrderInstructions": "Klicke auf Hexfelder, um festzulegen, wohin diese Armee als Nächstes ziehen soll — der letzte Klick ist das neue Ziel. {count} {hexWord} geplant.",
     "hexWord": "Hexfeld | Hexfelder",
     "freeAccountWaypoints": "Kostenlos im Konto enthalten: ein Ziel, keine Zwischenstopps.",
-    "premiumWaypointsNeeded": "wird benötigt, um zusätzliche Wegpunkte zu planen.",
+    "premiumWaypointsNeeded": "wird benötigt, um bis zu 10 Wegpunkte zu planen.",
     "premium": "Premium",
     "dragPinHint": "Ziehe eine Markierung auf der Karte, um einen Wegpunkt zu verschieben.",
     "destinationTag": "Ziel",
@@ -452,6 +506,43 @@
     "provisions": "Proviant",
     "dispatching": "Wird entsendet…",
     "confirmDispatch": "Entsendung bestätigen"
+  },
+  "armyDetail": {
+    "showOnMap": "Auf der Karte zeigen",
+    "back": "Zurück zu den Armeen",
+    "foodHeading": "Nahrung",
+    "spare": "Übrig",
+    "wayHome": "Heimweg",
+    "food": "Nahrung",
+    "perHour": "pro Stunde",
+    "events": {
+      "left": "Aufgebrochen",
+      "arrives": "Erreicht ({q}, {r})",
+      "arrived": "Angekommen auf ({q}, {r})",
+      "now": "jetzt",
+      "turnsHome": "Kehrt von selbst um",
+      "turnedHome": "Umgekehrt",
+      "home": "Zu Hause",
+      "starves": "Nahrung aufgebraucht",
+      "movesOn": "Zieht weiter",
+      "campReady": "Lager fertig"
+    },
+    "now": {
+      "marching": "Auf dem Weg",
+      "standing": "Steht und isst die Reserve",
+      "returning": "Auf dem Heimweg",
+      "stranded": "Kein Weg nach Hause",
+      "waiting": "Wartet auf die anderen Gruppen",
+      "camp": "Baut das Lager"
+    },
+    "next": {
+      "arrives": "Ankunft {time}",
+      "turnsHome": "Kehrt um {time}",
+      "home": "Zu Hause {time}",
+      "starves": "Nahrung aus {time}",
+      "movesOn": "Zieht weiter {time}",
+      "campReady": "Lager fertig {time}"
+    }
   },
   "dispatchSheet": {
     "cancel": "Entsendung abbrechen",
@@ -601,7 +692,19 @@
   },
   "panelColumn": {
     "toggle": "{panel} ein- oder ausblenden",
+    "constructionEmpty": "Gerade wird nichts gebaut",
+    "withCount": "{panel} ({count})",
     "collapse": "{panel} einklappen",
     "expand": "{panel} ausklappen"
+  },
+  "quickUpgrade": {
+    "chipTitle": "Schnellausbau",
+    "chipHintTouch": "Gebäude antippen · Karte gedrückt halten zum Beenden",
+    "chipHintMouse": "Gebäude anklicken · Esc zum Beenden",
+    "stop": "Schnellausbau beenden",
+    "holdHint": "Gedrückt halten: danach baust du mit einem Tipp pro Gebäude aus",
+    "premiumHold": "Premium: Gedrückt halten und mit einem Tipp pro Gebäude ausbauen",
+    "shiftHint": "Umschalt+Klick: auf Stufe {level} ausbauen",
+    "premiumShift": "Premium: Mit Umschalt+Klick ausbauen"
   }
 }

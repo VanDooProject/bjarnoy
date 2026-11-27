@@ -11,9 +11,9 @@ export const BASE_STORAGE = 500;
 /** `BuildingCatalogue.FoundingHeadroom`: how far below its full storage a new settlement's stock starts. */
 export const FOUNDING_HEADROOM = 50;
 
-/** `RenownThresholds.RequiredFor`: the renown you need to found your Nth settlement (55,000 for the 2nd, doubling). */
+/** `RenownThresholds.RequiredFor`: the renown you need to found your Nth settlement (80,000 for the 2nd, doubling). */
 export function renownRequired(settlementNumber: number): number {
-  return settlementNumber <= 1 ? 0 : 55_000 * 2 ** (settlementNumber - 2);
+  return settlementNumber <= 1 ? 0 : 80_000 * 2 ** (settlementNumber - 2);
 }
 
 /** `Feasts.Duration`: hours a Town Square feast runs. */

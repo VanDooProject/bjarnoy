@@ -18,6 +18,7 @@ import {
   type ArtRef,
 } from '../lib/map/buildingArt';
 import type { AtlasFrameRect } from '../lib/map/atlas';
+import { buildingAllowedOnHex } from '../lib/map/ringCatalogue';
 
 const catalogue = useBuildingCatalogueStore();
 const { t, te, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -119,12 +120,14 @@ const sandLookArt = computed<ArtRef>(() => {
 // AllowedTerrain lists (see BuildingCatalogue.cs) — null for the rows that
 // aren't a BuildingType terrain value on their own (sea never holds a
 // building; coastal water is a Sea hex with RequiresCoastalWater instead;
+// an inland lake is its own terrain, asked of `buildingAllowedOnHex`;
 // river is a shape drawn over another terrain, not a terrain of its own).
 interface TileEntry {
   id: string;
   art: ArtRef;
   terrain: string | null;
   coastal?: boolean;
+  inlandLake?: boolean;
   river?: boolean;
   mountain?: boolean;
   sand?: boolean;
@@ -137,6 +140,7 @@ interface TileEntry {
 const TILES = computed<TileEntry[]>(() => [
   { id: 'sea', art: terrainArt('sea'), terrain: 'sea' },
   { id: 'coastal-water', art: coastalWaterArt(), terrain: null, coastal: true },
+  { id: 'inland-lake', art: coastalWaterArt(), terrain: null, inlandLake: true },
   { id: 'sand', art: terrainArt('sand'), terrain: 'sand', sand: true },
   { id: 'grass', art: terrainArt('grass'), terrain: 'grass' },
   { id: 'forest', art: terrainArt('forest'), terrain: 'forest' },
@@ -180,6 +184,7 @@ const buildingsByTile = computed(() => {
         // A building that can no longer be placed (the Quarry) is no longer something to build on this ground.
         if (!def || def.newPlacementDisabled) return false;
         if (tile.coastal) return def.requiresCoastalWater;
+        if (tile.inlandLake) return buildingAllowedOnHex(type, { terrain: 'inlandlake', isCoastalWater: true });
         if (def.requiresCoastalWater || tile.terrain === null) return false;
         return def.allowedTerrain.length === 0 || def.allowedTerrain.includes(tile.terrain);
       })

@@ -8,6 +8,7 @@ import {
   buildingHudViewModel,
   hudMarkerKeys,
   markerBoxRect,
+  markerAt,
   markerScale,
   pointInRect,
   rowsSignature,
@@ -17,7 +18,7 @@ import {
   type BuildingHudInput,
   type HudRow,
 } from './buildingHud';
-import { DIAL_FINISH_MS, DIAL_MIN_LABEL_PX, DIAL_REJECT_MS, dialScale, type ConstructionDial } from '../map/constructionDial';
+import { DIAL_FINISH_MS, DIAL_MIN_LABEL_PX, DIAL_REJECT_MS, dialLevelFontPx, dialRadiusPx, dialScale, type ConstructionDial } from '../map/constructionDial';
 
 const stock = (o: Partial<Record<'wood' | 'stone' | 'food' | 'iron', number>> = {}) => ({ wood: 0, stone: 0, food: 0, iron: 0, ...o });
 
@@ -66,6 +67,16 @@ describe('upgrade state', () => {
     expect(vm.dial).toMatchObject({ kind: 'state', ring: 'ready' });
   });
 
+  it('carries the next level\'s cost and its build time as the settlement runs it', () => {
+    expect(buildingHudViewModel(input()).upgrade).toMatchObject({ cost: stock({ wood: 100 }), buildSeconds: 60 });
+    // Odin's Wisdom shortens it, the world's speed divides it (scaledBuildSeconds).
+    expect(buildingHudViewModel(input({ wisdomFactor: 0.5, worldSpeedFactor: 2 })).upgrade.buildSeconds).toBe(15);
+    // No catalogue entry for the next level: the client's estimate prices it, and there is no time.
+    const estimated = buildingHudViewModel(input({ definitions: undefined })).upgrade;
+    expect(estimated.cost).toBeDefined();
+    expect(estimated.buildSeconds).toBeUndefined();
+  });
+
   it('is short with the missing amounts and the time until production covers them', () => {
     const vm = buildingHudViewModel(input({ available: stock({ wood: 40 }), rates: stock({ wood: 120 }) }));
     expect(vm.upgrade.state).toBe('short');
@@ -107,8 +118,8 @@ describe('upgrade state', () => {
   });
 
   it('is max at the type ceiling, with a full ring', () => {
-    const vm = buildingHudViewModel(input({ type: 'tower', level: 10 }));
-    expect(vm.maxLevel).toBe(10);
+    const vm = buildingHudViewModel(input({ type: 'tower', level: 5 }));
+    expect(vm.maxLevel).toBe(5);
     expect(vm.upgrade.state).toBe('max');
     expect(vm.dial).toMatchObject({ ring: 'max', progress: 1 });
   });
@@ -238,6 +249,36 @@ describe('rowsFor', () => {
     expect(rowsFor(vm, 'near', { premium: false })[1]).toMatchObject({ kind: 'feast', secondsLeft: 100, renownGain: 6122 });
   });
 
+  describe('quick upgrade line of the hovered marker', () => {
+    const upgradeRow = (vm: ReturnType<typeof buildingHudViewModel>, quick?: 'premium' | 'locked', shift = false) =>
+      rowsFor(vm, 'near', { premium: quick !== 'locked', quick, shift })[0] as Extract<HudRow, { kind: 'upgrade' }>;
+
+    it('a ready upgrade carries the next level\'s cost and build time', () => {
+      expect(upgradeRow(buildingHudViewModel(input()), 'premium', true).quick).toEqual({
+        mode: 'premium',
+        shift: true,
+        cost: stock({ wood: 100 }),
+        buildSeconds: 60,
+      });
+    });
+    it('a blocked upgrade adds nothing: its own state shows as before', () => {
+      expect(upgradeRow(buildingHudViewModel(input({ available: stock({ wood: 40 }) })), 'premium').quick).toBeUndefined();
+      expect(upgradeRow(buildingHudViewModel(input({ type: 'tower', level: 5 })), 'premium').quick).toBeUndefined();
+    });
+    it('a free account holding Shift gets the locked line, whatever the state', () => {
+      expect(upgradeRow(buildingHudViewModel(input()), 'locked').quick).toMatchObject({ mode: 'locked' });
+      expect(upgradeRow(buildingHudViewModel(input({ available: stock() })), 'locked').quick).toMatchObject({ mode: 'locked' });
+    });
+    it('without a quick mode the row is the plain one, and the layout signature tells the two apart', () => {
+      const vm = buildingHudViewModel(input());
+      const plain = rowsFor(vm, 'near', { premium: true });
+      expect((plain[0] as Extract<HudRow, { kind: 'upgrade' }>).quick).toBeUndefined();
+      const quick = rowsFor(vm, 'near', { premium: true, quick: 'premium' });
+      expect(rowsSignature('near', quick)).not.toBe(rowsSignature('near', plain));
+      expect(rowsSignature('near', rowsFor(vm, 'near', { premium: true, quick: 'premium', shift: true }))).not.toBe(rowsSignature('near', quick));
+    });
+  });
+
   describe('time until affordable', () => {
     const short = () => buildingHudViewModel(input({ available: stock({ wood: 40 }), rates: stock({ wood: 120 }) }));
     it('premium gets the time and no hint', () => {
@@ -255,13 +296,22 @@ describe('rowsFor', () => {
 });
 
 describe('tierFor', () => {
-  const { labelBelow, boxBelow, nearAt, hysteresis } = HUD_TIER;
-  it('goes far exactly where the progress dial hides its label', () => {
-    // dialScale(mapScale, 0) shows the label from this size on; below it the marker is the ring only.
+  const { levelBelow, labelBelow, boxBelow, nearAt, hysteresis } = HUD_TIER;
+  it('drops the countdown exactly where the progress dial hides its label', () => {
+    // dialScale(mapScale, 0) shows the label from this size on; below it the marker shows the level only.
     expect(dialScale(labelBelow, 0).showLabel).toBe(true);
     expect(dialScale(labelBelow - 0.01, 0).showLabel).toBe(false);
     expect(tierFor(labelBelow)).toBe('dial');
-    expect(tierFor(labelBelow - 0.01)).toBe('far');
+    expect(tierFor(labelBelow - 0.01)).toBe('level');
+  });
+  it('keeps the level until its own (larger) font would be under the minimum label size on screen', () => {
+    // The bug: the level vanished at the countdown's threshold, while it was still drawn at over 12 px.
+    expect(dialLevelFontPx(dialRadiusPx(1)) * levelBelow).toBeCloseTo(DIAL_MIN_LABEL_PX);
+    expect(levelBelow).toBeLessThan(labelBelow);
+    expect(tierFor(0.64)).toBe('level');
+    expect(tierFor(levelBelow)).toBe('level');
+    expect(tierFor(levelBelow - 0.01)).toBe('far');
+    expect(tierFor(levelBelow - hysteresis / 2, 'level')).toBe('level');
   });
   it('shows the box once its text would be at least the minimum label size on screen', () => {
     expect(HUD_BOX_FONT_PX * boxBelow).toBeCloseTo(DIAL_MIN_LABEL_PX);
@@ -280,7 +330,7 @@ describe('tierFor', () => {
     expect(tierFor(boxBelow - hysteresis / 2, 'mid')).toBe('mid');
     expect(tierFor(boxBelow - hysteresis / 2, 'dial')).toBe('dial');
     expect(tierFor(labelBelow - hysteresis / 2, 'dial')).toBe('dial');
-    expect(tierFor(labelBelow - hysteresis / 2, 'far')).toBe('far');
+    expect(tierFor(labelBelow - hysteresis / 2, 'level')).toBe('level');
   });
   it('does not flicker when zs jitters around a threshold', () => {
     let tier = tierFor(nearAt + 0.05, null);
@@ -288,10 +338,27 @@ describe('tierFor', () => {
     for (const z of [nearAt + 0.01, nearAt - 0.01, nearAt + 0.02, nearAt - 0.02, nearAt]) seen.add((tier = tierFor(z, tier)));
     expect(seen).toEqual(new Set(['near']));
   });
-  it('has no box rows on far and dial', () => {
+  it('has no box rows on far, level and dial', () => {
     const vm = buildingHudViewModel(input());
     expect(rowsFor(vm, 'far', { premium: false })).toEqual([]);
+    expect(rowsFor(vm, 'level', { premium: false })).toEqual([]);
     expect(rowsFor(vm, 'dial', { premium: false })).toEqual([]);
+  });
+});
+
+describe('markerAt', () => {
+  const area = (hexKey: string, cx: number, z: number, box?: { x: number; y: number; w: number; h: number }) => ({ key: hexKey, hexKey, disc: { cx, cy: 100, r: 20 }, box, z });
+  it('gives the marker whose dial or box holds the point', () => {
+    const areas = [area('1,0', 100, 0, { x: 100, y: 85, w: 120, h: 30 }), area('2,0', 300, 1)];
+    expect(markerAt({ x: 105, y: 110 }, areas)?.hexKey).toBe('1,0');
+    expect(markerAt({ x: 200, y: 100 }, areas)?.hexKey).toBe('1,0');
+    expect(markerAt({ x: 290, y: 95 }, areas)?.hexKey).toBe('2,0');
+    expect(markerAt({ x: 100, y: 200 }, areas)).toBeNull();
+  });
+  it('takes the top-most of overlapping markers', () => {
+    const areas = [area('1,0', 100, 2, { x: 100, y: 85, w: 120, h: 30 }), area('2,0', 180, 1)];
+    expect(markerAt({ x: 170, y: 100 }, areas)?.hexKey).toBe('1,0');
+    expect(markerAt({ x: 170, y: 100 }, [areas[0]!, { ...areas[1]!, z: 3 }])?.hexKey).toBe('2,0');
   });
 });
 

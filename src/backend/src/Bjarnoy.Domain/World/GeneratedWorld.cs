@@ -55,10 +55,16 @@ public sealed record GeneratedIsland
     /// <summary>
     /// This island's bogland: moss, lakes with a river through them, shores, creeks and mouths (one entry per hex; a
     /// lake tile is <see cref="Terrain.Lake"/>, every other entry <see cref="Terrain.Bog"/>), plus the tiles of any enclosed sea
-    /// pocket turned into a lake. Empty for an island with no room for a bog. See <see cref="BogGenerator"/> and
+    /// pocket turned into a lake (a pocket the bog did not fill is in <see cref="InlandLakeTiles"/>). Empty for an island with no room for a bog. See <see cref="BogGenerator"/> and
     /// <c>docs/design/bog.md</c>.
     /// </summary>
     public IReadOnlyList<BogTile> BogTiles { get; init; } = [];
+
+    /// <summary>
+    /// The water this island encloses that is not a bog lake (<see cref="Terrain.InlandLake"/>): an enclosed sea pocket the
+    /// bog did not fill, sorted by (Q, R). Not sea (no ship), not land. Wasted islands list all of their enclosed water.
+    /// </summary>
+    public IReadOnlyList<HexCoord> InlandLakeTiles { get; init; } = [];
 
     /// <summary>
     /// This island's wildlife camps. Empty for an island with no tile a camp can stand on.

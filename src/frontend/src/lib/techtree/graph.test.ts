@@ -39,13 +39,13 @@ describe('buildGraph', () => {
   });
 
   it('drops prerequisites naming a building the page does not show', () => {
-    const withHidden = buildGraph(['longhouse', 'dockyard'], (type) =>
-      type === 'dockyard' ? [{ type: 'fishinghut', level: 5 }] : [],
+    const withHidden = buildGraph(['longhouse', 'harbour'], (type) =>
+      type === 'harbour' ? [{ type: 'fishinghut', level: 5 }] : [],
     );
 
-    // Fishing hut isn't in this set, so the dockyard falls back to the anchor
+    // Fishing hut isn't in this set, so the harbour falls back to the anchor
     // rather than pointing at a card that isn't drawn.
-    expect(withHidden.parents.get('dockyard')).toEqual(['longhouse']);
+    expect(withHidden.parents.get('harbour')).toEqual(['longhouse']);
   });
 });
 

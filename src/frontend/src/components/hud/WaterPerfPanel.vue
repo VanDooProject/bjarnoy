@@ -25,6 +25,7 @@
 // without pulling Vue reactivity into HexMapRenderer.
 import { computed, onMounted, onUnmounted, reactive, ref, shallowRef } from 'vue';
 import DebugPanel from './DebugPanel.vue';
+import DebugPanelLegend from './DebugPanelLegend.vue';
 import { waterDebugFlags, waterPerfStats, type WaterDebugToggle, type WaterPerfStats } from '../../lib/map/water/waterDebug';
 import { runPerfSweep, sampleFrames, type SweepResult, type SweepSubject } from '../../lib/map/water/perfSweep';
 import { fogDebugFlags } from '../../lib/map/HexMapRenderer';
@@ -252,7 +253,7 @@ const share = (deltaMs: number, baselineMs: number) =>
       </template>
     </div>
 
-    <div class="legend">
+    <DebugPanelLegend>
       Frame is the whole frame, not this layer's share. The breakdown measures each row the same way by hand
       would: switch one thing off, sample the frame clock, switch it back. So the rows <em>do not add up</em> —
       the layer's fixed cost (one full-viewport blended quad) is paid the moment the mesh is drawn at all and
@@ -262,7 +263,7 @@ const share = (deltaMs: number, baselineMs: number) =>
       per-effect GPU time here because attributing it needs a timer query this codebase does not have. A bake only
       happens when the camera leaves the region it was baked over, so <em>bakes</em> climbing while the camera
       sits still is a bug.
-    </div>
+    </DebugPanelLegend>
   </DebugPanel>
 </template>
 
@@ -390,11 +391,5 @@ const share = (deltaMs: number, baselineMs: number) =>
   flex: 0 0 auto;
   min-width: 82px;
   text-align: right;
-}
-.legend {
-  margin-top: 10px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--muted);
 }
 </style>

@@ -69,7 +69,7 @@ export function reportSummaryLine(
   const lines: Array<{ lost: number; survived: number }> = attacker
     ? [...report.attackerLines, ...(report.shipFight?.attackerLines ?? [])]
     : [...report.defenderLines, ...(report.shipFight?.defenderLines ?? [])];
-  // A burned Fire Ship survived the ship fight and then burned: it counts as lost, once, not as a survivor as well.
+  // A burned Fire Hulk survived the ship fight and then burned: it counts as lost, once, not as a survivor as well.
   const burned = attacker ? (report.fireShipsBurned ?? 0) : 0;
   const lost = sumLost(lines) + burned;
   const survived = Math.max(0, sumSurvived(lines) - burned);
@@ -85,16 +85,6 @@ export function reportSummaryLine(
     parts.push(i18n.global.t('hud.battleReport.summaryLooted', { n: Math.round(loot) }));
   }
   return parts.join(', ');
-}
-
-/** Which side `settlementId` fought on in this report, or `null` if it fought neither (shouldn't happen for reports fetched for that settlement). */
-export function sideFor(
-  report: { attackerSettlementId: string; defenderSettlementId: string },
-  settlementId: string,
-): 'attacker' | 'defender' | null {
-  if (report.attackerSettlementId === settlementId) return 'attacker';
-  if (report.defenderSettlementId === settlementId) return 'defender';
-  return null;
 }
 
 /** A report counts as unread if it happened after `lastSeenIso` (or nothing has been seen yet). */

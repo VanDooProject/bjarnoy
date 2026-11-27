@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isTradeReportUnread, tradeSideFor, tradeSummaryLine, tradeUnreadCount } from './tradeReports';
+import { isTradeReportUnread, tradeSummaryLine, tradeUnreadCount } from './tradeReports';
 import type { TradeReportResponse } from '../../api/types';
 
 const baseReport: TradeReportResponse = {
@@ -14,19 +14,8 @@ const baseReport: TradeReportResponse = {
   requestedAmount: 100,
   guildTrade: false,
   travelHours: 1.5,
+  viewerSide: 'poster',
 };
-
-describe('tradeSideFor', () => {
-  it('identifies the poster', () => {
-    expect(tradeSideFor(baseReport, 'poster')).toBe('poster');
-  });
-  it('identifies the acceptor', () => {
-    expect(tradeSideFor(baseReport, 'acceptor')).toBe('acceptor');
-  });
-  it('returns null for a settlement not party to the trade', () => {
-    expect(tradeSideFor(baseReport, 'stranger')).toBeNull();
-  });
-});
 
 describe('tradeSummaryLine', () => {
   it('describes the poster side: gave the offered goods, got the requested goods', () => {

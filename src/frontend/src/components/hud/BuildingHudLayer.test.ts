@@ -6,11 +6,14 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import BuildingHudDial from './BuildingHudDial.vue';
 import BuildingHudLayer, { type BuildingHudRenderer } from './BuildingHudLayer.vue';
 import { useWorldStore } from '../../stores/world';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
+import { useAuthStore } from '../../stores/auth';
+import { useQuickUpgradeStore } from '../../stores/quickUpgrade';
 import { installFakeAnimate, type FakeAnimate } from '../../test/fakeAnimate';
-import { DIAL_REJECT_MS, constructionDialsFromQueue, rejectDialAt, type ConstructionDial } from '../../lib/map/constructionDial';
+import { DIAL_REJECT_MS, constructionDialsFromQueue, rejectDialAt, type BlockedMarker, type ConstructionDial } from '../../lib/map/constructionDial';
 import { markerScale } from '../../lib/hud/buildingHud';
 import { makePendingOrder } from '../../lib/hud/pendingBuild';
 import { createTestI18n } from '../../test/i18n';
@@ -58,6 +61,10 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
     setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null) {
       this.tapObserver = fn;
     },
+    tapTarget: null as ((screen: { x: number; y: number }) => { q: number; r: number } | null) | null,
+    setTapTarget(fn: ((screen: { x: number; y: number }) => { q: number; r: number } | null) | null) {
+      this.tapTarget = fn;
+    },
     frameObserver: null as (() => void) | null,
     setFrameObserver(fn: (() => void) | null) {
       this.frameObserver = fn;
@@ -65,6 +72,8 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
     markerOcclusionCircle: null as { x: number; y: number; r: number } | null,
     // The renderer's construction dials; a test replaces the array to change them, like the renderer does.
     constructionDialList: [] as ConstructionDial[],
+    // The markers playing the blocked-upgrade animation; a test replaces the array, like the renderer does.
+    blockedMarkerList: [] as BlockedMarker[],
     ...overrides,
   };
   return renderer as BuildingHudRenderer & {
@@ -74,8 +83,10 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
     markerOcclusionCircle: { x: number; y: number; r: number } | null;
     hoveredHexKey: string | null;
     tapObserver: ((screen: { x: number; y: number }) => void) | null;
+    tapTarget: ((screen: { x: number; y: number }) => { q: number; r: number } | null) | null;
     frameObserver: (() => void) | null;
     constructionDialList: ConstructionDial[];
+    blockedMarkerList: BlockedMarker[];
   };
 }
 
@@ -118,6 +129,16 @@ describe('BuildingHudLayer', () => {
       return frames.length;
     });
     vi.stubGlobal('cancelAnimationFrame', () => {});
+    // jsdom has no ResizeObserver, which the layer requires: a silent one that never reports a size (the box tests below
+    // replace it with one a test can drive).
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
   });
 
   afterEach(() => {
@@ -196,7 +217,7 @@ describe('BuildingHudLayer', () => {
     expect(wrapper.get<HTMLElement>('[data-coord="2,0"]').element.style.transform).toContain('scale(2.000)');
   });
 
-  it('shows the box from mid on, the dial alone before that, and the bare ring on far', async () => {
+  it('shows the box from mid on, the dial alone before that, the level alone below that, and the bare ring on far', async () => {
     seedBuildings();
     const renderer = fakeRenderer();
     wrapper = mountLayer(renderer);
@@ -220,8 +241,14 @@ describe('BuildingHudLayer', () => {
     expect(marker().find('.hud-marker__box').exists()).toBe(false);
     expect(marker().find('text').text()).toBe('2');
 
-    // Where the progress dial hides its label: ring only, no number, no box.
-    await at(0.5);
+    // Where the progress dial hides its countdown: the level's larger font still reads, so the level stays.
+    await at(0.64);
+    expect(marker().attributes('data-tier')).toBe('level');
+    expect(marker().find('.hud-marker__box').exists()).toBe(false);
+    expect(marker().find('text').text()).toBe('2');
+
+    // The level would be under the minimum size too: ring only, no number, no box.
+    await at(0.4);
     expect(marker().attributes('data-tier')).toBe('far');
     expect(marker().find('.hud-marker__box').exists()).toBe(false);
     expect(marker().find('text').exists()).toBe(false);
@@ -333,7 +360,7 @@ describe('BuildingHudLayer', () => {
         const entries = [...o.targets].map((target) => {
           Object.defineProperty(target, 'offsetWidth', { configurable: true, value: 100 });
           Object.defineProperty(target, 'offsetHeight', { configurable: true, value: 40 });
-          return { target } as ResizeObserverEntry;
+          return { target, contentRect: { width: 1000, height: 800 } } as ResizeObserverEntry;
         });
         o.cb(entries, {} as ResizeObserver);
       }
@@ -383,7 +410,7 @@ describe('BuildingHudLayer', () => {
       expect(scaleOf()).toContain('scale(1.500)');
     });
 
-    it('a touch tap on a box reveals nothing: the hex under it belongs to the map', async () => {
+    it('a touch tap on a box reveals its marker and is its building\'s tap, like one on the dial', async () => {
       // One building, so no neighbour's dial lies over the point.
       const world = seedBuildings();
       world.hud.buildings = [{ q: 1, r: 0, type: 'longhouse', level: 1 }];
@@ -400,15 +427,16 @@ describe('BuildingHudLayer', () => {
           runFrame();
         }
       };
-      // On the box (x 180..330, y 270..330), off the dial disc.
+      // On the box (x 180..330, y 270..330), off the dial disc: the marker grows, and the tap means the longhouse's hex.
+      expect(renderer.tapTarget!({ x: 300, y: 320 })).toEqual({ q: 1, r: 0 });
       renderer.tapObserver!({ x: 300, y: 320 });
       frames5();
-      expect(scaleOf()).toContain('scale(1.500)');
-      // On the dial it does.
+      expect(scaleOf()).toContain('scale(1.950)');
+      // A second tap on it closes it again.
       renderer.tapObserver!({ x: 181, y: 301 });
       frames5();
       vi.useRealTimers();
-      expect(scaleOf()).toContain('scale(1.950)');
+      expect(scaleOf()).toContain('scale(1.500)');
     });
 
     it('the marker the mouse is directly on wins over the hex under it, and ends up on top', async () => {
@@ -488,7 +516,7 @@ describe('BuildingHudLayer', () => {
       // The entry's border-box size (60 x 20) replaces the 100 x 40 the layout reported: the box spans x 180..270 at 1.5.
       for (const o of observers) {
         o.cb(
-          [...o.targets].map((target) => ({ target, borderBoxSize: [{ inlineSize: 60, blockSize: 20 }] }) as unknown as ResizeObserverEntry),
+          [...o.targets].map((target) => ({ target, contentRect: { width: 1000, height: 800 }, borderBoxSize: [{ inlineSize: 60, blockSize: 20 }] }) as unknown as ResizeObserverEntry),
           {} as ResizeObserver,
         );
       }
@@ -496,6 +524,21 @@ describe('BuildingHudLayer', () => {
       advance();
       // 300 is beyond the 90 px wide box of 1,0 (it is on 2,0's, which is hovered instead).
       expect(wrapper!.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain('scale(1.500)');
+    });
+
+    it('writes a marker transform only when it changed', async () => {
+      const renderer = await mountAt(1.5);
+      const el = wrapper!.get<HTMLElement>('[data-coord="1,0"]').element;
+      const written = el.style.transform;
+      expect(written).toContain('translate3d');
+      // A frame that places the marker where it already is leaves the style alone (a foreign value survives it) ...
+      el.style.transform = 'none';
+      runFrame();
+      expect(el.style.transform).toBe('none');
+      // ... and one that moves it writes the new transform.
+      renderer.dialScreenPoint = (coord) => ({ x: 500 + coord.q * 80, y: 300 + coord.r * 10 });
+      runFrame();
+      expect(el.style.transform).toContain('translate3d(580.0px');
     });
 
     it('stops observing a box that goes away and disconnects on unmount', async () => {
@@ -519,9 +562,40 @@ describe('BuildingHudLayer', () => {
     const renderer = fakeRenderer();
     wrapper = mountLayer(renderer);
     expect(renderer.tapObserver).toBeTypeOf('function');
+    expect(renderer.tapTarget).toBeTypeOf('function');
     wrapper.unmount();
     wrapper = undefined;
     expect(renderer.tapObserver).toBeNull();
+    expect(renderer.tapTarget).toBeNull();
+  });
+
+  it("sends a click on a marker's dial to the marker's own hex, not the one it is drawn over", () => {
+    seedBuildings();
+    const renderer = fakeRenderer();
+    wrapper = mountLayer(renderer);
+    runFrame();
+    // The longhouse's dial sits at (180, 300), the tower's at (260, 300).
+    expect(renderer.tapTarget!({ x: 181, y: 290 })).toEqual({ q: 1, r: 0 });
+    expect(renderer.tapTarget!({ x: 262, y: 310 })).toEqual({ q: 2, r: 0 });
+    // Off every marker: the map's own hex under the pointer.
+    expect(renderer.tapTarget!({ x: 600, y: 50 })).toBeNull();
+  });
+
+  it('leaves a click on a marker to the hex under it while a route is plotted or the send picker is open', () => {
+    const world = seedBuildings();
+    const renderer = fakeRenderer();
+    wrapper = mountLayer(renderer);
+    runFrame();
+    world.dispatchDraft = { armyId: 'a' } as unknown as typeof world.dispatchDraft;
+    expect(renderer.tapTarget!({ x: 181, y: 290 })).toBeNull();
+    world.dispatchDraft = null;
+    world.fieldOrderDraft = { armyId: 'a' } as unknown as typeof world.fieldOrderDraft;
+    expect(renderer.tapTarget!({ x: 181, y: 290 })).toBeNull();
+    world.fieldOrderDraft = null;
+    world.sendPicker = {} as unknown as typeof world.sendPicker;
+    expect(renderer.tapTarget!({ x: 181, y: 290 })).toBeNull();
+    world.sendPicker = null;
+    expect(renderer.tapTarget!({ x: 181, y: 290 })).toEqual({ q: 1, r: 0 });
   });
 
   it('stacks markers by screen x, right-most on top', () => {
@@ -558,6 +632,171 @@ describe('BuildingHudLayer', () => {
     expect(localStorage.getItem('bjarnoy.hudBuildingInfo')).toBe('off');
     await toggle.trigger('click');
     expect(wrapper.findAll('.hud-marker')).toHaveLength(4);
+  });
+
+  describe('the quick upgrade look', () => {
+    function premium(on: boolean) {
+      useAuthStore().user = { id: 'u1', userName: 'p', role: 'player', preferredLocale: null, isPremium: on } as never;
+    }
+    const rich = { wood: 1e6, stone: 1e6, food: 1e6, iron: 1e6 };
+
+    it('makes room in the box for the level hex while the quick look shows: the content moves right, the box stays against the dial', async () => {
+      premium(true);
+      const world = seedBuildings();
+      world.hud.available = { ...rich };
+      world.hud.storageCap = { ...rich };
+      const renderer = fakeRenderer();
+      wrapper = mountLayer(renderer);
+      renderer.dialMapScale = 1;
+      runFrame();
+      await flushPromises();
+      const box = () => wrapper!.get<HTMLElement>('[data-coord="3,0"] .hud-marker__box').element.style;
+      const plain = { left: box().marginLeft, pad: parseFloat(box().paddingLeft) };
+
+      useQuickUpgradeStore().setShift(true);
+      await flushPromises();
+      expect(box().marginLeft).toBe(plain.left);
+      expect(parseFloat(box().paddingLeft)).toBeGreaterThan(plain.pad);
+
+      useQuickUpgradeStore().setShift(false);
+      await flushPromises();
+      expect(parseFloat(box().paddingLeft)).toBe(plain.pad);
+    });
+
+    it('shows the markers with glyphs in place of levels while Shift is held, even with building info off', async () => {
+      localStorage.setItem('bjarnoy.hudBuildingInfo', 'off');
+      premium(true);
+      const world = seedBuildings();
+      world.hud.available = { ...rich };
+      world.hud.storageCap = { ...rich };
+      wrapper = mountLayer(fakeRenderer());
+      expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
+
+      useQuickUpgradeStore().setShift(true);
+      await flushPromises();
+      expect(wrapper.findAll('.hud-marker')).toHaveLength(4);
+      // The barracks can be upgraded now: the double chevron, and no level number.
+      const barracks = wrapper!.get('[data-coord="3,0"]');
+      expect(barracks.find('.hud-dial__glyph--up').exists()).toBe(true);
+      // The level moves into the small hex at the dial's corner: it is the only number the dial shows.
+      expect(barracks.findAll('text')).toHaveLength(1);
+      expect(barracks.get('.hud-dial__level text').text()).toBe('2');
+      // The tower stands at its maximum: it keeps its level.
+      expect(wrapper.get('[data-coord="2,0"] text').text()).toBe('10');
+      expect(wrapper.find('[data-coord="2,0"] .hud-dial__glyph').exists()).toBe(false);
+
+      useQuickUpgradeStore().setShift(false);
+      await flushPromises();
+      expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
+    });
+
+    it('draws a clock for an upgrade that cannot be ordered yet', async () => {
+      premium(true);
+      const world = seedBuildings();
+      world.hud.available = { wood: 0, stone: 0, food: 0, iron: 0 };
+      wrapper = mountLayer(fakeRenderer());
+      useQuickUpgradeStore().start();
+      await flushPromises();
+      expect(wrapper.find('[data-coord="3,0"] .hud-dial__glyph--wait').exists()).toBe(true);
+      expect(wrapper.find('[data-coord="3,0"] .hud-dial__glyph--up').exists()).toBe(false);
+    });
+
+    describe('the hovered marker\'s box', () => {
+      async function hover(key: string) {
+        const renderer = fakeRenderer({ dialMapScale: 1.4 });
+        wrapper = mountLayer(renderer);
+        renderer.hoveredHexKey = key;
+        runFrame();
+        await flushPromises();
+        return renderer;
+      }
+      const line = (key: string) => wrapper!.get(`[data-coord="${key}"]`).find('[data-testid="hud-quick-upgrade"]');
+
+      it('shows the next level\'s cost and the Shift hint while Shift is held and the upgrade is ready', async () => {
+        premium(true);
+        const world = seedBuildings();
+        world.hud.available = { ...rich };
+        world.hud.storageCap = { ...rich };
+        useQuickUpgradeStore().setShift(true);
+        await hover('3,0');
+        expect(line('3,0').text()).toBe('Shift+click: upgrade to level 3');
+        expect(wrapper!.get('[data-coord="3,0"]').find('[data-testid="hud-quick-upgrade-cost"] .resource-icon').exists()).toBe(true);
+        // Only the hovered marker's box: the longhouse's stays as it was.
+        expect(line('1,0').exists()).toBe(false);
+      });
+
+      it('says Upgrade in the mode', async () => {
+        premium(true);
+        const world = seedBuildings();
+        world.hud.available = { ...rich };
+        world.hud.storageCap = { ...rich };
+        useQuickUpgradeStore().start();
+        await hover('3,0');
+        expect(line('3,0').text()).toBe('Upgrade');
+        expect(wrapper!.get('[data-coord="3,0"]').find('[data-testid="hud-quick-upgrade-cost"]').exists()).toBe(true);
+      });
+
+      it('adds nothing to a blocked upgrade and nothing without hover', async () => {
+        premium(true);
+        const world = seedBuildings();
+        world.hud.available = { wood: 0, stone: 0, food: 0, iron: 0 };
+        useQuickUpgradeStore().setShift(true);
+        await hover('3,0');
+        expect(line('3,0').exists()).toBe(false);
+        expect(wrapper!.get('[data-coord="3,0"]').find('.hud-marker__box .hud-chip--short, .hud-marker__box .hud-chip--blocked').exists()).toBe(true);
+      });
+
+      it('gives a free account holding Shift the locked premium line', async () => {
+        premium(false);
+        seedBuildings();
+        useQuickUpgradeStore().setShift(true);
+        await hover('3,0');
+        expect(line('3,0').text()).toBe('Premium: Shift+click upgrades');
+        expect(line('1,0').exists()).toBe(false);
+      });
+
+      it('shows nothing extra to a free account without Shift', async () => {
+        premium(false);
+        seedBuildings();
+        await hover('3,0');
+        expect(line('3,0').exists()).toBe(false);
+      });
+    });
+
+    it('hands the time a quick upgrade hit a blocked building to that marker\'s dial, and to no other', async () => {
+      premium(true);
+      const world = seedBuildings();
+      world.hud.available = { wood: 0, stone: 0, food: 0, iron: 0 };
+      const renderer = fakeRenderer();
+      wrapper = mountLayer(renderer);
+      useQuickUpgradeStore().start();
+      await flushPromises();
+      const dialOf = (key: string) => wrapper!.findAllComponents(BuildingHudDial).find((d) => d.element.closest(`[data-coord="${key}"]`));
+      expect(dialOf('3,0')!.props('blockedAtMs')).toBeUndefined();
+
+      const atMs = Date.now();
+      renderer.blockedMarkerList = [{ key: '3,0', atMs }];
+      runFrame();
+      await flushPromises();
+      expect(dialOf('3,0')!.props('blockedAtMs')).toBe(atMs);
+      expect(dialOf('1,0')!.props('blockedAtMs')).toBeUndefined();
+      // The dial plays it over the plain state: the clock stays, nothing is drawn as a refused order's dial.
+      expect(wrapper.get('[data-coord="3,0"] .hud-dial').attributes('data-refused')).toBeDefined();
+      expect(wrapper.find('[data-coord="3,0"] .hud-dial__glyph--wait').exists()).toBe(true);
+      expect(wrapper.find('[data-coord="3,0"] .hud-dial__burst').exists()).toBe(false);
+    });
+
+    it('a free account keeps the levels: Shift and the mode change nothing', async () => {
+      premium(false);
+      seedBuildings();
+      wrapper = mountLayer(fakeRenderer());
+      const quick = useQuickUpgradeStore();
+      quick.setShift(true);
+      quick.start();
+      await flushPromises();
+      expect(wrapper.find('.hud-dial__glyph').exists()).toBe(false);
+      expect(wrapper.get('[data-coord="3,0"] text').text()).toBe('2');
+    });
   });
 
   it('starts hidden when the player turned it off before', () => {

@@ -7,6 +7,7 @@ import AtlasSprite from "../components/AtlasSprite.vue";
 import WastedIsland from "../components/docs/WastedIsland.vue";
 import UtgardExample from "../components/docs/UtgardExample.vue";
 import DocsAdminNote from "../components/docs/DocsAdminNote.vue";
+import DocsHistoryNote from "../components/docs/DocsHistoryNote.vue";
 import AnimatedGiant from "../components/docs/AnimatedGiant.vue";
 import AnimationPausedNote from "../components/docs/AnimationPausedNote.vue";
 import { findAtlasFrame, type AtlasFrameRect } from "../lib/map/atlas";
@@ -259,6 +260,7 @@ function defensePower(garrison: readonly number[]): number {
       <p class="saga">{{ $t("docs.wastedLands.lore.p3") }}</p>
       <p class="saga">{{ $t("docs.wastedLands.lore.p4") }}</p>
       <p class="caption-note">{{ $t("docs.wastedLands.lore.caption") }}</p>
+      <DocsHistoryNote><p>{{ $t("docs.wastedLands.history") }}</p></DocsHistoryNote>
     </section>
 
     <AnimationPausedNote />

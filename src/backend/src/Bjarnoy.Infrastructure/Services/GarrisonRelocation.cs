@@ -28,10 +28,11 @@ internal sealed class GarrisonRelocation(GameDbContext dbContext)
     internal sealed record Candidate(Guid SettlementId, GarrisonSpot Spot);
 
     public async Task<Routing> LoadRoutingAsync(
-        Guid worldId, double speedFactor, Func<HexCoord, Terrain> terrainAt, Guid userId, Guid settlementId, CancellationToken cancellationToken)
+        Guid worldId, double speedFactor, Func<HexCoord, Terrain> terrainAt, Guid userId, Guid settlementId, DateTimeOffset now,
+        CancellationToken cancellationToken)
     {
         var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, worldId, terrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, worldId, terrainAt, rivers.IsWide, now, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(userId, settlementId));
         return new Routing(terrainAt, speedFactor, rivers.IsRiver, rivers.IsWide, walls);
     }
@@ -144,11 +145,10 @@ internal sealed class GarrisonRelocation(GameDbContext dbContext)
         return best;
     }
 
-    /// <summary>A new army row for <paramref name="army"/>, added to the context (not saved).</summary>
-    public ArmyEntity AddArmy(Army army)
+    /// <summary>A new army row for <paramref name="army"/> of the player who holds <paramref name="owner"/>, added to the context (not saved).</summary>
+    public ArmyEntity AddArmy(Army army, SettlementEntity owner)
     {
-        var entity = new ArmyEntity { Id = army.Id, SettlementId = army.SettlementId };
-        entity.ApplyDomain(army);
+        var entity = ArmyEntity.For(army, owner);
         _dbContext.Armies.Add(entity);
         return entity;
     }
@@ -174,10 +174,13 @@ internal sealed class GarrisonRelocation(GameDbContext dbContext)
         foreach (var entity in armies)
         {
             var army = entity.ToDomain();
-            var rehomed = Rehome(army, targets, now, routing);
+
+            // An army given an order after `now` (a camp that fell before it was settled) is rehomed from that order on.
+            var rehomed = Rehome(army, targets, army.NotBeforeItsOrder(now), routing);
             if (rehomed is not null)
             {
-                entity.ApplyDomain(rehomed);
+                // A gathering belongs to the settlement its groups set out from: one rehomed to another settlement leaves it.
+                entity.ApplyDomain(rehomed.SettlementId == settlementId ? rehomed : rehomed.LeaveGathering());
             }
         }
     }

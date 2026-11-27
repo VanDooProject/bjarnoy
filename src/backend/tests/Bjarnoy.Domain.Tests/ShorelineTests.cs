@@ -23,6 +23,17 @@ public class ShorelineTests
     }
 
     [Fact]
+    public void A_land_hex_next_to_only_an_inland_lake_is_not_a_shoreline()
+    {
+        var hex = new HexCoord(0, 0);
+        var lakeNeighbour = hex.Neighbours()[0];
+
+        Terrain TerrainAt(HexCoord c) => c == lakeNeighbour ? Terrain.InlandLake : Terrain.Grass;
+
+        Assert.False(Shoreline.IsShoreline(hex, TerrainAt));
+    }
+
+    [Fact]
     public void A_sea_hex_itself_is_never_a_shoreline_even_next_to_land()
     {
         var seaHex = new HexCoord(0, 0);

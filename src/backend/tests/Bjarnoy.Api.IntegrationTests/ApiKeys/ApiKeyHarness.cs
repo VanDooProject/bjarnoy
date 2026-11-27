@@ -7,6 +7,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests.ApiKeys;
 
@@ -122,8 +123,7 @@ internal sealed class ApiKeyHarness(BjarnoyApiFactory factory)
     public async Task<SettlementResponse> FoundSettlementAsync(Guid worldId, Guid ownerUserId)
     {
         using var client = Factory.CreateClient();
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -148,8 +148,7 @@ internal sealed class ApiKeyHarness(BjarnoyApiFactory factory)
     public async Task<(SettlementResponse Settlement, string OwnerId)> FoundAnonymousSettlementAsync(Guid worldId, string? jarlName = null)
     {
         using var client = Factory.CreateClient();
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
         var ownerId = Unique("anon");

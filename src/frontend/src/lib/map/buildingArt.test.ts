@@ -11,7 +11,7 @@
 //   only working by accident against whatever was open in an editor at the
 //   time.
 import { describe, expect, it } from 'vitest';
-import { buildingArt, buildingArtByFamily, buildingLayers, buildingLayersForType, terrainVariantArt } from './buildingArt';
+import { buildingArt, buildingArtByFamily, buildingLayers, buildingLayersForType, terrainArt, terrainVariantArt } from './buildingArt';
 
 describe('buildingArtByFamily', () => {
   it('resolves art for each of the sawmill families', () => {
@@ -115,5 +115,12 @@ describe('terrainVariantArt', () => {
 
   it('throws for a look the pack does not ship', () => {
     expect(() => terrainVariantArt('grasstile', 99)).toThrow();
+  });
+});
+
+describe('terrainArt', () => {
+  it('shows an inland lake with the sea art, not the grass fallback', () => {
+    expect(terrainArt('inlandlake')).toEqual(terrainArt('sea'));
+    expect(terrainArt('inlandlake')).not.toEqual(terrainArt('grass'));
   });
 });

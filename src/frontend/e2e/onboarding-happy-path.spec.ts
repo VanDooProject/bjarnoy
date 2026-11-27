@@ -2,7 +2,8 @@ import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
-import { buildThroughOpenRing, enterSettlementAfterOnboarding, openHudDrawer, waitForMapReady } from './helpers';
+import { buildThroughOpenRing, enterSettlementAfterOnboarding, openHudDrawer } from './helpers';
+import { waitForMapReady } from './support/render';
 
 /**
  * The full onboarding happy path, driven through the real UI end to end:

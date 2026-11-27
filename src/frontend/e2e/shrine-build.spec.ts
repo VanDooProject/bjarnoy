@@ -30,6 +30,8 @@ test('building a shrine from the ring menu places it without a rendering error',
   await settlement.setSettlementLevel(25);
   // The Shrine of Thor also needs a level-5 smithy standing (BuildingCatalogue.cs Prerequisites).
   await settlement.standBuildings([{ type: 'smithy', level: 5 }]);
+  // Late buildings cost more than a fresh settlement can hold: fund it (and its storage) so the bubble is affordable.
+  await settlement.fund(10_000_000);
 
   // Same approach as settlement-interactions.spec.ts's build test: ask the
   // model for a real empty, owned, grass hex (grass is what carries the new

@@ -21,8 +21,10 @@ Part of [Skirmish](README.md). The base for landing from the sea (see [Conquest 
 - A destroyed camp is gone: it claims nothing, holds nothing and is no longer in the settlement list. What its piles held is
   lost, except what the attacker looted.
 - A fleet that reaches the camp is garrisoned there like any other troops. It defends the camp and can be sent out again from it.
-- The camp can be attacked from land and from sea. If no troops defend it, it can be plundered. If no troops are in it, it can be
-  destroyed without catapults or rams.
+- The camp can be attacked from land and from sea. If no troops defend it, it can be plundered.
+- A camp falls only to an attack that leaves no troops in it while the attacker still has troops left; it needs no
+  catapults or rams for that. While troops guard it (its own or a supporting army's, ships included), nothing destroys
+  it, not catapults, rams or fire ships. A raid only plunders it.
 
 ## Numbers
 Starting values, to be tuned.

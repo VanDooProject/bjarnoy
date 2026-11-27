@@ -101,7 +101,7 @@ public class FogVisionRadiiTests
     [InlineData(UnitType.Catapult, 1)]
     [InlineData(UnitType.Ram, 1)]
     [InlineData(UnitType.Karve, 6)]
-    [InlineData(UnitType.Longship, 4)]
+    [InlineData(UnitType.Snekkja, 4)]
     public void Every_unit_type_has_its_decided_vision_radius(UnitType type, int expected)
     {
         Assert.Equal(expected, UnitCatalogue.Get(type).VisionRadius);
@@ -112,7 +112,7 @@ public class FogVisionRadiiTests
     public void An_armys_vision_radius_is_the_highest_among_the_unit_types_in_it()
     {
         var mixed = new[] { new UnitStack(UnitType.Catapult, 4), new UnitStack(UnitType.Thrall, 1), new UnitStack(UnitType.Spearman, 9) };
-        var fleet = new[] { new UnitStack(UnitType.Longship, 2), new UnitStack(UnitType.Karve, 1), new UnitStack(UnitType.Axeman, 5) };
+        var fleet = new[] { new UnitStack(UnitType.Snekkja, 2), new UnitStack(UnitType.Karve, 1), new UnitStack(UnitType.Axeman, 5) };
 
         Assert.Equal(3, FogVisionRadii.ArmyVisionRadius(mixed));
         Assert.Equal(6, FogVisionRadii.ArmyVisionRadius(fleet));
@@ -168,6 +168,7 @@ public class FogVisionRadiiTests
     {
         Assert.Equal(0.8, FogVisionRadii.MistOpaqueAtRamp);
         Assert.Equal(14, FogMaskOptions.DefaultUnknownMarginHexes);
+        Assert.Equal(4, FogMaskOptions.DefaultOutOfSightMarginHexes);
         Assert.Equal(14, new FogMaskOptions().UnknownMarginHexes);
         Assert.Equal(0.75, FogVisionRadii.ArmyFogWhiteOffsetHexes);
         Assert.Equal(6, FogVisionRadii.ArmyFogWhiteMarginHexes);

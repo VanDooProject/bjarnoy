@@ -290,7 +290,7 @@ alpha alive. Camp-initiated fights use the beasts' **attack** against the units'
 Every camp fight writes a `CampReport` (kind `hunt`, `ambush` or `tower`): camp coord, family,
 effective level, the player's settlement and army, the winner, both powers, seed, the player's units
 (sent / lost) and the beasts (before / lost) per tier, loot, whether the camp was cleared and whether a
-tower burned. `GET /settlements/{id}/camp-reports`, `GET /camp-reports/{id}`; the reports inbox shows them
+tower burned. `GET /worlds/{id}/camp-reports`, `GET /camp-reports/{id}`; the reports inbox shows them
 under "Camps".
 
 ### World map

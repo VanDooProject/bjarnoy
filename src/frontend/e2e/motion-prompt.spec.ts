@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { waitForMapReady } from './helpers';
+import { waitForMapReady } from './support/render';
 
 // The landing page's one-time "Play with animations?" bubble. The suite
 // emulates `prefers-reduced-motion: reduce` (playwright.config.ts), which is

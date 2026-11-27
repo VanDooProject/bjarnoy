@@ -5,6 +5,7 @@ import {
   deriveOnboardingGuidance,
   findGuidedTarget,
   guidedRingStep,
+  guidedTypesStarted,
   nextGuidedType,
   snapToOfferedPlot,
 } from './onboardingGuidance';
@@ -74,6 +75,27 @@ describe('nextGuidedType', () => {
 
   it('is null once both guided buildings are placed', () => {
     expect(nextGuidedType(['longhouse', 'reindeerherder', 'lumberjack'])).toBeNull();
+  });
+});
+
+describe('guidedTypesStarted', () => {
+  const order = (building: string, kind: 'build' | 'raze' = 'build') => ({ q: 1, r: 0, building, kind });
+
+  it('counts a queued guided building as started, so the next step is the other one', () => {
+    expect(nextGuidedType(guidedTypesStarted(['longhouse'], [order('reindeerherder')]))).toBe('lumberjack');
+    expect(nextGuidedType(guidedTypesStarted(['longhouse', 'reindeerherder'], [order('lumberjack')]))).toBeNull();
+  });
+
+  it('lists only guided types, each once, so a queued Longhouse upgrade does not read as a guided step', () => {
+    expect(guidedTypesStarted(['longhouse'], [order('longhouse')])).toEqual([]);
+    expect(guidedTypesStarted(['longhouse', 'reindeerherder'], [order('reindeerherder'), order('lumberjack')])).toEqual([
+      'reindeerherder',
+      'lumberjack',
+    ]);
+  });
+
+  it('does not count a raze order', () => {
+    expect(nextGuidedType(guidedTypesStarted(['longhouse'], [order('reindeerherder', 'raze')]))).toBe('reindeerherder');
   });
 });
 

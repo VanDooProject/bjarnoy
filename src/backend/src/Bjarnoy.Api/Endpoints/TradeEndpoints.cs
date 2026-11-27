@@ -58,10 +58,15 @@ public static class TradeEndpoints
             .RequireSettlementOwner()
             .WithConcurrencyRetry();
 
-        settlements.MapGet("/{settlementId:guid}/trade-reports", ListReportsForSettlement)
-            .WithName("ListSettlementTradeReports")
-            .WithSummary("Lists completed trade reports touching a settlement, as poster or acceptor, newest first.")
-            .RequireSettlementOwner();
+        var worlds = app.MapGroup("/api/v1/worlds")
+            .WithApiVersionSet(versionSet)
+            .WithTags("Trade")
+            .WithApiKeyFeature(ApiKeyFeature.Trade);
+
+        worlds.MapGet("/{worldId:guid}/trade-reports", ListReportsForOwner)
+            .WithName("ListTradeReports")
+            .WithSummary("Lists the caller's completed trade reports in a world, as poster or acceptor, newest first — one inbox across all their settlements.")
+            .RequireCallerRealm();
 
         var offers = app.MapGroup("/api/v1/trade-offers")
             .WithApiVersionSet(versionSet)
@@ -152,11 +157,15 @@ public static class TradeEndpoints
         return TypedResults.Ok<IReadOnlyList<ShipmentResponse>>([.. shipments.Select(ShipmentResponse.From)]);
     }
 
-    private static async Task<Ok<IReadOnlyList<TradeReportResponse>>> ListReportsForSettlement(
-        Guid settlementId, TradeService trade, CancellationToken cancellationToken)
+    private static async Task<Results<Ok<IReadOnlyList<TradeReportResponse>>, BadRequest<ProblemDetails>, JsonHttpResult<AuthErrorResponse>>> ListReportsForOwner(
+        Guid worldId, HttpContext httpContext, TradeService trade, RealmDirectory realms, CancellationToken cancellationToken)
     {
-        var reports = await trade.ListReportsAsync(settlementId, cancellationToken);
-        return TypedResults.Ok<IReadOnlyList<TradeReportResponse>>([.. reports.Select(TradeReportResponse.From)]);
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome == CallerRealmOutcome.MissingHeader) return ReportInbox.MissingOwnerId();
+        if (realm.Outcome == CallerRealmOutcome.Refused) return ReportInbox.NotOwner();
+
+        var reports = await trade.ListReportsForOwnerAsync(worldId, realm.OwnerId!, cancellationToken);
+        return TypedResults.Ok<IReadOnlyList<TradeReportResponse>>([.. reports.Select(r => TradeReportResponse.From(r, realm.OwnerId))]);
     }
 
     private static async Task<Results<Ok<TradeAcceptResponse>, NotFound, Conflict<ProblemDetails>>> Accept(

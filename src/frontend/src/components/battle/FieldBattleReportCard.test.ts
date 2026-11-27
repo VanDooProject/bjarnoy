@@ -8,12 +8,12 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import { createMemoryHistory, createRouter } from 'vue-router';
-import FieldBattleReportCard from './FieldBattleReportCard.vue';
+import FieldBattleReportCard, { type FieldBattleReportCardData } from './FieldBattleReportCard.vue';
 import { useMapFocus } from '../../composables/useMapFocus';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 
-const baseReport = {
+const baseReport: FieldBattleReportCardData = {
   winner: 'sidea',
   hex: { q: 12, r: -4 },
   sideAName: 'Alpha' as string | null,
@@ -26,9 +26,9 @@ const baseReport = {
   sideBWasDefending: true,
   lootTaken: { wood: 40, stone: 0, food: 10, iron: 0 },
   lines: [
-    { side: 'sidea' as const, isLoss: true, unit: 'axeman', count: 3 },
-    { side: 'sidea' as const, isLoss: false, unit: 'axeman', count: 12 },
-    { side: 'sideb' as const, isLoss: true, unit: 'thrall', count: 20 },
+    { side: 'sidea' as const, isLoss: true, unit: 'axeman', count: 3, volleyCount: 0 },
+    { side: 'sidea' as const, isLoss: false, unit: 'axeman', count: 12, volleyCount: 0 },
+    { side: 'sideb' as const, isLoss: true, unit: 'thrall', count: 20, volleyCount: 0 },
   ],
 };
 
@@ -41,7 +41,7 @@ const router = createRouter({
   ],
 });
 
-function mountCard(side: 'sidea' | 'sideb' = 'sidea', report: Partial<typeof baseReport> = {}) {
+function mountCard(side: 'sidea' | 'sideb' = 'sidea', report: Partial<FieldBattleReportCardData> = {}) {
   return mount(FieldBattleReportCard, {
     props: { report: { ...baseReport, ...report }, side, occurredAt: '2026-09-09T10:00:00.000Z' },
     global: { plugins: [createTestI18n({ hud: enHud }), router] },
@@ -49,6 +49,33 @@ function mountCard(side: 'sidea' | 'sideb' = 'sidea', report: Partial<typeof bas
 }
 
 describe('FieldBattleReportCard', () => {
+  it('shows no volley figures and keeps the single Lost column without ranged units', () => {
+    const wrapper = mountCard('sidea');
+    expect(wrapper.find('[data-testid="field-battle-volley-sidea"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="lost-volley"]').exists()).toBe(false);
+    expect(wrapper.findAll('th').map((th) => th.text())).toContain('Lost');
+    wrapper.unmount();
+  });
+
+  it('shows each side\'s volley power and splits the losses into volley and fight', () => {
+    const wrapper = mountCard('sidea', {
+      sideAVolleyPower: 200,
+      sideBVolleyPower: 0,
+      lines: [
+        { side: 'sidea' as const, isLoss: false, unit: 'skirmisher', count: 20, volleyCount: 0 },
+        { side: 'sideb' as const, isLoss: true, unit: 'axeman', count: 7, volleyCount: 3 },
+      ],
+    });
+
+    expect(wrapper.get('[data-testid="field-battle-volley-sidea"]').text()).toContain('200');
+    expect(wrapper.get('[data-testid="field-battle-volley-sideb"]').text()).toContain('0');
+    expect(wrapper.findAll('th').map((th) => th.text())).toEqual(expect.arrayContaining(['Lost (volley)', 'Lost (fight)']));
+    // Side A's skirmishers lost nothing; side B's axemen lost 3 to the volley and 4 in the fight.
+    expect(wrapper.findAll('[data-testid="lost-volley"]').map((td) => td.text())).toEqual(['0', '3']);
+    expect(wrapper.findAll('[data-testid="lost-fight"]').map((td) => td.text())).toEqual(['0', '4']);
+    wrapper.unmount();
+  });
+
   it("names the opponent from the viewer's side", () => {
     const asA = mountCard('sidea');
     expect(asA.find('[data-testid="field-battle-opponent"]').text()).toBe('Ben (Beta)');

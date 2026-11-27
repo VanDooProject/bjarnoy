@@ -198,8 +198,10 @@ internal static class CampGenerator
             frontier = next;
         }
 
+        // Water the island encloses (an inland lake or a bog pocket) is no sea: no whale road there.
+        var enclosed = EnclosedWater.Tiles(islandTiles, isLand).ToHashSet();
         var candidates = shore
-            .Where(e => e.Value >= WhaleMinShoreDistance)
+            .Where(e => e.Value >= WhaleMinShoreDistance && !enclosed.Contains(e.Key))
             .Select(e => (Coord: e.Key, Shore: e.Value))
             .OrderBy(c => c.Coord.Q)
             .ThenBy(c => c.Coord.R)

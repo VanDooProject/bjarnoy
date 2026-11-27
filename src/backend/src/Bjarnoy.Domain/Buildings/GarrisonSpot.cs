@@ -15,7 +15,7 @@ public enum GarrisonSpotKind
     /// <summary>A Tower. Land units only.</summary>
     Tower,
 
-    /// <summary>A Dockyard. Ships only.</summary>
+    /// <summary>A Harbour or a Shipyard. Ships only.</summary>
     Dock,
 
     /// <summary>A beach camp's centre (<c>docs/design/skirmish/beach-camp.md</c>). Land units and ships.</summary>
@@ -40,7 +40,7 @@ public static class GarrisonSpotKindExtensions
 public readonly record struct SpotStack(HexCoord Coord, UnitType Type, int Count);
 
 /// <summary>
-/// One place a settlement's units stand: its Longhouse hex, a Tower or a Dockyard.
+/// One place a settlement's units stand: its Longhouse hex, a Tower, a Harbour or a Shipyard.
 /// </summary>
 /// <param name="Coord">The building's hex.</param>
 /// <param name="Kind">What stands there.</param>
@@ -68,5 +68,5 @@ public sealed record GarrisonSpot(
     };
 }
 
-/// <summary>Units that stood at a coordinate that is no longer a garrison spot (its Tower or Dockyard is gone).</summary>
+/// <summary>Units that stood at a coordinate that is no longer a garrison spot (its Tower, Harbour or Shipyard is gone).</summary>
 public readonly record struct OrphanedGarrison(HexCoord From, IReadOnlyList<UnitStack> Stacks);

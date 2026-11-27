@@ -52,7 +52,7 @@ async function mountMenu(props: { unclaimedRealm?: boolean; landingEntries?: boo
   await router.isReady();
   const wrapper = mount(ReturningPlayerMenu, {
     props,
-    global: { plugins: [router, createTestI18n({ hud: enHud, worlds: enWorlds, intro: enIntro })] },
+    global: { plugins: [router, createTestI18n({ hud: enHud, worlds: enWorlds, intro: enIntro })], stubs: { teleport: true } },
   });
   return { wrapper, router };
 }

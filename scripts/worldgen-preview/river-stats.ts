@@ -1,7 +1,8 @@
 // Acceptance statistics for the river generator over several seeds: rivers and merges per island,
-// river lengths, width shares, truncated/dropped branches, inland mouths, parallel runs.
+// river lengths, width shares, truncated/dropped branches, inland mouths, parallel runs, shore hugging
+// (rivers with a run of 6+ tiles within two tiles of the sea) and antiparallel neighbours.
 //   cd src/frontend && npx tsx ../../scripts/worldgen-preview/river-stats.ts --seeds 1-8 --radius 1000
-import { coordKey, neighbors } from '../../src/frontend/src/lib/hex/coords';
+import { coordKey, hexDistance, neighbors } from '../../src/frontend/src/lib/hex/coords';
 import { emptyRiverStats, generateRivers } from '../../src/frontend/src/lib/map/riverGenerator';
 import { DEFAULT_GENERATION, islandDepthAt, terrainAt } from '../../src/frontend/src/lib/map/worldGenerator';
 import { TILE_ORIENTATIONS, type RiverTile } from '../../src/frontend/src/lib/map/types';
@@ -26,6 +27,11 @@ let river = 0;
 let inland = 0;
 let parallel = 0;
 let landTiles = 0;
+let hugging = 0;
+let antiparallel = 0;
+let selfAdjacentCourses = 0;
+let selfAdjacentPairs = 0;
+let mouthPairs = 0;
 const lengths: number[] = [];
 const mergesPer: { rivers: number; merges: number; land: number; outlets: number; straights: number }[] = [];
 let ms = 0;
@@ -53,6 +59,81 @@ for (let seed = from; seed <= to; seed++) {
       islandOf.set(coordKey(t), index);
     }
   });
+
+  // Sea distance of a river tile (1 = touches the sea), capped at 5.
+  const seaDistance = (c: { q: number; r: number }) => {
+    let frontier = [c];
+    const seen = new Set([coordKey(c)]);
+    for (let d = 1; d <= 4; d++) {
+      const next: { q: number; r: number }[] = [];
+      for (const f of frontier) {
+        for (const n of neighbors(f)) {
+          if (!isLand(n)) return d;
+          if (!seen.has(coordKey(n))) {
+            seen.add(coordKey(n));
+            next.push(n);
+          }
+        }
+      }
+      frontier = next;
+    }
+    return 5;
+  };
+  const ringDistance = new Map<string, number>();
+  for (const t of all.values()) ringDistance.set(coordKey(t), seaDistance(t));
+  const outIndex = (t: RiverTile) => (t.outDirection ? TILE_ORIENTATIONS.indexOf(t.outDirection) : -1);
+  for (const t of all.values()) {
+    if (t.shape !== 'spring') continue;
+    let cur: RiverTile | undefined = t;
+    let run = 0;
+    let best = 0;
+    for (let g = 0; cur && g < 1e5; g++) {
+      run = ringDistance.get(coordKey(cur))! <= 2 ? run + 1 : 0;
+      best = Math.max(best, run);
+      cur = cur.outDirection ? all.get(coordKey(neighbors(cur)[outIndex(cur)]!)) : undefined;
+    }
+    if (best >= 6) hugging++;
+  }
+  // A spring's whole course to its mouth touching itself: two of its tiles more than 2 steps apart that are neighbours.
+  for (const t of all.values()) {
+    if (t.shape !== 'spring') continue;
+    const order = new Map<string, number>();
+    for (let cur: RiverTile | undefined = t; cur && !order.has(coordKey(cur)); cur = cur.outDirection ? all.get(coordKey(neighbors(cur)[outIndex(cur)]!)) : undefined) {
+      order.set(coordKey(cur), order.size);
+    }
+    let pairs = 0;
+    for (const [key, i] of order) {
+      const tile = all.get(key)!;
+      for (const n of neighbors(tile)) {
+        const j = order.get(coordKey(n));
+        if (j !== undefined && j > i + 2) pairs++;
+      }
+    }
+    if (pairs > 0) selfAdjacentCourses++;
+    selfAdjacentPairs += pairs;
+  }
+  // Adjacent tiles of different rivers, not linked by flow, heading in opposite directions.
+  for (const t of all.values()) {
+    const od = outIndex(t);
+    for (const n of neighbors(t)) {
+      const o = all.get(coordKey(n));
+      if (!o || coordKey(n) <= coordKey(t)) continue;
+      const od2 = outIndex(o);
+      const linked = (od >= 0 && coordKey(neighbors(t)[od]!) === coordKey(n)) || (od2 >= 0 && coordKey(neighbors(o)[od2]!) === coordKey(t));
+      if (!linked && od >= 0 && od2 >= 0 && (od + 3) % 6 === od2) antiparallel++;
+    }
+  }
+
+  // Sea mouths (a mouth tile touching the sea) of one island closer than 4 hexes to each other.
+  const seaMouths = new Map<number, RiverTile[]>();
+  for (const t of all.values()) {
+    if (t.shape !== 'mouth' || !neighbors(t).some((x) => !isLand(x))) continue;
+    const key = islandOf.get(coordKey(t))!;
+    seaMouths.set(key, [...(seaMouths.get(key) ?? []), t]);
+  }
+  for (const list of seaMouths.values()) {
+    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) if (hexDistance(list[i]!, list[j]!) < 4) mouthPairs++;
+  }
 
   const rootOf = new Map<string, string>();
   const walk = (t: RiverTile) => {
@@ -104,4 +185,8 @@ console.log(`merges-per-island histogram ${JSON.stringify(hist)}`);
 console.log(`spring->end length: mean ${avg(lengths).toFixed(1)} median ${lengths[lengths.length >> 1] ?? 0} p90 ${lengths[Math.floor(lengths.length * 0.9)] ?? 0} max ${lengths[lengths.length - 1] ?? 0}`);
 console.log(`river-tile share: river ${pct(river, tilesTotal)} widen ${pct(widen, tilesTotal)} stream ${pct(stream, tilesTotal)} of ${tilesTotal} tiles (${pct(tilesTotal, landTiles)} of land on river islands)`);
 console.log(`inland mouths ${inland}; parallel adjacent pairs ${parallel} (${((1000 * parallel) / Math.max(1, tilesTotal)).toFixed(1)}/1000 tiles); generate ${ms.toFixed(0)} ms`);
+console.log(`valley streams ${stats.valleyStreams} of ${stats.valleyCandidates} cut-off valleys (${stats.valleyStreamsIntoRivers} into a river, joined earlier ${stats.valleysJoined})`);
+console.log(`shore hugging: ${hugging} of ${lengths.length} rivers (${pct(hugging, lengths.length)}) run 6+ tiles within two tiles of the sea; antiparallel adjacent pairs ${antiparallel} (${((1000 * antiparallel) / Math.max(1, tilesTotal)).toFixed(1)}/1000 tiles)`);
+console.log(`self-adjacent courses (a river beside its own course, >2 steps apart): ${selfAdjacentCourses} of ${lengths.length} (${selfAdjacentPairs} tile pairs)`);
+console.log(`sea-mouth pairs closer than 4 hexes: ${mouthPairs}`);
 if (verbose) console.log(JSON.stringify(mergesPer));

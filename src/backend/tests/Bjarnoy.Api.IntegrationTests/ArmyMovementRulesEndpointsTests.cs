@@ -11,6 +11,7 @@ using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -42,8 +43,7 @@ public sealed class ArmyMovementRulesEndpointsTests : IAsyncLifetime
     {
         using var client = _factory.CreateClient();
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.Where(i => i.StartPositions.Count > 3).OrderByDescending(i => i.TileCount).First();
         var plot = island.StartPositions[0];
 
@@ -95,12 +95,47 @@ public sealed class ArmyMovementRulesEndpointsTests : IAsyncLifetime
             await db.SaveChangesAsync(Ct);
         }
 
+        // The world's river index is cached; the islands were edited behind its back.
+        WorldIslandCaches.Invalidate(world.Id);
+
         var refused = await client.PostJsonAsync($"/api/v1/settlements/{settlement.Id}/armies", ToTarget(), Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
         var problem = await refused.Content.ReadFromJsonAsync<ProblemDetails>(SqliteApiFixture.StrictJson, Ct);
         Assert.Equal("No land route: mountains and wide rivers can't be crossed.", problem!.Detail);
         Assert.Equal("UnreachableLeg", problem.Extensions["rejection"]?.ToString());
+    }
+
+    [Fact]
+    public async Task A_dispatch_with_more_than_five_waypoints_is_refused_for_a_free_account()
+    {
+        using var client = _factory.CreateClient();
+        var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
+        var island = islands!.Where(i => i.StartPositions.Count > 3).OrderByDescending(i => i.TileCount).First();
+        var plot = island.StartPositions[0];
+
+        var ownerId = Unique("local-owner-");
+        var settlement = await (await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Bjornstad", "Ulf", ownerId), Ct))
+            .ReadStrictAsync<SettlementResponse>(Ct);
+        var player = await (await client.PostJsonAsync(
+            "/api/v1/auth/register", new RegisterRequest(Unique("ulf-"), "correct-horse-battery", ownerId), Ct))
+            .ReadStrictAsync<AuthResponse>(Ct);
+        Authorize(client, player.AccessToken);
+
+        // The cap is checked before anything is planned, so the waypoints need not be walkable.
+        var waypoints = Enumerable.Range(1, 6).Select(i => new HexPointRequest(plot.Q + i, plot.R)).ToList();
+        var refused = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/armies",
+            new DispatchArmyRequest([new(settlement.Spot(), [new UnitCountRequest("spearman", 1)])], waypoints, new HexPointRequest(plot.Q + 8, plot.R), 10),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        var problem = await refused.Content.ReadFromJsonAsync<ProblemDetails>(SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal("TooManyWaypoints", problem!.Extensions["rejection"]?.ToString());
+        Assert.Equal("Too many waypoints: an order takes at most 5, or 10 with premium.", problem.Detail);
     }
 
     /// <summary>

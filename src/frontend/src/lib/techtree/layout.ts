@@ -29,11 +29,11 @@ export const ANCHOR = 'longhouse';
 /**
  * Buildings still in the catalogue that the docs should not advertise — a
  * docs-only omission, add an entry to hide one. The Quarry is hidden because
- * no new one can be built (existing quarries keep standing); the Magic Tower
+ * no new one can be built (existing quarries keep standing); the Beach Camp because a sea landing sets it up, it is never built; the Magic Tower
  * and the Fisher Hut (merged into the Fishing Hut) are gone from the
  * catalogue altogether.
  */
-export const HIDDEN_FROM_DOCS: readonly string[] = ['quarry'];
+export const HIDDEN_FROM_DOCS: readonly string[] = ['quarry', 'beachcamp'];
 
 export const COLUMN_TITLES: readonly string[] = ['Anchor', 'First works', 'Refining', 'Advanced', 'Capstone'];
 
@@ -47,7 +47,7 @@ export type Slot = readonly [col: number, row: number];
  * Brickworks (LH 1), Fishing Hut (LH 2), Tower (LH 3) and Town Square (LH 6). Each row is one chain: a source sits level with what it feeds, so
  * most links are a single horizontal run — Lumberjack -> Sawmill -> Shrine of
  * Ullr, Reindeer Herder -> Farm -> Crop Mill -> Shrine of Freyja, Storage House -> Great
- * Storehouse, Fishing Hut -> Dockyard -> Shrine of Njörd, Tower -> Barracks ->
+ * Storehouse, Fishing Hut -> Harbour -> Shrine of Njörd, Tower -> Barracks ->
  * Archery Range.
  *
  * Every building has at most one feeder now, so every link joins two adjacent
@@ -92,9 +92,10 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   bogoreworks: [2, 3],
   hammerschmiede: [3, 3],
 
-  // Row 4 — Fishing Hut (LH 2) -> Dockyard (LH 8) -> Shrine of Njörd (LH 25).
+  // Row 4 — Fishing Hut (LH 2) -> Harbour (LH 5) -> Shipyard (LH 10), and Harbour -> Shrine of Njörd (LH 25).
   fishinghut: [1, 4],
-  dockyard: [2, 4],
+  harbour: [2, 4],
+  shipyard: [3, 4],
   shrineofnjord: [4, 4],
 
   // Row 5 — Tower (LH 3) -> Barracks (LH 5) -> Archery Range (LH 9) -> Siege Workshop (LH 18, behind a level-3 Archery Range).

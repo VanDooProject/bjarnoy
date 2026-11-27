@@ -106,6 +106,7 @@ public sealed class WorldGenerator
                 var tiles = kept[i].SortedTiles();
                 IReadOnlyList<RiverTile> riverTiles;
                 IReadOnlyList<BogTile> bogTiles = [];
+                IReadOnlyList<HexCoord> inlandLakes;
                 IReadOnlyList<Giant> giants;
                 IReadOnlyList<Camp> camps;
                 IReadOnlyList<UtgardWall> utgardWalls = [];
@@ -121,12 +122,15 @@ public sealed class WorldGenerator
                     // Utgard's wall rings and the Jötun watchtowers, after giants and camps (they keep clear of both).
                     (utgardWalls, jotunTowers) = EndgameGenerator.Generate(tiles, land, _sampler, _options, index, riverTiles, giants, camps);
                     startPositions = [];
+                    inlandLakes = EnclosedWater.Tiles(
+                        tiles, c => _sampler.TerrainAt(c).IsLand() || _sampler.WastedTerrainAt(c).IsLand());
                 }
                 else
                 {
                     var generated = RiverGenerator.GenerateWithBogs(tiles, land, _sampler, _options, index);
                     riverTiles = generated.Rivers;
                     bogTiles = generated.Bogs;
+                    inlandLakes = generated.InlandLakes;
 
                     // Giants, camps and start positions see the bogland as terrain: they never stand on a bog or a
                     // lake, and only plain bog moss can hold a (bog) camp.
@@ -155,6 +159,7 @@ public sealed class WorldGenerator
                     StartPositions = startPositions,
                     RiverTiles = riverTiles,
                     BogTiles = bogTiles,
+                    InlandLakeTiles = inlandLakes,
                     Giants = giants,
                     Camps = camps,
                     UtgardWalls = utgardWalls,

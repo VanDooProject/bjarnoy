@@ -1,6 +1,7 @@
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { claimLandfall, enterSettlementAfterOnboarding, placeGuidedBuildings, waitForMapReady } from './helpers';
+import { claimLandfall, enterSettlementAfterOnboarding, placeGuidedBuildings } from './helpers';
+import { waitForMapReady } from './support/render';
 
 // After a deploy an open tab's lazy chunks 404. Entering the settlement used
 // to do nothing then; now the tab loads the new build.

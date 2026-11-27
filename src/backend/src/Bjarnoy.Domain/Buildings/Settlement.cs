@@ -13,8 +13,12 @@ namespace Bjarnoy.Domain.Buildings;
 /// player's realm (<c>docs/design/economy.md</c> section 5, "Buildings outside the realm decay"), or <see langword="null"/>
 /// while it is inside: a building with a value there has no function (<see cref="IsFunctioning"/>) and loses a level every
 /// <see cref="BuildingCatalogue.DecayInterval(BuildingType, double)"/>. Only <see cref="Settlement.ApplyRealmState"/> sets or clears it.
+/// <paramref name="StandingSince"/> is, for a palisade or a gate, the game instant its build order raised it to a standing wall (level 1,
+/// or a palisade turned gate or back): armies already marching react to a wall from then on (<c>docs/design/troop-movement-range.md</c>
+/// §5). <see langword="null"/> for every other building and for walls that stood before it was recorded.
 /// </summary>
-public readonly record struct PlacedBuilding(HexCoord Coord, BuildingType Type, int Level, DateTimeOffset? OutsideRealmSince = null)
+public readonly record struct PlacedBuilding(
+    HexCoord Coord, BuildingType Type, int Level, DateTimeOffset? OutsideRealmSince = null, DateTimeOffset? StandingSince = null)
 {
     /// <summary>Whether the hex is inside the realm, so the building produces, boosts and trains.</summary>
     public bool IsFunctioning => OutsideRealmSince is null;
@@ -106,7 +110,7 @@ public sealed record Settlement
     public IReadOnlyList<UnitStack> Garrison => TotalOf(SpotStacks);
 
     /// <summary>
-    /// The garrison spots: the Longhouse hex first, then every standing Tower and Dockyard by Q, then R — one entry each, empty
+    /// The garrison spots: the Longhouse hex first, then every standing Tower, Harbour and Shipyard by Q, then R — one entry each, empty
     /// ones included. A tower outside the realm is still a building and still a spot; a foundation still under construction
     /// (level 0) is not standing yet.
     /// </summary>
@@ -116,7 +120,7 @@ public sealed record Settlement
         {
             var coords = new List<(HexCoord Coord, GarrisonSpotKind Kind)> { (Centre, IsBeachCamp ? GarrisonSpotKind.BeachCamp : GarrisonSpotKind.Longhouse) };
             coords.AddRange(Buildings
-                .Where(b => b.Type is BuildingType.Tower or BuildingType.Dockyard && b.Level >= 1 && b.Coord != Centre)
+                .Where(b => b.Type.HoldsGarrison() && b.Level >= 1 && b.Coord != Centre)
                 .OrderBy(b => b.Coord.Q).ThenBy(b => b.Coord.R)
                 .Select(b => (b.Coord, b.Type == BuildingType.Tower ? GarrisonSpotKind.Tower : GarrisonSpotKind.Dock)));
 
@@ -172,7 +176,7 @@ public sealed record Settlement
     }
 
     /// <summary>
-    /// Splits off the units standing at a coordinate that is no longer a garrison spot (its Tower or Dockyard was destroyed,
+    /// Splits off the units standing at a coordinate that is no longer a garrison spot (its Tower, Harbour or Shipyard was destroyed,
     /// however that happened) and returns this settlement without them, plus what stood there. The one place such a garrison is
     /// found; the infrastructure marches each group to a new spot when it persists the settlement.
     /// </summary>
@@ -231,6 +235,12 @@ public sealed record Settlement
     /// reward pay exactly once.
     /// </summary>
     public int ClaimedQuests { get; init; }
+
+    /// <summary>
+    /// Whether the owner is a registered account rather than anonymous play (not persisted; set when the settlement is loaded).
+    /// Completes the register quest (<see cref="Quests"/>).
+    /// </summary>
+    public bool OwnerRegistered { get; init; }
 
     /// <summary>
     /// Whether this settlement has ever dispatched an army with
@@ -381,8 +391,8 @@ public sealed record Settlement
 
     /// <summary>
     /// How many orders may build in parallel right now (issue #158):
-    /// <c>max(2, longhouseLevel)</c> — 2 slots at level 1–2, then one more per level
-    /// (3 at level 3, 10 at level 10, 30 at 30). A razed settlement
+    /// <c>max(2, 1 + floor(longhouseLevel / 2))</c> — level 1 has 2 slots (the exception), then one more every
+    /// second level (2, 2, 3, 3, 4, 4, 5, 5, 6 at levels 2–10; 11 at level 20, 16 at 30). A razed settlement
     /// (<see cref="LonghouseLevel"/> 0) still reads 2 — harmless, since every
     /// building needs <see cref="BuildingDefinition.RequiredLonghouseLevel"/>
     /// &gt;= 1 and nothing can be queued there anyway.
@@ -427,12 +437,12 @@ public sealed record Settlement
         }
 
         var longhouseLevel = buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
-        return Math.Max(2, longhouseLevel);
+        return Math.Max(2, 1 + (longhouseLevel / 2));
     }
 
     /// <summary>
     /// Slots a Longhouse order occupies out of <paramref name="constructionSlots"/>: 90 %, rounded down, at least 1
-    /// (level 10: 9 of 10). The rest stay free for other construction.
+    /// (level 10: 5 of 6 slots). The rest stay free for other construction.
     /// </summary>
     public static int LonghouseSlotCost(int constructionSlots) => Math.Max(1, constructionSlots * 9 / 10);
 
@@ -646,6 +656,21 @@ public sealed record Settlement
     public int Score => Buildings.Sum(b => b.Level * (b.Level + 1) / 2);
 
     /// <summary>
+    /// <see cref="PlacedBuilding.StandingSince"/> after <paramref name="order"/> completes at <paramref name="completedAt"/> on
+    /// <paramref name="before"/> (<see langword="null"/>: nothing stood there): a palisade or gate that becomes a standing wall (from
+    /// below level 1, or turned from one kind into the other) stands from then; an upgrade keeps the instant it already had.
+    /// </summary>
+    private static DateTimeOffset? WallStandsFrom(PlacedBuilding? before, BuildOrder order, DateTimeOffset completedAt)
+    {
+        if (order.Type is not (BuildingType.Palisade or BuildingType.PalisadeGate) || order.TargetLevel < 1)
+        {
+            return before?.StandingSince;
+        }
+
+        return before is { Level: >= 1 } standing && standing.Type == order.Type ? standing.StandingSince : completedAt;
+    }
+
+    /// <summary>
     /// The settlement as of <paramref name="now"/>: every order whose time has
     /// come is applied, and production and capacity are recomputed from what is
     /// then standing.
@@ -754,11 +779,19 @@ public sealed record Settlement
                 }
                 else if (index >= 0)
                 {
-                    buildings[index] = buildings[index] with { Type = order.Type, Level = order.TargetLevel };
+                    var before = buildings[index];
+                    buildings[index] = before with
+                    {
+                        Type = order.Type,
+                        Level = order.TargetLevel,
+                        StandingSince = WallStandsFrom(before, order, eventTime),
+                    };
                 }
                 else
                 {
-                    buildings.Add(new PlacedBuilding(order.Coord, order.Type, order.TargetLevel));
+                    buildings.Add(new PlacedBuilding(
+                        order.Coord, order.Type, order.TargetLevel,
+                        StandingSince: WallStandsFrom(null, order, eventTime)));
                 }
 
                 queue.Remove(order);
@@ -961,8 +994,8 @@ public sealed record Settlement
 
     /// <summary>
     /// The waiting order that may start next out of <paramref name="fifoQueue"/> (the whole queue in FIFO/plan order): the first
-    /// waiting order with no earlier order on its hex (stage 1d contiguity), provided its slot cost fits the free slots
-    /// (head-of-line: a smaller order behind it never jumps). <see langword="null"/> when none may start.
+    /// waiting order, provided no earlier order on its hex is unfinished and its slot cost fits the free slots (head-of-line:
+    /// no order behind it ever jumps). <see langword="null"/> when none may start.
     /// </summary>
     internal static BuildOrder? NextPromotable(IReadOnlyList<BuildOrder> fifoQueue, int constructionSlots)
     {
@@ -973,24 +1006,22 @@ public sealed record Settlement
         }
 
         // List position — not QueuedAt — is the tiebreaker that actually matters: two orders planned in the same instant
-        // (identical QueuedAt) still have a real, distinguishable plan order here.
-        var candidate = fifoQueue
-            .Where(o => o.IsWaiting)
-            .FirstOrDefault(o =>
-            {
-                var index = IndexOfOrder(fifoQueue, o);
-                return !fifoQueue.Any(other => other.Coord == o.Coord && other.Id != o.Id && IndexOfOrder(fifoQueue, other) < index);
-            });
-
+        // (identical QueuedAt) still have a real, distinguishable plan order here. Strict FIFO: only the oldest waiting
+        // order may start; whatever holds it back (slots, an unfinished earlier order on its hex) holds back everything
+        // behind it too.
+        var candidate = fifoQueue.FirstOrDefault(o => o.IsWaiting);
         if (candidate is null)
         {
             return null;
         }
 
-        var slotCost = EffectiveSlotCost(candidate, constructionSlots);
+        var index = IndexOfOrder(fifoQueue, candidate);
+        if (fifoQueue.Any(other => other.Coord == candidate.Coord && other.Id != candidate.Id && IndexOfOrder(fifoQueue, other) < index))
+        {
+            return null;
+        }
 
-        // Head-of-line blocking: the waiting queue is FIFO, not a pool a smaller order can jump.
-        return slotCost > free ? null : candidate;
+        return EffectiveSlotCost(candidate, constructionSlots) > free ? null : candidate;
     }
 
     private static int IndexOfOrder(IReadOnlyList<BuildOrder> queue, BuildOrder order)
@@ -1340,6 +1371,10 @@ public sealed record Settlement
     /// (the fishing hut) cares; <paramref name="terrain"/> alone can't say,
     /// since it reports plain <see cref="Terrain.Sea"/> either way.
     /// </param>
+    /// <param name="isInlandLakeShore">
+    /// Whether <paramref name="coord"/> is an inland-lake hex with a land neighbour (<see cref="World.TerrainSampler.IsInlandLakeShore"/>).
+    /// Only a <see cref="BuildingDefinition.AlsoOnInlandLakeShore"/> building (the fishing hut) cares.
+    /// </param>
     /// <param name="maxWaitingOrders">
     /// How many orders may sit in the waiting queue at once — 0 for
     /// non-premium/anonymous play, <see cref="MaxWaitingOrders"/> for premium
@@ -1457,7 +1492,8 @@ public sealed record Settlement
         bool onWastedIsland = false,
         World.IEndgameSiteIndex? endgameSites = null,
         ConnectedRealm? realm = null,
-        bool onRiverTile = false)
+        bool onRiverTile = false,
+        bool isInlandLakeShore = false)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
         var connected = realm ?? ConnectedRealm.Resolve([AsRealmSettlement()]);
@@ -1530,7 +1566,7 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.NewPlacementDisabled);
         }
 
-        if (!definition.AllowsHex(terrain, isCoastalWater, bogKindAt))
+        if (!definition.AllowsHex(terrain, isCoastalWater, bogKindAt, isInlandLakeShore))
         {
             return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
         }
@@ -1650,28 +1686,6 @@ public sealed record Settlement
             }
         }
 
-        // Storage houses keep their Longhouse cap, and an additional one is only
-        // allowed once enough of them stand high enough
-        // (BuildingCatalogue.AdditionalStorageHouseRequirement). Only a *new*
-        // storage house counts (baseLevel 0) — upgrading one is never refused.
-        if (type == BuildingType.StorageHouse && baseLevel == 0)
-        {
-            // A linked realm counts all of its storage houses, in every member.
-            var storageHexes = Buildings.Where(b => b.Type == BuildingType.StorageHouse).Select(b => b.Coord)
-                .Concat(Queue.Where(o => o.Type == BuildingType.StorageHouse).Select(o => o.Coord))
-                .Concat(Linked?.OtherBuildings.Where(b => b.Type == BuildingType.StorageHouse).Select(b => b.Coord) ?? [])
-                .Concat(Linked?.OtherQueue.Where(o => o.Type == BuildingType.StorageHouse).Select(o => o.Coord) ?? [])
-                .Distinct()
-                .Count();
-            var (needCount, needLevel) = BuildingCatalogue.AdditionalStorageHouseRequirement(storageHexes);
-            if (storageHexes >= 1
-                && Buildings.Count(b => b.Type == BuildingType.StorageHouse && b.Level >= needLevel)
-                    + (Linked?.OtherBuildings.Count(b => b.Type == BuildingType.StorageHouse && b.Level >= needLevel) ?? 0) < needCount)
-            {
-                return BuildDecision.Rejected(BuildRejection.StorageHouseTooLow);
-            }
-        }
-
         // Every prerequisite must be met, and each is judged against the
         // settlement's *highest-level* building of that type — not the first
         // one in coordinate order, which would let a second, lower building of
@@ -1686,6 +1700,26 @@ public sealed record Settlement
             if (highest < prerequisite.Level)
             {
                 return BuildDecision.Rejected(BuildRejection.RequiredBuildingTooLow, prerequisite);
+            }
+        }
+
+        // The n-th Great Storehouse needs n Storage Houses standing at the top
+        // level (BuildingCatalogue.GreatStorehouseStorageHouseLevel). Only a
+        // *new* Great Storehouse counts (baseLevel 0) — upgrading one is never
+        // refused. A linked realm counts every member's buildings and orders.
+        if (type == BuildingType.GreatStorehouse && baseLevel == 0)
+        {
+            var held = Buildings.Where(b => b.Type == BuildingType.GreatStorehouse).Select(b => b.Coord)
+                .Concat(Queue.Where(o => o.Type == BuildingType.GreatStorehouse).Select(o => o.Coord))
+                .Concat(Linked?.OtherBuildings.Where(b => b.Type == BuildingType.GreatStorehouse).Select(b => b.Coord) ?? [])
+                .Concat(Linked?.OtherQueue.Where(o => o.Type == BuildingType.GreatStorehouse).Select(o => o.Coord) ?? [])
+                .Distinct()
+                .Count();
+            var maxed = Buildings.Count(b => b.Type == BuildingType.StorageHouse && b.Level >= BuildingCatalogue.GreatStorehouseStorageHouseLevel)
+                + (Linked?.OtherBuildings.Count(b => b.Type == BuildingType.StorageHouse && b.Level >= BuildingCatalogue.GreatStorehouseStorageHouseLevel) ?? 0);
+            if (maxed < held + 1)
+            {
+                return BuildDecision.Rejected(BuildRejection.GreatStorehouseNeedsStorageHouses);
             }
         }
 
@@ -1765,7 +1799,7 @@ public sealed record Settlement
     }
 
     /// <summary>
-    /// The slot logic shared by <see cref="PlanBuild"/> and <see cref="PlanRaze"/>: the order starts now when its slot cost
+    /// The slot logic shared by <see cref="PlanBuild"/> and <see cref="PlanRaze"/>: the order starts now when nothing in the realm is waiting and its slot cost
     /// (<paramref name="slotDefinition"/>, the level in work) fits the free slots, waits in the premium queue when there is room
     /// for it, and is refused otherwise.
     /// </summary>
@@ -1786,11 +1820,17 @@ public sealed record Settlement
         // alone are not enough: two levels of the same hex must never be
         // "under construction" at once, or completion order (and hence the
         // level a hex ends up at) stops being deterministic.
-        var fitsNow = !earlierOnHexUnfinished && slotCost <= FreeSlots;
+        // A new order never starts ahead of one already waiting (FIFO): with any waiting order in the realm, it waits too,
+        // even when its smaller slot cost would fit the free slots.
+        var fitsNow = !earlierOnHexUnfinished && !GroupWaitingOrders.Any() && slotCost <= FreeSlots;
 
         if (!fitsNow && GroupWaitingOrders.Count() >= maxWaitingOrders)
         {
-            return BuildDecision.Rejected(maxWaitingOrders <= 0 ? BuildRejection.NoFreeSlot : BuildRejection.QueueFull);
+            // Without Premium, orders queued earlier stay and keep going, but nothing new joins them until all have started.
+            var rejection = maxWaitingOrders > 0
+                ? BuildRejection.QueueFull
+                : GroupWaitingOrders.Any() ? BuildRejection.QueueLockedWithoutPremium : BuildRejection.NoFreeSlot;
+            return BuildDecision.Rejected(rejection);
         }
 
         if (fitsNow)
@@ -1911,10 +1951,12 @@ public sealed record Settlement
 
         // A waiting order never spent anything (its cost is only reserved) —
         // cancelling it just drops it, no refund, no stub to remove (it never
-        // staked one).
+        // staked one). It may have been the head of the FIFO holding back a
+        // smaller order that fits the free slots, so promote right away.
         if (order.IsWaiting)
         {
-            return CancelBuildResult.Accept(this with { Queue = [.. Queue.Where(o => o.Id != orderId)] });
+            var (afterDrop, _) = (this with { Queue = [.. Queue.Where(o => o.Id != orderId)] }).PromoteWaitingOrders(now, speedFactor);
+            return CancelBuildResult.Accept(afterDrop);
         }
 
         // A raze cost nothing, so there is nothing to refund, and the building it was lowering stays as it is.
@@ -2103,7 +2145,8 @@ public sealed record Settlement
         World.IGiantIndex? giants = null,
         World.BogTileKind? bogKindAt = null,
         Palisades.PalisadeLayout? palisades = null,
-        ConnectedRealm? realm = null)
+        ConnectedRealm? realm = null,
+        bool isInlandLakeShore = false)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
         if (giantIndex.TryGetGiant(coord, out _))
@@ -2136,7 +2179,7 @@ public sealed record Settlement
             return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.LonghouseIsFixed);
         }
 
-        if (!definition.AllowsHex(terrain, isCoastalWater, bogKindAt))
+        if (!definition.AllowsHex(terrain, isCoastalWater, bogKindAt, isInlandLakeShore))
         {
             return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.TerrainNotAllowed);
         }
@@ -2446,7 +2489,7 @@ public sealed record Settlement
             Buildings = buildings,
             Queue = [.. Queue.Where(o => o.Coord != editedCoord)],
             Resources = resources,
-        }).CancelTrainingAt(new HashSet<HexCoord> { editedCoord }, now);
+        }).CancelTrainingAt(new HashSet<HexCoord> { editedCoord }, now).PromoteWaitingOrders(now, speedFactor).Settlement;
     }
 
     /// <summary>
@@ -2728,12 +2771,14 @@ public sealed record Settlement
             return TrainDecision.Rejected(TrainRejection.PremiumRequired);
         }
 
-        if (!UnitCatalogue.IsAvailable(type, LonghouseLevel, t => HighestLevelOf(t)))
+        if (!UnitCatalogue.IsAvailable(type, LonghouseLevel, t => HighestLevelOf(t), checkOwnBuildingLevel: false))
         {
             // The same check counting every building: the unit is only missing because its training building stands
             // outside the realm.
             return TrainDecision.Rejected(
-                UnitCatalogue.IsAvailable(type, LonghouseLevel, t => Buildings.Where(b => b.Type == t).Select(b => b.Level).DefaultIfEmpty(0).Max())
+                UnitCatalogue.IsAvailable(
+                    type, LonghouseLevel, t => Buildings.Where(b => b.Type == t).Select(b => b.Level).DefaultIfEmpty(0).Max(),
+                    checkOwnBuildingLevel: false)
                     ? TrainRejection.BuildingOutsideRealm
                     : TrainRejection.UnitNotAvailable);
         }
@@ -2750,13 +2795,27 @@ public sealed record Settlement
             return TrainDecision.Rejected(TrainRejection.WrongBuilding);
         }
 
-        var candidates = split == TrainingSplit.Here
+        // "This building" needs the ordering building's own level. A distributed order goes to the buildings of the type that have
+        // the level, so it may be placed from a building below it.
+        if (split == TrainingSplit.Here && here.Level < definition.RequiredBuildingLevel)
+        {
+            return TrainDecision.Rejected(TrainRejection.BuildingLevelTooLow);
+        }
+
+        var functioning = (split == TrainingSplit.Here
             ? new List<PlacedBuilding> { here }
-            : Buildings.Where(b => b.Type == definition.RequiredBuildingType).ToList();
-        candidates.RemoveAll(b => b.Level < 1 || !b.IsFunctioning);
-        if (candidates.Count == 0)
+            : Buildings.Where(b => b.Type == definition.RequiredBuildingType).ToList())
+            .Where(b => b.Level >= 1 && b.IsFunctioning)
+            .ToList();
+        if (functioning.Count == 0)
         {
             return TrainDecision.Rejected(TrainRejection.BuildingOutsideRealm);
+        }
+
+        var candidates = functioning.Where(b => b.Level >= definition.RequiredBuildingLevel).ToList();
+        if (candidates.Count == 0)
+        {
+            return TrainDecision.Rejected(TrainRejection.BuildingLevelTooLow);
         }
 
         var slots = candidates
@@ -2816,6 +2875,62 @@ public sealed record Settlement
         }
 
         return this with { Resources = paid, TrainingQueue = [.. TrainingQueue, .. orders] };
+    }
+
+    /// <summary>Share of the cost of units not yet trained that cancelling a training order pays back (<c>docs/design/economy.md</c>).</summary>
+    public const double TrainingCancelRefundShare = 0.5;
+
+    /// <summary>
+    /// What cancelling <paramref name="order"/> at <paramref name="now"/> pays back: 50 % of the cost of the units not yet trained, floored to whole resources.
+    /// Units of a running order that are already trained are not part of it.
+    /// </summary>
+    public static ResourceAmounts TrainingCancelRefund(TrainingOrder order, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(order);
+
+        var untrained = order.Count - order.CompletedCount(now);
+        var half = UnitCatalogue.Get(order.UnitType).TrainingCost * (untrained * TrainingCancelRefundShare);
+
+        // Whole resources only, floored: the training window shows the same number.
+        return new ResourceAmounts(Math.Floor(half.Wood), Math.Floor(half.Stone), Math.Floor(half.Food), Math.Floor(half.Iron));
+    }
+
+    /// <summary>
+    /// Cancels any order of the training queue (running or waiting): the units not trained yet are refunded at 50 % of their
+    /// cost, the units of a running order that are already trained join the garrison, and the orders behind it in the same
+    /// building move up. Call on an already-settled settlement, like <see cref="CancelBuild"/>.
+    /// </summary>
+    public CancelTrainingResult CancelTraining(Guid orderId, DateTimeOffset now)
+    {
+        var order = TrainingQueue.FirstOrDefault(o => o.Id == orderId);
+        if (order is null || order.IsComplete(now))
+        {
+            return CancelTrainingResult.Rejected(CancelTrainingRejection.OrderNotFound);
+        }
+
+        var done = order.CompletedCount(now);
+        var freed = order.CompletesAt - (order.StartedAt > now ? order.StartedAt : now);
+        var queue = TrainingQueue
+            .Where(o => o.Id != orderId)
+            .Select(o => o.BuildingCoord == order.BuildingCoord && o.StartedAt >= order.CompletesAt
+                ? o with { StartedAt = o.StartedAt - freed }
+                : o)
+            .ToList();
+
+        var settled = this with
+        {
+            Resources = Resources.Deposit(TrainingCancelRefund(order, now), now),
+            TrainingQueue = queue,
+        };
+
+        if (done > 0)
+        {
+            var batch = new[] { new UnitStack(order.UnitType, done) };
+            var spot = settled.NearestSpotFor(order.BuildingCoord, batch)?.Coord ?? Centre;
+            settled = settled.AddToGarrisonAt(spot, batch);
+        }
+
+        return CancelTrainingResult.Accept(settled);
     }
 
     /// <summary>
@@ -2939,54 +3054,97 @@ public sealed record Settlement
     {
         ArgumentNullException.ThrowIfNull(requestedUnits);
 
-        if (SpotAt(fromSpot) is null)
-        {
-            return SettlementDispatchDecision.Rejected(DispatchRejection.NotAGarrisonSpot);
-        }
+        var decision = PlanDispatch([(fromSpot, requestedUnits)], provisions, now);
+        return decision.Accepted
+            ? SettlementDispatchDecision.Accept(decision.Settlement!, decision.GroupStacks![0].Units)
+            : SettlementDispatchDecision.Rejected(decision.Rejection);
+    }
 
-        var normalised = requestedUnits
-            .Where(s => s.Count > 0)
-            .GroupBy(s => s.Type)
-            .Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))
-            .ToList();
+    /// <summary>
+    /// The settlement-side half of sending an army put together from the units of several garrison spots
+    /// (<c>docs/design/garrison.md</c>, "Training, sending out, losing a spot"): every group must stand at a garrison spot of its
+    /// own and hold the units asked for, the provisions must not exceed what all the units together can carry, and they are
+    /// paid once. Returns the settlement with every group's units and the food removed, and each group's normalised stacks (in the
+    /// order of <paramref name="groups"/>; a spot listed twice is one group). The single-spot overload is this with one group.
+    /// </summary>
+    public GatheredSettlementDispatchDecision PlanDispatch(
+        IReadOnlyList<(HexCoord Spot, IReadOnlyList<UnitStack> Units)> groups, double provisions, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(groups);
 
-        if (normalised.Count == 0)
+        var normalisedGroups = new List<(HexCoord Spot, List<UnitStack> Units)>();
+        foreach (var (spot, units) in groups)
         {
-            return SettlementDispatchDecision.Rejected(DispatchRejection.NoUnitsRequested);
-        }
-
-        var atSpot = GarrisonAt(fromSpot);
-        foreach (var stack in normalised)
-        {
-            if (atSpot.Where(g => g.Type == stack.Type).Sum(g => g.Count) < stack.Count)
+            ArgumentNullException.ThrowIfNull(units);
+            if (SpotAt(spot) is null)
             {
-                return SettlementDispatchDecision.Rejected(DispatchRejection.InsufficientGarrison);
+                return GatheredSettlementDispatchDecision.Rejected(DispatchRejection.NotAGarrisonSpot);
+            }
+
+            var merged = units
+                .Where(s => s.Count > 0)
+                .GroupBy(s => s.Type)
+                .Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))
+                .ToList();
+            var existing = normalisedGroups.FindIndex(g => g.Spot == spot);
+            if (existing >= 0)
+            {
+                normalisedGroups[existing] = (spot, [.. normalisedGroups[existing].Units.Concat(merged)
+                    .GroupBy(s => s.Type).Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))]);
+            }
+            else
+            {
+                normalisedGroups.Add((spot, merged));
+            }
+        }
+
+        if (normalisedGroups.Count == 0 || normalisedGroups.All(g => g.Units.Count == 0))
+        {
+            return GatheredSettlementDispatchDecision.Rejected(DispatchRejection.NoUnitsRequested);
+        }
+
+        normalisedGroups.RemoveAll(g => g.Units.Count == 0);
+
+        foreach (var (spot, units) in normalisedGroups)
+        {
+            var atSpot = GarrisonAt(spot);
+            foreach (var stack in units)
+            {
+                if (atSpot.Where(g => g.Type == stack.Type).Sum(g => g.Count) < stack.Count)
+                {
+                    return GatheredSettlementDispatchDecision.Rejected(DispatchRejection.InsufficientGarrison);
+                }
             }
         }
 
         if (provisions < 0)
         {
-            return SettlementDispatchDecision.Rejected(DispatchRejection.ProvisionsExceedCarryCapacity);
+            return GatheredSettlementDispatchDecision.Rejected(DispatchRejection.ProvisionsExceedCarryCapacity);
         }
 
-        var carryCapacity = normalised.Sum(s => UnitCatalogue.Get(s.Type).FoodCarryCapacity * s.Count);
+        var carryCapacity = normalisedGroups.Sum(g => g.Units.Sum(s => UnitCatalogue.Get(s.Type).FoodCarryCapacity * s.Count));
         if (provisions > carryCapacity)
         {
-            return SettlementDispatchDecision.Rejected(DispatchRejection.ProvisionsExceedCarryCapacity);
+            return GatheredSettlementDispatchDecision.Rejected(DispatchRejection.ProvisionsExceedCarryCapacity);
         }
 
         // Issue #158 stage 1c: provisions are a voluntary spend too — they
         // must not dip into what is reserved for the waiting build queue.
         if (!TrySpendAvailable(new ResourceAmounts(Wood: 0, Stone: 0, Food: provisions, Iron: 0), now, out var paidResources))
         {
-            return SettlementDispatchDecision.Rejected(DispatchRejection.InsufficientResources);
+            return GatheredSettlementDispatchDecision.Rejected(DispatchRejection.InsufficientResources);
         }
 
-        var left = atSpot
-            .Select(g => g with { Count = g.Count - normalised.Where(n => n.Type == g.Type).Sum(n => n.Count) })
-            .Where(g => g.Count > 0);
-        var updated = WithGarrisonAt(fromSpot, left) with { Resources = paidResources };
-        return SettlementDispatchDecision.Accept(updated, normalised);
+        var updated = this with { Resources = paidResources };
+        foreach (var (spot, units) in normalisedGroups)
+        {
+            var left = updated.GarrisonAt(spot)
+                .Select(g => g with { Count = g.Count - units.Where(n => n.Type == g.Type).Sum(n => n.Count) })
+                .Where(g => g.Count > 0);
+            updated = updated.WithGarrisonAt(spot, left);
+        }
+
+        return GatheredSettlementDispatchDecision.Accept(updated, [.. normalisedGroups.Select(g => (g.Spot, (IReadOnlyList<UnitStack>)g.Units))]);
     }
 }
 
