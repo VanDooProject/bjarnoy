@@ -27,6 +27,14 @@ const DRIFT_SPEED_MIN = 0;
 const DRIFT_SPEED_MAX = 5;
 const DRIFT_SPEED_STEP = 0.1;
 
+// The dark tier's desaturation filter (FogDesaturateFilter): three strengths, shown as percentages.
+const DESATURATE_SLIDERS: ReadonlyArray<{ key: 'desaturate' | 'brightPull' | 'darken'; label: string; max: number }> = [
+  { key: 'desaturate', label: 'Dark tier: desaturate', max: 1 },
+  { key: 'brightPull', label: 'Dark tier: pull bright tones', max: 1 },
+  { key: 'darken', label: 'Dark tier: darken', max: 0.8 },
+];
+const DESATURATE_STEP = 0.02;
+
 // Labelled to match FogPerfPanel's row names ("Terrain", "Borders", "Mask
 // fetch") so a toggle here and the number it moves there are easy to line
 // up. See map-fog-v2.md §2.8 for why this is a different flag set from v1's.
@@ -68,6 +76,20 @@ watch(
         :step="DRIFT_SPEED_STEP"
         :disabled="!flags.drift"
         v-model.number="tuning.driftSpeed"
+      />
+    </div>
+    <div v-for="slider in DESATURATE_SLIDERS" :key="slider.key" class="row slider-row" :class="{ disabled: !flags.maskOutOfSight }">
+      <span class="slider-label">
+        {{ slider.label }}
+        <span class="slider-value">{{ Math.round(tuning[slider.key] * 100) }}%</span>
+      </span>
+      <input
+        type="range"
+        :min="0"
+        :max="slider.max"
+        :step="DESATURATE_STEP"
+        :disabled="!flags.maskOutOfSight"
+        v-model.number="tuning[slider.key]"
       />
     </div>
   </DebugPanel>

@@ -8,7 +8,8 @@
 - The time until a short-of-resources upgrade becomes affordable is a premium feature. Free accounts see only that
   resources are short.
 - The dial scales with the map like the construction dial and sits at the same height above its tile. Zoomed out far
-  enough that the construction dial drops its time, the dial is empty: ring only, no number, no box.
+  enough that the construction dial drops its time, a countdown in the dial goes too, but the level (or queue place) stays
+  until its own, larger number would be too small to read; from there the dial is empty: ring only, no number, no box.
 - Next to the dial a box shows the details. Near zoom: up to three rows (upgrade state, production or Town Square feast,
   garrison troop types, training queue). Mid zoom: two rows.
 - Bridges get a dial; wall pieces do not.
@@ -25,9 +26,10 @@
   yellow in its last minute. Switching the info on or off hands each hex over marker by marker, so a hex always shows exactly
   one dial. The map canvas draws no construction dial itself; the landing page's live settlement preview shows its dial-only
   markers too (no building markers there).
-- Markers never take mouse or touch input: hover, taps, wheel and drags go to the map under them like on any tile. A marker
+- Markers never block the map's hover, wheel and drags. A click or tap on a marker's dial or box opens the ring menu (or
+  does the quick upgrade) of the marker's own building, not of the hex it is drawn over; while a route is plotted or the
+  send picker is open, the click stays on the hex under the pointer. A marker
   grows (at least 1.3x; at the smallest zoom to the size where its compact box with text shows) when the mouse is on its dial,
-  its box or its hex, or when a touch taps its dial (the tap still reaches the map; a tap on the box reveals nothing, the hex
-  under it belongs to the map). The mouse directly on a marker's dial or box wins over the hex under it: only that marker
+  its box or its hex, or when a touch taps it (on its dial or its box). The mouse directly on a marker's dial or box wins over the hex under it: only that marker
   grows, and where several overlap the one on top (the hovered one, else the right-most) takes it. The box text stands on its
   own, there are no tooltips on it. While a marker is hovered, the map's tile tooltip does not show.
