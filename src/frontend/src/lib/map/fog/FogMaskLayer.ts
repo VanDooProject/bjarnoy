@@ -1,14 +1,12 @@
-// One of fog v2's two stage quads (§4: "black fog" out-of-sight tint, "white mist" never-scouted mist). Each is a cheap
-// composite: it samples the shared FogField textures (FogField.ts, which runs the expensive mask/noise shader once for
-// both tiers) at its pixel's world position and tints one channel with the tier's constant colour. They are two quads
-// only because markerLayer sits between them in the stage: dark fog under the markers, white mist over them.
+// Fog v2's mist stage quad (§4: "white mist", the never-scouted tier). A cheap composite: it samples the shared FogField
+// textures (FogField.ts, which runs the expensive mask/noise shader once for both tiers) at its pixel's world position and
+// tints the G channel with the constant mist colour. It is a quad of its own because markerLayer sits under it in the
+// stage: the mist covers the markers. The dark tier is not a quad: FogDesaturateFilter greys what is under the markers.
 import { GlProgram, Mesh, MeshGeometry, Shader, UniformGroup } from 'pixi.js';
 import { hexToRgb01 } from '../shaderResources';
 import { FOG_COMPOSITE_FRAGMENT, FOG_VERTEX } from './fogShader';
-import { ARMY_FOG_WHITE_MARGIN, ARMY_FOG_WHITE_OFFSET, FOG_MIST_OPAQUE_AT_RAMP } from './fogRamp';
+import { ARMY_FOG_WHITE_MARGIN, ARMY_FOG_WHITE_OFFSET, FOG_MIST_OPAQUE_AT_RAMP, OUT_OF_SIGHT_RAMP_MARGIN_HEXES } from './fogRamp';
 import type { FogField } from './FogField';
-
-export type FogTier = 'outOfSight' | 'unknown';
 
 /** One live army's fog reveal: its world-space point and its own vision radius in hexes (`ArmyResponse.visionRadius`). */
 export interface ArmyVisionSource {
@@ -21,12 +19,12 @@ export interface ArmyVisionSource {
  * The troop's own fog ramps (fogShader.ts's armyRamps), in hexes. Offsets are
  * relative to the army vision radius R. The black (out-of-sight) ramp starts
  * a quarter hex inside the sight radius — pulled in so the dark band reads
- * before the white — and fades over 2 hexes; the white (unknown) ramp starts
+ * before the white — and fades over the same 4 hexes as the mask's dark ramp (the shader's dark edge window is in ramp units of that width); the white (unknown) ramp starts
  * 0.75 hex past it and fades over 6 hexes, versus the village's 14, so the
  * troop's edge is the village look at a smaller scale.
  */
 export const ARMY_FOG_BLACK_OFFSET = -0.25;
-export const ARMY_FOG_BLACK_MARGIN = 2;
+export const ARMY_FOG_BLACK_MARGIN = OUT_OF_SIGHT_RAMP_MARGIN_HEXES;
 export { ARMY_FOG_WHITE_OFFSET, ARMY_FOG_WHITE_MARGIN };
 
 /**
@@ -67,30 +65,20 @@ export function fullscreenGeometry(): MeshGeometry {
   });
 }
 
-export interface FogMaskLayerColors {
-  scoutedColor: number;
-  unexploredColor: number;
-  scoutedAlpha: number;
-}
-
 export class FogMaskLayer {
   readonly mesh: Mesh<MeshGeometry, Shader>;
 
-  constructor(tier: FogTier, colors: FogMaskLayerColors, field: FogField) {
-    const [scoutedR, scoutedG, scoutedB] = hexToRgb01(colors.scoutedColor);
-    const [unexploredR, unexploredG, unexploredB] = hexToRgb01(colors.unexploredColor);
+  constructor(unexploredColor: number, field: FogField) {
+    const [unexploredR, unexploredG, unexploredB] = hexToRgb01(unexploredColor);
 
-    const tierUniforms = new UniformGroup({
-      uTier: { value: tier === 'outOfSight' ? 0 : 1, type: 'f32' },
-      uScoutedColor: { value: new Float32Array([scoutedR, scoutedG, scoutedB]), type: 'vec3<f32>' },
+    const mistUniforms = new UniformGroup({
       uUnexploredColor: { value: new Float32Array([unexploredR, unexploredG, unexploredB]), type: 'vec3<f32>' },
-      uScoutedAlpha: { value: colors.scoutedAlpha, type: 'f32' },
     });
 
     const shader = new Shader({
       glProgram: fogCompositeGlProgram(),
       resources: {
-        fogTierUniforms: tierUniforms,
+        fogMistUniforms: mistUniforms,
         fogFieldUniforms: field.compositeUniforms,
         uFieldA: field.textures[0].source,
         uFieldB: field.textures[1].source,

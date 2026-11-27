@@ -10,7 +10,8 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import type { MessageSchema } from '../../i18n/schema';
-import { formatBuildingModifier, formatBuildingOutput } from '../../lib/map/buildingStatsText';
+import { formatBuildingModifier } from '../../lib/map/buildingStatsText';
+import BuildingOutputText from './BuildingOutputText.vue';
 import { scaleOutput } from '../../lib/map/buildingEconomy';
 import { useWorldStore } from '../../stores/world';
 import { buildingName, terrainName, wastedTerrainName, giantName, campName, beastName, endgameName } from '../../i18n/catalogueNames';
@@ -122,9 +123,7 @@ const bridgeAccessText = computed(() => {
   return t('hud.hoverTooltip.bridgeAccessClosed');
 });
 
-const outputText = computed(() =>
-  props.info.stats?.output ? formatBuildingOutput(scaleOutput(props.info.stats.output, world.worldSpeedFactor), t) : undefined,
-);
+const output = computed(() => (props.info.stats?.output ? scaleOutput(props.info.stats.output, world.worldSpeedFactor) : undefined));
 const modifierText = computed(() =>
   props.info.stats?.modifier && props.info.stats.modifier.kind !== 'bridge' ? formatBuildingModifier(props.info.stats.modifier, t) : undefined,
 );
@@ -142,10 +141,10 @@ const modifierText = computed(() =>
     <ul v-if="campLines.length" class="camp-lines" data-testid="camp-lines">
       <li v-for="line in campLines" :key="line">{{ line }}</li>
     </ul>
-    <dl v-if="outputText || modifierText || bridgeText" class="stats">
-      <template v-if="outputText">
+    <dl v-if="output || modifierText || bridgeText" class="stats">
+      <template v-if="output">
         <dt>{{ t('hud.hoverTooltip.output') }}</dt>
-        <dd>{{ outputText }}</dd>
+        <dd><BuildingOutputText :output="output" /></dd>
       </template>
       <template v-if="modifierText">
         <dt>{{ t('hud.hoverTooltip.modifier') }}</dt>

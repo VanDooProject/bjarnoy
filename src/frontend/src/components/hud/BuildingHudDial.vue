@@ -12,6 +12,7 @@ import {
   BLOCKED_DIAL_OPTIONS,
   CONSTRUCTION_DIAL_REJECT_COLOR,
   DIAL_PENDING_SWEEP_MS,
+  dialLevelFontPx,
   dialPhase,
   dialProgress,
   dialRejectFrame,
@@ -86,7 +87,7 @@ const geometry = computed(() => {
   const hex = [0, 1, 2, 3, 4, 5].map((i) => vertex(i, r));
   // The arc is this outline (from the top vertex, clockwise, closed), drawn `progress` of the way round by its dash offset.
   const outline = `M${hex.map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' L')} Z`;
-  const font = props.time ? (14.4 * r) / 27.5 : 13 + (r - 14) * 0.5;
+  const font = props.time ? (14.4 * r) / 27.5 : dialLevelFontPx(r);
   return { sw, size: 2 * c, c, hex: fmt(hex), hexAt, outline, font, unit: sw / 6 };
 });
 
@@ -174,6 +175,27 @@ function playSwitch(direction: 'in' | 'out') {
     });
   };
   anims.forEach((a) => a.addEventListener('finish', done));
+}
+
+/**
+ * The level copy is drawn (the quick look, and every frame of its switch in and out). The dial's own label waits for it: the copy
+ * carries the level the whole way, so the label only comes back once the copy has landed on the dial and is gone.
+ */
+const levelCopyOn = computed(() => shown.value !== undefined && props.level !== undefined);
+/**
+ * The label is handing over to / from the level copy in this render: the level switches without its fade (the copy sits right on
+ * it). Any other label (`#place`, a countdown) that arrives as the copy lands keeps its fade.
+ */
+let labelHandoff = false;
+watch(levelCopyOn, () => {
+  labelHandoff = true;
+  void nextTick(() => {
+    labelHandoff = false;
+  });
+});
+function fadeLabel(el: Element, direction: 'in' | 'out', done: () => void) {
+  if (!props.labelFade || (labelHandoff && el.textContent?.trim() === String(props.level))) return done();
+  props.labelFade(el, direction, done);
 }
 
 watch(
@@ -430,9 +452,10 @@ const pending = computed(() => {
         <circle :cx="geometry.c" :cy="geometry.c" :r="glyphMarks.clockRadius" fill="none" stroke="#fff" :stroke-width="glyphMarks.width" />
         <polyline :points="glyphMarks.hands" fill="none" stroke="#fff" :stroke-width="glyphMarks.width" stroke-linecap="round" stroke-linejoin="round" />
       </g>
-      <Transition :css="false" @enter="(el, done) => (labelFade ? labelFade(el, 'in', done) : done())" @leave="(el, done) => (labelFade ? labelFade(el, 'out', done) : done())">
+      <Transition :css="false" @enter="(el, done) => fadeLabel(el, 'in', done)" @leave="(el, done) => fadeLabel(el, 'out', done)">
         <text
-          v-if="label"
+          v-if="label && !levelCopyOn"
+          class="hud-dial__label"
           :x="geometry.c"
           :y="geometry.c + geometry.font * 0.36"
           text-anchor="middle"
@@ -448,7 +471,7 @@ const pending = computed(() => {
         </text>
       </Transition>
       <!-- The level hex of the quick look: the dial's copy, at rest at the lower right corner point. -->
-      <g v-if="shown && level !== undefined" class="hud-dial__level" :style="{ transform: cornerCopy, transformOrigin: `${geometry.c}px ${geometry.c}px`, transformBox: 'view-box' }">
+      <g v-if="levelCopyOn" class="hud-dial__level" :style="{ transform: cornerCopy, transformOrigin: `${geometry.c}px ${geometry.c}px`, transformBox: 'view-box' }">
         <polygon :points="geometry.hex" :fill="DARK_FILL" />
         <polygon :points="geometry.hex" fill="none" :stroke="RING_COLOR[ring]" :stroke-width="geometry.sw" stroke-linejoin="round" />
         <text

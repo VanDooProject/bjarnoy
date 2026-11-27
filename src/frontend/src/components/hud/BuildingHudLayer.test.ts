@@ -61,6 +61,10 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
     setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null) {
       this.tapObserver = fn;
     },
+    tapTarget: null as ((screen: { x: number; y: number }) => { q: number; r: number } | null) | null,
+    setTapTarget(fn: ((screen: { x: number; y: number }) => { q: number; r: number } | null) | null) {
+      this.tapTarget = fn;
+    },
     frameObserver: null as (() => void) | null,
     setFrameObserver(fn: (() => void) | null) {
       this.frameObserver = fn;
@@ -79,6 +83,7 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
     markerOcclusionCircle: { x: number; y: number; r: number } | null;
     hoveredHexKey: string | null;
     tapObserver: ((screen: { x: number; y: number }) => void) | null;
+    tapTarget: ((screen: { x: number; y: number }) => { q: number; r: number } | null) | null;
     frameObserver: (() => void) | null;
     constructionDialList: ConstructionDial[];
     blockedMarkerList: BlockedMarker[];
@@ -212,7 +217,7 @@ describe('BuildingHudLayer', () => {
     expect(wrapper.get<HTMLElement>('[data-coord="2,0"]').element.style.transform).toContain('scale(2.000)');
   });
 
-  it('shows the box from mid on, the dial alone before that, and the bare ring on far', async () => {
+  it('shows the box from mid on, the dial alone before that, the level alone below that, and the bare ring on far', async () => {
     seedBuildings();
     const renderer = fakeRenderer();
     wrapper = mountLayer(renderer);
@@ -236,8 +241,14 @@ describe('BuildingHudLayer', () => {
     expect(marker().find('.hud-marker__box').exists()).toBe(false);
     expect(marker().find('text').text()).toBe('2');
 
-    // Where the progress dial hides its label: ring only, no number, no box.
-    await at(0.5);
+    // Where the progress dial hides its countdown: the level's larger font still reads, so the level stays.
+    await at(0.64);
+    expect(marker().attributes('data-tier')).toBe('level');
+    expect(marker().find('.hud-marker__box').exists()).toBe(false);
+    expect(marker().find('text').text()).toBe('2');
+
+    // The level would be under the minimum size too: ring only, no number, no box.
+    await at(0.4);
     expect(marker().attributes('data-tier')).toBe('far');
     expect(marker().find('.hud-marker__box').exists()).toBe(false);
     expect(marker().find('text').exists()).toBe(false);
@@ -399,7 +410,7 @@ describe('BuildingHudLayer', () => {
       expect(scaleOf()).toContain('scale(1.500)');
     });
 
-    it('a touch tap on a box reveals nothing: the hex under it belongs to the map', async () => {
+    it('a touch tap on a box reveals its marker and is its building\'s tap, like one on the dial', async () => {
       // One building, so no neighbour's dial lies over the point.
       const world = seedBuildings();
       world.hud.buildings = [{ q: 1, r: 0, type: 'longhouse', level: 1 }];
@@ -416,15 +427,16 @@ describe('BuildingHudLayer', () => {
           runFrame();
         }
       };
-      // On the box (x 180..330, y 270..330), off the dial disc.
+      // On the box (x 180..330, y 270..330), off the dial disc: the marker grows, and the tap means the longhouse's hex.
+      expect(renderer.tapTarget!({ x: 300, y: 320 })).toEqual({ q: 1, r: 0 });
       renderer.tapObserver!({ x: 300, y: 320 });
       frames5();
-      expect(scaleOf()).toContain('scale(1.500)');
-      // On the dial it does.
+      expect(scaleOf()).toContain('scale(1.950)');
+      // A second tap on it closes it again.
       renderer.tapObserver!({ x: 181, y: 301 });
       frames5();
       vi.useRealTimers();
-      expect(scaleOf()).toContain('scale(1.950)');
+      expect(scaleOf()).toContain('scale(1.500)');
     });
 
     it('the marker the mouse is directly on wins over the hex under it, and ends up on top', async () => {
@@ -550,9 +562,40 @@ describe('BuildingHudLayer', () => {
     const renderer = fakeRenderer();
     wrapper = mountLayer(renderer);
     expect(renderer.tapObserver).toBeTypeOf('function');
+    expect(renderer.tapTarget).toBeTypeOf('function');
     wrapper.unmount();
     wrapper = undefined;
     expect(renderer.tapObserver).toBeNull();
+    expect(renderer.tapTarget).toBeNull();
+  });
+
+  it("sends a click on a marker's dial to the marker's own hex, not the one it is drawn over", () => {
+    seedBuildings();
+    const renderer = fakeRenderer();
+    wrapper = mountLayer(renderer);
+    runFrame();
+    // The longhouse's dial sits at (180, 300), the tower's at (260, 300).
+    expect(renderer.tapTarget!({ x: 181, y: 290 })).toEqual({ q: 1, r: 0 });
+    expect(renderer.tapTarget!({ x: 262, y: 310 })).toEqual({ q: 2, r: 0 });
+    // Off every marker: the map's own hex under the pointer.
+    expect(renderer.tapTarget!({ x: 600, y: 50 })).toBeNull();
+  });
+
+  it('leaves a click on a marker to the hex under it while a route is plotted or the send picker is open', () => {
+    const world = seedBuildings();
+    const renderer = fakeRenderer();
+    wrapper = mountLayer(renderer);
+    runFrame();
+    world.dispatchDraft = { armyId: 'a' } as unknown as typeof world.dispatchDraft;
+    expect(renderer.tapTarget!({ x: 181, y: 290 })).toBeNull();
+    world.dispatchDraft = null;
+    world.fieldOrderDraft = { armyId: 'a' } as unknown as typeof world.fieldOrderDraft;
+    expect(renderer.tapTarget!({ x: 181, y: 290 })).toBeNull();
+    world.fieldOrderDraft = null;
+    world.sendPicker = {} as unknown as typeof world.sendPicker;
+    expect(renderer.tapTarget!({ x: 181, y: 290 })).toBeNull();
+    world.sendPicker = null;
+    expect(renderer.tapTarget!({ x: 181, y: 290 })).toEqual({ q: 1, r: 0 });
   });
 
   it('stacks markers by screen x, right-most on top', () => {

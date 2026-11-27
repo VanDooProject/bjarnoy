@@ -1105,6 +1105,7 @@ function upgradeActionFor(tile: Tile): RingAction {
           : stats.modifier
             ? formatModifier(stats.modifier)
             : undefined,
+      givesOutput: rate ? rate.gain : stats.output ? scaleOutput(stats.output, world.worldSpeedFactor) : undefined,
       givesTotal: rate ? t('hud.ringMenu.card.givesTotal', { amount: rate.total }) : undefined,
       locks: busyNote ? [busyNote, ...locks] : locks,
       art: buildingArt(type, nextLevel),

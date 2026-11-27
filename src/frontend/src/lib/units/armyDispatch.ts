@@ -569,14 +569,19 @@ export function maxAffordableProvisions(
   byType: Record<string, UnitDefinitionResponse>,
   foodStock: number,
 ): number {
-  let carryCapacity = 0;
+  return Math.max(0, Math.min(foodCarryCapacity(unitCounts, byType), foodStock));
+}
+
+/** How much food the chosen units can carry together: the sum of their `foodCarryCapacity` (the backend's `ProvisionsExceedCarryCapacity` limit). */
+export function foodCarryCapacity(unitCounts: Record<string, number>, byType: Record<string, UnitDefinitionResponse>): number {
+  let capacity = 0;
   for (const [type, count] of Object.entries(unitCounts)) {
     if (count <= 0) continue;
     const definition = byType[type];
     if (!definition) continue;
-    carryCapacity += definition.foodCarryCapacity * count;
+    capacity += definition.foodCarryCapacity * count;
   }
-  return Math.max(0, Math.min(carryCapacity, foodStock));
+  return capacity;
 }
 
 /**

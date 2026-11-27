@@ -143,7 +143,7 @@ An RGBA8 texture over a world-space rect:
 | --- | --- |
 | **R** | The **signed** near distance from the coastline, `0.5 + d / (2 * NEAR_SPAN_TILES)`. 0.5 is exactly the coastline, below it is land, above it is water. |
 | **G** | Unsigned distance from the nearest land, **in ground space**, normalised over `FOAM_REACH_TILES` — the far field, read by §4.2's wave coast-fade and §4.2b's caustic keep-off. |
-| **B** | Per-hex pseudo-random seed, as fog v2's B channel does (`demoFogMask.ts`'s `noiseSeed`). **Nothing samples it any more** — see §4.3 on why a per-hex value is the wrong shape for anything the foam does — and it is kept for the debug view and for whatever wants a per-hex constant next. |
+| **B** | Per-hex pseudo-random seed (as fog v2's B channel once was; fog's B is now a baked smooth lump, `map-fog-v2.md` §2.2). **Nothing samples it any more** — see §4.3 on why a per-hex value is the wrong shape for anything the foam does — and it is kept for the debug view and for whatever wants a per-hex constant next. |
 | **A** | Unused, baked as 255. What the shader must keep off in the painted art is not a mask channel any more: it is the art dry mask (§4.4b), a separate texture. |
 
 The mask's RGBA bytes are spoken for, so the tainted-water field around a revealed

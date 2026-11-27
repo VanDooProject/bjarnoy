@@ -14,15 +14,16 @@ function mountTicker(ticks: { id: number; resource: 'wood' | 'stone' | 'food' | 
 }
 
 describe('ResourceTicker', () => {
-  it('renders one label per tick, with the real resource name and amount', () => {
+  it('renders one label per tick, with the amount and the resource icon instead of its name', () => {
     const wrapper = mountTicker([
       { id: 1, resource: 'food', amount: 36, x: 10, y: 20 },
       { id: 2, resource: 'wood', amount: 30, x: 30, y: 40 },
     ]);
     const labels = wrapper.findAll('.tick');
     expect(labels).toHaveLength(2);
-    expect(labels[0].text()).toContain('+36 Food/h');
-    expect(labels[1].text()).toContain('+30 Wood/h');
+    expect(labels[0].text()).toBe('+36 /h');
+    expect(labels[1].text()).toBe('+30 /h');
+    expect(labels[0].find('svg.resource-icon').exists()).toBe(true);
     wrapper.unmount();
   });
 

@@ -36,7 +36,8 @@ import {
   hasHudMarker,
   markerBoxRect,
   markerScale,
-  pointInRect,
+  markerAt,
+  type MarkerHitArea,
   rowsFor,
   rowsSignature,
   stackOrder,
@@ -55,7 +56,6 @@ import {
   dialRadiusPx,
   dialRemainingSeconds,
   nextTapReveal,
-  pickTappedDial,
   type BlockedMarker,
   type ConstructionDial,
 } from '../../lib/map/constructionDial';
@@ -77,6 +77,8 @@ export interface BuildingHudRenderer {
   readonly hoveredHexKey: string | null;
   /** Touch taps on the map, which still reach the map itself: a tap on a marker's dial reveals it. */
   setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null): void;
+  /** A click or tap on a marker (dial or box) reaches the hex the marker belongs to, not the one it is drawn over. */
+  setTapTarget(fn: ((screen: { x: number; y: number }) => AxialCoord | null) | null): void;
   /** Called once per rendered map frame after the camera moved: the markers are placed from it, in the frame the canvas presents. */
   setFrameObserver(fn: (() => void) | null): void;
   /** The open ring menu's footprint (canvas px); markers beneath it fade out like the progress dials do. */
@@ -369,7 +371,7 @@ function glyphOf(m: Marker): 'up' | 'wait' | undefined {
 
 /**
  * Inside the dial: the countdown of a running upgrade or raze, `#place` of a queued order, else the level; the far tier is the
- * ring only. A pending, refused or finishing dial draws its own symbols instead of a number; an upgrade or raze whose time is up
+ * ring only, the level tier hides a countdown (its smaller font would be unreadable there). A pending, refused or finishing dial draws its own symbols instead of a number; an upgrade or raze whose time is up
  * (`settling`, or the finish animation) shows none until the poll brings the new state.
  */
 function labelOf(m: Marker): string {
@@ -380,6 +382,7 @@ function labelOf(m: Marker): string {
     case 'upgrading':
     case 'razing':
       // Time up (the finish animation, or the poll has not brought the new state yet): no number.
+      if (tierOf(m.key) === 'level') return '';
       return (dial.secondsLeft ?? 0) > 0 ? formatCountdownShort(dial.secondsLeft!) : '';
     case 'queued':
       return `#${dial.queuePosition ?? ''}`;
@@ -395,20 +398,40 @@ function labelOf(m: Marker): string {
 
 // ---- hover / tap (like the progress dial: grows to its default-zoom size, comes to the front) --------------------------------
 
-// The markers take no pointer input (like the canvas dials they never block the map's hover, tap and ring): hover is the
-// mouse position the map tracks (dial disc, box or hex), a tap is reported by the map (dial disc only).
+// The markers take no pointer input (like the canvas dials they never block the map's hover, wheel and drags): hover is the
+// mouse position the map tracks (dial disc, box or hex); a click or tap is the map's, which asks the layer which marker it is on
+// (`tapTargetAt`) and then reaches that marker's hex.
 let tapKey: string | null = null;
 let tapAtMs = 0;
 const hoverT = new Map<string, number>();
-/** Where each marker's dial is drawn right now (canvas px, radius), for the tap hit test. */
+/** Where each marker's dial is drawn right now (canvas px, radius), for the tap hit test; absent while it is faded out. */
 const dialDiscs = new Map<string, { key: string; cx: number; cy: number; r: number }>();
 /** Where each marker's box is drawn right now (canvas px); absent while it has none. */
 const boxRects = new Map<string, { x: number; y: number; w: number; h: number }>();
 
-/** A tap on a dial reveals it (a second one closes it); a tap elsewhere closes a revealed one. A box takes no tap: the hex under it is another one's. */
+/** The marker (dial disc or box) at canvas point `screen` as placed in the last frame, or null: the top-most of several. */
+function placedMarkerAt(screen: { x: number; y: number }): MarkerHitArea | null {
+  if (hudHidden.value) return null;
+  const areas: MarkerHitArea[] = [];
+  for (const [key, disc] of dialDiscs) areas.push({ key, hexKey: disc.key, disc, box: boxRects.get(key), z: lastZ.get(key) ?? 0 });
+  return markerAt(screen, areas);
+}
+
+/** A tap on a marker reveals it (a second one closes it); a tap elsewhere closes a revealed one. */
 function onMapTap(screen: { x: number; y: number }) {
-  tapKey = nextTapReveal(tapKey, pickTappedDial(screen, [...dialDiscs.values()]));
+  tapKey = nextTapReveal(tapKey, placedMarkerAt(screen)?.hexKey ?? null);
   tapAtMs = Date.now();
+}
+
+/**
+ * The hex a click or tap at canvas point `screen` means (`setTapTarget`): on a marker, its building's hex, not the one it is
+ * drawn over, for the ring menu and quick upgrade. A route being plotted (dispatch, field order) or the send picker's target
+ * keeps the hex under the pointer.
+ */
+function tapTargetAt(screen: { x: number; y: number }): AxialCoord | null {
+  if (world.dispatchDraft || world.fieldOrderDraft || world.sendPicker) return null;
+  const hexKey = placedMarkerAt(screen)?.hexKey;
+  return hexKey === undefined ? null : (placeables.value.find((p) => p.hexKey === hexKey)?.coord ?? null);
 }
 
 /**
@@ -417,13 +440,12 @@ function onMapTap(screen: { x: number; y: number }) {
  */
 function directHit(mouse: { x: number; y: number } | null, candidates: { key: string; x: number; y: number; zs: number }[]): string | null {
   if (!mouse) return null;
-  const hits = candidates
-    .filter(({ key, x, y, zs }) => {
-      const size = boxSizes.get(key);
-      return Math.hypot(mouse.x - x, mouse.y - y) <= dialRadiusPx(zs) || (size !== undefined && pointInRect(mouse, markerBoxRect(x, y, size, zs)));
-    })
-    .map(({ key, x }) => ({ key, x, hovered: (hoverT.get(key) ?? 0) > 0 }));
-  return stackOrder(hits).at(-1)?.key ?? null;
+  const ranked = stackOrder(candidates.map((c) => ({ ...c, hovered: (hoverT.get(c.key) ?? 0) > 0 })));
+  const areas = ranked.map(({ key, x, y, zs }, z): MarkerHitArea => {
+    const size = boxSizes.get(key);
+    return { key, hexKey: key, disc: { cx: x, cy: y, r: dialRadiusPx(zs) }, box: size && markerBoxRect(x, y, size, zs), z };
+  });
+  return markerAt(mouse, areas)?.key ?? null;
 }
 
 // ---- per-frame placement --------------------------------------------------------------------------------------------------
@@ -786,6 +808,7 @@ onMounted(() => {
   if (root.value) ensureBoxObserver().observe(root.value, { box: 'border-box' });
   window.addEventListener('keydown', onKeyDown);
   props.renderer?.setTapObserver(onMapTap);
+  props.renderer?.setTapTarget(tapTargetAt);
   props.renderer?.setFrameObserver(tick);
 });
 watch(
@@ -793,8 +816,10 @@ watch(
   (next, previous) => {
     setMouseHovering(false);
     previous?.setTapObserver(null);
+    previous?.setTapTarget(null);
     previous?.setFrameObserver(null);
     next?.setTapObserver(onMapTap);
+    next?.setTapTarget(tapTargetAt);
     next?.setFrameObserver(tick);
   },
 );
@@ -809,6 +834,7 @@ onUnmounted(() => {
   boxSizes.clear();
   window.removeEventListener('keydown', onKeyDown);
   props.renderer?.setTapObserver(null);
+  props.renderer?.setTapTarget(null);
   props.renderer?.setFrameObserver(null);
 });
 </script>
@@ -854,7 +880,7 @@ onUnmounted(() => {
                 :radius="DIAL_RADIUS"
                 :ring="d.ring"
                 :progress="d.progress"
-                :label="tierOf(d.key) === 'far' ? '' : d.label"
+                :label="tierOf(d.key) === 'far' || (d.time && tierOf(d.key) === 'level') ? '' : d.label"
                 :time="d.time"
                 :urgent="d.urgent"
                 :order="d.dial"
@@ -882,6 +908,8 @@ onUnmounted(() => {
 .building-hud__markers {
   position: absolute;
   inset: 0;
+  /* Its own stacking context: the markers' per-frame z-index (stackOrder) never lifts one above the phone switch. */
+  z-index: 0;
 }
 /* The marker is a zero-size anchor at the dial's centre; the placement loop moves and scales it (zs, like the progress dial). */
 .hud-marker {
@@ -938,6 +966,7 @@ html[data-hud-motion='reduced'] .hud-marker__box {
 /* Phone: the switch sits at the map's top left, below the settlement bubble that sits there (it ends about 44px under the bar). */
 .building-hud__toggle--phone {
   position: absolute;
+  z-index: 1;
   top: calc(var(--hud-inset-top, 0px) + 60px);
   left: calc(16px + var(--hud-inset-left, 0px));
 }

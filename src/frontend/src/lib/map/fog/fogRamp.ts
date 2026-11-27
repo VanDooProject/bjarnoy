@@ -20,7 +20,7 @@ export const EDGE_NOISE_FADE_RAMP = 0.25;
  * it used to be. Where it shuts also sets how far terrain has to be drawn,
  * so pushing it further out is not free.
  */
-export const NOISE_REACH: [number, number] = [0.55, 0.7];
+export const NOISE_REACH: [number, number] = [0.55, 0.6];
 
 /**
  * The ramp value past which the mist's edge noise is fully shut off, and so
@@ -38,6 +38,14 @@ export const FOG_MIST_OPAQUE_AT_RAMP = NOISE_REACH[0] + EDGE_NOISE_FADE_RAMP;
  * `FogMaskOptions.UnknownMarginHexes`; nothing derives it from the mask itself (a PNG carries no metadata beyond its size).
  */
 export const UNKNOWN_RAMP_MARGIN_HEXES = 14;
+
+/**
+ * Width, in hexes, of the mask's out-of-sight (dark tier) ramp: the G channel goes 0 -> 255 over this many hexes past the
+ * visible ring, and the shader's dark edge window is in units of it. The troop's dark ramp (`ARMY_FOG_BLACK_MARGIN`) uses the
+ * same width, so a troop's clearing and a settlement's share one edge shaping. Must equal the backend generator's
+ * `FogMaskOptions.OutOfSightMarginHexes`.
+ */
+export const OUT_OF_SIGHT_RAMP_MARGIN_HEXES = 4;
 
 /**
  * How far past a settlement's or tower's explored ring (straight-line hexes) the ground is still visible through the mist:
