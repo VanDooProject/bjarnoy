@@ -961,6 +961,8 @@ public static class SettlementEndpoints
         BuildRejection.LonghouseCannotBeRazed => "The longhouse cannot be razed.",
         BuildRejection.NoFreeSlot =>
             "Every construction slot is busy. Premium settlements can queue extra builds to wait for a free slot.",
+        BuildRejection.QueueLockedWithoutPremium =>
+            "Your waiting builds stay in the queue and start as slots free up, but without Premium you can't add new ones until all of them have started.",
         _ => "Refused.",
     };
 

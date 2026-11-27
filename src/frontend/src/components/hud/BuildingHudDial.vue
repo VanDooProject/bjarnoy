@@ -12,6 +12,7 @@ import {
   BLOCKED_DIAL_OPTIONS,
   CONSTRUCTION_DIAL_REJECT_COLOR,
   DIAL_PENDING_SWEEP_MS,
+  dialLevelFontPx,
   dialPhase,
   dialProgress,
   dialRejectFrame,
@@ -90,7 +91,7 @@ const geometry = computed(() => {
   // way round by its dash offset.
   const arcHex = props.counterClockwise ? [hex[0]!, ...hex.slice(1).reverse()] : hex;
   const outline = `M${arcHex.map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' L')} Z`;
-  const font = props.time ? (14.4 * r) / 27.5 : 13 + (r - 14) * 0.5;
+  const font = props.time ? (14.4 * r) / 27.5 : dialLevelFontPx(r);
   return { sw, size: 2 * c, c, hex: fmt(hex), hexAt, outline, font, unit: sw / 6 };
 });
 

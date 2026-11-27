@@ -221,6 +221,12 @@ public enum BuildRejection
 
     /// <summary>A raze was ordered on the Longhouse, which can never be razed.</summary>
     LonghouseCannotBeRazed,
+
+    /// <summary>
+    /// The order cannot start now and the realm has no waiting-queue room (no Premium), but builds that were queued while it
+    /// had Premium are still waiting: they keep going, and nothing new can be added until every one of them has started.
+    /// </summary>
+    QueueLockedWithoutPremium,
 }
 
 /// <summary>The outcome of asking to build something.</summary>

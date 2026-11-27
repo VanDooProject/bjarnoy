@@ -3,7 +3,8 @@ import { WorldModel } from '../WorldModel';
 import { buildDemoFogMask, demoMaskBounds } from './demoFogMask';
 import type { FogCoverageLookup } from './fogCoverage';
 import { maskBounds, toTexel } from './fogMaskLayout';
-import { ARMY_FOG_WHITE_MARGIN, ARMY_FOG_WHITE_OFFSET } from './fogRamp';
+import { texelLump } from './fogLump';
+import { ARMY_FOG_WHITE_MARGIN, ARMY_FOG_WHITE_OFFSET, OUT_OF_SIGHT_RAMP_MARGIN_HEXES } from './fogRamp';
 import { hexEuclideanDistance } from '../../hex/coords';
 
 // The bake used to round-trip every texel through an OffscreenCanvas 2D
@@ -117,6 +118,36 @@ describe('buildDemoFogMask', () => {
     const homeIndex = (texel.v - bounds.minV) * bounds.width + (texel.u - bounds.minU);
     expect(capturedData![homeIndex * 4 + 0]).toBe(0);
     expect(capturedData![homeIndex * 4 + 3]).toBe(255); // alpha always opaque
+    vi.unstubAllGlobals();
+  });
+
+  it('bakes the lump of the texel itself into B, hex and interpolation texels alike, and a 4-hex dark ramp into G', async () => {
+    stubBitmapGlobals();
+    const model = new WorldModel();
+    model.foundSettlement('player-1', 'Player', 'Realm', { q: 0, r: 0 });
+    let data: Uint8ClampedArray | null = null;
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn(async (source: FakeImageData) => {
+        data = source.data;
+        return {} as ImageBitmap;
+      }),
+    );
+
+    await buildDemoFogMask(model);
+
+    const bounds = demoMaskBounds(model);
+    for (let v = bounds.minV; v < bounds.maxV; v += 3) {
+      for (let u = bounds.minU; u < bounds.maxU; u += 2) {
+        const i = ((v - bounds.minV) * bounds.width + (u - bounds.minU)) * 4;
+        expect(data![i + 2], `texel (${u}, ${v})`).toBe(texelLump(u, v));
+      }
+    }
+    // The visible ring is radius 3 (border 2 + 1): a hex 2 hexes past it is half way up the 4-hex dark ramp.
+    const probe = toTexel({ q: 5, r: 0 });
+    const g = data![((probe.v - bounds.minV) * bounds.width + (probe.u - bounds.minU)) * 4 + 1];
+    const distance = hexEuclideanDistance({ q: 0, r: 0 }, { q: 5, r: 0 }) - 3;
+    expect(g).toBe(Math.round((255 * distance) / OUT_OF_SIGHT_RAMP_MARGIN_HEXES));
     vi.unstubAllGlobals();
   });
 });
