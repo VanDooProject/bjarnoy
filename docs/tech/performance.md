@@ -159,14 +159,16 @@ A frame is background when:
   stops;
 - its interval is over 250 ms (a resumed or stalled frame);
 - the frame rate looks capped by the browser: the last 30 intervals average
-  ≥ 30 ms with a standard deviation under 1.5 ms (Chrome battery saver,
-  Safari Low Power mode at 30 fps). A struggling GPU jitters; a cap does not.
+  30–36 ms (about 30 fps) with a standard deviation under 1.5 ms (Chrome
+  battery saver, Safari Low Power mode at 30 fps). A struggling GPU jitters;
+  a cap does not. A steady slower rate (e.g. 20 fps) is a slow device and
+  counts.
 
 After any background stretch the first 1000 ms of active frame time is
 settling and counts as background too.
 
-Limit of the cap heuristic: a device that is genuinely locked at exactly half
-its refresh rate also looks metronomic. Its frames are neither counted as
+Limit of the cap heuristic: a device that is genuinely locked at exactly 30 fps
+(half of a 60 Hz refresh) also looks metronomic. Its frames are neither counted as
 good nor as bad, so such a device stays where it is.
 
 The Graphics settings replace the measure lines with a "counting paused" line

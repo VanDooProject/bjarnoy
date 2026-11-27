@@ -77,6 +77,12 @@ describe('FrameActivity', () => {
     expect(out.every((c) => c.mode === 'active')).toBe(true);
   });
 
+  it('does not treat a steady 20fps device as throttled: it is slow, not capped', () => {
+    const activity = new FrameActivity();
+    const out = run(activity, new Array<number>(100).fill(50));
+    expect(out.every((c) => c.mode === 'active')).toBe(true);
+  });
+
   it('settles for 1s after a throttled stretch ends', () => {
     const activity = new FrameActivity();
     run(activity, new Array<number>(40).fill(1000 / 30));

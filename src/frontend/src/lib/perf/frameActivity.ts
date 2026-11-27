@@ -24,8 +24,9 @@ export const GAP_MS = 250;
 export const SETTLE_MS = 1000;
 /** Throttle heuristic: this many intervals ... */
 export const THROTTLE_WINDOW = 30;
-/** ... with a mean of at least this ... */
+/** ... with a mean in this band (a 30 fps cap; a steady slower rate is a slow device, not a cap) ... */
 export const THROTTLE_MIN_MEAN_MS = 30;
+export const THROTTLE_MAX_MEAN_MS = 36;
 /** ... and a standard deviation below this look like a browser frame cap. */
 export const THROTTLE_MAX_STDDEV_MS = 1.5;
 
@@ -69,7 +70,7 @@ export class FrameActivity {
   private looksThrottled(): boolean {
     if (this.recent.length < THROTTLE_WINDOW) return false;
     const mean = this.recent.reduce((sum, ms) => sum + ms, 0) / this.recent.length;
-    if (mean < THROTTLE_MIN_MEAN_MS) return false;
+    if (mean < THROTTLE_MIN_MEAN_MS || mean > THROTTLE_MAX_MEAN_MS) return false;
     const variance = this.recent.reduce((sum, ms) => sum + (ms - mean) ** 2, 0) / this.recent.length;
     return Math.sqrt(variance) < THROTTLE_MAX_STDDEV_MS;
   }

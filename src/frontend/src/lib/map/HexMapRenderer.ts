@@ -116,7 +116,7 @@ import { PinchTracker } from './pinchGesture';
 import { DOUBLE_TAP_MS, DOUBLE_TAP_ZOOM_MS, doubleTapZoomLog, isDoubleTap, type Tap } from './doubleTap';
 import { LongPressTracker } from './longPress';
 import { resolutionPreference } from '../perf/resolutionPreference';
-import { feedFrame } from '../perf/frameGovernors';
+import { feedFrame, stopFrames } from '../perf/frameGovernors';
 import { prefersReducedMotion } from '../motion';
 import { antialiasPreference } from '../perf/antialiasPreference';
 import { advanceClipFrame, clipTimingOf, phasedStart, sharedClockPlayback, swayPeriodOffset } from './clipPlayback';
@@ -7257,6 +7257,7 @@ export class HexMapRenderer {
 
   destroy() {
     this.destroyed = true;
+    stopFrames();
     this.maskBaker.destroy();
     const canvas = this.app?.canvas;
     canvas?.removeEventListener('pointerdown', this.onPointerDown);

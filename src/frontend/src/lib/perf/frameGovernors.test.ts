@@ -113,6 +113,15 @@ describe('frameGovernors', () => {
     expect(animation.animationPreference.effective).toBe(false);
   });
 
+  it('stopFrames clears a paused reason once the map is gone', async () => {
+    const { feedFrame, stopFrames, frameActivityState } = await load();
+    focused = false;
+    feeder(feedFrame)(60, 1);
+    expect(frameActivityState.reason).toBe('unfocused');
+    stopFrames();
+    expect(frameActivityState).toMatchObject({ mode: 'active', reason: null });
+  });
+
   it('a forced animation setting lets resolution move freely', async () => {
     const { feedFrame, animation, resolution } = await load();
     animation.animationPreference.setting = 'off';

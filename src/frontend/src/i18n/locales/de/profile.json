@@ -55,9 +55,9 @@
     "resolutionStatus": {
       "forced": "{value} (auf diesem Gerät)",
       "deviceMax": "Automatisch – {value}, mehr bietet dein Bildschirm nicht",
-      "measuring": "Automatisch – {value}, es wird geprüft, ob die nächste Stufe hält",
+      "measuring": "Automatisch – {value}, misst gerade, ob die nächste Stufe flüssig läuft",
       "autoMax": "Automatisch – {value}, die höchste Stufe deines Bildschirms",
-      "autoDown": "Automatisch – {value}, die Bildrate fiel unter 30 fps"
+      "autoDown": "Automatisch – {value}, Bildrate unter 30 fps gefallen"
     },
     "water": "Wasserbewegung",
     "waterSub": "Wellen, Brandung, Lichtreflexe, fließende Flüsse",
@@ -86,7 +86,7 @@
       "none": "Noch keine Messung. Sie läuft, solange du die Karte siehst.",
       "paused": {
         "hidden": "Zählung pausiert: Der Tab ist im Hintergrund",
-        "unfocused": "Zählung pausiert: Das Fenster hat nicht den Fokus",
+        "unfocused": "Zählung pausiert: Das Fenster ist nicht aktiv",
         "throttled": "Zählung pausiert: Der Browser begrenzt die Bildrate (Energiesparmodus)",
         "settling": "Die Zählung läuft gleich weiter"
       }

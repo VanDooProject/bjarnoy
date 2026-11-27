@@ -11,7 +11,7 @@ import { FrameActivity, readFrameEnv, type BackgroundReason, type FrameMode } fr
 import { animationGovernor, animationPreference, refreshAnimationState } from './animationPreference';
 import { refreshResolutionState, resolutionGovernor } from './resolutionPreference';
 
-const activity = new FrameActivity();
+let activity = new FrameActivity();
 
 const activityState = reactive<{ mode: FrameMode; reason: BackgroundReason | null }>({ mode: 'active', reason: null });
 
@@ -37,6 +37,15 @@ export function resetGovernors(): void {
   resolutionGovernor.reset();
   refreshAnimationState();
   refreshResolutionState();
+}
+
+/**
+ * The map stopped rendering (renderer destroyed): no frames arrive, so a
+ * "counting paused" reason from the last frame would go stale in the settings.
+ */
+export function stopFrames(): void {
+  activity = new FrameActivity();
+  refreshAll('active', null);
 }
 
 /** Call once per rendered frame with the frame's interval. */
