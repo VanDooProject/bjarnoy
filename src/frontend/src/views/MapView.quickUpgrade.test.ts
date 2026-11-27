@@ -257,7 +257,7 @@ describe('MapView quick upgrade', () => {
     expect(wrapper.findComponent(RingMenu).exists()).toBe(false);
   });
 
-  it('a free account\'s Upgrade bubble is not holdable and its card says quick upgrade is premium', async () => {
+  it('a free account\'s Upgrade bubble is not holdable and its card shows no hold hint', async () => {
     seedWorld({ premium: false });
     const canvas = await mountView();
 
@@ -265,6 +265,6 @@ describe('MapView quick upgrade', () => {
     await flushPromises();
     const upgrade = wrapper.getComponent(RingMenu).props('actions').find((a: { id: string }) => a.id === 'upgrade');
     expect(upgrade?.holdable).toBe(false);
-    expect(upgrade?.card?.holdHint).toEqual({ text: enHud.quickUpgrade.premiumHold, locked: true });
+    expect(upgrade?.card?.holdHint).toBeUndefined();
   });
 });
