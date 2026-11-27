@@ -686,8 +686,13 @@
     },
     "markerLabel": "{building}, Stufe {level}",
     "toggle": {
-      "label": "Gebäudeinfo (H)",
-      "title": "Gebäudeinfo ein- oder ausblenden (H)"
+      "label": "Gebäudeinfo: {mode} (H)",
+      "title": "Gebäudeinfo: {mode} – mit H wechselst du zu „{next}“",
+      "modes": {
+        "full": "Stufen und Details",
+        "levels": "nur Stufen",
+        "off": "aus"
+      }
     }
   },
   "panelColumn": {

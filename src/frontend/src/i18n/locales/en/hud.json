@@ -686,8 +686,13 @@
     },
     "markerLabel": "{building}, level {level}",
     "toggle": {
-      "label": "Building info (H)",
-      "title": "Show or hide building info (H)"
+      "label": "Building info: {mode} (H)",
+      "title": "Building info: {mode}. H switches to: {next}",
+      "modes": {
+        "full": "levels and details",
+        "levels": "levels only",
+        "off": "off"
+      }
     }
   },
   "panelColumn": {

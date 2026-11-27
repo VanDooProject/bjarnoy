@@ -31,7 +31,7 @@ export class BuildingHudComponent {
     this.page = page;
     this.markers = page.locator('.hud-marker[data-coord]');
     this.dialOnlyMarkers = page.locator('.hud-marker[data-dial-only]');
-    this.toggle = page.getByRole('button', { name: 'Building info (H)' });
+    this.toggle = page.getByTestId('building-info-toggle');
   }
 
   /** The marker over the building on this hex. */
@@ -57,6 +57,11 @@ export class BuildingHudComponent {
   /** What is inside a marker's dial: the level or the countdown (absent at the far tier). */
   dialLabel(hex: HexCoord): Locator {
     return this.dial(hex).locator('text');
+  }
+
+  /** Presses the HUD button until the building HUD shows `mode` (it steps full → levels → off). */
+  async switchTo(mode: 'full' | 'levels' | 'off'): Promise<void> {
+    for (let i = 0; i < 3 && (await this.toggle.getAttribute('data-mode')) !== mode; i++) await this.toggle.click();
   }
 
   /** A marker's detail box (absent at the far and dial tiers). */

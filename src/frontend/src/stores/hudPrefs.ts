@@ -18,11 +18,18 @@ const STORAGE_KEY = 'bjarnoy.hudBarPosition';
 
 const BUILDING_INFO_KEY = 'bjarnoy.hudBuildingInfo';
 
-function readBuildingInfo(): boolean {
+/** What the building HUD shows: dials and their boxes, the dials alone (a box only on the hovered marker), or nothing. */
+export type BuildingHudMode = 'full' | 'levels' | 'off';
+
+/** H and the HUD button step through the modes in this order, then start over. */
+export const BUILDING_HUD_CYCLE: Record<BuildingHudMode, BuildingHudMode> = { full: 'levels', levels: 'off', off: 'full' };
+
+function readBuildingHudMode(): BuildingHudMode {
   try {
-    return localStorage.getItem(BUILDING_INFO_KEY) !== 'off';
+    const raw = localStorage.getItem(BUILDING_INFO_KEY);
+    return raw === 'off' || raw === 'levels' ? raw : 'full';
   } catch {
-    return true;
+    return 'full';
   }
 }
 
@@ -63,14 +70,19 @@ function readBarPosition(): HudBarPosition {
 export const useHudPrefsStore = defineStore('hudPrefs', {
   state: () => ({
     barPosition: readBarPosition() as HudBarPosition,
-    // The per-building info markers over the settlement map (components/hud/BuildingHudLayer.vue); on by default.
-    buildingInfo: readBuildingInfo(),
+    // The per-building info markers over the settlement map (components/hud/BuildingHudLayer.vue); full by default.
+    buildingHudMode: readBuildingHudMode(),
     // The desktop settlement view's dockable panels (components/hud/HudPanelDock.vue): open or closed, collapsed to the header, and where they dock.
     panels: readPanels() as HudPanels,
   }),
+  getters: {
+    /** Any building marker shows (full or levels only). */
+    buildingInfo: (state): boolean => state.buildingHudMode !== 'off',
+  },
   actions: {
-    toggleBuildingInfo() {
-      this.setBuildingInfo(!this.buildingInfo);
+    /** H and the HUD button: full → levels only → off → full. */
+    cycleBuildingHud() {
+      this.setBuildingHudMode(BUILDING_HUD_CYCLE[this.buildingHudMode]);
     },
     togglePanel(id: HudPanelId) {
       this.panels[id].open = !this.panels[id].open;
@@ -99,10 +111,10 @@ export const useHudPrefsStore = defineStore('hudPrefs', {
         // Best-effort persistence only — the in-memory value still applies.
       }
     },
-    setBuildingInfo(on: boolean) {
-      this.buildingInfo = on;
+    setBuildingHudMode(mode: BuildingHudMode) {
+      this.buildingHudMode = mode;
       try {
-        localStorage.setItem(BUILDING_INFO_KEY, on ? 'on' : 'off');
+        localStorage.setItem(BUILDING_INFO_KEY, mode);
       } catch {
         // Best-effort persistence only — the in-memory value still applies.
       }

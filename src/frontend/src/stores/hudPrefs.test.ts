@@ -65,17 +65,28 @@ describe('hudPrefs store', () => {
     expect(prefs.barPosition).toBe('bottom');
   });
 
-  it('shows building info by default, and remembers turning it off', () => {
+  it('shows the full building HUD by default, and remembers the chosen mode', () => {
     const backing = stubLocalStorage();
     const prefs = useHudPrefsStore();
+    expect(prefs.buildingHudMode).toBe('full');
     expect(prefs.buildingInfo).toBe(true);
-    prefs.setBuildingInfo(false);
-    expect(backing.get('bjarnoy.hudBuildingInfo')).toBe('off');
+    prefs.setBuildingHudMode('levels');
+    expect(backing.get('bjarnoy.hudBuildingInfo')).toBe('levels');
     setActivePinia(createPinia());
+    expect(useHudPrefsStore().buildingHudMode).toBe('levels');
+    useHudPrefsStore().setBuildingHudMode('off');
+    setActivePinia(createPinia());
+    expect(useHudPrefsStore().buildingHudMode).toBe('off');
     expect(useHudPrefsStore().buildingInfo).toBe(false);
   });
 
-  it('keeps building info on in memory when storage is unavailable', () => {
+  it('reads the old on/off value: on is the full HUD', () => {
+    const backing = stubLocalStorage();
+    backing.set('bjarnoy.hudBuildingInfo', 'on');
+    expect(useHudPrefsStore().buildingHudMode).toBe('full');
+  });
+
+  it('keeps the mode in memory when storage is unavailable', () => {
     vi.stubGlobal('localStorage', {
       getItem: () => {
         throw new Error('storage disabled');
@@ -86,19 +97,22 @@ describe('hudPrefs store', () => {
       removeItem: () => {},
     });
     const prefs = useHudPrefsStore();
-    expect(prefs.buildingInfo).toBe(true);
-    expect(() => prefs.setBuildingInfo(false)).not.toThrow();
-    expect(prefs.buildingInfo).toBe(false);
+    expect(prefs.buildingHudMode).toBe('full');
+    expect(() => prefs.setBuildingHudMode('off')).not.toThrow();
+    expect(prefs.buildingHudMode).toBe('off');
   });
 
-  it('toggleBuildingInfo flips the preference and persists it', () => {
+  it('cycleBuildingHud steps full, levels only, off and back to full, and persists each step', () => {
     const backing = stubLocalStorage();
     const prefs = useHudPrefsStore();
-    prefs.toggleBuildingInfo();
-    expect(prefs.buildingInfo).toBe(false);
+    prefs.cycleBuildingHud();
+    expect(prefs.buildingHudMode).toBe('levels');
+    expect(backing.get('bjarnoy.hudBuildingInfo')).toBe('levels');
+    prefs.cycleBuildingHud();
+    expect(prefs.buildingHudMode).toBe('off');
     expect(backing.get('bjarnoy.hudBuildingInfo')).toBe('off');
-    prefs.toggleBuildingInfo();
-    expect(prefs.buildingInfo).toBe(true);
+    prefs.cycleBuildingHud();
+    expect(prefs.buildingHudMode).toBe('full');
   });
 
   describe('dockable panels', () => {

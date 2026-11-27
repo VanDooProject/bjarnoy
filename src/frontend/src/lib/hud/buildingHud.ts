@@ -84,22 +84,20 @@ export function stackOrder<T extends { x: number; hovered?: boolean }>(markers: 
   return [...markers].sort((a, b) => Number(!!a.hovered) - Number(!!b.hovered) || a.x - b.x);
 }
 
-/** One marker as the pointer sees it: its dial disc and box on screen (canvas px) and its stacking order (higher = on top). */
+/** One marker as the pointer sees it: its dial disc on screen (canvas px) and its stacking order (higher = on top). The box takes no pointer. */
 export interface MarkerHitArea {
   key: string;
   /** The hex ("q,r") the marker stands for. */
   hexKey: string;
   disc: { cx: number; cy: number; r: number };
-  box?: { x: number; y: number; w: number; h: number };
   z: number;
 }
 
-/** The top-most marker whose dial disc or box holds `point`, or null when the point is on none: the one hit test of hover and tap. */
+/** The top-most marker whose dial disc holds `point`, or null when the point is on none: the one hit test of hover and tap. */
 export function markerAt<T extends MarkerHitArea>(point: { x: number; y: number }, areas: Iterable<T>): T | null {
   let best: T | null = null;
   for (const a of areas) {
-    const hit = Math.hypot(point.x - a.disc.cx, point.y - a.disc.cy) <= a.disc.r || (a.box !== undefined && pointInRect(point, a.box));
-    if (hit && (best === null || a.z > best.z)) best = a;
+    if (Math.hypot(point.x - a.disc.cx, point.y - a.disc.cy) <= a.disc.r && (best === null || a.z > best.z)) best = a;
   }
   return best;
 }
