@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-// The singleton import below touches `document`/`window.matchMedia` at
-// module load (its visibilitychange listener + reduced-motion query), which
+// The singleton import below touches `window.matchMedia` at
+// module load (its reduced-motion query), which
 // the default 'node' test environment doesn't provide.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AnimationGovernor, resolveAnimationState } from './animationPreference';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { resolveAnimationState } from './animationPreference';
 
 function stubLocalStorage() {
   const store = new Map<string, string>();
@@ -18,125 +18,6 @@ function stubLocalStorage() {
   });
   return store;
 }
-
-describe('AnimationGovernor', () => {
-  let governor: AnimationGovernor;
-
-  beforeEach(() => {
-    governor = new AnimationGovernor();
-  });
-
-  // Frame counters below use fps values whose frame interval is an exact
-  // binary fraction (100fps -> 10ms, 20fps -> 50ms) rather than e.g. 60fps's
-  // repeating 16.666...ms, so summing many frames' intervals never drifts
-  // below the 1000ms bucket boundary by float rounding error alone — the
-  // governor's own bucketing logic is what's under test here, not floating
-  // point addition.
-  let clockMs = 0;
-
-  /** Feeds `seconds` worth of frames at a steady `fps`. */
-  function feedSteady(fps: number, seconds: number): void {
-    const frameMs = 1000 / fps;
-    const frames = Math.round(fps * seconds);
-    for (let i = 0; i < frames; i++) {
-      clockMs += frameMs;
-      governor.sample(clockMs, frameMs);
-    }
-  }
-
-  it('starts in measuring (animations off)', () => {
-    expect(governor.getState()).toBe('measuring');
-  });
-
-  it('does not enable before 10s of sustained >= 30fps', () => {
-    feedSteady(100, 9);
-    expect(governor.getState()).toBe('measuring');
-  });
-
-  it('enables after 10s of sustained >= 30fps', () => {
-    feedSteady(100, 10);
-    expect(governor.getState()).toBe('on');
-  });
-
-  it('counts a bucket just over 30fps as good', () => {
-    // 32fps -> 31.25ms frames, exact in binary.
-    feedSteady(32, 10);
-    expect(governor.getState()).toBe('on');
-  });
-
-  it('a bucket under 30fps does not count', () => {
-    feedSteady(20, 30);
-    expect(governor.getState()).toBe('measuring');
-  });
-
-  it('reports the last bucket fps and the enable window progress', () => {
-    expect(governor.getProgress()).toEqual({ fps: null, goodMs: 0, requiredMs: 10_000, thresholdFps: 30 });
-    feedSteady(100, 4);
-    expect(governor.getProgress()).toMatchObject({ fps: 100, goodMs: 4000 });
-    feedSteady(20, 1);
-    expect(governor.getProgress()).toMatchObject({ fps: 20, goodMs: 0 });
-  });
-
-  it('a single hitch within a bucket does not block enabling', () => {
-    // 100 frames/sec of 10ms each is a clean 1000ms bucket at fps=100; swap
-    // one 10ms frame for a 100ms hitch and the bucket mean (~91.7fps) still
-    // clears the 30fps bar, so a single stutter shouldn't reset the streak.
-    let now = 0;
-    for (let bucket = 0; bucket < 10; bucket++) {
-      for (let frame = 0; frame < 100; frame++) {
-        const frameMs = bucket === 5 && frame === 0 ? 100 : 10;
-        now += frameMs;
-        governor.sample(now, frameMs);
-      }
-    }
-    expect(governor.getState()).toBe('on');
-  });
-
-  it('a sustained slow bucket resets the enable streak', () => {
-    feedSteady(100, 8);
-    feedSteady(20, 1);
-    feedSteady(100, 8);
-    // Only 8s of sustained good fps since the slow bucket, short of 10s.
-    expect(governor.getState()).toBe('measuring');
-    feedSteady(100, 2);
-    expect(governor.getState()).toBe('on');
-  });
-
-  it('drops to off-slow and latches after 5s sustained under 30fps once on', () => {
-    feedSteady(100, 10);
-    expect(governor.getState()).toBe('on');
-    feedSteady(20, 5);
-    expect(governor.getState()).toBe('off-slow');
-  });
-
-  it('reset() does not clear the latch', () => {
-    feedSteady(100, 10);
-    feedSteady(20, 5);
-    expect(governor.getState()).toBe('off-slow');
-    governor.reset();
-    expect(governor.getState()).toBe('off-slow');
-    // Latched: further good samples never bring it back this page session.
-    feedSteady(100, 60);
-    expect(governor.getState()).toBe('off-slow');
-  });
-
-  it('reset() restarts the in-progress measuring window', () => {
-    feedSteady(100, 8);
-    expect(governor.getState()).toBe('measuring');
-    governor.reset();
-    feedSteady(100, 8);
-    // Only 8s since reset, short of the 10s needed.
-    expect(governor.getState()).toBe('measuring');
-    feedSteady(100, 2);
-    expect(governor.getState()).toBe('on');
-  });
-
-  it('ignores non-positive frame intervals', () => {
-    governor.sample(0, 0);
-    governor.sample(0, -5);
-    expect(governor.getState()).toBe('measuring');
-  });
-});
 
 describe('resolveAnimationState', () => {
   const noEnv = { reducedMotion: false, saveData: false };
@@ -244,17 +125,39 @@ describe('animationPreference singleton', () => {
     expect(animationPreference.reason).toBe('measuring');
   });
 
-  it('feedFrame is ignored while the document is hidden', async () => {
+  it('maps the governor levels: measuring, on, off-slow with a retry', async () => {
     stubLocalStorage();
-    const { animationPreference } = await import('./animationPreference');
-    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
-    // 30s at 60fps would normally enable the governor (10s is enough).
-    let now = 0;
-    for (let i = 0; i < 60 * 30; i++) {
-      now += 1000 / 60;
-      animationPreference.feedFrame(now, 1000 / 60);
-    }
+    const { animationPreference, animationGovernor, refreshAnimationState } = await import('./animationPreference');
+    const open = { up: true, down: true };
+    const feed = (fps: number, seconds: number) => {
+      for (let i = 0; i < fps * seconds; i++) animationGovernor.sample(1000 / fps, open);
+      refreshAnimationState();
+    };
     expect(animationPreference.reason).toBe('measuring');
-    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+    feed(100, 10);
+    expect(animationPreference.reason).toBe('auto-on');
+    feed(20, 5);
+    expect(animationPreference.reason).toBe('auto-off-slow');
+    // One retry: 30 s at 60 fps or more.
+    feed(100, 30);
+    expect(animationPreference.reason).toBe('auto-on');
+    // The second drop latches.
+    feed(20, 5);
+    feed(128, 120);
+    expect(animationPreference.reason).toBe('auto-off-slow');
+  });
+
+  it('keepLoaded only for an Auto drop, not for Off, reduced motion or save-data', async () => {
+    stubLocalStorage();
+    const { animationPreference, animationGovernor, refreshAnimationState } = await import('./animationPreference');
+    expect(animationPreference.keepLoaded).toBe(false);
+    const open = { up: true, down: true };
+    for (let i = 0; i < 1000; i++) animationGovernor.sample(10, open);
+    for (let i = 0; i < 250; i++) animationGovernor.sample(50, open);
+    refreshAnimationState();
+    expect(animationPreference.reason).toBe('auto-off-slow');
+    expect(animationPreference.keepLoaded).toBe(true);
+    animationPreference.setting = 'off';
+    expect(animationPreference.keepLoaded).toBe(false);
   });
 });

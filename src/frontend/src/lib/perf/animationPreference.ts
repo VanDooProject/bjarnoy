@@ -21,6 +21,7 @@
 // similar `bjarnoy.hudBarPosition` key) rather than app/session state, and
 // it needs no store-wide devtools/persistence-plugin machinery Pinia adds.
 import { reactive } from 'vue';
+import { FpsGovernor, type GovernorProgress } from './fpsGovernor';
 
 /** The user's own choice, persisted per device. 'auto' hands the decision to environment checks + the FPS governor below. */
 export type AnimationSetting = 'auto' | 'on' | 'off';
@@ -68,119 +69,16 @@ function saveDataEnabled(): boolean {
   return nav?.connection?.saveData === true;
 }
 
-/** `AnimationGovernor`'s own state machine — see its class doc for the transition rules. */
+/**
+ * The animation governor's state for the settings line and
+ * `resolveAnimationState`: `measuring` (level 0, never dropped: animations
+ * off while the device is measured without their cost), `on` (level 1),
+ * `off-slow` (level 0 after a drop: off, one retry through the stricter
+ * 30 s at 60 fps window, a second drop latches it off for the session).
+ */
 export type GovernorState = 'measuring' | 'on' | 'off-slow';
 
-export interface GovernorProgress {
-  /** Mean fps of the last full 1s bucket; null until one has completed. */
-  fps: number | null;
-  /** Consecutive good time so far in the enable window. */
-  goodMs: number;
-  requiredMs: number;
-  thresholdFps: number;
-}
-
-export const ENABLE_FPS_THRESHOLD = 30;
-export const ENABLE_SUSTAIN_MS = 10_000;
-const DISABLE_FPS_THRESHOLD = 30;
-const DISABLE_SUSTAIN_MS = 5_000;
-/**
- * Buckets fps into ~1s means rather than judging every single frame
- * interval — so one dropped frame (a GC pause, a texture upload) can't
- * reset a 10s enable window or trip the 5s disable one; only a bucket
- * whose *average* fps misses the threshold counts.
- */
-const BUCKET_MS = 1000;
-
-/**
- * A pure (no DOM, no timers of its own — every timestamp is passed in) FPS
- * governor for the 'auto' animation setting. Three states:
- *
- * - `measuring`: the starting state, animations off. This is deliberate —
- *   the whole point is to measure the device's fps *without* the cost of
- *   the animations first, so turning them on doesn't invalidate the very
- *   measurement that decided to turn them on.
- * - `on`: fps was >= 30 for a sustained 10s of measuring, animations play.
- * - `off-slow`: once `on`, fps dropped below 30 for a sustained 5s. This
- *   *latches* — it never re-measures back to `on` for the rest of the page
- *   session (a fresh mount/reload starts over). Latching matters because
- *   animations are part of what costs the fps: an un-latched governor would
- *   oscillate (on -> slow -> off -> fast again because nothing is drawing
- *   -> on -> slow again), which is worse than just staying off.
- */
-export class AnimationGovernor {
-  private state: GovernorState = 'measuring';
-  private latched = false;
-  private bucketFrames = 0;
-  private bucketMs = 0;
-  private goodStreakMs = 0;
-  private badStreakMs = 0;
-
-  private lastFps: number | null = null;
-
-  getState(): GovernorState {
-    return this.latched ? 'off-slow' : this.state;
-  }
-
-  /** The last full bucket's mean fps (null before the first one) and how far the enable window has got — for the settings' status line. */
-  getProgress(): GovernorProgress {
-    return { fps: this.lastFps, goodMs: this.goodStreakMs, requiredMs: ENABLE_SUSTAIN_MS, thresholdFps: ENABLE_FPS_THRESHOLD };
-  }
-
-  /** Feed one frame's interval. `nowMs` is unused by the bucketing itself (frameMs already carries the interval) but kept in the signature for callers and future use (e.g. detecting a gap larger than frameMs itself, such as a debugger pause). */
-  sample(nowMs: number, frameMs: number): void {
-    void nowMs;
-    if (this.latched) return;
-    if (!(frameMs > 0)) return;
-    this.bucketFrames += 1;
-    this.bucketMs += frameMs;
-    if (this.bucketMs < BUCKET_MS) return;
-
-    const fps = (this.bucketFrames * 1000) / this.bucketMs;
-    this.lastFps = fps;
-    this.bucketFrames = 0;
-    this.bucketMs = 0;
-
-    if (this.state === 'measuring') {
-      if (fps >= ENABLE_FPS_THRESHOLD) {
-        this.goodStreakMs += BUCKET_MS;
-        if (this.goodStreakMs >= ENABLE_SUSTAIN_MS) {
-          this.state = 'on';
-          this.badStreakMs = 0;
-        }
-      } else {
-        this.goodStreakMs = 0;
-      }
-      return;
-    }
-
-    // state === 'on' (off-slow only happens via the latch, handled above)
-    if (fps < DISABLE_FPS_THRESHOLD) {
-      this.badStreakMs += BUCKET_MS;
-      if (this.badStreakMs >= DISABLE_SUSTAIN_MS) {
-        this.state = 'off-slow';
-        this.latched = true;
-      }
-    } else {
-      this.badStreakMs = 0;
-    }
-  }
-
-  /**
-   * Restarts whichever window is currently running (the 10s enable window
-   * if still `measuring`, the 5s disable window if `on`) by dropping the
-   * in-progress bucket and streak — used when the tab becomes visible again
-   * (the gap while hidden is not a real frame rate) or the map remounts.
-   * Deliberately does NOT clear the latch: once a device has been judged
-   * too slow this page session, it stays off for the rest of it.
-   */
-  reset(): void {
-    this.bucketFrames = 0;
-    this.bucketMs = 0;
-    this.goodStreakMs = 0;
-    this.badStreakMs = 0;
-  }
-}
+export type { GovernorProgress };
 
 export interface AnimationResolution {
   effective: boolean;
@@ -209,14 +107,20 @@ export function resolveAnimationState(
   return { effective: false, reason: 'measuring' };
 }
 
-const governor = new AnimationGovernor();
+/** Level 0 is off, level 1 is on. Fed by `frameGovernors.ts`, the renderer's single entry point. */
+export const animationGovernor = new FpsGovernor(2);
+
+function governorStateOf(g: FpsGovernor): GovernorState {
+  if (g.getLevel() === 1) return 'on';
+  return g.failures(1) > 0 ? 'off-slow' : 'measuring';
+}
 
 const state = reactive({
   setting: readSetting(),
   reducedMotion: prefersReducedMotion(),
   saveData: saveDataEnabled(),
-  governorState: governor.getState() as GovernorState,
-  progress: governor.getProgress(),
+  governorState: governorStateOf(animationGovernor),
+  progress: animationGovernor.getProgress(),
 });
 
 if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -232,11 +136,12 @@ if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
   }
 }
 
-function refreshGovernorState(): void {
-  state.governorState = governor.getState();
-  // Changes once per 1s bucket at most; replacing the object every frame would re-render the settings 60 times a second.
-  const next = governor.getProgress();
-  if (next.fps !== state.progress.fps || next.goodMs !== state.progress.goodMs) state.progress = next;
+/** Copies the governor's state into the reactive state; the progress object is replaced only when it changed (once per 1s bucket at most). */
+export function refreshAnimationState(): void {
+  state.governorState = governorStateOf(animationGovernor);
+  const next = animationGovernor.getProgress();
+  const prev = state.progress;
+  if (next.fps !== prev.fps || next.goodMs !== prev.goodMs || next.window !== prev.window) state.progress = next;
 }
 
 /**
@@ -292,29 +197,10 @@ export const animationPreference = {
     return resolveAnimationState(this.setting, { reducedMotion: this.reducedMotion, saveData: this.saveData }, 'on').effective;
   },
   /**
-   * The renderer's per-tick entry point (only meaningful while animations
-   * are 'auto' and still being measured/governed — forced 'on'/'off' just
-   * ignore the governor's state, but feeding it samples regardless is
-   * harmless and keeps the measurement warm for if the user switches back
-   * to 'auto'). Samples while the tab is hidden are dropped: `onTick`
-   * already stops firing then (see HexMapRenderer's ticker pause), but a
-   * defensive check here means any other caller doesn't have to remember
-   * that rule too.
+   * An Auto drop keeps the animation textures loaded (a retry then costs no
+   * decode); Off, reduced motion and save-data release them.
    */
-  feedFrame(nowMs: number, frameMs: number): void {
-    if (typeof document !== 'undefined' && document.hidden) return;
-    governor.sample(nowMs, frameMs);
-    refreshGovernorState();
-  },
-  /** Call when the tab becomes visible again (or the map remounts) — see `AnimationGovernor.reset`. */
-  resetGovernor(): void {
-    governor.reset();
-    refreshGovernorState();
+  get keepLoaded(): boolean {
+    return this.reason === 'auto-off-slow';
   },
 };
-
-if (typeof document !== 'undefined') {
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) animationPreference.resetGovernor();
-  });
-}
