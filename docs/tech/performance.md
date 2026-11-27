@@ -184,6 +184,12 @@ These parts only change when a world is reseeded, so they are served from memory
 
 ## Rendering baseline (measured 2026-11-26)
 
+**Pre-change.** Every number in this section was measured before the low-zoom
+water quad ([below](#water-mesh-at-low-zoom-2026-11-27)). The settlement z=0.09
+and world z=0.05 water rows in particular describe the per-hex mesh that those
+framings no longer draw; they stay here as the reference the change is measured
+against.
+
 One machine, four framings, one set of numbers to compare later changes
 against. These are not a benchmark of a player's device: they are the first
 reading on a known setup, so a later reading can say "this got worse" rather
@@ -443,6 +449,58 @@ framings, zoom with `zoomBy` (or load a camera hash such as
 `#world&q=61&r=-2&z=0.22`) and wait for the new water bake before sampling.
 Keep the camera still during a sweep, report the MAD and baseline drift with
 every result, and say whether the pacer was attached.
+
+## Water mesh at low zoom (2026-11-27)
+
+The baseline above put the water layer at 84 ms of a 118 ms frame at world
+z=0.05 and 18.6 ms at settlement z=0.09, while switching its effects off barely
+moved it. The cost was the geometry: one hexagon (four triangles) per sea and
+shore hex, ~52k hexes at world z=0.05, so ~200k triangles a few pixels across,
+each paying the GPU's 2×2-quad overdraw.
+
+What changed: once a hex is small on screen the water mesh is one quad over the
+mask's rect instead (`nextWaterCoverage` in
+`src/frontend/src/lib/map/water/waterCoverage.ts`). The switch reads the hex's
+width in device pixels (zoom × `TILE_W` × renderer resolution), every frame:
+below 20 px it goes to the quad, above 24 px back to hexagons, and in between it
+keeps what it has, so it does not flap at the threshold. At a device pixel ratio
+of 1 that puts settlement z=0.09 (15 px) and world z=0.05 (8 px) on the quad and
+both default framings (57 px and 37 px) on hexagons. A switch rebuilds the mesh
+from the current mask, no re-bake. The shader already discards on land away from
+the shore, so the quad draws the same picture; `docs/design/water-shader.md` §3.7
+has the reasoning. River flow and bog lakes have their own meshes and are not
+touched.
+
+The per-hex mesh stays at normal zoom: there it saves the fill of every land
+pixel, and the quad would be slower (the timings below show it).
+
+### Sandbox reading (software-rendered)
+
+Measured in the Claude Code cloud sandbox, **Chromium's software rasteriser,
+no GPU**, 1296 × 841, device pixel ratio 1, demo mode, fog masks off so the sea
+is visible, animation clocks frozen. Each value is the median of nine
+`renderer.render()` calls followed by a 1-pixel `readPixels` (which waits for
+the frame), with the same scene drawn both ways; two runs per framing agreed
+within 12%. These are not comparable with the GPU baseline above; they show the
+direction, not the size, of the change on real hardware.
+
+| Framing | Per-hex mesh | One quad | Used now |
+| --- | ---: | ---: | --- |
+| Settlement, default z=0.34 | 291 ms | 322 ms | hexagons |
+| Settlement, z=0.09 | 466 ms | 251 ms | quad |
+| World, default z=0.22 | 73 ms | 94 ms | hexagons |
+| World, z=0.05 | 217 ms | 62 ms | quad |
+
+Pixel comparison of the same frozen frame, per-hex mesh against the new cover:
+default settlement is byte-identical (both use hexagons). At settlement z=0.09
+the land is untouched and sea pixels differ by at most 68/255, at most 5/255
+after a 2 px blur: the interpolated world position differs in the last bits
+between the two triangulations, and the caustic noise, a pixel or less across
+at that zoom, picks that up. By eye the two are the same. On the world map the
+frame-to-frame change of the scene itself (labels, coastline) was larger than
+the difference between the two covers, so it gives no tighter bound there.
+
+A real-GPU re-measure of the framing table above is still to do.
 
 ## Possible next steps
 
