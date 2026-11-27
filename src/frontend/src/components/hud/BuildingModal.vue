@@ -12,7 +12,8 @@ import type { ResourceLine } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
 import { formatBuildingModifier } from '../../lib/map/buildingStatsText';
 import BuildingOutputText from './BuildingOutputText.vue';
-import { buildingName, terrainName, resourceName, runeTypeName, runeRarityName } from '../../i18n/catalogueNames';
+import ResourceCost from '../ResourceCost.vue';
+import { buildingName, terrainName, runeTypeName, runeRarityName } from '../../i18n/catalogueNames';
 import { DEMO_MODE } from '../../config';
 import { apiErrorMessage } from '../../i18n/apiErrors';
 import { FEAST_HOURS, feastCost, feastRenown } from '../../lib/economy/feasts';
@@ -112,11 +113,11 @@ const feastOffer = computed(() => {
     renownGain: feastRenown(ts),
   };
 });
-const feastCostLine = computed(() =>
-  (['wood', 'stone', 'food'] as const)
-    .map((key) => `${Math.round(feastOffer.value.cost[key])} ${resourceName(key)}`)
-    .join(' · '),
-);
+const feastCostRounded = computed(() => ({
+  wood: Math.round(feastOffer.value.cost.wood),
+  stone: Math.round(feastOffer.value.cost.stone),
+  food: Math.round(feastOffer.value.cost.food),
+}));
 const feastHours = computed(() => Math.round(feastOffer.value.durationSeconds / 3600));
 const runningFeast = computed(() => world.hud.feast);
 const canAffordFeast = computed(() =>
@@ -322,7 +323,7 @@ const currentStats = computed(() =>
           <p class="desc feast-desc">{{ t('hud.buildingModal.feastDesc') }}</p>
           <dl class="stats">
             <dt>{{ t('hud.buildingModal.feastCost') }}</dt>
-            <dd data-testid="feast-cost">{{ feastCostLine }}</dd>
+            <dd data-testid="feast-cost"><ResourceCost :cost="feastCostRounded" /></dd>
             <dt>{{ t('hud.buildingModal.feastDuration') }}</dt>
             <dd>{{ t('hud.buildingModal.feastHours', { hours: feastHours }) }}</dd>
             <dt>{{ t('hud.buildingModal.feastGain') }}</dt>

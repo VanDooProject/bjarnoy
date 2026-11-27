@@ -39,6 +39,33 @@ function demoWorld(page: Page): Promise<{ dispatchDraft: any; sendPicker: any; s
   });
 }
 
+/** A standing army of the open realm on its centre hex: a second source besides the garrison, so the picker stays a choice. */
+async function seedStandingArmy(page: Page) {
+  await page.evaluate(() => {
+    const world = window.__demoWorld() as { model: any; selectedSettlementId: string; armies: unknown[] };
+    const home = world.model.getSettlement(world.selectedSettlementId);
+    const at = { q: home.q, r: home.r };
+    const arrived = new Date(Date.now() - 60_000).toISOString();
+    world.armies = [
+      {
+        id: 'standing-1',
+        settlementId: world.selectedSettlementId,
+        mission: 'move',
+        targetSettlementId: null,
+        atHome: false,
+        supporting: false,
+        position: at,
+        provisions: 1_000_000,
+        totalSpeed: 2,
+        totalUpkeepPerHour: 1,
+        visionRadius: 2,
+        stacks: [{ unit: 'spearman', count: 5 }],
+        movement: { path: [at, at], isReturning: false, departedAt: arrived, arrivesAt: arrived },
+      },
+    ];
+  });
+}
+
 async function seedGarrison(page: Page) {
   await page.evaluate(() => {
     const world = window.__demoWorld();
@@ -76,8 +103,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect(ring.action('Send army here')).toBeVisible();
 
     await ring.action('Send army here').click();
-    // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
-    await page.locator('.send-picker [data-source^="home:"] .send-row-head').click();
+    // The ring opens the source picker; the garrison is the only source that can go, so it hands over to the dispatch form on its own.
 
     const sheet = page.locator('.dispatch-sheet');
     await expect(sheet).toBeVisible();
@@ -130,6 +156,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
     await seedGarrison(page);
+    await seedStandingArmy(page);
     const ring = new RingMenuComponent(page);
 
     const first = await settlement.findHex();
@@ -190,8 +217,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect(ring.action('Attack')).toBeVisible();
 
     await ring.action('Attack').click();
-    // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
-    await page.locator('.send-picker [data-source^="home:"] .send-row-head').click();
+    // The ring opens the source picker; the garrison is the only source that can go, so it hands over to the dispatch form on its own.
 
     await expect(page.locator('.dispatch-sheet')).toBeVisible();
     const draft = await demoWorld(page).then((w) => w.dispatchDraft);
@@ -225,8 +251,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     const hex = await settlement.findHex();
     await settlement.clickHex(hex);
     await ring.action('Send army here').click();
-    // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
-    await page.locator('.send-picker [data-source^="home:"] .send-row-head').click();
+    // The ring opens the source picker; the garrison is the only source that can go, so it hands over to the dispatch form on its own.
 
     const sheet = page.locator('.dispatch-sheet');
     await expect(sheet).toBeVisible();

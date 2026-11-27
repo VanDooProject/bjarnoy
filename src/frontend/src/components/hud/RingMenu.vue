@@ -30,6 +30,8 @@ import ResourceCost from '../ResourceCost.vue';
 import { computed, nextTick, onMounted, onUnmounted, onUpdated, ref, shallowRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AtlasSprite from '../AtlasSprite.vue';
+import BuildingOutputText from './BuildingOutputText.vue';
+import type { BuildingOutput } from '../../lib/map/buildingEconomy';
 import HoldProgress from './HoldProgress.vue';
 import type { ArtRef } from '../../lib/map/buildingArt';
 import type { MessageSchema } from '../../i18n/schema';
@@ -103,6 +105,8 @@ export interface RingCard {
   okBadge?: string;
   /** One-line summary of what it produces. */
   gives?: string;
+  /** The structured output behind `gives`, when it is one: the card draws a resource rate with the resource icon. */
+  givesOutput?: BuildingOutput;
   /** For an upgrade, the building's new total next to the gain in `gives` ("90 total"); shown on wide screens only. */
   givesTotal?: string;
   /** Progression blockers (longhouse level, prerequisites, limits), each as a sentence. */
@@ -456,6 +460,7 @@ function cardOf(b: RingBuilding): RingCard {
     cost: b.cost,
     time: b.time,
     gives: b.gives,
+    givesOutput: b.givesOutput,
     givesTotal: b.givesTotal,
     locks: b.locks?.length ? b.locks : b.lock ? [b.lock] : [],
     warning: b.warning,
@@ -496,6 +501,7 @@ interface CardView {
   refundChips: { key: ResourceKey; amount: number }[];
   refundCost: Partial<Record<ResourceKey, number>>;
   gives?: string;
+  givesOutput?: BuildingOutput;
   givesTotal?: string;
   warning?: string;
   statuses: { text: string; tone: Tone }[];
@@ -577,6 +583,7 @@ const cardView = computed<CardView | null>(() => {
     refundCost: card.refund ?? {},
     refundChips: RESOURCE_KEYS.filter((key) => !!card.refund?.[key]).map((key) => ({ key, amount: Math.floor(card.refund![key]!) })),
     gives: card.gives,
+    givesOutput: card.givesOutput,
     givesTotal: card.givesTotal,
     warning: card.warning,
     statuses,
@@ -1148,7 +1155,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         <template v-if="cardView.gives">
           <dt>{{ t('hud.ringMenu.gives') }}</dt>
           <dd>
-            {{ cardView.gives }}<span v-if="cardView.givesTotal" class="gives-total" data-testid="ring-card-total"> · {{ cardView.givesTotal }}</span>
+            <BuildingOutputText v-if="cardView.givesOutput" :output="cardView.givesOutput" /><template v-else>{{ cardView.gives }}</template><span v-if="cardView.givesTotal" class="gives-total" data-testid="ring-card-total"> · {{ cardView.givesTotal }}</span>
           </dd>
         </template>
       </dl>

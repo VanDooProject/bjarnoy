@@ -296,6 +296,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
       cost,
       time: definition ? formatBuildTime(buildSeconds(definition.buildSeconds)) : undefined,
       gives: stats.output ? formatOutput(scaleOutput(stats.output, world.worldSpeedFactor)) : stats.modifier ? formatModifier(stats.modifier) : undefined,
+      givesOutput: stats.output ? scaleOutput(stats.output, world.worldSpeedFactor) : undefined,
       locks,
       warning: type === 'tower' ? towerCampWarning(coord) : undefined,
       art: buildingArt(type, 1),

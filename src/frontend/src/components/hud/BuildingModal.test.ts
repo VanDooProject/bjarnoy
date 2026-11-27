@@ -59,6 +59,8 @@ describe('BuildingModal Town Square feast', () => {
     const wrapper = mountModal(townSquare(3));
 
     expect(wrapper.get('[data-testid="feast-cost"]').text()).toContain('1250');
+    expect(wrapper.findAll('[data-testid="feast-cost"] svg.resource-icon')).toHaveLength(3);
+    expect(wrapper.get('[data-testid="feast-cost"]').text()).not.toContain('Wood');
     expect(wrapper.text()).toContain('12 h');
     expect(wrapper.get('[data-testid="feast-gain"]').text()).toContain('4629');
   });

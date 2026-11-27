@@ -110,8 +110,24 @@ const pickerRows = computed<PickerRow[]>(() =>
   }),
 );
 
+// Once every route is in and exactly one source can go, there is nothing to pick: that source is selected (a home row hands over to
+// the dispatch form at once) and the rows that cannot go are not listed.
+const onlyOption = computed<SendSource | null>(() => {
+  if (rows.value.some((s) => s.block === 'pending')) return null;
+  const ok = rows.value.filter((s) => s.ok);
+  return ok.length === 1 ? ok[0]! : null;
+});
+watch(
+  onlyOption,
+  (only) => {
+    if (only && picker.value?.selectedId !== only.id) world.selectSendSource(only.id);
+  },
+  { immediate: true },
+);
+const shownRows = computed(() => (onlyOption.value ? pickerRows.value.filter((r) => r.source.id === onlyOption.value!.id) : pickerRows.value));
+
 function toggle(row: PickerRow) {
-  if (!row.source.ok) return;
+  if (!row.source.ok || onlyOption.value) return;
   if (row.selected) {
     world.selectSendSource(null);
     return;
@@ -206,13 +222,13 @@ watch(
 
     <div class="send-picker-list">
       <div
-        v-for="row in pickerRows"
+        v-for="row in shownRows"
         :key="row.source.id"
         class="send-row"
         :class="{ 'is-home': row.source.kind === 'home', 'is-selected': row.selected, 'is-off': !row.source.ok }"
         :data-source="row.source.id"
       >
-        <button type="button" class="send-row-head" :disabled="!row.source.ok" :aria-pressed="row.selected" @click="toggle(row)">
+        <button type="button" class="send-row-head" :disabled="!row.source.ok || !!onlyOption" :aria-pressed="row.selected" @click="toggle(row)">
           <span class="send-row-icon" aria-hidden="true">
             <img v-if="row.icon" :src="row.icon" alt="" />
             <template v-else>{{ HOME_GLYPH }}</template>
