@@ -52,6 +52,7 @@ import {
   type GiantTextureMap,
 } from './giantTiles';
 import { PALISADE_FAMILY, isRefusal, palisadeTileFor, type PalisadePiece } from './palisadeTiles';
+import { isLakeFishingHut, lakeFishingHutArt } from './placementRules';
 import { drawsAsSea, type BogTile, type ForestKind, type RiverTile, type Terrain, type Tile, type TileOrientation } from './types';
 import type { RiverVariant } from './worldGenerator';
 import {
@@ -146,9 +147,11 @@ export type TextureKey =
   | 'lakeweir'
   | 'lakeoreboat'
   | 'lakefishboat'
-  // A Fishing Hut on a bog lake's half shore, and the Hammer Forge on a creek bend (straight creek = `hammerschmiede`):
+  // A Fishing Hut on a bog lake's inlet, shore or half shore, and the Hammer Forge on a creek bend (straight creek = `hammerschmiede`):
   // like the Sawmill's river keys these are texture-lookup keys, not wire building types.
   | 'fisherhutlake'
+  | 'fisherhutinlet'
+  | 'fisherhutlakeshore'
   | 'hammerschmiedebend'
   // The stave tower on sand, on a forest hex and on plain bog moss: texture-lookup keys, the wire type is `tower`.
   | 'towersand'
@@ -305,9 +308,11 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   lakeweir: 'boglake',
   lakeoreboat: 'boglake',
   lakefishboat: 'boglake',
-  // The bog-ore works (7 art levels, level000-006) and its helpers. The lake Fishing Hut stands on the half shore base.
+  // The bog-ore works (7 art levels, level000-006) and its helpers. The lake Fishing Hut stands on the inlet (`fisherhut_inlet`), shore (`fisherhut_lakeshore`) or half shore (`fisherhut_lake`) base.
   bogoreworks: 'bogoreworks',
   fisherhutlake: 'fisherhut_lake',
+  fisherhutinlet: 'fisherhut_inlet',
+  fisherhutlakeshore: 'fisherhut_lakeshore',
   // The river hammer mill stands in for a bog-creek Hammer Forge for now (TODO(art): bog-creek Hammer Forge).
   hammerschmiede: 'hammerschmiede',
   hammerschmiedebend: 'hammerschmiede_bend',
@@ -1786,9 +1791,10 @@ export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
   if (tile.lakeProp && !tile.buildingType) return LAKE_PROP_KEY[tile.lakeProp];
   if (tile.buildingType === 'sawmill') return 'sawmillriver';
   if (tile.buildingType === 'bridge') return 'riverbridge';
-  // A Fishing Hut on a bog lake's half shore has its own lake art; the Hammer Forge on a creek is the river hammer mill
+  // A Fishing Hut on a bog lake's inlet, shore or half shore has its own lake art; the Hammer Forge on a creek is the river hammer mill
   // (straight creek or bend), a placeholder until the bog-creek art exists.
-  if (tile.buildingType === 'fishinghut' && tile.bog?.kind === 'half') return 'fisherhutlake';
+  const lakeHut = isLakeFishingHut(tile) ? lakeFishingHutArt(tile.bog?.kind) : undefined;
+  if (lakeHut) return lakeHut.key;
   if (tile.buildingType === 'hammerschmiede' && tile.bog?.kind === 'creek') {
     return bogTextureKey(tile.bog) === 'bogcreek' ? 'hammerschmiede' : 'hammerschmiedebend';
   }
@@ -1889,13 +1895,13 @@ export function bogOrientationFor(bog: BogTile, fallback: TileOrientation): Tile
 
 /**
  * Whether a bog hex renders with its bog kind's own art rotation: bare bog always, and the two buildings whose art is drawn
- * over the hex's own water — the lake Fishing Hut (over the half shore) and the Hammer Forge (over the creek). The other
+ * over the hex's own water — the lake Fishing Hut (over the inlet, shore or half shore) and the Hammer Forge (over the creek). The other
  * bog buildings (bog-ore works, Clay Brickworks) stand on plain moss and keep the tile's cosmetic rotation.
  */
 function usesBogOrientation(tile: Tile): boolean {
   if (!tile.bog || drawnCampOf(tile)) return false;
   if (!tile.buildingType) return true;
-  return tile.buildingType === 'hammerschmiede' || (tile.buildingType === 'fishinghut' && tile.bog.kind === 'half');
+  return tile.buildingType === 'hammerschmiede' || isLakeFishingHut(tile);
 }
 
 /**

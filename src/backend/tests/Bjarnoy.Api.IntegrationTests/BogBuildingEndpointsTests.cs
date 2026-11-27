@@ -41,7 +41,7 @@ public sealed class BogBuildingEndpointsTests : IAsyncLifetime
 
     /// <summary>
     /// A settlement at Longhouse 20 with a level-10 bog-ore works and a level-3 clay brickworks standing, and one hex of every bog kind around its centre:
-    /// plain moss twice, a creek, a half shore, a shore, a lake; the rest stays grass.
+    /// plain moss twice, a creek, a half shore, a shore, an inlet, a creek mouth, a lake; the rest stays grass.
     /// </summary>
     private async Task<(HttpClient Client, SettlementResponse Settlement, Dictionary<string, HexCoord> Hexes)> SetUpAsync()
     {
@@ -67,6 +67,8 @@ public sealed class BogBuildingEndpointsTests : IAsyncLifetime
             ["creek"] = new(centre.Q, centre.R - 1),
             ["half"] = new(centre.Q - 1, centre.R),
             ["shore"] = new(centre.Q - 1, centre.R + 1),
+            ["inlet"] = new(centre.Q - 1, centre.R - 1),
+            ["mouth"] = new(centre.Q + 1, centre.R + 1),
             ["lake"] = new(centre.Q - 2, centre.R),
             ["grass"] = new(centre.Q, centre.R + 1),
         };
@@ -83,6 +85,8 @@ public sealed class BogBuildingEndpointsTests : IAsyncLifetime
                 Bog(hexes["creek"], BogTileKind.Creek, outDirection: 0, inDirections: [3]),
                 Bog(hexes["half"], BogTileKind.Half, waterEdges: [2, 3, 4]),
                 Bog(hexes["shore"], BogTileKind.Shore, waterEdges: [3, 4]),
+                Bog(hexes["inlet"], BogTileKind.Inlet, waterEdges: [3]),
+                Bog(hexes["mouth"], BogTileKind.Mouth, inDirections: [3], waterEdges: [0]),
                 Bog(hexes["lake"], BogTileKind.Lake),
             ];
 
@@ -174,18 +178,20 @@ public sealed class BogBuildingEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task The_fishing_hut_is_placed_on_a_lake_half_shore_and_on_no_other_bog_hex()
+    public async Task The_fishing_hut_is_placed_on_a_lake_inlet_shore_or_half_shore_and_on_no_other_bog_hex()
     {
         var (client, settlement, hexes) = await SetUpAsync();
         using var _ = client;
 
-        foreach (var hex in new[] { "moss1", "creek", "shore", "lake", "grass" })
+        foreach (var hex in new[] { "moss1", "creek", "mouth", "lake", "grass" })
         {
             var response = await Build(client, settlement.Id, "fishinghut", hexes[hex]);
             Assert.Equal("TerrainNotAllowed", await response.RejectionAsync(Ct));
         }
 
         Assert.Equal(HttpStatusCode.Accepted, (await Build(client, settlement.Id, "fishinghut", hexes["half"])).StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, (await Build(client, settlement.Id, "fishinghut", hexes["shore"])).StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, (await Build(client, settlement.Id, "fishinghut", hexes["inlet"])).StatusCode);
     }
 
     [Fact]

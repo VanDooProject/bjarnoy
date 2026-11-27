@@ -5903,7 +5903,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -5946,7 +5948,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -5989,7 +5993,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6032,7 +6038,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6075,7 +6083,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6118,7 +6128,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6161,7 +6173,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6204,7 +6218,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6247,7 +6263,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6290,7 +6308,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6333,7 +6353,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6376,7 +6398,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6419,7 +6443,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6462,7 +6488,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6505,7 +6533,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6548,7 +6578,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6591,7 +6623,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6634,7 +6668,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6677,7 +6713,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6720,7 +6758,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6763,7 +6803,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6806,7 +6848,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6849,7 +6893,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6892,7 +6938,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []
@@ -6935,7 +6983,9 @@
       "requiresBogKinds": [],
       "alsoOnBogKinds": [],
       "lakeShoreKinds": [
-        "half"
+        "half",
+        "inlet",
+        "shore"
       ],
       "requiresRiverShapes": [],
       "excludedRiverVariants": []

@@ -3,6 +3,7 @@
 // same "current stats" for a tile instead of two formulas drifting apart.
 import type { ResourceLine } from '../../api/types';
 import { neighbors, type AxialCoord } from '../hex/coords';
+import { isLakeFishingHut } from './placementRules';
 import type { Terrain, Tile } from './types';
 
 export type BuildingKind = NonNullable<Tile['buildingType']>;
@@ -64,7 +65,7 @@ export const BOOST_TERRAIN: Partial<Record<BuildingKind, Terrain | readonly Terr
   quarry: 'mountain',
   // The hut itself already stands on coastal water; more open sea around it
   // is what the backend rewards, not the land it backs onto. A hut on a bog
-  // lake's half shore counts the lake hexes around it the same way; so does one beside an inland lake.
+  // lake's inlet, shore or half shore counts the lake hexes around it the same way; so does one beside an inland lake.
   fishinghut: ['sea', 'lake', 'inlandlake'],
   // The bog around a bog-ore works: any bog hex (moss, shore, creek, mouth, spring) or lake water.
   bogoreworks: ['bog', 'lake'],
@@ -244,7 +245,7 @@ export function matchingNeighbourCount(
 
 /**
  * `buildingStatsFor` for a building standing on `tile`: reads the boost terrain's neighbour count off the map, and knows a
- * Fishing Hut on a bog lake's half shore boosts by lake (not coastal) water. One helper for the hover card, the building
+ * Fishing Hut on a bog lake's inlet, shore or half shore boosts by lake (not coastal) water. One helper for the hover card, the building
  * modal and the ring menu, so they can't drift apart.
  */
 export function scaleOutput(output: BuildingOutput, speedFactor: number): BuildingOutput {
@@ -286,7 +287,7 @@ export function boostContextAt(
   const boostTerrain = BOOST_TERRAIN[type];
   return {
     matchingNeighbours: boostTerrain ? matchingNeighbourCount(tile, boostTerrain, getTile) : 0,
-    onLake: type === 'fishinghut' && tile.bog?.kind === 'half',
+    onLake: isLakeFishingHut({ buildingType: type, bog: tile.bog }),
   };
 }
 

@@ -10,6 +10,7 @@
 // level for yet (e.g. `hut`/vikinghut isn't in showcase at all) fall back
 // to the older, lower-res per-level hextiles/ PNG.
 import { findAtlasFrame, findAtlasClip, type AtlasClip, type AtlasFrameRect } from './atlas';
+import { isLakeFishingHut, lakeFishingHutArt } from './placementRules';
 import { TILE_ORIENTATIONS as TILE_DIRECTIONS, type TileOrientation } from './types';
 
 /** Either a showcase atlas frame (preferred) or a plain PNG URL fallback — <AtlasSprite>/<img> render either uniformly. */
@@ -176,8 +177,8 @@ export function buildingArt(type: string, level = 1): ArtRef | undefined {
 }
 
 /**
- * `buildingArt` for a building standing on `tile`: a Fishing Hut on a bog lake's half shore is the lake hut
- * (`fisherhut_lake`), a Hammer Forge on a creek bend the bend mill (`hammerschmiede_bend`; the river mill is the
+ * `buildingArt` for a building standing on `tile`: a Fishing Hut on a bog lake's inlet, shore or half shore is the lake hut
+ * (`fisherhut_inlet`, `fisherhut_lakeshore` or `fisherhut_lake`), a Hammer Forge on a creek bend the bend mill (`hammerschmiede_bend`; the river mill is the
  * placeholder art for now), a tower on sand, forest or plain bog moss the stave tower made for that ground, a Longhouse on sand the beach longhouse, a Reindeer Herder on forest the forest herder. Everything else is `buildingArt`.
  */
 export function buildingArtOnTile(
@@ -190,7 +191,8 @@ export function buildingArtOnTile(
   if (type === 'tower' && tile.terrain === 'sand') return buildingArtByFamily('stavetower_sand', level);
   if (type === 'longhouse' && tile.terrain === 'sand') return buildingArtByFamily('greathall_sand', level);
   if (type === 'reindeerherder' && tile.terrain === 'forest') return buildingArtByFamily('reindeerherder_mixed', level);
-  if (type === 'fishinghut' && tile.bog?.kind === 'half') return buildingArtByFamily('fisherhut_lake', level);
+  const lakeHut = isLakeFishingHut({ buildingType: type, bog: tile.bog }) ? lakeFishingHutArt(tile.bog?.kind) : undefined;
+  if (lakeHut) return buildingArtByFamily(lakeHut.family, level);
   if (type === 'hammerschmiede' && tile.bog?.kind === 'creek') {
     const straight =
       tile.bog.inDirections[0] !== undefined &&

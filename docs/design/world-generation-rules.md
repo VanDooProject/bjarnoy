@@ -192,7 +192,7 @@ into a tile whose Y the art can draw, so every path ends at a sea mouth or a con
   spring or a lake mouth; a creek meets a lake only at a mouth (inlet shore with the creek opposite its water
   edge; inflow = outflow tile); a fish weir only near a lake fisher hut; no walkways.
 - Buildings in scope: bog-ore works (iron), Clay Brickworks on bog (the grass version is dropped), Fishing Hut
-  on a bog-lake half shore, Hammer Forge on a bog creek; landing spots need bog in reach. *Implemented (bog buildings PR)*:
+  on a bog-lake inlet, shore or half shore, Hammer Forge on a bog creek; landing spots need bog in reach. *Implemented (bog buildings PR)*:
   see [`bog.md`](./bog.md), "Buildings" and "Decisions".
 - More bogs (owner decision): every island of 150 or more land tiles that has a landing-spot candidate gets at least one bog, so the
   landing-spot rule keeps spots on 140 of the 273 islands of seeds 1-8 at radius 1000 (94 without the guarantee; 177 have a candidate; the

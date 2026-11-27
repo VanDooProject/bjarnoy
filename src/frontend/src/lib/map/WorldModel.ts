@@ -68,6 +68,7 @@ import {
   type Tile,
   type TileOrientation,
 } from './types';
+import { isLakeFishingHut } from './placementRules';
 
 /**
  * Demo mode's client-only trade offer — mirrors the shape of the backend's
@@ -599,8 +600,8 @@ export class WorldModel {
   }
 
   /**
-   * Recomputes the lake decorations (`lakeProps.ts`) from the bog and the buildings standing on it: a lake Fishing Hut (on a
-   * half shore) may bring a fish weir and a fishing boat, a bog-ore works an ore boat. Sets `Tile.lakeProp` on the hexes that
+   * Recomputes the lake decorations (`lakeProps.ts`) from the bog and the buildings standing on it: a lake Fishing Hut (on an
+   * inlet, shore or half shore) may bring a fish weir and a fishing boat, a bog-ore works an ore boat. Sets `Tile.lakeProp` on the hexes that
    * carry one and clears it where one went away; pure in (seed, bog, buildings), so every client draws the same lake.
    */
   private recomputeLakeProps() {
@@ -611,8 +612,8 @@ export class WorldModel {
     const buildings: LakePropBuilding[] = [];
     if (openLake.length > 0) {
       for (const tile of this.tiles.values()) {
-        if (tile.buildingType === 'bogoreworks' || (tile.buildingType === 'fishinghut' && tile.bog?.kind === 'half')) {
-          buildings.push({ q: tile.q, r: tile.r, type: tile.buildingType });
+        if (tile.buildingType === 'bogoreworks' || isLakeFishingHut(tile)) {
+          buildings.push({ q: tile.q, r: tile.r, type: isLakeFishingHut(tile) ? 'fishinghut' : 'bogoreworks' });
         }
       }
     }

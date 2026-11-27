@@ -5,7 +5,7 @@
 // Render-only: the server knows nothing of these. They are a pure function of (world seed, the lake, the buildings around
 // it), so every client that knows the same buildings draws the same props:
 //
-// - A lake Fishing Hut (one on a half shore) may put a fish weir (`boglake` variant004) and, independently, a fishing boat
+// - A lake Fishing Hut (one on an inlet, shore or half shore) may put a fish weir (`boglake` variant004) and, independently, a fishing boat
 //   (variant006, animated, camera W) on an open-lake tile within `FISHING_HUT_PROP_REACH` of it.
 // - A bog-ore works with open lake water within `ORE_WORKS_PROP_REACH` of it may put an ore boat (variant005, animated,
 //   camera SW) on an open-lake tile within that reach.
@@ -29,7 +29,7 @@ export const FISHING_HUT_PROP_REACH = 2;
 /** How far from a bog-ore works its ore boat may be (its bog has to touch the lake within this). */
 export const ORE_WORKS_PROP_REACH = 3;
 
-/** A building that can ask for a lake prop: a Fishing Hut on a half shore, or a bog-ore works. */
+/** A building that can ask for a lake prop: a Fishing Hut on an inlet, shore or half shore, or a bog-ore works. */
 export interface LakePropBuilding extends AxialCoord {
   type: 'fishinghut' | 'bogoreworks';
 }

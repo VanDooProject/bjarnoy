@@ -78,6 +78,34 @@ export function setPlacementRules(definitions: readonly BuildingDefinitionRespon
   rules = next;
 }
 
+/**
+ * Whether the building on `tile` stands on a bog lake's shore by its catalogue rule (`lakeShoreKinds`, the backend's
+ * `BuildingDefinition.LakeShoreKinds`): today the lake Fishing Hut, on an inlet (one water edge, `fisherhut_inlet`), a shore (two,
+ * `fisherhut_lakeshore`) or a half shore (three, `fisherhut_lake`), rather than on the coast. The one place the client tells a lake hut
+ * from a coastal one.
+ */
+export function isLakeFishingHut(tile: { buildingType?: string; bog?: { kind: string } }): boolean {
+  const kind = tile.bog?.kind;
+  return kind !== undefined && (placementRuleFor(tile.buildingType)?.lakeShoreKinds.includes(kind) ?? false);
+}
+
+/**
+ * The art of a lake Fishing Hut by the bog kind it stands on: its texture-lookup key (`textures.ts`) and its art family
+ * (`buildingArt.ts`). The one place that choice is written.
+ */
+const LAKE_FISHING_HUT_ART = {
+  inlet: { key: 'fisherhutinlet', family: 'fisherhut_inlet' },
+  shore: { key: 'fisherhutlakeshore', family: 'fisherhut_lakeshore' },
+  half: { key: 'fisherhutlake', family: 'fisherhut_lake' },
+} as const;
+
+/** The art of a lake Fishing Hut standing on bog `kind`, or `undefined` for a kind no lake hut stands on. */
+export function lakeFishingHutArt(kind: string | undefined): (typeof LAKE_FISHING_HUT_ART)[keyof typeof LAKE_FISHING_HUT_ART] | undefined {
+  return kind !== undefined && kind in LAKE_FISHING_HUT_ART
+    ? LAKE_FISHING_HUT_ART[kind as keyof typeof LAKE_FISHING_HUT_ART]
+    : undefined;
+}
+
 export function placementRuleFor(type: string | undefined): PlacementRule | undefined {
   return type === undefined ? undefined : rules.get(type);
 }

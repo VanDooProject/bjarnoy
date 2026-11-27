@@ -84,6 +84,8 @@ const WATER_SHAPES = [
 const BUILDINGS = [
   { id: "bogoreworks", family: "bogoreworks" },
   { id: "fisherhut", family: "fisherhut_lake" },
+  { id: "fisherhutshore", family: "fisherhut_lakeshore" },
+  { id: "fisherhutinlet", family: "fisherhut_inlet" },
   { id: "hammerschmiede", family: "hammerschmiede" },
   { id: "claybrickworks", family: "claybrickworks" },
 ] as const;

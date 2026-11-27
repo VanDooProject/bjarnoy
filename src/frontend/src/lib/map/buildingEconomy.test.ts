@@ -325,6 +325,11 @@ describe('bog buildings', () => {
     expect(buildingStatsAt('fishinghut', 1, lakeHut, lakeNeighbours).modifier).toEqual({ kind: 'terrainBoost', terrain: 'lake', percent: 30 });
     expect(buildingStatsAt('fishinghut', 1, lakeHut, lakeNeighbours).output).toEqual({ kind: 'resourceRate', resource: 'food', amount: 21 });
 
+    const shoreHut: Tile = { ...lakeHut, bog: { ...lakeHut.bog!, kind: 'shore', waterEdges: ['E', 'NE'] } };
+    expect(buildingStatsAt('fishinghut', 1, shoreHut, lakeNeighbours)).toEqual(buildingStatsAt('fishinghut', 1, lakeHut, lakeNeighbours));
+    const inletHut: Tile = { ...lakeHut, bog: { ...lakeHut.bog!, kind: 'inlet', waterEdges: ['E'] } };
+    expect(buildingStatsAt('fishinghut', 1, inletHut, lakeNeighbours)).toEqual(buildingStatsAt('fishinghut', 1, lakeHut, lakeNeighbours));
+
     const coastHut: Tile = { q: 0, r: 0, terrain: 'sea', buildingType: 'fishinghut' };
     expect(buildingStatsAt('fishinghut', 1, coastHut, terrainMap('sea', 2)).modifier).toEqual({ kind: 'coastal', percent: 20 });
     expect(buildingStatsAt('fishinghut', 1, coastHut, terrainMap('grass', 0)).modifier).toEqual({ kind: 'coastal' });
