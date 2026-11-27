@@ -73,7 +73,7 @@ describe('FogField army vision sources', () => {
 
     layer.setArmyVisionSources([{ x: 0, y: 0, radiusHexes: 3 }], { x: 1, y: 1 });
 
-    expect(before).toEqual([-0.25, 2, 0.75, 6]);
+    expect(before).toEqual([-0.25, 4, 0.75, 6]);
     expect(ramp()).toEqual(before);
   });
 

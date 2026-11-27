@@ -12,7 +12,7 @@
     "loot": "Loot carried",
     "position": "Position"
   },
-  "lootLine": "{wood} wood, {stone} stone, {food} food, {iron} iron",
+  "lootLine": "{wood} wood, {stone} brick, {food} food, {iron} iron",
   "where": {
     "atHome": "at home",
     "supporting": "supporting",

@@ -9,6 +9,7 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AtlasSprite from '../AtlasSprite.vue';
+import BuildingOutputText from '../hud/BuildingOutputText.vue';
 import type { AtlasFrameRect } from '../../lib/map/atlas';
 import type { BuildingDefinitionResponse } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
@@ -221,7 +222,9 @@ function clear() {
             </span>
             <span class="naming">
               <span class="label">{{ card.label }}</span>
-              <span v-if="card.gives" class="gives">{{ card.gives }}</span>
+              <span v-if="card.gives" class="gives">
+                <BuildingOutputText v-if="card.output" :output="card.output" locale="en" :icon-size="11" /><template v-else>{{ card.gives }}</template>
+              </span>
             </span>
           </span>
           <span class="chips">

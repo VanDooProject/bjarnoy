@@ -134,6 +134,11 @@ describe('buildTechTreeNodes', () => {
     expect(byName.get('barracks')!.gives).toBe('Trains land troops');
   });
 
+  it('hands the structured output to the card so a resource rate can draw its icon', () => {
+    expect(byName.get('lumberjack')!.output).toEqual({ kind: 'resourceRate', resource: 'wood', amount: 8 });
+    expect(byName.get('barracks')!.output).toBeUndefined();
+  });
+
   it('positions cards on the layout grid', () => {
     expect(byName.get('longhouse')!.x).toBe(0);
     expect(byName.get('lumberjack')!.y).toBe(0);

@@ -20,7 +20,6 @@ import { missionName, unitName } from '../../i18n/catalogueNames';
 import {
   dispatchHasDestination,
   isRouteDestination,
-  maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
 import { useDispatchTargetBuilding } from '../../composables/useDispatchTargetBuilding';
 import CampInstructions from './CampInstructions.vue';
@@ -28,6 +27,7 @@ import HuntTargetSummary from './HuntTargetSummary.vue';
 import DispatchTargetBuildingPicker from './DispatchTargetBuildingPicker.vue';
 import SendArmyPicker from './SendArmyPicker.vue';
 import DispatchSlots from './DispatchSlots.vue';
+import DispatchProvisionsField from './DispatchProvisionsField.vue';
 import { useDispatchUnitPicker } from '../../composables/useDispatchUnitPicker';
 import { groupArmyRowsByHome, useArmyRows } from '../../composables/useArmyRows';
 import { useArmyRowTap } from '../../composables/useArmyRowTap';
@@ -61,20 +61,9 @@ const { isRowSelectable, hasLockedOutUnits, sandHuntLacksTroops, unitSourceText 
 function quantityFor(unit: string): number {
   return draft.value?.unitCounts[unit] ?? 0;
 }
-function setQuantity(unit: string, value: string, max: number) {
+function setQuantity(unit: string, value: string | number, max: number) {
   const n = Math.floor(Number(value));
-  const clamped = Number.isFinite(n) ? Math.max(0, Math.min(n, max)) : 0;
-  world.setDispatchUnitCount(unit, clamped);
-  // Re-propose a default provisions amount whenever the selection changes,
-  // rather than leaving whatever was typed before a unit count changed the
-  // carry capacity out from under it — the player can still edit it after.
-  if (draft.value) {
-    // Issue #158: provisions come out of `available`, not raw stock — food
-    // reserved for the waiting build queue is not free to load onto an army.
-    world.setDispatchProvisions(
-      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.dispatchSource?.availableFood ?? world.hud.available.food),
-    );
-  }
+  world.setDispatchUnitCount(unit, Number.isFinite(n) ? Math.max(0, Math.min(n, max)) : 0);
 }
 
 const routeLength = computed(() => draft.value?.route.length ?? 0);
@@ -451,21 +440,21 @@ async function confirmFieldOrderClick() {
               @input="setQuantity(row.unit, ($event.target as HTMLInputElement).value, row.available)"
             />
             <span class="unit-picker-max">/ {{ row.available }}</span>
+            <button
+              type="button"
+              class="unit-picker-all"
+              :disabled="!isRowSelectable(row.unit) || quantityFor(row.unit) >= row.available"
+              @click="setQuantity(row.unit, row.available, row.available)"
+            >
+              {{ t('hud.dispatchSheet.allButton') }}
+            </button>
           </div>
           <div v-if="!garrisonRows.length" class="status-subtext">{{ t('hud.armyPanel.noUnitsAvailable') }}</div>
         </div>
 
         <DispatchSlots :unit-counts="draft.unitCounts" />
 
-        <label class="provisions-field">
-          <span>{{ t('hud.armyPanel.provisions') }}</span>
-          <input
-            type="number"
-            min="0"
-            :value="draft.provisions"
-            @input="world.setDispatchProvisions(Number(($event.target as HTMLInputElement).value))"
-          />
-        </label>
+        <DispatchProvisionsField />
 
         <div class="dispatch-actions">
           <button class="secondary" @click="world.removeLastWaypoint()" :disabled="routeLength === 0">
@@ -721,28 +710,28 @@ async function confirmFieldOrderClick() {
   color: var(--text);
 }
 .unit-picker-max {
+  /* Room for a three-digit count, so the inputs and All buttons line up between rows. */
+  min-width: 5ch;
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
-.qty {
-  width: 56px;
-  padding: 4px 6px;
+.unit-picker-all {
+  padding: 4px 8px;
   background: transparent;
   border: 1px solid var(--panel-border);
   border-radius: 6px;
-  color: var(--text);
+  color: var(--muted);
   font: inherit;
-  text-align: center;
+  font-size: 11px;
+  cursor: pointer;
 }
-.provisions-field {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  color: var(--text);
+.unit-picker-all:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
-.provisions-field input {
-  width: 90px;
+.qty {
+  width: 56px;
   padding: 4px 6px;
   background: transparent;
   border: 1px solid var(--panel-border);

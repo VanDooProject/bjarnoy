@@ -6,11 +6,9 @@
 // self-removing on `animationend` rather than looping — like the landfall
 // burst, the mockup's own keyframe only repeats because it's a static
 // preview frame.
-import { useI18n } from 'vue-i18n';
 import { useHiddenUnderPhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import type { ResourceKind } from '../../lib/map/types';
-import { resourceName } from '../../i18n/catalogueNames';
-import type { MessageSchema } from '../../i18n/schema';
+import ResourceIcon from '../ResourceIcon.vue';
 
 export interface ResourceTick {
   id: number;
@@ -23,7 +21,6 @@ export interface ResourceTick {
 
 defineProps<{ ticks: ResourceTick[] }>();
 const emit = defineEmits<{ expire: [id: number] }>();
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const hudHidden = useHiddenUnderPhoneLayer();
 </script>
 
@@ -36,7 +33,10 @@ const hudHidden = useHiddenUnderPhoneLayer();
     :style="{ left: `${tick.x}px`, top: `${tick.y}px`, '--tint': `var(--${tick.resource})` }"
     @animationend="emit('expire', tick.id)"
   >
-    {{ t('hud.hoverTooltip.outputResourceRate', { amount: tick.amount, resource: resourceName(tick.resource) }) }}
+    <i18n-t keypath="hud.hoverTooltip.outputResourceRateIcon" tag="span" class="rate">
+      <template #amount>{{ tick.amount }}</template>
+      <template #icon><ResourceIcon :kind="tick.resource" :size="16" /></template>
+    </i18n-t>
   </div>
 </template>
 
@@ -72,5 +72,10 @@ const hudHidden = useHiddenUnderPhoneLayer();
    the visible rise. */
 html[data-hud-motion='reduced'] .tick {
   animation-duration: 0.01s;
+}
+.rate {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
 </style>

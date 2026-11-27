@@ -10,8 +10,10 @@ import { useI18n } from 'vue-i18n';
 import type { Tile } from '../../lib/map/types';
 import type { ResourceLine } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
-import { formatBuildingModifier, formatBuildingOutput } from '../../lib/map/buildingStatsText';
-import { buildingName, terrainName, resourceName, runeTypeName, runeRarityName } from '../../i18n/catalogueNames';
+import { formatBuildingModifier } from '../../lib/map/buildingStatsText';
+import BuildingOutputText from './BuildingOutputText.vue';
+import ResourceCost from '../ResourceCost.vue';
+import { buildingName, terrainName, runeTypeName, runeRarityName } from '../../i18n/catalogueNames';
 import { DEMO_MODE } from '../../config';
 import { apiErrorMessage } from '../../i18n/apiErrors';
 import { FEAST_HOURS, feastCost, feastRenown } from '../../lib/economy/feasts';
@@ -111,11 +113,11 @@ const feastOffer = computed(() => {
     renownGain: feastRenown(ts),
   };
 });
-const feastCostLine = computed(() =>
-  (['wood', 'stone', 'food'] as const)
-    .map((key) => `${Math.round(feastOffer.value.cost[key])} ${resourceName(key)}`)
-    .join(' · '),
-);
+const feastCostRounded = computed(() => ({
+  wood: Math.round(feastOffer.value.cost.wood),
+  stone: Math.round(feastOffer.value.cost.stone),
+  food: Math.round(feastOffer.value.cost.food),
+}));
 const feastHours = computed(() => Math.round(feastOffer.value.durationSeconds / 3600));
 const runningFeast = computed(() => world.hud.feast);
 const canAffordFeast = computed(() =>
@@ -240,9 +242,7 @@ const buildingStats = computed(() =>
 const currentStats = computed(() =>
   buildingStats.value
     ? {
-        output: buildingStats.value.output
-          ? formatBuildingOutput(scaleOutput(buildingStats.value.output, world.worldSpeedFactor), t)
-          : undefined,
+        output: buildingStats.value.output ? scaleOutput(buildingStats.value.output, world.worldSpeedFactor) : undefined,
         modifier: buildingStats.value.modifier ? formatBuildingModifier(buildingStats.value.modifier, t) : undefined,
       }
     : undefined,
@@ -280,7 +280,7 @@ const currentStats = computed(() =>
         <dl v-if="!outsideRealm && currentStats && (currentStats.output || currentStats.modifier)" class="stats">
           <template v-if="currentStats.output">
             <dt>{{ t('hud.hoverTooltip.output') }}</dt>
-            <dd>{{ currentStats.output }}</dd>
+            <dd><BuildingOutputText :output="currentStats.output" /></dd>
           </template>
           <template v-if="currentStats.modifier">
             <dt>{{ t('hud.hoverTooltip.modifier') }}</dt>
@@ -323,7 +323,7 @@ const currentStats = computed(() =>
           <p class="desc feast-desc">{{ t('hud.buildingModal.feastDesc') }}</p>
           <dl class="stats">
             <dt>{{ t('hud.buildingModal.feastCost') }}</dt>
-            <dd data-testid="feast-cost">{{ feastCostLine }}</dd>
+            <dd data-testid="feast-cost"><ResourceCost :cost="feastCostRounded" /></dd>
             <dt>{{ t('hud.buildingModal.feastDuration') }}</dt>
             <dd>{{ t('hud.buildingModal.feastHours', { hours: feastHours }) }}</dd>
             <dt>{{ t('hud.buildingModal.feastGain') }}</dt>

@@ -16,7 +16,7 @@ type Hex = { q: number; r: number };
 async function addCamp(page: import('@playwright/test').Page, family: string, at: Hex, level = 2) {
   await page.evaluate(
     ({ family, at, level }) => {
-      const world = (window as unknown as { __demoWorld: () => { model: any } }).__demoWorld();
+      const world = window.__demoWorld() as { model: any };
       world.model.setCamps([{ family, coord: at, level, orientation: 'SE' }]);
     },
     { family, at, level },
@@ -26,7 +26,7 @@ async function addCamp(page: import('@playwright/test').Page, family: string, at
 async function setCampState(page: import('@playwright/test').Page, at: Hex, empty: boolean) {
   await page.evaluate(
     ({ at, empty }) => {
-      const world = (window as unknown as { __demoWorld: () => { model: any } }).__demoWorld();
+      const world = window.__demoWorld() as { model: any };
       const camp = world.model.campAt(at);
       const garrison = empty ? { young: 0, adult: 0, alpha: 0 } : { young: 3, adult: 6, alpha: 1 };
       world.model.setCampStates([

@@ -22,19 +22,17 @@ test.use({ contextOptions: { reducedMotion: 'no-preference' } });
 test.describe('mobile queue drawer, motion on', { tag: '@g2' }, () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  interface DemoWindow {
-    __demoWorld: () => {
-      hud: { queueFetchedAt: number; queue: unknown[]; tick: number };
-      selectedSettlementId: string;
-      model: { getSettlement: (id: string) => { q: number; r: number } };
-      syncHud: () => void;
-    };
+  interface DemoWorld {
+    hud: { queueFetchedAt: number; queue: unknown[]; tick: number };
+    selectedSettlementId: string;
+    model: { getSettlement: (id: string) => { q: number; r: number } };
+    syncHud: () => void;
   }
 
   /** Places one build order after load, so the drawer column mounts (and slides in) only now. */
   async function placeFirstOrder(page: Page) {
     await page.evaluate(() => {
-      const world = (window as unknown as DemoWindow).__demoWorld();
+      const world = window.__demoWorld() as DemoWorld;
       const settlement = world.model.getSettlement(world.selectedSettlementId);
       world.hud.queueFetchedAt = Date.now();
       world.hud.queue = [

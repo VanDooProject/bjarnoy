@@ -416,6 +416,7 @@ internal static partial class RiverGenerator
         public readonly double[] Edge;
         public readonly double BendCost;
         public readonly double SharpBendCost;
+        public readonly double WalkCrowdingCost;
         public readonly double MeanderSteer;
         public readonly int MeanderMinStretch;
         public readonly int MeanderMaxStretch;
@@ -433,6 +434,7 @@ internal static partial class RiverGenerator
         {
             BendCost = options.BendCost;
             SharpBendCost = options.SharpBendCost;
+            WalkCrowdingCost = options.WalkCrowdingCost;
             MeanderSteer = options.MeanderSteer;
             MeanderMinStretch = options.MeanderMinStretch;
             MeanderMaxStretch = options.MeanderMaxStretch;
@@ -485,10 +487,54 @@ internal static partial class RiverGenerator
                 }
 
                 Interior[i] = !coastal[i] && !isBlocked[i];
+            }
+
+            // Sea distance 2: an interior tile with a coastal neighbour; sea distance 3: an interior tile next to one of those.
+            var shore = new bool[n];
+            for (var i = 0; i < n; i++)
+            {
+                if (!Interior[i])
+                {
+                    continue;
+                }
+
+                for (var d = 0; d < 6; d++)
+                {
+                    var nb = Neighbour[(i * 6) + d];
+                    if (nb >= 0 && coastal[nb])
+                    {
+                        shore[i] = true;
+                    }
+                }
+            }
+
+            for (var i = 0; i < n; i++)
+            {
+                var shoreCost = 0.0;
+                if (Interior[i])
+                {
+                    if (shore[i])
+                    {
+                        shoreCost = options.ShoreCost;
+                    }
+                    else
+                    {
+                        for (var d = 0; d < 6; d++)
+                        {
+                            var nb = Neighbour[(i * 6) + d];
+                            if (nb >= 0 && shore[nb])
+                            {
+                                shoreCost = options.ShoreCost * 0.5;
+                            }
+                        }
+                    }
+                }
+
                 Step[i] = 1.0
                     + (options.DrainageNoise * ValueNoise.Hash2(Tiles[i].Q, Tiles[i].R, seed + 53))
                     + (options.ValleyNoise * ValueNoise.Sample(Tiles[i].Q, Tiles[i].R, seed + 61, options.ValleyScale))
-                    + (land[Tiles[i]] == Terrain.Mountain ? options.MountainCost : 0.0);
+                    + (land[Tiles[i]] == Terrain.Mountain ? options.MountainCost : 0.0)
+                    + shoreCost;
             }
 
             for (var i = 0; i < n; i++)
@@ -612,12 +658,33 @@ internal static partial class RiverGenerator
             return (best, bestCost);
         }
 
+        /// <summary>Earlier-river neighbours of a free tile (0 for an earlier river's own tile: reaching it is a join, not running beside).</summary>
+        public int ClaimedAround(int tile, Claim?[] claims)
+        {
+            if (claims[tile] is not null)
+            {
+                return 0;
+            }
+
+            var count = 0;
+            for (var d = 0; d < 6; d++)
+            {
+                var n = Neighbour[(tile * 6) + d];
+                if (n >= 0 && claims[n] is not null)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
         /// <summary>
-        /// Like <see cref="BestOut"/> but pulled towards <paramref name="target"/>: an out-direction costs
-        /// <see cref="MeanderSteer"/> extra when it is not the target (half that when 60 degrees off it), and tiles the walk
-        /// already holds are not offered. Returns -1 when nothing qualifies.
+        /// <see cref="BestOut"/> for the walk: each candidate also pays <see cref="WalkCrowdingCost"/> per earlier-river neighbour, so a
+        /// river that runs on alone does not drift along another one. Tiles marked in <paramref name="beside"/> (beside the walk's own
+        /// earlier course) are not offered. The static field and <see cref="BestOut"/> stay as they are.
         /// </summary>
-        public int SteeredOut(int tile, int inDir, int target, bool[] onPath)
+        public int CrowdedOut(int tile, int inDir, Claim?[] claims, bool[] beside)
         {
             var best = -1;
             var bestCost = double.PositiveInfinity;
@@ -630,14 +697,49 @@ internal static partial class RiverGenerator
                 }
 
                 var d = Dist[(n * 6) + ((o + 3) % 6)];
-                if (double.IsPositiveInfinity(d) || onPath[n])
+                if (double.IsPositiveInfinity(d) || beside[n])
+                {
+                    continue;
+                }
+
+                var cost = d + Step[n] + TurnCost(inDir, o) + Edge[(tile * 6) + o] + (WalkCrowdingCost * ClaimedAround(n, claims));
+                if (cost < bestCost)
+                {
+                    bestCost = cost;
+                    best = o;
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>
+        /// Like <see cref="BestOut"/> but pulled towards <paramref name="target"/>: an out-direction costs
+        /// <see cref="MeanderSteer"/> extra when it is not the target (half that when 60 degrees off it), and tiles the walk
+        /// already holds (or lies beside, see <c>beside</c>) are not offered. Returns -1 when nothing qualifies.
+        /// </summary>
+        public int SteeredOut(int tile, int inDir, int target, bool[] onPath, bool[] beside, Claim?[]? claims)
+        {
+            var best = -1;
+            var bestCost = double.PositiveInfinity;
+            for (var o = 0; o < 6; o++)
+            {
+                var n = Neighbour[(tile * 6) + o];
+                if (n < 0 || (inDir >= 0 && o == inDir))
+                {
+                    continue;
+                }
+
+                var d = Dist[(n * 6) + ((o + 3) % 6)];
+                if (double.IsPositiveInfinity(d) || onPath[n] || beside[n])
                 {
                     continue;
                 }
 
                 var off = Math.Min((o - target + 6) % 6, (target - o + 6) % 6);
                 var steer = off == 0 ? 0.0 : off == 1 ? MeanderSteer * 0.5 : MeanderSteer;
-                var cost = d + Step[n] + TurnCost(inDir, o) + Edge[(tile * 6) + o] + steer;
+                var crowd = claims is null ? 0.0 : WalkCrowdingCost * ClaimedAround(n, claims);
+                var cost = d + Step[n] + TurnCost(inDir, o) + Edge[(tile * 6) + o] + steer + crowd;
                 if (cost < bestCost)
                 {
                     bestCost = cost;
@@ -701,7 +803,7 @@ internal static partial class RiverGenerator
             }
 
             var k = Math.Clamp(
-                (int)Math.Floor((Tiles.Length / (double)options.OutletTilesPer) + 0.5),
+                (int)Math.Floor((PlannedSprings(Tiles.Length, options) / (double)options.SpringsPerOutlet) + 0.5),
                 1,
                 options.MaxOutlets);
             var first = 0;
@@ -955,6 +1057,9 @@ internal static partial class RiverGenerator
         var len = left;
         var path = new List<HexCoord> { spring };
         var tiles = new List<int>();
+
+        // Tiles beside the walk's own course up to the third to last tile: the next step may touch only the last two.
+        var besideWalk = new bool[drainage.Tiles.Length];
         var current = drainage.Index[spring];
         tiles.Add(current);
         onPath[current] = true;
@@ -992,7 +1097,16 @@ internal static partial class RiverGenerator
                     return null;
                 }
 
-                var outDir = naturalOut;
+                // The walk's own pick also keeps off earlier rivers; the junction searches are priced with the plain natural cost.
+                var crowdClaims = anyClaims ? claims : null;
+                var walkOut = crowdClaims is null ? drainage.BestOut(current, inDir, n => besideWalk[n]).Out : drainage.CrowdedOut(current, inDir, crowdClaims, besideWalk);
+                if (walkOut < 0)
+                {
+                    // Every way on runs back beside the walk's own course.
+                    return null;
+                }
+
+                var outDir = walkOut;
                 if (steer && inDir >= 0)
                 {
                     // Each stretch of the walk bends to one side through its middle half, then the side flips: the river arcs.
@@ -1007,8 +1121,8 @@ internal static partial class RiverGenerator
                     left--;
                     var at = len - 1 - left;
                     var bent = at >= len * 0.25 && at < len * 0.75;
-                    var target = bent ? (((naturalOut + side) % 6) + 6) % 6 : naturalOut;
-                    var steered = drainage.SteeredOut(current, inDir, target, onPath);
+                    var target = bent ? (((walkOut + side) % 6) + 6) % 6 : walkOut;
+                    var steered = drainage.SteeredOut(current, inDir, target, onPath, besideWalk, crowdClaims);
                     if (steered >= 0)
                     {
                         outDir = steered;
@@ -1016,30 +1130,20 @@ internal static partial class RiverGenerator
                 }
 
                 var next = drainage.Neighbour[(current * 6) + outDir];
-                if (!taken(next))
+
+                // A free tile with no earlier river beside it is a plain step. Beside an earlier river (or onto one) the walk joins
+                // it at a drawable Y if one is near, else runs on alone: a river never runs along another one.
+                if (!taken(next) && (!anyClaims || Crowding(drainage, claims, next) == 0.0))
                 {
-                    if (!anyClaims || Crowding(drainage, claims, next) == 0.0)
-                    {
-                        Step(next, outDir);
-                        continue;
-                    }
-
-                    // About to run alongside an earlier river: join it if a drawable Y is near.
-                    var beside = SearchJunction(drainage, path, claims, onPath, naturalCost + options.MergeSlack, options.MergeReach, options.RiverStreamBonus);
-                    if (beside is not null)
-                    {
-                        path.AddRange(beside);
-                        merged = true;
-                        return path;
-                    }
-
                     Step(next, outDir);
                     continue;
                 }
 
                 if (claims[next] is { } claim)
                 {
-                    if (claim.Joinable && RiverConfluence.IsRepresentable(claim.In1, (outDir + 3) % 6, claim.Out))
+                    if (claim.Joinable && RiverConfluence.IsRepresentable(claim.In1, (outDir + 3) % 6, claim.Out)
+                        && TouchesOnlyJoin(drainage, claims, current, next, claim)
+                        && TouchesOnlyJoin(drainage, claims, drainage.Index[path[0]], next, claim))
                     {
                         path.Add(drainage.Tiles[next]);
                         merged = true;
@@ -1058,9 +1162,22 @@ internal static partial class RiverGenerator
                     }
                 }
 
+                if (anyClaims)
+                {
+                    // Next to an existing mouth naturalCost is ~0, so the slack above rejects every junction: join the trunk
+                    // upstream whatever it costs rather than end a second river beside the first one's mouth.
+                    var upstream = SearchJunction(drainage, path, claims, onPath, double.PositiveInfinity, options.MergeReach, options.RiverStreamBonus);
+                    if (upstream is not null)
+                    {
+                        path.AddRange(upstream);
+                        merged = true;
+                        return path;
+                    }
+                }
+
                 // No drawable junction: run on alone to the nearest free coast (a new mouth). Head-on mouths are rarer than
                 // any coastal tile, so the reach is 10x MergeReach: at 3x about 2% more rivers found none and were dropped.
-                var alone = SearchJunction(drainage, path, claims, onPath, double.PositiveInfinity, options.MergeReach * 10.0, 0.0, true);
+                var alone = SearchJunction(drainage, path, claims, onPath, double.PositiveInfinity, options.MergeReach * 10.0, 0.0, true, options.MinMouthSpacing);
                 if (alone is not null)
                 {
                     path.AddRange(alone);
@@ -1077,6 +1194,19 @@ internal static partial class RiverGenerator
                 path.Add(drainage.Tiles[to]);
                 tiles.Add(to);
                 onPath[to] = true;
+                if (path.Count >= 3)
+                {
+                    var older = drainage.Index[path[^3]];
+                    for (var d = 0; d < 6; d++)
+                    {
+                        var nb = drainage.Neighbour[(older * 6) + d];
+                        if (nb >= 0)
+                        {
+                            besideWalk[nb] = true;
+                        }
+                    }
+                }
+
                 current = to;
                 inDir = (dir + 3) % 6;
             }
@@ -1108,8 +1238,43 @@ internal static partial class RiverGenerator
         double limit,
         double reach,
         double riverStreamBonus,
-        bool toMouth = false)
+        bool toMouth = false,
+        int minMouthSpacing = 0)
     {
+        // A new mouth keeps its distance from every existing sea mouth: all outlets (used or not) and the end of every committed river that reaches the sea.
+        var mouths = new List<HexCoord>();
+        if (toMouth && minMouthSpacing > 0)
+        {
+            for (var i = 0; i < drainage.Tiles.Length; i++)
+            {
+                if (drainage.Outlet[i] || (claims[i] is { Out: < 0, Spring: false }))
+                {
+                    mouths.Add(drainage.Tiles[i]);
+                }
+            }
+        }
+
+        // A route never runs back beside the walk's own course: tiles next to any earlier tile of it are off limits. Only the
+        // last two tiles may be touched, and only by the first steps: the first route tile touches the last one, and a sharp
+        // bend touches the tile before it (the first route tile) or the one after (the second).
+        var besideOwn = new bool[drainage.Tiles.Length];
+        var besideLast = new bool[drainage.Tiles.Length];
+        var besideLast2 = new bool[drainage.Tiles.Length];
+        for (var i = 0; i < path.Count; i++)
+        {
+            var pi = drainage.Index[path[i]];
+            var mark = i == path.Count - 1 ? besideLast : i == path.Count - 2 ? besideLast2 : besideOwn;
+            for (var d = 0; d < 6; d++)
+            {
+                var nb = drainage.Neighbour[(pi * 6) + d];
+                if (nb >= 0)
+                {
+                    mark[nb] = true;
+                }
+            }
+        }
+
+        var first = drainage.Index[path[0]];
         var last = path[^1];
         var start = drainage.Index[last];
         var startIn = path.Count > 1 ? DirectionIndex(last, path[^2]) : -1;
@@ -1118,6 +1283,9 @@ internal static partial class RiverGenerator
         var parent = new Dictionary<int, int> { [startKey] = -1 };
         var heap = new Heap();
         heap.Push(0.0, startKey);
+
+        var depth = 0;
+        bool TouchesOwn(int n) => besideOwn[n] || (depth > 1 && besideLast[n]) || (depth > 0 && besideLast2[n]);
 
         var found = false;
         var bestTotal = limit;
@@ -1133,6 +1301,10 @@ internal static partial class RiverGenerator
 
             var tile = state / 6;
             var inDir = state == startKey ? startIn : state % 6;
+            depth = state == startKey ? 0 : parent[state] == startKey ? 1 : 2;
+
+            // A tile beside an earlier river is only ever the final approach of a junction: it may join, never run on.
+            var approachOnly = !toMouth && state != startKey && drainage.ClaimedAround(tile, claims) > 0;
             for (var dir = 0; dir < 6; dir++)
             {
                 var turn = drainage.TurnCost(inDir, dir);
@@ -1145,7 +1317,7 @@ internal static partial class RiverGenerator
                 if (toMouth)
                 {
                     // Alone to the sea: any free coastal tile with sea straight ahead is a new mouth.
-                    if (claims[n] is not null || onPath[n])
+                    if (claims[n] is not null || onPath[n] || TouchesOwn(n) || drainage.ClaimedAround(n, claims) > 0)
                     {
                         continue;
                     }
@@ -1158,7 +1330,12 @@ internal static partial class RiverGenerator
                             continue;
                         }
 
-                        var total = d + turn + drainage.Step[n] + drainage.Edge[(tile * 6) + dir] + Crowding(drainage, claims, n);
+                        if (TooCloseToMouth(drainage.Tiles[n], mouths, minMouthSpacing))
+                        {
+                            continue;
+                        }
+
+                        var total = d + turn + drainage.Step[n] + drainage.Edge[(tile * 6) + dir];
                         if (!found || total < bestTotal)
                         {
                             found = true;
@@ -1173,6 +1350,12 @@ internal static partial class RiverGenerator
                 else if (claims[n] is { } claim)
                 {
                     if (!claim.Joinable || !RiverConfluence.IsRepresentable(claim.In1, (dir + 3) % 6, claim.Out))
+                    {
+                        continue;
+                    }
+
+                    // The approach tile (and the spring) may touch the trunk only at the join: its tile and the tiles right before and after it.
+                    if (!TouchesOnlyJoin(drainage, claims, tile, n, claim) || !TouchesOnlyJoin(drainage, claims, first, n, claim))
                     {
                         continue;
                     }
@@ -1194,13 +1377,14 @@ internal static partial class RiverGenerator
                     continue;
                 }
 
-                if (!drainage.Interior[n] || onPath[n] || claims[n] is not null)
+                if (approachOnly || !drainage.Interior[n] || onPath[n] || claims[n] is not null || TouchesOwn(n)
+                    || (toMouth && drainage.ClaimedAround(n, claims) > 0))
                 {
                     continue;
                 }
 
                 var key = (n * 6) + ((dir + 3) % 6);
-                var nd = d + turn + drainage.Step[n] + drainage.Edge[(tile * 6) + dir] + (toMouth ? Crowding(drainage, claims, n) : 0.0);
+                var nd = d + turn + drainage.Step[n] + drainage.Edge[(tile * 6) + dir];
                 if (nd <= reach && (!cost.TryGetValue(key, out var known) || nd < known))
                 {
                     cost[key] = nd;
@@ -1221,8 +1405,66 @@ internal static partial class RiverGenerator
             route.Insert(0, drainage.Tiles[cur / 6]);
         }
 
-        // A shortest route in state space can, rarely, cross its own tile in another state.
-        return route.Distinct().Count() == route.Count ? route : null;
+        // A shortest route in state space can, rarely, cross its own tile in another state, or fold back beside the walk or itself.
+        if (route.Distinct().Count() != route.Count)
+        {
+            return null;
+        }
+
+        var along = new Dictionary<HexCoord, int>();
+        foreach (var c in path.Concat(route))
+        {
+            along[c] = along.Count;
+        }
+
+        // The water goes on down the trunk: the tile after the join counts as part of the course.
+        if (!toMouth && claims[bestJunction]!.Out is >= 0 and var trunkOut && drainage.Neighbour[(bestJunction * 6) + trunkOut] is >= 0 and var afterTile)
+        {
+            along.TryAdd(drainage.Tiles[afterTile], along.Count);
+        }
+
+        foreach (var (c, i) in along)
+        {
+            foreach (var nb in c.Neighbours())
+            {
+                if (along.TryGetValue(nb, out var j) && j > i + 2)
+                {
+                    return null;
+                }
+            }
+        }
+
+        return route;
+    }
+
+    /// <summary>Whether every earlier-river neighbour of the approach <paramref name="tile"/> is the joined trunk tile or the one before or after it.</summary>
+    private static bool TouchesOnlyJoin(Drainage drainage, Claim?[] claims, int tile, int joined, Claim claim)
+    {
+        var before = drainage.Neighbour[(joined * 6) + claim.In1];
+        var after = drainage.Neighbour[(joined * 6) + claim.Out];
+        for (var d = 0; d < 6; d++)
+        {
+            var c = drainage.Neighbour[(tile * 6) + d];
+            if (c >= 0 && claims[c] is not null && c != joined && c != before && c != after)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TooCloseToMouth(HexCoord tile, List<HexCoord> mouths, int spacing)
+    {
+        foreach (var m in mouths)
+        {
+            if (HexCoord.Distance(tile, m) < spacing)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Extra cost of a tile beside an earlier river on a walk that is not joining it: keeps rivers that run on alone from hugging one another.</summary>
@@ -1296,6 +1538,10 @@ internal static partial class RiverGenerator
         return strict.Count > 0 ? strict : loose;
     }
 
+    /// <summary>How many springs an island of this size gets: <c>round(land / RiverTilesPerSpring)</c>, at least 1, at most <see cref="WorldGenerationOptions.MaxSpringsPerIsland"/>.</summary>
+    internal static int PlannedSprings(int islandTileCount, WorldGenerationOptions options) =>
+        Math.Clamp((int)Math.Floor((islandTileCount / (double)options.RiverTilesPerSpring) + 0.5), 1, options.MaxSpringsPerIsland);
+
     /// <summary>
     /// Springs by farthest-point sampling over the candidates the drainage field can carry to an
     /// outlet. The first is the most inland candidate; each next one maximises its distance to
@@ -1327,10 +1573,7 @@ internal static partial class RiverGenerator
             hash[i] = ValueNoise.Hash2(candidates[i].Q, candidates[i].R, seed + 41);
         }
 
-        var k = Math.Clamp(
-            (int)Math.Floor((islandTileCount / (double)options.RiverTilesPerSpring) + 0.5),
-            1,
-            options.MaxSpringsPerIsland);
+        var k = PlannedSprings(islandTileCount, options);
 
         var first = 0;
         var firstDepth = depthAt(candidates[0]) ?? 0.0;

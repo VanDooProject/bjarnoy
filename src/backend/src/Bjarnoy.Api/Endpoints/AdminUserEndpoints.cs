@@ -53,6 +53,10 @@ public static class AdminUserEndpoints
             .WithName("AdminSetUserPremium")
             .WithSummary("Grants or revokes a user's premium flag (gates the fight simulator).");
 
+        users.MapPost("/{userId:guid}/renown", SetRenown)
+            .WithName("AdminSetUserRenown")
+            .WithSummary("Sets a user's renown total (the account-level figure that gates founding more settlements).");
+
         return app;
     }
 
@@ -197,6 +201,33 @@ public static class AdminUserEndpoints
         ArgumentNullException.ThrowIfNull(request);
 
         var (outcome, user) = await userService.SetPremiumAsync(userId, request.IsPremium, cancellationToken);
+
+        if (outcome == UserEditOutcome.NotFound)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var settlementCount = await userService.GetSettlementCountAsync(userId, cancellationToken);
+        return TypedResults.Ok(AdminUserResponse.From(user!, settlementCount));
+    }
+
+    private static async Task<Results<Ok<AdminUserResponse>, NotFound, ValidationProblem>> SetRenown(
+        Guid userId,
+        SetUserRenownRequest request,
+        UserService userService,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (!double.IsFinite(request.Renown) || request.Renown < 0)
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [nameof(request.Renown)] = ["Renown must be a number of zero or more."],
+            });
+        }
+
+        var (outcome, user) = await userService.SetRenownAsync(userId, request.Renown, cancellationToken);
 
         if (outcome == UserEditOutcome.NotFound)
         {

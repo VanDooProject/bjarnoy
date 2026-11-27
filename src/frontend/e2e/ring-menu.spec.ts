@@ -428,9 +428,7 @@ test.describe('ring menu availability', () => {
 
     await settlement.setResources({ wood: 99_999, stone: 99_999, food: 99_999, iron: 99_999 });
     await page.evaluate(() => {
-      const world = (window as unknown as {
-        __demoWorld: () => { hud: { construction: { slots: number; slotsUsed: number } } };
-      }).__demoWorld();
+      const world = window.__demoWorld() as { hud: { construction: { slots: number; slotsUsed: number } } };
       world.hud.construction.slotsUsed = world.hud.construction.slots;
     });
     await settlement.clickHex(target);
@@ -509,9 +507,7 @@ test.describe('ring menu availability', () => {
     await settlement.ring.hover(herder);
 
     await page.evaluate((hex) => {
-      const world = (window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string };
-      }).__demoWorld();
+      const world = window.__demoWorld() as { model: any; selectedSettlementId: string };
       world.model.placeBuilding(world.selectedSettlementId, hex, 'farm');
     }, target.hex);
     const before = await settlement.countBuildings();

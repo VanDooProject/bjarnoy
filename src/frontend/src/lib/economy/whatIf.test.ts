@@ -67,14 +67,16 @@ describe('applyWhatIf', () => {
   it('the Longhouse has its own growth factors and stays linear in production', () => {
     const w = applyWhatIf(live, { ...defaultWhatIf(), longhouseCostGrowth: 1.5, productionGrowth: 3 });
     const lh1 = live.longhouse[0];
-    expect(w.longhouse[9].cost.stone).toBe(niceRound(100 * 1.5 ** 9));
+    expect(w.longhouse[9].cost.wood).toBe(niceRound(120 * 1.5 ** 9));
     expect(w.longhouse[9].productionPerHour.wood).toBeCloseTo(lh1.productionPerHour.wood * 10, 6);
   });
 
   it('keeps the start buildings brick-free for their first levels, whatever the knobs', () => {
     const w = applyWhatIf(live, { ...defaultWhatIf(), producerCostScale: 2, costGrowth: 1.5 });
-    for (const level of [1, 5]) expect(w.lumberjack[level - 1].cost.stone, `lumberjack ${level}`).toBe(0);
-    expect(w.lumberjack[5].cost.stone).toBe(niceRound(49 * 2 * 1.5 ** 5));
+    for (const level of [1, 8]) expect(w.lumberjack[level - 1].cost.stone, `lumberjack ${level}`).toBe(0);
+    expect(w.lumberjack[8].cost.stone).toBe(niceRound(49 * 2 * 1.5 ** 8 * 0.25));
+    for (const level of [1, 10]) expect(w.longhouse[level - 1].cost.stone, `longhouse ${level}`).toBe(0);
+    expect(w.longhouse[10].cost.stone).toBeGreaterThan(0);
     expect(w.claybrickworks[0].cost.stone).toBe(0);
     expect(w.claybrickworks[1].cost.stone).toBeGreaterThan(0);
   });
@@ -126,8 +128,8 @@ describe('applyWhatIf', () => {
   it('the Longhouse break level moves where the late growth starts', () => {
     const w = applyWhatIf(live, { ...defaultWhatIf(), longhouseBreakLevel: 5 });
     expect(w.longhouse[4].cost.food).toBe(live.longhouse[4].cost.food);
-    expect(w.longhouse[5].cost.stone).toBe(niceRound(100 * 1.34 ** 4 * 1.6));
-    expect(w.longhouse[5].cost.stone).toBeGreaterThan(live.longhouse[5].cost.stone);
+    expect(w.longhouse[5].cost.wood).toBe(niceRound(120 * 1.34 ** 4 * 1.6));
+    expect(w.longhouse[5].cost.wood).toBeGreaterThan(live.longhouse[5].cost.wood);
   });
 
   it('storage knobs set capacity and cost of the two storage types and are independent of the standard cost growth', () => {

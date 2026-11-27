@@ -284,7 +284,7 @@ public sealed class LinkedSettlementContextTests
     }
 
     [Fact]
-    public void NextPromotable_respects_hex_contiguity_head_of_line_and_free_slots()
+    public void NextPromotable_is_strict_head_of_line_for_hex_contiguity_and_free_slots()
     {
         var first = Order(BuildingType.Farm, new HexCoord(1, 0), waiting: true);
         var sameHex = Order(BuildingType.Farm, new HexCoord(1, 0), level: 2, waiting: true);
@@ -292,7 +292,8 @@ public sealed class LinkedSettlementContextTests
 
         Assert.Equal(first.Id, Settlement.NextPromotable([first, sameHex, other], 2)!.Id);
         var activeOnHex = Order(BuildingType.Farm, new HexCoord(1, 0));
-        Assert.Equal(other.Id, Settlement.NextPromotable([activeOnHex, sameHex, other], 3)!.Id);
+        // Strict FIFO: a head held back by its own hex holds back everything behind it.
+        Assert.Null(Settlement.NextPromotable([activeOnHex, sameHex, other], 3));
 
         var busy = new[] { Order(BuildingType.Farm, new HexCoord(8, 0)), Order(BuildingType.Farm, new HexCoord(9, 0)) };
         Assert.Null(Settlement.NextPromotable([.. busy, first], 2));
