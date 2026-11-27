@@ -13,6 +13,7 @@ using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -42,7 +43,7 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
 
     private sealed record Player(SettlementResponse Settlement, AuthResponse Auth);
 
-    private static async Task<Player> FoundAsync(HttpClient client, Guid worldId, IslandResponse island, TileCoordinate plot, string name)
+    private static async Task<Player> FoundAsync(HttpClient client, Guid worldId, FullIslandResponse island, TileCoordinate plot, string name)
     {
         var ownerId = Unique("local-owner-");
         var settlement = await (await client.PostJsonAsync(
@@ -55,12 +56,11 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
         return new Player(settlement, auth);
     }
 
-    private async Task<(HttpClient Client, WorldEntity World, IslandResponse Island, Player Owner, HashSet<HexCoord> Rivers)> SetUpAsync()
+    private async Task<(HttpClient Client, WorldEntity World, FullIslandResponse Island, Player Owner, HashSet<HexCoord> Rivers)> SetUpAsync()
     {
         var client = _factory.CreateClient();
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.Where(i => i.StartPositions.Count > 3).OrderByDescending(i => i.TileCount).First();
         var owner = await FoundAsync(client, world.Id, island, island.StartPositions[0], "Ulf");
         var rivers = island.RiverTiles.Select(t => new HexCoord(t.Q, t.R)).ToHashSet();
@@ -141,6 +141,10 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
             var longhouse = await db.PlacedBuildings.SingleAsync(b => b.SettlementId == owner.Settlement.Id && b.Type == BuildingType.Longhouse, Ct);
             longhouse.Level = 15;
+            // The late buildings cost more than a fresh settlement can hold: fund it beyond its storage.
+            var entity = await db.Settlements.SingleAsync(x => x.Id == owner.Settlement.Id, Ct);
+            entity.StockWood = entity.StockStone = entity.StockFood = 1_000_000;
+            entity.CapacityWood = entity.CapacityStone = entity.CapacityFood = 1_000_000;
             var towerHex = centre.WithinRadius(2).First(c => c != centre && !line.Contains(c) && c != branch && terrain.TryGetValue(c, out var t) && t is "grass" or "sand");
             db.PlacedBuildings.Add(new PlacedBuildingEntity { SettlementId = owner.Settlement.Id, Q = towerHex.Q, R = towerHex.R, Type = BuildingType.Tower, Level = 5 });
             await db.SaveChangesAsync(Ct);

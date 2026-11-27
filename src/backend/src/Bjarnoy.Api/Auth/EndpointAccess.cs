@@ -100,6 +100,10 @@ public static class EndpointAccessBuilderExtensions
     public static RouteHandlerBuilder RequireCampReportOwner(this RouteHandlerBuilder builder) =>
         builder.AddEndpointFilter<CampReportOwnershipEndpointFilter>().WithMetadata(EndpointAccess.ReportParty);
 
+    /// <summary>For an army-report-by-id read — see <see cref="ArmyReportOwnershipEndpointFilter"/>.</summary>
+    public static RouteHandlerBuilder RequireArmyReportOwner(this RouteHandlerBuilder builder) =>
+        builder.AddEndpointFilter<ArmyReportOwnershipEndpointFilter>().WithMetadata(EndpointAccess.ReportParty);
+
     /// <summary>
     /// For a handler that resolves the caller's own realm itself via
     /// <see cref="CallerRealmResolver"/> instead of an endpoint filter — adds

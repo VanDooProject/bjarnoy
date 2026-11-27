@@ -9,6 +9,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -51,8 +52,7 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
     /// <summary>Founds a settlement on the world's first usable plot, under <paramref name="ownerId"/>, via the anonymous header.</summary>
     private async Task<SettlementResponse> FoundAsync(HttpClient client, Guid worldId, string ownerId)
     {
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -461,8 +461,7 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
         var first = await (await client.GetAsync($"/api/v1/worlds/{worldId}/plot-suggestion", Ct))
             .ReadStrictAsync<PlotSuggestionResponse>(Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         var suggestedIsland = islands!.Single(i => i.Id == first.IslandId);
         var otherIsland = islands!.First(i => i.Id != first.IslandId);
 

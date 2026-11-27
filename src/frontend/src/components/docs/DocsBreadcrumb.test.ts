@@ -51,8 +51,8 @@ describe('DocsBreadcrumb', () => {
 
     expect(pageTrigger().attributes('aria-expanded')).toBe('true');
     const items = wrapper!.findAll('[data-menu=page] [role=menuitem]');
-    expect(items.map((i) => i.text())).toEqual(['Tech tree', 'Resource production', 'Shrines', 'Walls']);
-    expect(items.map((i) => i.attributes('href'))).toEqual(['/docs/tech-tree', '/docs/production', '/docs/shrines', '/docs/walls']);
+    expect(items.map((i) => i.text())).toEqual(['Tech tree', 'Resource production', 'Shrines', 'Walls', 'Extending the realm']);
+    expect(items.map((i) => i.attributes('href'))).toEqual(['/docs/tech-tree', '/docs/production', '/docs/shrines', '/docs/walls', '/docs/realm']);
     expect(items.filter((i) => i.classes('current')).map((i) => i.text())).toEqual(['Shrines']);
     expect(items[2]!.attributes('aria-current')).toBe('page');
   });
@@ -106,7 +106,11 @@ describe('DocsBreadcrumb', () => {
     await menu.trigger('keydown', { key: 'ArrowDown' });
     expect(document.activeElement?.getAttribute('data-page')).toBe('walls');
     await menu.trigger('keydown', { key: 'ArrowDown' });
+    expect(document.activeElement?.getAttribute('data-page')).toBe('realm');
+    await menu.trigger('keydown', { key: 'ArrowDown' });
     expect(document.activeElement?.getAttribute('data-page')).toBe('techTree');
+    await menu.trigger('keydown', { key: 'ArrowUp' });
+    expect(document.activeElement?.getAttribute('data-page')).toBe('realm');
     await menu.trigger('keydown', { key: 'ArrowUp' });
     expect(document.activeElement?.getAttribute('data-page')).toBe('walls');
   });

@@ -126,8 +126,8 @@ public sealed class SimulatorEndpointsTests(SqliteApiFixture fixture) : IClassFi
 
         const int seed = 4242;
         var request = new SimulatorRequest(
-            AttackerStacks: [new UnitCountRequest("longship", 5), new UnitCountRequest("axeman", 80)],
-            DefenderStacks: [new UnitCountRequest("longship", 1), new UnitCountRequest("spearman", 10)],
+            AttackerStacks: [new UnitCountRequest("snekkja", 5), new UnitCountRequest("axeman", 80)],
+            DefenderStacks: [new UnitCountRequest("snekkja", 1), new UnitCountRequest("spearman", 10)],
             GuestDefenderStacks: [new UnitCountRequest("spearman", 10)],
             TowerLevel: 2,
             LandAttackBonusPercent: 10,
@@ -139,8 +139,8 @@ public sealed class SimulatorEndpointsTests(SqliteApiFixture fixture) : IClassFi
         var result = await response.ReadStrictAsync<SimulatorResponse>(Ct);
 
         var expected = AttackResolver.Resolve(
-            [new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 80)],
-            [new UnitStack(UnitType.Longship, 1), new UnitStack(UnitType.Spearman, 10)],
+            [new UnitStack(UnitType.Snekkja, 5), new UnitStack(UnitType.Axeman, 80)],
+            [new UnitStack(UnitType.Snekkja, 1), new UnitStack(UnitType.Spearman, 10)],
             [new UnitStack(UnitType.Spearman, 10)],
             Bjarnoy.Domain.Buildings.BuildingCatalogue.TowerDefenseBonusPercent(2), ResourceAmounts.Uniform(1_000_000), seed,
             raid: false, landAttackBonusPercent: 10, shipAttackBonusPercent: 50,
@@ -222,5 +222,30 @@ public sealed class SimulatorEndpointsTests(SqliteApiFixture fixture) : IClassFi
         var response = await client.PostJsonAsync("/api/v1/simulator", request, Ct);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("attack", true)]
+    [InlineData("raid", false)]
+    public async Task Only_a_won_attack_reports_siege_damage_a_raid_with_catapults_and_rams_destroys_nothing(string mission, bool sieges)
+    {
+        using var client = _fixture.CreateClient();
+        var (accessToken, _) = await CreatePremiumUserAsync(client);
+        Authorize(client, accessToken);
+
+        var request = new SimulatorRequest(
+            AttackerStacks: [new UnitCountRequest("axeman", 40), new UnitCountRequest("catapult", 20), new UnitCountRequest("ram", 20)],
+            DefenderStacks: [new UnitCountRequest("spearman", 2)],
+            GuestDefenderStacks: null,
+            TowerLevel: 0,
+            Mission: mission,
+            Seed: 7);
+
+        var response = await client.PostJsonAsync("/api/v1/simulator", request, Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.ReadStrictAsync<SimulatorResponse>(Ct);
+
+        Assert.Equal("attacker", result.Winner);
+        Assert.Equal(sieges, result.Siege is not null);
     }
 }

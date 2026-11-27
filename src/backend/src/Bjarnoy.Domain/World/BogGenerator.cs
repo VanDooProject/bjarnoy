@@ -130,6 +130,11 @@ internal sealed class BogGenerator
     /// <summary>The water tiles of accepted pockets: sea that became lake. A river's drainage counts them as land it cannot enter.</summary>
     public HashSet<HexCoord> PocketWater { get; } = [];
 
+    /// <summary>Enclosed water the bog did not fill (a pocket too small or too large, or whose ring broke a rule): it stays water and becomes an inland lake.</summary>
+    public HashSet<HexCoord> InlandLake { get; } = [];
+
+    internal List<HexCoord> InlandLakeTiles() => Sorted(InlandLake);
+
     /// <summary>The bog ring tiles of accepted pockets (non-lake): drainage treats them as blocked.</summary>
     public HashSet<HexCoord> PocketRing { get; } = [];
 
@@ -252,7 +257,7 @@ internal sealed class BogGenerator
     /// <summary>
     /// Finds enclosed sea pockets (sea not connected to the open sea: the inside of an O-shaped island),
     /// builds each one's lake and bog ring on scratch state and keeps the ones that satisfy every rule
-    /// (a pocket whose ring would touch the open sea, sand-to-sea, a mountain shore or another bog is left as sea).
+    /// (a pocket whose ring would touch the open sea, sand, a mountain shore or another bog becomes an inland lake, as does a pocket outside the size limits).
     /// </summary>
     public void FindPockets()
     {
@@ -261,130 +266,11 @@ internal sealed class BogGenerator
             return;
         }
 
-        var minQ = int.MaxValue;
-        var maxQ = int.MinValue;
-        var minR = int.MaxValue;
-        var maxR = int.MinValue;
-        foreach (var t in _islandTiles)
-        {
-            minQ = Math.Min(minQ, t.Q);
-            maxQ = Math.Max(maxQ, t.Q);
-            minR = Math.Min(minR, t.R);
-            maxR = Math.Max(maxR, t.R);
-        }
-
-        minQ--;
-        maxQ++;
-        minR--;
-        maxR++;
-        var w = maxQ - minQ + 1;
-        var h = maxR - minR + 1;
-        var state = new byte[w * h]; // 0 water not yet seen, 1 island land, 2 open sea
-        foreach (var t in _islandTiles)
-        {
-            state[((t.R - minR) * w) + (t.Q - minQ)] = 1;
-        }
-
-        var queue = new Queue<int>();
-        for (var q = 0; q < w; q++)
-        {
-            foreach (var r in new[] { 0, h - 1 })
-            {
-                var idx = (r * w) + q;
-                if (state[idx] == 0)
-                {
-                    state[idx] = 2;
-                    queue.Enqueue(idx);
-                }
-            }
-        }
-
-        for (var r = 0; r < h; r++)
-        {
-            foreach (var q in new[] { 0, w - 1 })
-            {
-                var idx = (r * w) + q;
-                if (state[idx] == 0)
-                {
-                    state[idx] = 2;
-                    queue.Enqueue(idx);
-                }
-            }
-        }
-
-        while (queue.Count > 0)
-        {
-            var idx = queue.Dequeue();
-            var q = (idx % w) + minQ;
-            var r = (idx / w) + minR;
-            for (var d = 0; d < 6; d++)
-            {
-                var n = Nb(new HexCoord(q, r), d);
-                var nq = n.Q - minQ;
-                var nr = n.R - minR;
-                if (nq < 0 || nr < 0 || nq >= w || nr >= h)
-                {
-                    continue;
-                }
-
-                var ni = (nr * w) + nq;
-                if (state[ni] == 0)
-                {
-                    state[ni] = 2;
-                    queue.Enqueue(ni);
-                }
-            }
-        }
-
-        // Remaining water cells are enclosed: group them.
-        var seen = new HashSet<int>();
-        var components = new List<List<HexCoord>>();
-        for (var r = 0; r < h; r++)
-        {
-            for (var q = 0; q < w; q++)
-            {
-                var idx = (r * w) + q;
-                if (state[idx] != 0 || !seen.Add(idx))
-                {
-                    continue;
-                }
-
-                var comp = new List<HexCoord>();
-                var pending = new Stack<int>();
-                pending.Push(idx);
-                while (pending.Count > 0)
-                {
-                    var cur = pending.Pop();
-                    var c = new HexCoord((cur % w) + minQ, (cur / w) + minR);
-                    comp.Add(c);
-                    for (var d = 0; d < 6; d++)
-                    {
-                        var n = Nb(c, d);
-                        var nq = n.Q - minQ;
-                        var nr = n.R - minR;
-                        if (nq < 0 || nr < 0 || nq >= w || nr >= h)
-                        {
-                            continue;
-                        }
-
-                        var ni = (nr * w) + nq;
-                        if (state[ni] == 0 && seen.Add(ni))
-                        {
-                            pending.Push(ni);
-                        }
-                    }
-                }
-
-                components.Add(comp);
-            }
-        }
-
-        // Nothing but sea-level water may be in the pocket: another landmass inside it means it is not ours.
-        components = [.. components.Where(c => !c.Any(_isLand))];
-        foreach (var comp in components)
+        foreach (var comp in EnclosedWater.Pockets(_islandTiles, _isLand))
         {
             if (comp.Count < _options.BogPocketMinTiles || comp.Count > _options.BogPocketMaxTiles)
             {
+                InlandLake.UnionWith(comp);
                 continue;
             }
 
@@ -393,7 +279,11 @@ internal sealed class BogGenerator
                 _stats.BogPocketsFound++;
             }
 
-            if (TryBuildPocket(comp) && _stats is not null)
+            if (!TryBuildPocket(comp))
+            {
+                InlandLake.UnionWith(comp);
+            }
+            else if (_stats is not null)
             {
                 _stats.BogPocketsFilled++;
             }
@@ -512,8 +402,7 @@ internal sealed class BogGenerator
             layer = next;
         }
 
-        // R7 for the whole ring: nothing touches the open sea. (Sand is fine here: the pocket is inside the island, its own
-        // beach and the sand beside it turn to bog as far as the ring reaches; see docs/design/bog.md.)
+        // R7 for the whole ring: nothing touches the open sea or sand.
         foreach (var t in ring)
         {
             foreach (var n in Nb6(t))
@@ -524,6 +413,11 @@ internal sealed class BogGenerator
                 }
 
                 if (OpenSea(n))
+                {
+                    return false;
+                }
+
+                if (_islandLand.Contains(n) && _land[n] == Terrain.Sand)
                 {
                     return false;
                 }
@@ -567,7 +461,7 @@ internal sealed class BogGenerator
 
         if (connected.Count != ring.Count)
         {
-            // A stranded piece would have to be dropped, and the sand rule may need it: keep only the connected part
+            // A stranded piece would have to be dropped, and R7 may need it: keep only the connected part
             // when nothing was dropped that touches sand, else give the pocket up.
             foreach (var t in ring.Where(t => !connected.Contains(t)))
             {

@@ -62,7 +62,10 @@ function army(id: string, overrides: Partial<ArmyResponse> = {}, arrivesAt = '20
       turnAroundAt: '2099-01-01T00:00:00Z',
       returnArrivesAt: '2099-01-02T00:00:00Z',
       isReturning: false,
+      isStranded: false,
+      isFleeing: false,
     },
+    starvesAt: null,
     ...overrides,
   };
 }
@@ -218,7 +221,8 @@ describe('SendArmyPicker', () => {
   });
 
   it('a marching army shows the premium lock and cannot be selected without premium', async () => {
-    const world = setup([army('march', {}, inOneHour())]);
+    // A second army that can go keeps the picker a choice (with one option it is picked on its own).
+    const world = setup([army('march', {}, inOneHour()), army('stand')]);
 
     const wrapper = mountPicker();
     await routesArrive();
@@ -278,7 +282,7 @@ describe('SendArmyPicker', () => {
     const count = 10;
     const walkHours = (6 + 4) / spearman.speed;
     const neededFood = walkHours * spearman.upkeepPerHour * count;
-    setup([army('stand', { provisions: neededFood - 1 })]);
+    setup([army('stand', { provisions: neededFood - 1 }), army('fed')]);
 
     const wrapper = mountPicker();
     await routesArrive();
@@ -316,6 +320,35 @@ describe('SendArmyPicker', () => {
 
     expect(world.sendPicker).toBeNull();
     expect(world.dispatchDraft?.route).toEqual([{ q: 4, r: 0 }]);
+  });
+
+  it('with only the home garrison able to go it hands over to the dispatch form without a pick', async () => {
+    const returning = army('ret');
+    returning.movement!.isReturning = true;
+    const world = setup([returning]);
+
+    mountPicker();
+    await vi.waitFor(() => expect(world.sendPicker).toBeNull());
+
+    expect(world.dispatchDraft?.route).toEqual([{ q: 4, r: 0 }]);
+  });
+
+  it('with only one field army able to go it is selected and the rows that cannot go are not listed', async () => {
+    const returning = army('ret');
+    returning.movement!.isReturning = true;
+    const world = setup([army('stand'), returning], []);
+
+    const wrapper = mountPicker();
+    // Nothing is picked while a route is still being searched: a pending row may still turn out to go.
+    expect(world.sendPicker?.selectedId).toBeNull();
+    await vi.waitFor(() => expect(world.sendPicker?.selectedId).toBe('stand'));
+    await nextTick();
+
+    expect(wrapper.findAll('.send-row').map((r) => r.attributes('data-source'))).toEqual(['stand']);
+    expect(wrapper.find('.send-go').exists()).toBe(true);
+    // The one option cannot be unselected: there is nothing else to pick.
+    await wrapper.get('[data-source="stand"] .send-row-head').trigger('click');
+    expect(world.sendPicker?.selectedId).toBe('stand');
   });
 
   it('closing drops the order being composed', async () => {

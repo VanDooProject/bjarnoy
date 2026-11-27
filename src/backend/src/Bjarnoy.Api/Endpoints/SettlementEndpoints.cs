@@ -92,6 +92,14 @@ public static class SettlementEndpoints
             .AddEndpointFilter<UserActivityEndpointFilter>()
             .WithConcurrencyRetry();
 
+        settlements.MapPost("/{settlementId:guid}/units/{orderId:guid}/cancel", CancelTraining)
+            .WithName("CancelTraining")
+            .WithSummary("Cancels an order of a building's training queue; the units not trained yet are refunded at 50 %.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .RequireSettlementOwner()
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
+
         settlements.MapPost("/{settlementId:guid}/units", TrainUnits)
             .WithName("TrainUnits")
             .WithSummary("Queues training a batch of units, charging their cost immediately.")
@@ -515,6 +523,22 @@ public static class SettlementEndpoints
         return result.Accepted ? TypedResults.NoContent() : TypedResults.NotFound();
     }
 
+    private static async Task<Results<NoContent, NotFound, Conflict<ProblemDetails>>> CancelTraining(
+        Guid settlementId,
+        Guid orderId,
+        SettlementService settlements,
+        CancellationToken cancellationToken)
+    {
+        var result = await settlements.CancelTrainingAsync(settlementId, orderId, cancellationToken);
+
+        if (result.WorldPaused)
+        {
+            return TypedResults.Conflict(WorldPausedProblem());
+        }
+
+        return result.Accepted ? TypedResults.NoContent() : TypedResults.NotFound();
+    }
+
     private static async Task<Results<Accepted<TrainUnitsResponse>, NotFound,
         Conflict<ProblemDetails>, BadRequest<ProblemDetails>>> TrainUnits(
         Guid settlementId,
@@ -922,8 +946,8 @@ public static class SettlementEndpoints
         BuildRejection.RequiredBuildingTooLow => "A required building is not high enough level yet.",
         BuildRejection.TowerLimitReached =>
             "You already hold as many towers as your longhouse level allows. Upgrade the longhouse to raise the limit.",
-        BuildRejection.StorageHouseTooLow =>
-            "Raise your storage houses before building another: 1 at level 10, then 2 at 15, 3 at 20, 4 at 25.",
+        BuildRejection.GreatStorehouseNeedsStorageHouses =>
+            "Max out more storage houses first: each Great Storehouse needs one more Storage House at level 25 than you have Great Storehouses.",
         BuildRejection.ShrineGodAlreadyOnIsland => "That god already has a shrine on this island.",
         BuildRejection.SettlementAlreadyHasShrine => "This settlement already has a shrine.",
         BuildRejection.PalisadeWouldBranch =>
@@ -937,6 +961,8 @@ public static class SettlementEndpoints
         BuildRejection.LonghouseCannotBeRazed => "The longhouse cannot be razed.",
         BuildRejection.NoFreeSlot =>
             "Every construction slot is busy. Premium settlements can queue extra builds to wait for a free slot.",
+        BuildRejection.QueueLockedWithoutPremium =>
+            "Your waiting builds stay in the queue and start as slots free up, but without Premium you can't add new ones until all of them have started.",
         _ => "Refused.",
     };
 
@@ -972,6 +998,7 @@ public static class SettlementEndpoints
             "The building that trains this unit stands outside your realm and has no function until your realm reaches it again.",
         TrainRejection.WrongBuilding => "There is no building that trains this unit on that hex.",
         TrainRejection.PremiumRequired => "Splitting an order for the fastest finish needs premium.",
+        TrainRejection.BuildingLevelTooLow => "This building is too low a level to train that unit.",
         _ => "Refused.",
     };
 

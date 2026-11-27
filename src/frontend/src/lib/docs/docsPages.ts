@@ -95,12 +95,12 @@ export const DOCS_GROUPS: DocsGroupEntry[] = [
     // The Shrine of Thor's art family is `torshrine` (buildingArt.ts); its last level is 3.
     page('shrines', '/docs/shrines', 'torshrine_SE_level003', 'icon', ['techTree', 'production', 'landMovement']),
     page('walls', '/docs/walls', 'palisade_gate180_SE_level002', 'icon', ['landMovement', 'techTree', 'wastedLands']),
+    page('realm', '/docs/realm', 'stavetower_SE_level003', 'backdrop', ['founding', 'walls', 'wildlifeCamps']),
   ]),
   group('move', [
     page('training', '/docs/training', 'barracks_SE_level004', 'backdrop', ['founding', 'ships', 'realm']),
     page('founding', '/docs/founding', 'cartworkshop_SE_level004', 'backdrop', ['landMovement', 'wildlifeCamps', 'realm']),
     page('beachCamp', '/docs/beach-camp', 'beachcamp_SE_level001', 'backdrop', ['founding', 'ships', 'realm']),
-    page('realm', '/docs/realm', 'stavetower_SE_level003', 'backdrop', ['founding', 'walls', 'wildlifeCamps']),
     page('landMovement', '/docs/land-movement', 'riverbridge_SE_level004', 'backdrop', ['walls', 'wildlifeCamps', 'founding']),
     page('ships', '/docs/ships', 'dockyard_SE_level007', 'backdrop', ['shrines', 'walls', 'wildlifeCamps']),
   ]),

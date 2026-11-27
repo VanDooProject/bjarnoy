@@ -129,10 +129,10 @@ describe('routeEdges', () => {
   });
 
   it('runs a lone level target straight across with no trunk at all', () => {
-    // The Fishing Hut's only target is the Dockyard, on its own row, so their link is one segment.
+    // The Fishing Hut's only target is the Harbour, on its own row, so their link is one segment.
     const [hutCol, hutRow] = TECH_TREE_LAYOUT.fishinghut!;
     const y = rowY(hutRow) + CARD_H / 2;
-    const straight = segments.find((s) => s.keys.includes(edgeKey('fishinghut', 'dockyard')));
+    const straight = segments.find((s) => s.keys.includes(edgeKey('fishinghut', 'harbour')));
 
     expect(straight!.points).toEqual([
       [columnX(hutCol) + CARD_W, y],

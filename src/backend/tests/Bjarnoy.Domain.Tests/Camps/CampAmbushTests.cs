@@ -28,7 +28,7 @@ public class CampAmbushTests
     private static List<double> Hours(int count) => [.. Enumerable.Range(0, count).Select(i => (double)i)];
 
     /// <summary>Out along q 0..20 at one hex per hour, home again from <paramref name="turnAt"/>.</summary>
-    private static MovementRecord OutAndBack(double turnAtHours = 20, bool immune = false, bool returning = false) => new()
+    private static MovementRecord OutAndBack(double turnAtHours = 20, double? immuneHours = null, bool returning = false) => new()
     {
         DepartedAt = T0,
         Path = Line(0, 20),
@@ -39,7 +39,7 @@ public class CampAmbushTests
         ReturnEdgeHours = Hours(21),
         TurnAroundAt = T0.AddHours(turnAtHours),
         IsReturning = returning,
-        RetreatImmune = immune,
+        FieldBattleImmuneUntil = immuneHours is { } h ? T0.AddHours(h) : null,
     };
 
     private static CampAmbushHit? Find(
@@ -128,9 +128,26 @@ public class CampAmbushTests
     }
 
     [Fact]
-    public void A_retreat_immune_movement_is_never_ambushed()
+    public void A_fleeing_army_is_not_ambushed_while_its_protection_lasts()
     {
-        Assert.Null(Find(OutAndBack(immune: true), [Pristine(CampAt(10))]));
+        // On its way home it enters the guard range at hour 7, the protection runs until hour 8.
+        Assert.Null(Find(OutAndBack(immuneHours: 8, returning: true), [Pristine(CampAt(10))]));
+    }
+
+    [Fact]
+    public void A_fleeing_army_is_ambushed_again_by_a_camp_it_enters_after_its_protection_ended()
+    {
+        var hit = Find(OutAndBack(immuneHours: 3, returning: true), [Pristine(CampAt(10))]);
+
+        Assert.NotNull(hit);
+        Assert.Equal(T0.AddHours(7), hit.Value.At);
+    }
+
+    [Fact]
+    public void The_protection_ends_at_the_instant_it_names_not_a_moment_later()
+    {
+        Assert.Null(Find(OutAndBack(immuneHours: 7.5, returning: true), [Pristine(CampAt(10))]));
+        Assert.NotNull(Find(OutAndBack(immuneHours: 7, returning: true), [Pristine(CampAt(10))]));
     }
 
     [Fact]

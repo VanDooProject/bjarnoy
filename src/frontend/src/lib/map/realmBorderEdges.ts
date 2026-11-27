@@ -15,10 +15,15 @@ export interface BorderEdgeSplit {
   front: [number, number][];
 }
 
+/** Whether edge `edge` (corner `edge` to `edge + 1`) is one of the hex's back edges. */
+export function isBackEdge(edge: number): boolean {
+  return edge < 3;
+}
+
 export function splitBorderEdges(edges: readonly [number, number][]): BorderEdgeSplit {
   const back: [number, number][] = [];
   const front: [number, number][] = [];
-  for (const edge of edges) (edge[0] < 3 ? back : front).push(edge);
+  for (const edge of edges) (isBackEdge(edge[0]) ? back : front).push(edge);
   return { back, front };
 }
 

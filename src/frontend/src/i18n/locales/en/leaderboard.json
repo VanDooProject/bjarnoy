@@ -7,8 +7,6 @@
   "noEntries": "No entries yet.",
   "table": {
     "rank": "Rank",
-    "name": "Name",
-    "value": "Value",
     "change": "Change"
   },
   "badge": {
@@ -37,5 +35,36 @@
     "noWeeklyWindowsYet": "Unlocks once weekly windows are tracked.",
     "notComputedYet": "Not computed yet — check back soon.",
     "unknownBoard": "This board does not exist."
-  }
+  },
+  "railLabel": "Boards",
+  "rankShort": "#{rank}",
+  "thisWeek": "This week",
+  "ofEntries": "of {count}",
+  "boardTitle": "{scope} · {category}",
+  "notAvailable": "Not available yet",
+  "updated": "Updated {time}",
+  "own": {
+    "user": "{name} · yours",
+    "settlement": "{name} · yours",
+    "guild": "{name} · your guild"
+  },
+  "nameHeads": {
+    "user": "Player",
+    "settlement": "Settlement",
+    "guild": "Guild"
+  },
+  "valueHeads": {
+    "score": "Score",
+    "biggestSettlement": "Score",
+    "weeklyScoreGained": "Score gained",
+    "weeklyFightsWon": "Fights won",
+    "weeklyFightsLost": "Fights lost",
+    "weeklyResourcesLooted": "Looted",
+    "biggestArmy": "Army size"
+  },
+  "weekLabel": "Week",
+  "earlierWeek": "Earlier week",
+  "laterWeek": "Later week",
+  "final": "Final",
+  "premiumWeeks": "Premium: the last 4 weeks"
 }

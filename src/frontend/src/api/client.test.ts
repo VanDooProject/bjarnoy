@@ -3,7 +3,7 @@
 // shared `request()` plumbing (URL/query building, JSON parsing, ApiError on
 // failure) the same way it behaves for every other client method.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError, authHooks } from './client';
+import { api, ApiError, authHooks, isTerrainChunkNotFound } from './client';
 import { isUpdatePending, resetAppUpdate } from '../lib/appUpdate';
 import { setOwnBuildId } from '../lib/buildId';
 import type {
@@ -173,6 +173,51 @@ describe('camp reads identify the caller', () => {
     const [url, init] = vi.mocked(fetch).mock.calls[0]!;
     expect(String(url)).toContain('/worlds/w1/camps?islandId=island%201');
     expect((init?.headers as Record<string, string>)['X-Owner-Id']).toBeUndefined();
+  });
+});
+
+describe('terrain chunks', () => {
+  it('reads the manifest, then every chunk, and returns the islands in chunk order', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        jsonResponse({ chunkSize: 64, chunkCount: 2, chunks: [{ index: 0, eTag: '"a"' }, { index: 1, eTag: '"b"' }] }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ chunk: 0, islands: [{ id: 'i0', riverTiles: [], bogTiles: [] }] }))
+      .mockResolvedValueOnce(jsonResponse({ chunk: 1, islands: [{ id: 'i1', riverTiles: [], bogTiles: [] }] }));
+
+    const islands = await api.getTerrainChunks('w1');
+
+    expect(islands.map((i) => i.id)).toEqual(['i0', 'i1']);
+    const urls = vi.mocked(fetch).mock.calls.map(([url]) => String(url));
+    expect(urls[0]).toContain('/worlds/w1/terrain-chunks');
+    expect(urls[0]).not.toMatch(/terrain-chunks\/\d/);
+    expect(urls.slice(1).sort()).toEqual([expect.stringContaining('/terrain-chunks/0'), expect.stringContaining('/terrain-chunks/1')]);
+  });
+
+  it('fails with the ApiError of a chunk that cannot be read', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse({ chunkSize: 64, chunkCount: 1, chunks: [{ index: 0, eTag: '"a"' }] }))
+      .mockResolvedValueOnce(jsonResponse({ error: 'world_not_found' }, 404));
+
+    const err = await api.getTerrainChunks('w1').catch((e) => e);
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status: 404, path: '/worlds/w1/terrain-chunks/0' });
+  });
+});
+
+describe('isTerrainChunkNotFound', () => {
+  it('is true for the 404 of a chunk the world no longer has, and for nothing else', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse({ chunkSize: 64, chunkCount: 1, chunks: [{ index: 0, eTag: '"a"' }] }))
+      .mockResolvedValueOnce(jsonResponse({ error: 'terrain_chunk_not_found' }, 404));
+    const missing = await api.getTerrainChunks('w1').catch((e) => e);
+    expect(isTerrainChunkNotFound(missing)).toBe(true);
+
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ error: 'world_not_found' }, 404));
+    const noWorld = await api.getIslands('w1').catch((e) => e);
+    expect(isTerrainChunkNotFound(noWorld)).toBe(false);
+    expect(isTerrainChunkNotFound(new Error('x'))).toBe(false);
   });
 });
 

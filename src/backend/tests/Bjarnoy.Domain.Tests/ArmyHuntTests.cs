@@ -167,7 +167,7 @@ public class ArmyHuntTests
 
         var leg = ((ArmyLocation.InTransit)returning.Location).Movement;
         Assert.True(leg.IsReturning);
-        Assert.True(leg.RetreatImmune);
+        Assert.Null(leg.FieldBattleImmuneUntil); // only a lost field battle protects a returning army
         Assert.Equal(battleInstant, leg.DepartedAt);
         Assert.Equal(outbound.ReturnPath, leg.Path);
         Assert.Equal(outbound.ReturnCumulativeHours, leg.CumulativeHours);

@@ -9,6 +9,7 @@ using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -48,8 +49,7 @@ public sealed class RealmDecayEndpointsTests : IAsyncLifetime
         var client = _factory.CreateClient();
         worldId ??= (await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct)).Id;
         var world = new { Id = worldId.Value };
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         HttpResponseMessage? founded = null;
         TileCoordinate? plot = null;
         foreach (var (island, candidate) in islands!.SelectMany(i => i.StartPositions.Select(p => (Island: i, Plot: p))))

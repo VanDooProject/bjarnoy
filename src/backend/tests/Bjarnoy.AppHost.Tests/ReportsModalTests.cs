@@ -8,6 +8,7 @@ using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.AppHost.Tests;
 
@@ -39,7 +40,9 @@ namespace Bjarnoy.AppHost.Tests;
 /// unrelated settlements on is not knowable up front. This iterates
 /// candidate seeds through the admin seed-preview endpoint (nothing
 /// persisted, see <c>AdminWorldEndpoints.PreviewSeed</c>) until one produces
-/// a non-Wasted island with two start positions at least
+/// a non-Wasted island with two start positions whose corridor no land camp
+/// guards (its ambush would turn the attack back on the way, see
+/// <c>CampGuardsCorridor</c>) and that lie at least
 /// <see cref="SettlementService.MinimumSpacing"/> hexes apart — the same
 /// spacing rule <c>Settlement.FoundAsync</c> itself enforces between any two
 /// settlements — and only then commits that seed via
@@ -84,6 +87,28 @@ public class ReportsModalTests(AppHostFixture fixture)
     /// first handful of attempts.
     /// </summary>
     private const int MaxSeedAttempts = 200;
+
+    /// <summary>How far the army's land route may stray from the straight line between the two settlements.</summary>
+    private const int RouteSlack = 6;
+
+    /// <summary>
+    /// Whether a land camp guards the corridor between <paramref name="a"/> and <paramref name="b"/>: a camp ambushes an army
+    /// whose route enters its guard range, which turns the attack back before it reaches the target and leaves no battle
+    /// report. The corridor is every hex whose distances to both ends add up to at most the straight distance plus twice
+    /// <see cref="RouteSlack"/>, widened by the camp's guard range.
+    /// </summary>
+    private static bool CampGuardsCorridor(PreviewIslandResponse island, TileCoordinate a, TileCoordinate b)
+    {
+        var from = new HexCoord(a.Q, a.R);
+        var to = new HexCoord(b.Q, b.R);
+        var straight = HexCoord.Distance(from, to);
+        return island.Camps.Any(c =>
+        {
+            var camp = new HexCoord(c.Q, c.R);
+            return c.GuardRange > 0
+                && HexCoord.Distance(camp, from) + HexCoord.Distance(camp, to) <= straight + (2 * (RouteSlack + c.GuardRange));
+        });
+    }
 
     [Fact]
     public async Task ViewingAResolvedBattleReportThroughTheRealFrontendWorksOnDesktopAndPhone()
@@ -133,7 +158,7 @@ public class ReportsModalTests(AppHostFixture fixture)
                         var a = island.StartPositions[i];
                         var b = island.StartPositions[j];
                         var distance = HexCoord.Distance(new HexCoord(a.Q, a.R), new HexCoord(b.Q, b.R));
-                        if (distance >= SettlementService.MinimumSpacing)
+                        if (distance >= SettlementService.MinimumSpacing && !CampGuardsCorridor(island, a, b))
                         {
                             found = (island.Index, a, b, seed);
                             break;
@@ -145,7 +170,7 @@ public class ReportsModalTests(AppHostFixture fixture)
 
         Assert.True(
             found is not null,
-            $"No seed among the first {MaxSeedAttempts} produced a non-Wasted island with two start "
+            $"No seed among the first {MaxSeedAttempts} produced a non-Wasted island with two unguarded start "
                 + $"positions >= {SettlementService.MinimumSpacing} hexes apart.");
 
         var (islandIndex, playerStart, rivalStart, chosenSeed) = found!.Value;
@@ -156,8 +181,7 @@ public class ReportsModalTests(AppHostFixture fixture)
             cancellationToken);
         reseedResponse.EnsureSuccessStatusCode();
 
-        var islands = await apiClient.GetFromJsonAsync<IslandResponse[]>(
-            $"/api/v1/worlds/{world.Id}/islands", cancellationToken);
+        var islands = await apiClient.GetFullIslandsAsync(world.Id, cancellationToken);
         var targetIsland = Assert.Single(islands!, i => i.Index == islandIndex);
 
         // --- Found both settlements anonymously (see class remarks) ---
@@ -241,7 +265,7 @@ public class ReportsModalTests(AppHostFixture fixture)
         arrivedArmyResponse.EnsureSuccessStatusCode();
 
         var reports = await playerHttpClient.GetFromJsonAsync<BattleReportResponse[]>(
-            $"/api/v1/settlements/{playerSettlement.Id}/reports", cancellationToken);
+            $"/api/v1/worlds/{playerSettlement.WorldId}/reports", cancellationToken);
         var report = Assert.Single(reports!);
         // The rival garrison is empty, so any attacker with positive attack
         // power wins outright (BattleResolver.Resolve) — the attacker here

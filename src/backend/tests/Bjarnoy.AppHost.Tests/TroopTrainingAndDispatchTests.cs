@@ -6,6 +6,7 @@ using Aspire.Hosting.Testing;
 using Bjarnoy.Api.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.AppHost.Tests;
 
@@ -148,8 +149,7 @@ public class TroopTrainingAndDispatchTests(AppHostFixture fixture)
         // anything.
         var layout = await adminHttpClient.GetFromJsonAsync<AdminSettlementLayoutResponse>(
             $"/api/v1/admin/settlements/{settlementId}/layout", cancellationToken);
-        var islands = await apiClient.GetFromJsonAsync<IslandResponse[]>(
-            $"/api/v1/worlds/{world.Id}/islands", cancellationToken);
+        var islands = await apiClient.GetFullIslandsAsync(world.Id, cancellationToken);
         var riverHexes = islands!.SelectMany(i => i.RiverTiles).Select(t => (t.Q, t.R)).ToHashSet();
         var plainLand = layout!.Hexes
             .Where(h => !h.IsCentre
@@ -208,17 +208,15 @@ public class TroopTrainingAndDispatchTests(AppHostFixture fixture)
 
         await trainUnitsBubble.ClickAsync();
 
-        // TrainingModal.vue: the quantity input defaults to 1, so queuing the
-        // single Thrall this test needs is just clicking that row's Train
-        // button — no need to touch the quantity field.
+        // TrainingModal.vue: every row starts at 0; "+" picks one Thrall and the footer's single button places the order.
         var thrallRow = page.Locator(".unit-row").Filter(new LocatorFilterOptions { HasText = "thrall" });
         await Assertions.Expect(thrallRow).ToBeVisibleAsync(new() { Timeout = 15_000 });
-        await thrallRow.GetByRole(AriaRole.Button, new() { Name = "Train", Exact = true }).ClickAsync();
+        await thrallRow.GetByRole(AriaRole.Button, new() { Name = "More", Exact = true }).ClickAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Train 1 order", Exact = true }).ClickAsync();
 
-        // TrainingModal emits 'trained' on success, which SettlementView wires
-        // straight to closeTrainModal — the modal disappearing is itself proof
-        // world.trainUnitsLive's POST succeeded (an ApiError would instead
-        // leave the modal open with errorText set).
+        // The window stays open after Train and shows the new order in "Training here"; closing it is a separate step.
+        await Assertions.Expect(page.GetByTestId("training-here")).ToContainTextAsync("1× Thrall", new() { Timeout = 15_000 });
+        await page.Locator(".modal .close").ClickAsync();
         await Assertions.Expect(page.Locator(".unit-row"))
             .ToHaveCountAsync(0, new() { Timeout = 15_000 });
 

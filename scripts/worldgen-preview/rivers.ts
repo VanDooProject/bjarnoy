@@ -6,6 +6,7 @@
 import { coordKey, neighbors } from '../../src/frontend/src/lib/hex/coords';
 import { generateRiversWithBogs, emptyRiverStats, type RiverStats } from '../../src/frontend/src/lib/map/riverGenerator';
 import { addViolations, checkBogRules, noViolations, type BogRuleViolations } from '../../src/frontend/src/lib/map/bogRules';
+import { enclosedWaterPockets } from '../../src/frontend/src/lib/map/enclosedWater';
 import { bogWaterExits, lakeSizes } from './bogs';
 import { islandDepthAt, terrainAt, type WorldSeed } from '../../src/frontend/src/lib/map/worldGenerator';
 import { TILE_ORIENTATIONS, type BogTile, type RiverTile } from '../../src/frontend/src/lib/map/types';
@@ -27,6 +28,9 @@ export interface BogIsland {
   pocketsFound: number;
   pocketsFilled: number;
   pocketSinks: number;
+  /** Enclosed pockets that became inland lakes (too thin, too big, or their ring would touch sand or open sea), and their tiles. */
+  inlandLakePockets: number;
+  inlandLakeTiles: number;
   /** Bogs the guarantee placed: on a relaxed through river, and spawn bogs (a spring feeds the lake). */
   guaranteeThrough: number;
   guaranteeSpawns: number;
@@ -93,7 +97,7 @@ function computeRiversUncached(world: WorldSeed, window?: Window): RiverField {
       if (!list.some((t) => Math.abs(t.q - window.q) <= reach && Math.abs(t.r - window.r) <= reach)) return;
     }
     const islandStats = emptyRiverStats();
-    const { rivers, bogs: islandBogs } = generateRiversWithBogs(
+    const { rivers, bogs: islandBogs, inlandLakes } = generateRiversWithBogs(
       list,
       (c) => terrainAt(c.q, c.r, world),
       (c) => islandDepthAt(c.q, c.r, world),
@@ -104,10 +108,11 @@ function computeRiversUncached(world: WorldSeed, window?: Window): RiverField {
       true,
       islandStats,
     );
+    const inlandSet = new Set(inlandLakes.map(coordKey));
     for (const k of Object.keys(stats) as (keyof RiverStats)[]) stats[k] += islandStats[k];
     if (rivers.length > 0) islandsWithRivers++;
     for (const t of rivers) tiles.set(coordKey(t), t);
-    if (islandBogs.length > 0 || islandStats.pocketsFound > 0) {
+    if (islandBogs.length > 0 || islandStats.pocketsFound > 0 || inlandLakes.length > 0) {
       const violations = checkBogRules(islandBogs, rivers, (c) => terrainAt(c.q, c.r, world));
       bogViolations = addViolations(bogViolations, violations);
       for (const t of islandBogs) bogs.set(coordKey(t), t);
@@ -123,6 +128,8 @@ function computeRiversUncached(world: WorldSeed, window?: Window): RiverField {
         pocketsFound: islandStats.pocketsFound,
         pocketsFilled: islandStats.pocketsFilled,
         pocketSinks: islandStats.pocketSinks,
+        inlandLakePockets: enclosedWaterPockets(list, isLand).filter((p) => inlandSet.has(coordKey(p[0]!))).length,
+        inlandLakeTiles: inlandLakes.length,
         guaranteeThrough: islandStats.guaranteeThrough,
         guaranteeSpawns: islandStats.guaranteeSpawns,
         violations,

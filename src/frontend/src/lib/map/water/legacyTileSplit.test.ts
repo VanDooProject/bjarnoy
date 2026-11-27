@@ -66,7 +66,7 @@ describe('LEGACY_TALL_KEYS', () => {
     // Measured from the art by first row with >=5 opaque pixels (a raw alpha
     // bbox is inflated by stray near-transparent rows): mountaintile 66px,
     // magictower 102px, dockyard 25px.
-    expect([...LEGACY_TALL_KEYS].sort()).toEqual(['dockyard', 'magictower', 'mountain']);
+    expect([...LEGACY_TALL_KEYS].sort()).toEqual(['harbour', 'magictower', 'mountain']);
   });
 
   it('leaves the flat unsplit families alone', () => {

@@ -7,6 +7,7 @@ using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -36,8 +37,7 @@ public sealed class RivalBuildingsEndpointsTests : IAsyncLifetime
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 80, cancellationToken: Ct);
         var owner = Unique("owner");
         client.DefaultRequestHeaders.Add("X-Owner-Id", owner);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
         var response = await client.PostJsonAsync(

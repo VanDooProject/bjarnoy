@@ -24,6 +24,13 @@ public enum Terrain
     /// water, nothing is built on it. Placed by <see cref="BogGenerator"/> like <see cref="Bog"/>.
     /// </summary>
     Lake = 6,
+
+    /// <summary>
+    /// Water an island encloses that the bog did not fill: not sea (no ship can reach it), not land (nothing is claimed or
+    /// walked on it), drawn as coastal water. Placed per island by <see cref="WorldGenerator"/> and stored with it
+    /// (<see cref="GeneratedIsland.InlandLakeTiles"/>). Only a Fishing Hut may stand on one that borders land.
+    /// </summary>
+    InlandLake = 7,
 }
 
 public static class TerrainExtensions
@@ -38,11 +45,12 @@ public static class TerrainExtensions
         Terrain.Mountain => "mountain",
         Terrain.Bog => "bog",
         Terrain.Lake => "lake",
+        Terrain.InlandLake => "inlandlake",
         _ => throw new ArgumentOutOfRangeException(nameof(terrain), terrain, "Unknown terrain"),
     };
 
-    /// <summary>Everything that is neither the sea nor a bog lake; the hexes that can be claimed.</summary>
-    public static bool IsLand(this Terrain terrain) => terrain is not (Terrain.Sea or Terrain.Lake);
+    /// <summary>Everything that is neither the sea nor a bog lake nor an inland lake; the hexes that can be claimed.</summary>
+    public static bool IsLand(this Terrain terrain) => terrain is not (Terrain.Sea or Terrain.Lake or Terrain.InlandLake);
 
     /// <summary>Whether a unit of the given kind can be on this hex: land units on land, ships on open sea only (never a bog lake).</summary>
     public static bool IsTraversable(this Terrain terrain, bool isLandUnit) => isLandUnit ? terrain.IsLand() : terrain.IsSea();

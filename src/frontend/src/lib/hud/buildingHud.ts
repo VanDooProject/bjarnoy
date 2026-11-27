@@ -3,7 +3,7 @@
 // `buildingStatsFor`, `maxLevelFor`), see docs on `resolveUpgradeTarget`.
 import type { AxialCoord } from '../hex/coords';
 import type { BuildingDefinitionResponse, BuildOrderResponse, TrainingOrderResponse, UnitStackResponse } from '../../api/types';
-import { DIAL_LABEL_BASE_PX, DIAL_MIN_LABEL_PX, dialPhase, liftedScale, type ConstructionDial } from '../map/constructionDial';
+import { DIAL_LABEL_BASE_PX, DIAL_MIN_LABEL_PX, dialLevelFontPx, dialRadiusPx, dialPhase, liftedScale, type ConstructionDial } from '../map/constructionDial';
 import { buildingStatsFor, maxLevelFor, scaleOutput, type BuildingKind, type BuildingOutput } from '../map/buildingEconomy';
 import {
   RING_RESOURCE_KEYS,
@@ -13,24 +13,26 @@ import {
   type RingResourceKey,
   type RingStock,
 } from '../map/ringAvailability';
-import { isWallBuilding } from '../map/ringCatalogue';
+import { isWallBuilding, scaledBuildSeconds } from '../map/ringCatalogue';
 import { MAX_TRAINING_ORDERS_PER_BUILDING } from '../units/trainingEconomy';
 import { upgradeVerdict } from './upgradeRules';
 
 // ---- zoom tiers -------------------------------------------------------------------------------------------------------
 
 /**
- * far: the dial's ring only (the progress dial would hide its label too); dial: level or time inside, no box yet; mid: the
- * compact box; near: the full box.
+ * far: the dial's ring only; level: the level (or queue place) inside, a countdown is still too small and hidden (the progress
+ * dial hides its label too); dial: level or time inside, no box yet; mid: the compact box; near: the full box.
  */
-export type HudTier = 'near' | 'mid' | 'dial' | 'far';
+export type HudTier = 'near' | 'mid' | 'dial' | 'level' | 'far';
 
 /** Smallest text of the box at zs = 1, in px; the box shows once this would be `DIAL_MIN_LABEL_PX` on screen. */
 export const HUD_BOX_FONT_PX = 11;
 
 /** The marker's tiers are measured on `zs`, the progress dial's own size factor (`dialScale`), so both change at the same zoom. */
 export const HUD_TIER = {
-  /** Below this zs the dial's label would be under `DIAL_MIN_LABEL_PX` on screen: far, ring only (the progress dial's rule). */
+  /** Below this zs the dial's level (its larger font) would be under `DIAL_MIN_LABEL_PX` on screen: far, ring only. */
+  levelBelow: DIAL_MIN_LABEL_PX / dialLevelFontPx(dialRadiusPx(1)),
+  /** Below this zs a countdown in the dial would be under `DIAL_MIN_LABEL_PX` on screen: level only (the progress dial's rule). */
   labelBelow: DIAL_MIN_LABEL_PX / DIAL_LABEL_BASE_PX,
   /** Below this zs the box text would be under `DIAL_MIN_LABEL_PX` on screen: the dial alone. */
   boxBelow: DIAL_MIN_LABEL_PX / HUD_BOX_FONT_PX,
@@ -42,10 +44,11 @@ export const HUD_TIER = {
 
 /** The tier at size factor `zs`; `previous` (the marker's current tier) adds the hysteresis. */
 export function tierFor(zs: number, previous: HudTier | null = null): HudTier {
-  const { labelBelow, boxBelow, nearAt, hysteresis } = HUD_TIER;
+  const { levelBelow, labelBelow, boxBelow, nearAt, hysteresis } = HUD_TIER;
   // A threshold the marker is already past stays crossed until zs is `hysteresis` back.
   const atLeast = (threshold: number, held: HudTier[]) => zs >= threshold - (previous !== null && held.includes(previous) ? hysteresis : 0);
-  if (!atLeast(labelBelow, ['dial', 'mid', 'near'])) return 'far';
+  if (!atLeast(levelBelow, ['level', 'dial', 'mid', 'near'])) return 'far';
+  if (!atLeast(labelBelow, ['dial', 'mid', 'near'])) return 'level';
   if (!atLeast(boxBelow, ['mid', 'near'])) return 'dial';
   return atLeast(nearAt, ['near']) ? 'near' : 'mid';
 }
@@ -79,6 +82,26 @@ export function pointInRect(point: { x: number; y: number }, rect: { x: number; 
 /** Markers bottom to top: ascending screen x (right-most on top), the hovered/tapped one last. Stable, input untouched. */
 export function stackOrder<T extends { x: number; hovered?: boolean }>(markers: readonly T[]): T[] {
   return [...markers].sort((a, b) => Number(!!a.hovered) - Number(!!b.hovered) || a.x - b.x);
+}
+
+/** One marker as the pointer sees it: its dial disc and box on screen (canvas px) and its stacking order (higher = on top). */
+export interface MarkerHitArea {
+  key: string;
+  /** The hex ("q,r") the marker stands for. */
+  hexKey: string;
+  disc: { cx: number; cy: number; r: number };
+  box?: { x: number; y: number; w: number; h: number };
+  z: number;
+}
+
+/** The top-most marker whose dial disc or box holds `point`, or null when the point is on none: the one hit test of hover and tap. */
+export function markerAt<T extends MarkerHitArea>(point: { x: number; y: number }, areas: Iterable<T>): T | null {
+  let best: T | null = null;
+  for (const a of areas) {
+    const hit = Math.hypot(point.x - a.disc.cx, point.y - a.disc.cy) <= a.disc.r || (a.box !== undefined && pointInRect(point, a.box));
+    if (hit && (best === null || a.z > best.z)) best = a;
+  }
+  return best;
 }
 
 // ---- view model -------------------------------------------------------------------------------------------------------
@@ -125,6 +148,10 @@ export interface BuildingHudViewModel {
     /** Longhouse requirement first, then prerequisite buildings (states 'longhouse' and 'prereq'). */
     requirements?: HudRequirement[];
     targetLevel?: number;
+    /** What the next level costs (the quick upgrade line of the hovered marker's box). */
+    cost?: Readonly<Record<RingResourceKey, number>>;
+    /** The next level's build time in seconds as this settlement runs it (`scaledBuildSeconds`); undefined without a catalogue entry. */
+    buildSeconds?: number;
     /** Only a maxed Longhouse wears the crown. */
     crown: boolean;
   };
@@ -158,6 +185,8 @@ export interface BuildingHudInput {
   rates: RingStock;
   construction: RingConstruction;
   worldSpeedFactor: number;
+  /** Odin's Wisdom: the settlement's build time factor (`WorldModel.wisdomFactor`); 1 when omitted. */
+  wisdomFactor?: number;
   /** For `buildingStatsFor`. */
   matchingNeighbours?: number;
   onLake?: boolean;
@@ -373,7 +402,12 @@ function standingViewModel(input: BuildingHudInput): BuildingHudViewModel {
     locked: requirements.length > 0,
     hexBusy,
   });
-  const base = { targetLevel: verdict.nextLevel, crown };
+  const base = {
+    targetLevel: verdict.nextLevel,
+    crown,
+    cost,
+    buildSeconds: definition ? scaledBuildSeconds(definition.buildSeconds, input.wisdomFactor ?? 1, input.worldSpeedFactor) : undefined,
+  };
 
   if (requirements.length > 0) {
     vm.upgrade = { ...base, state: blockers.longhouse !== undefined ? 'longhouse' : 'prereq', requirements };
@@ -419,6 +453,11 @@ export type HudRow =
       affordableInSeconds?: number | null;
       /** Free account short of resources: the dimmed premium marker instead of a time. */
       premiumHint: boolean;
+      /**
+       * The quick upgrade line of the hovered marker (`rowsFor`'s `quick`): `premium` + a ready upgrade shows the next level's
+       * `cost` and `buildSeconds`; `locked` (a free account holding Shift) shows the premium line instead.
+       */
+      quick?: { mode: 'premium' | 'locked'; /** Shift is held: the title reads "Shift+click: upgrade to level n". */ shift: boolean; cost?: Readonly<Record<RingResourceKey, number>>; buildSeconds?: number };
     }
   | { kind: 'production'; production: { resource: RingResourceKey; perHour: number }[] }
   | { kind: 'storage'; capacity: number }
@@ -445,7 +484,7 @@ function listRequirements(all: readonly HudRequirement[], tier: 'near' | 'mid'):
   return { shown: all.slice(0, 1), more: all.length - 1 };
 }
 
-function upgradeRow(vm: BuildingHudViewModel, tier: 'near' | 'mid', premium: boolean): HudRow {
+function upgradeRow(vm: BuildingHudViewModel, tier: 'near' | 'mid', premium: boolean, quick: 'premium' | 'locked' | undefined, shift: boolean): HudRow {
   const u = vm.upgrade;
   const { shown, more } = listRequirements(u.requirements ?? [], tier);
   return {
@@ -458,13 +497,22 @@ function upgradeRow(vm: BuildingHudViewModel, tier: 'near' | 'mid', premium: boo
     missing: u.missing,
     affordableInSeconds: u.state === 'short' && premium ? (u.affordableInSeconds ?? null) : undefined,
     premiumHint: u.state === 'short' && !premium,
+    quick:
+      quick === 'locked'
+        ? { mode: 'locked', shift: true }
+        : quick === 'premium' && u.state === 'ready'
+          ? { mode: 'premium', shift, cost: u.cost, buildSeconds: u.buildSeconds }
+          : undefined,
   };
 }
 
-/** The rows a marker shows at `tier` (none without a box: far and dial). Near takes up to three rows, mid two. */
-export function rowsFor(vm: BuildingHudViewModel, tier: HudTier, opts: { premium: boolean }): HudRow[] {
-  if (tier === 'far' || tier === 'dial') return [];
-  const upgrade = upgradeRow(vm, tier, opts.premium);
+/**
+ * The rows a marker shows at `tier` (none without a box: far, level and dial). Near takes up to three rows, mid two. `quick` is set
+ * on the hovered marker while quick upgrade applies (`premium`), or while a free account holds Shift (`locked`).
+ */
+export function rowsFor(vm: BuildingHudViewModel, tier: HudTier, opts: { premium: boolean; quick?: 'premium' | 'locked'; shift?: boolean }): HudRow[] {
+  if (tier === 'far' || tier === 'level' || tier === 'dial') return [];
+  const upgrade = upgradeRow(vm, tier, opts.premium, opts.quick, opts.shift ?? false);
   // The Longhouse with a garrison shows the garrison instead of its production.
   const showProduction = !vm.garrison;
 
@@ -510,6 +558,11 @@ export function hudMarkerKeys(buildings: readonly { q: number; r: number; type: 
 
 // ---- structure of a marker's box ---------------------------------------------------------------------------------------
 
+function quickSignature(quick: Extract<HudRow, { kind: 'upgrade' }>['quick']): string {
+  if (!quick) return '-';
+  return quick.mode === 'locked' ? 'locked' : `premium:${quick.shift ? 1 : 0}:${RING_RESOURCE_KEYS.filter((k) => quick.cost?.[k]).join('+')}:${quick.buildSeconds === undefined ? 0 : 1}`;
+}
+
 /**
  * What a box is made of, without the text that ticks: the same string = the same layout, so no resize. A countdown or a
  * resource amount changing is not a change; another row, another state chip, a training order starting is.
@@ -518,7 +571,7 @@ export function rowsSignature(tier: HudTier, rows: readonly HudRow[]): string {
   const part = (row: HudRow): string => {
     switch (row.kind) {
       case 'upgrade':
-        return `upgrade:${row.state}:${row.crown ? 1 : 0}:${row.requirements.length}:${row.moreCount}:${row.premiumHint ? 1 : 0}`;
+        return `upgrade:${row.state}:${row.crown ? 1 : 0}:${row.requirements.length}:${row.moreCount}:${row.premiumHint ? 1 : 0}:${quickSignature(row.quick)}`;
       case 'production':
         return `production:${row.production.map((p) => p.resource).join('+')}`;
       case 'storage':

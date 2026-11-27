@@ -39,7 +39,9 @@ public abstract record ArmyLocation
     /// dispatch — the guest's destination and its current host are one and
     /// the same, so no separate field is stored on <c>Army</c> for it.
     /// <paramref name="Spot"/> is the host's garrison spot the guest stands at
-    /// (<see cref="Army.TargetBuildingCoord"/> named it at dispatch).
+    /// (<see cref="Army.TargetBuildingCoord"/> named it at dispatch). <paramref name="Since"/> is the instant it got there (its
+    /// inbound leg's arrival): nothing settled late for an earlier instant changes it from before then (<see cref="Army.NotBeforeItsOrder"/>).
+    /// <see langword="default"/> when unknown (a guest that arrived before the instant was kept).
     /// </summary>
-    public sealed record Supporting(Guid HostSettlementId, Bjarnoy.Domain.World.HexCoord Spot) : ArmyLocation;
+    public sealed record Supporting(Guid HostSettlementId, Bjarnoy.Domain.World.HexCoord Spot, DateTimeOffset Since = default) : ArmyLocation;
 }

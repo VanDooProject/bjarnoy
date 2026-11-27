@@ -62,7 +62,7 @@ public class BuildingCatalogueTests
     [InlineData(1, 1)]
     [InlineData(2, 2)]
     [InlineData(3, 3)]
-    [InlineData(10, 10)]
+    [InlineData(5, 5)]
     public void Tower_ClaimRadius_grows_one_hex_per_level_starting_at_level_1(int level, int expectedRadius)
     {
         Assert.Equal(expectedRadius, BuildingCatalogue.Get(BuildingType.Tower, level).ClaimRadius);
@@ -106,12 +106,12 @@ public class BuildingCatalogueTests
     }
 
     [Theory]
-    [InlineData(11)] // Tower tops out at 10
+    [InlineData(6)] // Tower tops out at 5
     [InlineData(int.MaxValue)]
     public void TowerClaimRadius_clamps_a_too_high_level_instead_of_returning_zero(int towerLevel)
     {
         Assert.Equal(
-            BuildingCatalogue.Get(BuildingType.Tower, 10).ClaimRadius,
+            BuildingCatalogue.Get(BuildingType.Tower, 5).ClaimRadius,
             Settlement.TowerClaimRadius(towerLevel));
     }
 
@@ -197,9 +197,9 @@ public class BuildingCatalogueTests
 
     [Theory]
     [InlineData(BuildingType.FishingHut)]
-    [InlineData(BuildingType.Dockyard)]
+    [InlineData(BuildingType.Harbour)]
     [InlineData(BuildingType.ShrineOfNjord)]
-    public void The_fishing_hut_dockyard_and_shrine_of_njord_require_coastal_water_instead_of_a_land_terrain(BuildingType type)
+    public void The_fishing_hut_harbour_and_shrine_of_njord_require_coastal_water_instead_of_a_land_terrain(BuildingType type)
     {
         var definition = BuildingCatalogue.Get(type, 1);
 
@@ -230,31 +230,32 @@ public class BuildingCatalogueTests
     }
 
     [Fact]
-    public void The_great_storehouse_requires_a_level_15_storage_house_alongside_a_level_15_longhouse()
+    public void The_great_storehouse_requires_a_level_25_storage_house_alongside_a_level_15_longhouse()
     {
         var definition = BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1);
 
         Assert.Equal(15, definition.RequiredLonghouseLevel);
         var prerequisite = Assert.Single(definition.Prerequisites);
         Assert.Equal(BuildingType.StorageHouse, prerequisite.Type);
-        Assert.Equal(15, prerequisite.Level);
+        Assert.Equal(25, prerequisite.Level);
     }
 
     [Theory]
     [InlineData(BuildingType.Barracks, BuildingType.Tower, 3)]
-    [InlineData(BuildingType.Dockyard, BuildingType.FishingHut, 5)]
+    [InlineData(BuildingType.Harbour, BuildingType.FishingHut, 3)]
+    [InlineData(BuildingType.Shipyard, BuildingType.Harbour, 5)]
     [InlineData(BuildingType.ArcheryRange, BuildingType.Barracks, 5)]
     [InlineData(BuildingType.SiegeWorkshop, BuildingType.ArcheryRange, 3)]
     [InlineData(BuildingType.CartWorkshop, BuildingType.TownSquare, 3)]
     [InlineData(BuildingType.Meadery, BuildingType.Farm, 5)]
     [InlineData(BuildingType.DruidHut, BuildingType.TownSquare, 5)]
     [InlineData(BuildingType.Smithy, BuildingType.Barracks, 10)]
-    [InlineData(BuildingType.GreatStorehouse, BuildingType.StorageHouse, 15)]
+    [InlineData(BuildingType.GreatStorehouse, BuildingType.StorageHouse, 25)]
     [InlineData(BuildingType.Sawmill, BuildingType.Lumberjack, 10)]
     [InlineData(BuildingType.CropMill, BuildingType.Farm, 10)]
     [InlineData(BuildingType.ShrineOfUllr, BuildingType.Sawmill, 5)]
     [InlineData(BuildingType.ShrineOfFreyja, BuildingType.CropMill, 5)]
-    [InlineData(BuildingType.ShrineOfNjord, BuildingType.Dockyard, 10)]
+    [InlineData(BuildingType.ShrineOfNjord, BuildingType.Harbour, 10)]
     [InlineData(BuildingType.ShrineOfThor, BuildingType.Smithy, 5)]
     public void The_catalogue_carries_the_agreed_prerequisites(
         BuildingType type, BuildingType required, int requiredLevel)
@@ -296,14 +297,14 @@ public class BuildingCatalogueTests
         var herder = BuildingCatalogue.Get(BuildingType.ReindeerHerder, 1);
 
         Assert.Equal(1, herder.RequiredLonghouseLevel);
-        Assert.Equal(40, herder.ProductionPerHour.Food);
+        Assert.Equal(8, herder.ProductionPerHour.Food);
         Assert.Equal(0, herder.ProductionPerHour.Wood);
         Assert.Equal(new HashSet<Terrain> { Terrain.Grass }, herder.AllowedTerrain.ToHashSet());
         Assert.Equal(25, BuildingCatalogue.MaxLevelFor(BuildingType.ReindeerHerder));
         Assert.Contains(BuildingType.ReindeerHerder, BuildingCatalogue.StorageCappedProducers);
         Assert.Equal("reindeerherder", BuildingType.ReindeerHerder.ToWireName());
         Assert.Equal(28, (int)BuildingType.ReindeerHerder); // persisted ints must not shift
-        Assert.Equal(TimeSpan.FromMinutes(3), herder.BuildDuration);
+        Assert.Equal(TimeSpan.FromMinutes(1), herder.BuildDuration);
         Assert.True(Bjarnoy.Domain.Settlers.Quests.IsProducer(BuildingType.ReindeerHerder));
     }
 
@@ -407,8 +408,9 @@ public class BuildingCatalogueTests
         var one = BuildingCatalogue.Get(BuildingType.Lumberjack, 1);
         var three = BuildingCatalogue.Get(BuildingType.Lumberjack, 3);
 
-        Assert.Equal(40, one.ProductionPerHour.Wood, 6);
-        Assert.Equal(one.ProductionPerHour.Wood * 1.2 * 1.2, three.ProductionPerHour.Wood, 6);
+        // Increment-geometric: level 3 totals I1 · (1 + 1.2 + 1.2²).
+        Assert.Equal(8, one.ProductionPerHour.Wood, 6);
+        Assert.Equal(one.ProductionPerHour.Wood * (1 + 1.2 + 1.2 * 1.2), three.ProductionPerHour.Wood, 6);
     }
 
     [Fact]
@@ -666,10 +668,11 @@ public class BuildingCatalogueTests
         var three = BuildingCatalogue.Get(type, 3).ProductionPerHour;
 
         Assert.True(one.Wood + one.Stone + one.Food + one.Iron > 0);
-        Assert.Equal(one.Wood * 1.2 * 1.2, three.Wood, 6);
-        Assert.Equal(one.Stone * 1.2 * 1.2, three.Stone, 6);
-        Assert.Equal(one.Food * 1.2 * 1.2, three.Food, 6);
-        Assert.Equal(one.Iron * 1.2 * 1.2, three.Iron, 6);
+        var sum = 1 + 1.2 + 1.2 * 1.2;
+        Assert.Equal(one.Wood * sum, three.Wood, 6);
+        Assert.Equal(one.Stone * sum, three.Stone, 6);
+        Assert.Equal(one.Food * sum, three.Food, 6);
+        Assert.Equal(one.Iron * sum, three.Iron, 6);
     }
 
     [Theory]
@@ -1185,7 +1188,7 @@ public class SettlementTests
         var order = Plan(settlement, BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0);
         var queued = settlement.Enqueue(order, T0);
 
-        var result = queued.SettleTo(T0.AddMinutes(1));
+        var result = queued.SettleTo(T0.AddSeconds(30));
 
         // The stock is only written when it changes: an idle read must leave
         // the pool's timestamp exactly where it was.
@@ -1378,19 +1381,19 @@ public class SettlementTests
     }
 
     [Fact]
-    public void A_great_storehouse_is_accepted_once_the_storage_house_reaches_level_15()
+    public void A_great_storehouse_is_accepted_once_the_storage_house_reaches_level_25()
     {
         var settlement = Found() with
         {
             Buildings =
             [
                 new PlacedBuilding(Centre, BuildingType.Longhouse, 15),
-                new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 15),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 25),
             ],
             Resources = ResourcePool.Create(
                 ResourceAmounts.Uniform(1_000_000),
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, 15), (BuildingType.StorageHouse, 15)]).ProductionPerHour,
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, 15), (BuildingType.StorageHouse, 15)]).Capacity,
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 15), (BuildingType.StorageHouse, 25)]).ProductionPerHour,
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 15), (BuildingType.StorageHouse, 25)]).Capacity,
                 T0),
         };
 
@@ -1412,7 +1415,7 @@ public class SettlementTests
             [
                 new PlacedBuilding(Centre, BuildingType.Longhouse, 15),
                 new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 0),
-                new PlacedBuilding(new HexCoord(2, 0), BuildingType.StorageHouse, 15),
+                new PlacedBuilding(new HexCoord(2, 0), BuildingType.StorageHouse, 25),
             ],
             Resources = ResourcePool.Create(
                 ResourceAmounts.Uniform(1_000_000),
@@ -1449,7 +1452,7 @@ public class SettlementTests
 
         Assert.Equal(BuildRejection.RequiredBuildingTooLow, decision.Rejection);
         Assert.Equal(BuildingType.StorageHouse, decision.MissingPrerequisite?.Type);
-        Assert.Equal(15, decision.MissingPrerequisite?.Level);
+        Assert.Equal(25, decision.MissingPrerequisite?.Level);
     }
 
     /// <summary>
@@ -1472,9 +1475,10 @@ public class SettlementTests
         {
             Buildings = buildings,
             Resources = ResourcePool.Create(
-                ResourceAmounts.Uniform(1_000_000),
+                ResourceAmounts.Uniform(100_000_000),
                 BuildingCatalogue.Totals([(BuildingType.Longhouse, level)]).ProductionPerHour,
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, level)]).Capacity,
+                // Room for the stock whatever the building costs: the test funds the settlement, storage is not what it is about.
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, level)]).Capacity + ResourceAmounts.Uniform(100_000_000),
                 T0),
         };
     }
@@ -1758,7 +1762,7 @@ public class SettlementTests
     public void A_shrine_of_njord_is_refused_on_land_even_when_affordable()
     {
         // Its art is a shrine on a rock in the shallows — same rule as
-        // FishingHut/Dockyard, it is built on coastal water only.
+        // FishingHut/Harbour, it is built on coastal water only.
         var settlement = FoundAtLonghouseLevel(10);
 
         var decision = settlement.PlanBuild(BuildingType.ShrineOfNjord, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());

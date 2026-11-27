@@ -13,10 +13,18 @@ export const GUILD_REALM_COLOR = 0x4fd17a;
 export const TREATY_REALM_COLOR = 0x9b5cf0;
 export const RIVAL_REALM_COLOR = 0xe2705f;
 
+/** How an owner stands to the player, as the server sends it (`SettlementRelations`): absent reads as a rival. */
+export type RealmRelation = 'mine' | 'guild' | 'treaty' | 'rival';
+
+/** The owner colour of `relation`. */
+export function relationColor(relation: RealmRelation | undefined): number {
+  if (relation === 'mine') return OWN_REALM_COLOR;
+  if (relation === 'guild') return GUILD_REALM_COLOR;
+  if (relation === 'treaty') return TREATY_REALM_COLOR;
+  return RIVAL_REALM_COLOR;
+}
+
 /** The colour a settlement (and the realm it holds) is drawn in for the player `playerId`; an unknown settlement reads as a rival. */
 export function realmColor(settlement: Settlement | undefined, playerId: string): number {
-  if (settlement?.ownerId === playerId) return OWN_REALM_COLOR;
-  if (settlement?.relation === 'guild') return GUILD_REALM_COLOR;
-  if (settlement?.relation === 'treaty') return TREATY_REALM_COLOR;
-  return RIVAL_REALM_COLOR;
+  return relationColor(settlement?.ownerId === playerId ? 'mine' : settlement?.relation);
 }

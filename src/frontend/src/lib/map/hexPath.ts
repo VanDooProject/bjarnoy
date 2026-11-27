@@ -7,7 +7,7 @@
 // (leave price of the hex left + enter price of the hex entered) / 2. `rules` always comes from the backend
 // (`WorldResponse.movement`), never a hardcoded literal here, so this and the
 // server can't quietly drift apart — see hexPath.golden.test.ts.
-import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
+import { coordKey, hexDistance, hexLine, neighbors, type AxialCoord } from '../hex/coords';
 import type { Terrain } from './types';
 
 export interface MovementRules {
@@ -299,7 +299,7 @@ function openKeyLess(a: OpenKey, b: OpenKey): boolean {
  * twin of `HexPathfinder.FindPath` for land armies. Same A* (plain hex distance as the
  * heuristic), same endpoint check (both must be land terrain),
  * same open-set order (f, then h, then distance from the start-to-goal line, then q and r), same bounding box (the endpoints padded by their distance, at least 10) and expansion cap.
- * Prices exactly what the backend does; `ctx.restrictions` can add a palisade or (preview tool only) switch a rule off.
+ * The route is smoothed afterwards (see `aStar`). Prices exactly what the backend does; `ctx.restrictions` can add a palisade or (preview tool only) switch a rule off.
  */
 export function findPath(from: AxialCoord, to: AxialCoord, ctx: PathContext): AxialCoord[] | null {
   return drain(findPathSteps(from, to, ctx));
@@ -332,6 +332,7 @@ function drain(search: PathSearch): AxialCoord[] | null {
  * The one A* loop behind `findPath` and `findSeaPath` (the backend's `HexPathfinder.FindPath` is likewise one loop with two cost
  * tables): plain hex distance as the heuristic, the endpoints padded by their distance (at least 10) as the bounding box, and
  * `MAX_EXPANDED_NODES` as the expansion cap. `step` prices the move between two neighbours, `null` when it is impassable.
+ * The route found is smoothed (`smooth`) before it is returned.
  */
 function* aStar(
   from: AxialCoord,
@@ -366,7 +367,7 @@ function* aStar(
     if (current.q === to.q && current.r === to.r) {
       const path = [current];
       for (let k = cameFrom.get(currentKey); k; k = cameFrom.get(coordKey(k))) path.push(k);
-      return path.reverse();
+      return smooth(path.reverse(), step);
     }
     if (++expanded > MAX_EXPANDED_NODES) return null;
     if (expanded % SLICE_EXPANSIONS === 0) yield;
@@ -386,6 +387,49 @@ function* aStar(
     }
   }
   return null;
+}
+
+/**
+ * Straightens an A* route (the twin of `HexPathfinder.Smooth`): from each hex it takes the furthest later hex whose straight hex line
+ * is fully passable and costs no more (by `step`, 1e-9 slack) than the stretch of the route it replaces, and walks that line instead.
+ * The result is still hex by hex, never dearer than `path`, and on open sea one straight line instead of two legs with a corner.
+ * Stops at the first later hex that fails, so it stays O(n * stretch).
+ */
+function smooth(
+  path: AxialCoord[],
+  step: (a: AxialCoord, b: AxialCoord) => number | null,
+): AxialCoord[] {
+  const n = path.length;
+  if (n < 3) return path;
+  const prefix: number[] = [0];
+  for (let k = 1; k < n; k++) prefix.push(prefix[k - 1]! + (step(path[k - 1]!, path[k]!) ?? 0));
+  const out: AxialCoord[] = [path[0]!];
+  let i = 0;
+  while (i < n - 1) {
+    let best = i + 1;
+    let bestLine: AxialCoord[] | null = null;
+    for (let j = i + 2; j < n; j++) {
+      const line = hexLine(path[i]!, path[j]!);
+      let c = 0;
+      let ok = true;
+      for (let k = 1; k < line.length; k++) {
+        const s = step(line[k - 1]!, line[k]!);
+        if (s === null) {
+          ok = false;
+          break;
+        }
+        c += s;
+      }
+      if (ok && c <= prefix[j]! - prefix[i]! + 1e-9) {
+        best = j;
+        bestLine = line;
+      } else break;
+    }
+    if (bestLine === null) out.push(path[i + 1]!);
+    else for (let k = 1; k < bestLine.length; k++) out.push(bestLine[k]!);
+    i = best;
+  }
+  return out;
 }
 
 /** False only when a flood backwards from `to` (edge n to cur priced by `step(n, cur)`) runs dry inside the box without reaching `from`. */
@@ -475,7 +519,7 @@ function fleetStepCost(
  * Shortest route for a fleet from `from` to `to` (both included), or `null` if there is none: the TS twin of `HexPathfinder.FindPath`
  * for ships. Open sea costs a flat 1.0 per hex (`SeaTerrainCost`), a sand endpoint `FLEET_SAND_COST`, and the two endpoints are exempt
  * from the sea-only rule (a harbour or beaching hex, the shore a fleet is sent at), so every hex in between has to be sea. Same
- * bounding box and expansion cap as `findPath`.
+ * bounding box and expansion cap as `findPath`, and the route is smoothed the same way (one straight line across open sea).
  */
 export function findSeaPath(
   from: AxialCoord,

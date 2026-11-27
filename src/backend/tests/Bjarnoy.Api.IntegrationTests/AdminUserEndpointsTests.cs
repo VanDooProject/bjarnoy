@@ -7,6 +7,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -269,8 +270,7 @@ public sealed class AdminUserEndpointsTests(SqliteApiFixture fixture) : IClassFi
         var worldResponse = await _fixture.Factory.CreateWorldAsync(
             UniqueName("world"), seed: 4242, radius: 30, maxPlayers: 100, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldResponse.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldResponse.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -327,6 +327,42 @@ public sealed class AdminUserEndpointsTests(SqliteApiFixture fixture) : IClassFi
         var premiumResponse = await client.PostJsonAsync(
             $"/api/v1/admin/users/{missing}/premium", new SetUserPremiumRequest(true), Ct);
         Assert.Equal(HttpStatusCode.NotFound, premiumResponse.StatusCode);
+
+        var renownResponse = await client.PostJsonAsync(
+            $"/api/v1/admin/users/{missing}/renown", new SetUserRenownRequest(10), Ct);
+        Assert.Equal(HttpStatusCode.NotFound, renownResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_can_set_a_users_renown_and_it_shows_in_the_user_list()
+    {
+        using var client = _fixture.CreateClient();
+        var (_, _, userId) = await CreatePlayerAsync(client);
+        var (adminToken, _) = await CreateAdminAsync(client);
+        Authorize(client, adminToken);
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/admin/users/{userId}/renown", new SetUserRenownRequest(80_000), Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var updated = await response.ReadStrictAsync<AdminUserResponse>(Ct);
+        Assert.Equal(80_000, updated.Renown);
+
+        var list = await client.GetAsync("/api/v1/admin/users?pageSize=200", Ct);
+        var page = await list.ReadStrictAsync<PagedAdminUsersResponse>(Ct);
+        Assert.Equal(80_000, page.Items.Single(u => u.Id == userId).Renown);
+    }
+
+    [Fact]
+    public async Task Setting_a_negative_or_non_finite_renown_is_rejected()
+    {
+        using var client = _fixture.CreateClient();
+        var (_, _, userId) = await CreatePlayerAsync(client);
+        var (adminToken, _) = await CreateAdminAsync(client);
+        Authorize(client, adminToken);
+
+        var negative = await client.PostJsonAsync(
+            $"/api/v1/admin/users/{userId}/renown", new SetUserRenownRequest(-1), Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, negative.StatusCode);
     }
 
     /// <summary>

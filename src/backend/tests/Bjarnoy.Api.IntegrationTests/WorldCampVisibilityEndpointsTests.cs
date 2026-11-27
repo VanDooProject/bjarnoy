@@ -7,6 +7,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -79,9 +80,8 @@ public sealed class WorldCampVisibilityEndpointsTests : IAsyncLifetime
         return await response.ReadStrictAsync<SettlementResponse>(Ct);
     }
 
-    private static async Task<List<IslandResponse>> IslandsAsync(HttpClient client, Guid worldId) =>
-        (await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct))!;
+    private static async Task<List<FullIslandResponse>> IslandsAsync(HttpClient client, Guid worldId) =>
+        (await client.GetFullIslandsAsync(worldId, Ct))!;
 
     private static async Task<List<CampStateResponse>> CampStatesAsync(HttpClient client, Guid worldId) =>
         (await client.GetFromJsonAsync<List<CampStateResponse>>(

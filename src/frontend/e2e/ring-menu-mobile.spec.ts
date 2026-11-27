@@ -155,9 +155,7 @@ async function expectCategoriesOnCircle(
       const r = el.getBoundingClientRect();
       return { x: r.x, y: r.y, w: r.width, h: r.height };
     };
-    const renderer = (
-      window as unknown as { __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } } }
-    ).__settlementRenderer();
+    const renderer = window.__settlementRenderer();
     const canvas = document.querySelector('canvas')!.getBoundingClientRect();
     const centre = renderer.hexCenterScreen(at);
     return {

@@ -283,6 +283,15 @@ export const animationPreference = {
     return this.resolution.reason;
   },
   /**
+   * Building clip art outside the settlement map (the docs pages' camps and
+   * giants): the same resolution as `effective`, minus the map's fps
+   * governor, which only measures the map's own renderer — 'auto' plays
+   * unless the device asks for reduced motion or saves data.
+   */
+  get clipsEnabled(): boolean {
+    return resolveAnimationState(this.setting, { reducedMotion: this.reducedMotion, saveData: this.saveData }, 'on').effective;
+  },
+  /**
    * The renderer's per-tick entry point (only meaningful while animations
    * are 'auto' and still being measured/governed — forced 'on'/'off' just
    * ignore the governor's state, but feeding it samples regardless is

@@ -13,6 +13,7 @@ using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -50,8 +51,7 @@ public sealed class FieldOrderEndpointsTests : IAsyncLifetime
     private async Task<Setup> SetUpAsync(HttpClient client)
     {
         var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -242,7 +242,7 @@ public sealed class FieldOrderEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NotFound, read.StatusCode);
 
         var reports = await client.GetFromJsonAsync<List<CampReportResponse>>(
-            $"/api/v1/settlements/{setup.Settlement.Id}/camp-reports", SqliteApiFixture.StrictJson, Ct);
+            $"/api/v1/worlds/{setup.Settlement.WorldId}/camp-reports", SqliteApiFixture.StrictJson, Ct);
         var report = Assert.Single(reports!);
         Assert.Equal("hunt", report.Kind);
         Assert.Equal(army.Id, report.ArmyId);

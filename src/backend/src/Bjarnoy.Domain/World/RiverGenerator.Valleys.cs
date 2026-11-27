@@ -603,7 +603,7 @@ internal static partial class RiverGenerator
                 {
                     if (at.TryGetValue(n, out var j))
                     {
-                        if (Math.Abs(i - j) != 1)
+                        if (Math.Abs(i - j) > 2)
                         {
                             layoutOk = false;
                         }

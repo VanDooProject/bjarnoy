@@ -277,7 +277,8 @@ public sealed record FeastOfferResponse(
 /// <param name="Claimed">Whether its reward was already claimed.</param>
 /// <param name="Reward">Wood, stone and food paid on claim (clamped to storage).</param>
 /// <param name="Progress">Where the settlement stands toward the goal, or null for a quest without a counted goal.</param>
-public sealed record QuestResponse(string Id, bool Completed, bool Claimed, ResourceLine Reward, QuestProgressResponse? Progress = null);
+public sealed record QuestResponse(
+    string Id, bool Completed, bool Claimed, ResourceLine Reward, QuestProgressResponse? Progress = null, int PremiumDays = 0);
 
 /// <summary>Counted progress toward a quest: <paramref name="Current"/> of <paramref name="Target"/> (never above the target).</summary>
 public sealed record QuestProgressResponse(int Current, int Target);
@@ -358,7 +359,7 @@ public sealed record SettlementResponse(
         var members = shown.Select(m => (Entity: session.EntityOf(m), Domain: store.Outcome(m).Settlement)).ToList();
 
         var speedFactor = session.SpeedFactor;
-        var maxWaitingOrders = session.Anchor.Owner?.IsPremium ?? false ? Settlement.MaxWaitingOrders : 0;
+        var maxWaitingOrders = session.Anchor.Owner?.IsPremiumAt(TimeProvider.System.GetUtcNow()) ?? false ? Settlement.MaxWaitingOrders : 0;
 
         // Only a fishing hut needs its own orientation (see PlacedBuildingResponse), read off its own member's shore.
         string? OrientationFor(SettlementEntity member, BuildingType type, HexCoord coord) =>
@@ -432,9 +433,10 @@ public sealed record SettlementResponse(
                     Feasts.RenownFor(domain.TownSquareLevel))
                 : null,
             // Quests are enabled on the player's first settlement only (economy.md section 7).
-            [.. Bjarnoy.Domain.Settlers.Quests.All.Where(_ => id == session.FirstSettlementId).Select(q => new QuestResponse(
+            [.. Bjarnoy.Domain.Settlers.Quests.For(domain).Where(_ => id == session.FirstSettlementId).Select(q => new QuestResponse(
                 q.Id, q.IsCompleted(domain), domain.HasClaimed(q), ResourceLine.From(q.Reward),
-                q.Progress?.Invoke(domain) is { } p ? new QuestProgressResponse(p.Current, p.Target) : null))],
+                q.Progress?.Invoke(domain) is { } p ? new QuestProgressResponse(p.Current, p.Target) : null,
+                q.PremiumDays))],
             WorldClockResponse.From(clock, gameNow),
             [.. store.Realm.SettlementIds
                 .OrderBy(other => other == entity.Id ? 0 : 1)
@@ -492,6 +494,9 @@ public sealed record BuildingPrerequisiteResponse(string Type, int Level);
 /// The building stands on land (<paramref name="AllowedTerrain"/>) <em>and</em>, as an exception, on a coastal-water hex: the palisade's
 /// sea end. Unlike <paramref name="RequiresCoastalWater"/> it does not replace the land terrain.
 /// </param>
+/// <param name="AlsoOnInlandLakeShore">
+/// The building also stands on an inland-lake hex that has land beside it (the Fishing Hut); nothing else stands on an inland lake.
+/// </param>
 /// <param name="RingCategory">
 /// The build ring's group this building is listed under (<c>resource</c>, <c>military</c>, <c>logistics</c>, <c>defense</c>, <c>religion</c>,
 /// <c>water</c>), or null when the ring never lists it (the Longhouse); the client builds its ring from this, so no client table repeats it.
@@ -520,6 +525,7 @@ public sealed record BuildingDefinitionResponse(
     IReadOnlyList<string> AllowedTerrain,
     bool RequiresCoastalWater,
     bool AlsoOnCoastalWater,
+    bool AlsoOnInlandLakeShore,
     int RequiredLonghouseLevel,
     int SlotCost,
     bool OccupiesMostSlots,
@@ -548,6 +554,7 @@ public sealed record BuildingDefinitionResponse(
             [.. definition.AllowedTerrain.Select(t => t.ToWireName()).Order(StringComparer.Ordinal)],
             definition.RequiresCoastalWater,
             definition.AlsoOnCoastalWater,
+            definition.AlsoOnInlandLakeShore,
             definition.RequiredLonghouseLevel,
             definition.SlotCost,
             definition.OccupiesMostSlots,
@@ -609,15 +616,27 @@ public static class SettlementRelations
         GameDbContext db, Guid worldId, Guid? callerUserId, Func<SettlementEntity, bool> isMine, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(isMine);
+        var relationOfUser = await OfUserForCallerAsync(db, worldId, callerUserId, cancellationToken);
+        return s => isMine(s) ? Mine : relationOfUser(s.UserId);
+    }
+
+    /// <summary>
+    /// A lookup from an owner's account to how it stands to the caller: <c>mine</c> for the caller's own account, else <c>guild</c>
+    /// or <c>treaty</c> through <see cref="GuildRelations"/>, else <c>rival</c> (an anonymous owner or caller is in no guild). The
+    /// key a client colours by when it must not learn the owner's ids (a foreign army: <see cref="ForeignArmyResponse"/>).
+    /// </summary>
+    public static async Task<Func<Guid, string>> OfUserForCallerAsync(
+        GameDbContext db, Guid worldId, Guid? callerUserId, CancellationToken cancellationToken)
+    {
         var guildRelation = callerUserId is not null
             ? await GuildRelations.LoadAsync(db, worldId, cancellationToken)
             : null;
 
-        return s =>
+        return userId =>
         {
-            if (isMine(s)) return Mine;
             if (guildRelation is null || callerUserId is not { } caller) return Rival;
-            return guildRelation(caller, s.UserId) switch
+            if (userId == caller) return Mine;
+            return guildRelation(caller, userId) switch
             {
                 GuildRelation.SameGuild => Guild,
                 GuildRelation.Treaty => Treaty,
@@ -683,12 +702,15 @@ public sealed record UnitDefinitionResponse(
     int CargoSlots,
     int ShipSlots,
     double UpkeepPerHour,
+    bool Ranged,
     ResourceLine TrainingCost,
     double TrainingSeconds,
     int RequiredLonghouseLevel,
     string? RequiredUnitType,
     string RequiredBuildingType,
-    IReadOnlyList<string> SiegeTargets)
+    int RequiredBuildingLevel,
+    IReadOnlyList<string> SiegeTargets,
+    int FireCraftPerLevel)
 {
     public static UnitDefinitionResponse From(UnitDefinition definition)
     {
@@ -706,12 +728,15 @@ public sealed record UnitDefinitionResponse(
             definition.CargoSlots,
             definition.ShipSlots,
             definition.UpkeepPerHour,
+            definition.Ranged,
             ResourceLine.From(definition.TrainingCost),
             definition.TrainingDuration.TotalSeconds,
             definition.RequiredLonghouseLevel,
             definition.RequiredUnitType?.ToWireName(),
             definition.RequiredBuildingType.ToWireName(),
-            SiegeTargetNames(definition.SiegeTargets));
+            definition.RequiredBuildingLevel,
+            SiegeTargetNames(definition.SiegeTargets),
+            definition.FireCraftPerLevel);
     }
 
     /// <summary>The lowercase wire names of the kinds of building a siege engine can damage: <c>walls</c>, <c>towers</c>, <c>buildings</c>.</summary>

@@ -46,9 +46,9 @@ describe('FoundingView', () => {
     const wrapper = await mountPage();
 
     const row = (n: number) => wrapper.get(`[data-settlement="${n}"]`).findAll('th, td').map((c) => c.text());
-    expect(row(2)).toEqual(['Settlement no. 2', '55,000']);
-    expect(row(3)).toEqual(['Settlement no. 3', '110,000']);
-    expect(row(5)).toEqual(['Settlement no. 5', '440,000']);
+    expect(row(2)).toEqual(['Settlement no. 2', '80,000']);
+    expect(row(3)).toEqual(['Settlement no. 3', '160,000']);
+    expect(row(5)).toEqual(['Settlement no. 5', '640,000']);
     wrapper.unmount();
   });
 
@@ -91,11 +91,11 @@ describe('FoundingView', () => {
     wrapper.unmount();
   });
 
-  it('describes founding by sea: the dockyard, the slots a settler takes and the ships page', async () => {
+  it('describes founding by sea: the harbour, the slots a settler takes and the ships page', async () => {
     const wrapper = await mountPage();
 
     const sea = wrapper.get('#sea').text();
-    expect(sea).toContain('leaves from your Dockyard');
+    expect(sea).toContain('leaves from your Harbour');
     expect(sea).toContain('Each settler takes 1 slot aboard');
     expect(sea).toContain('slowest ship');
     expect(wrapper.find('#sea a[href="/docs/ships"]').exists()).toBe(true);

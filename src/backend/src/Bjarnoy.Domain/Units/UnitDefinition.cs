@@ -93,12 +93,31 @@ public sealed record UnitDefinition
     /// </summary>
     public SiegeTargets SiegeTargets { get; init; }
 
+    /// <summary>
+    /// For a fire craft: how many of them take one building level off a building standing in the water (Fire Hulk 10, Fire Raft
+    /// 50); they are used up doing it. Zero for every other unit. See <see cref="Bjarnoy.Domain.Combat.SiegeResolver.Burn"/>.
+    /// </summary>
+    public int FireCraftPerLevel { get; init; }
+
+    /// <summary>
+    /// True for the units that strike in the volley before the main fight of a land fight (Bowman, Skirmisher): see
+    /// <see cref="Bjarnoy.Domain.Combat.Volley"/> and <c>docs/design/units-and-ships.md</c> section 4.
+    /// </summary>
+    public bool Ranged { get; init; }
+
     public required ResourceAmounts TrainingCost { get; init; }
 
     /// <summary>Time to train one unit. A batch drips out one at a time — see <see cref="Bjarnoy.Domain.Buildings.TrainingOrder"/>.</summary>
     public required TimeSpan TrainingDuration { get; init; }
 
+    /// <summary>The unit's own Longhouse gate, on top of the Longhouse level its training building opens at.</summary>
     public required int RequiredLonghouseLevel { get; init; }
+
+    /// <summary>
+    /// The minimum level of the training building (<see cref="RequiredBuildingType"/>) the order is placed in
+    /// (<c>docs/design/units-and-ships.md</c> section 1). Checked against that one building, not against any building of the type.
+    /// </summary>
+    public int RequiredBuildingLevel { get; init; } = 1;
 
     /// <summary>
     /// Another unit type that must itself be available (see
@@ -113,7 +132,7 @@ public sealed record UnitDefinition
     /// land roster (Spearman, Axeman, Berserker),
     /// <see cref="BuildingType.ArcheryRange"/> for the archer
     /// (Bowman), <see cref="BuildingType.SiegeWorkshop"/> for the siege
-    /// engines (Catapult, Ram), <see cref="BuildingType.Dockyard"/> for
+    /// engines (Catapult, Ram), <see cref="BuildingType.Harbour"/> for
     /// ships. Defaults to the Longhouse.
     /// </summary>
     public BuildingType RequiredBuildingType { get; init; } = BuildingType.Longhouse;

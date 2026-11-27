@@ -50,9 +50,16 @@ export interface RingAvailability {
     hasRoom: boolean;
     waiting: number;
     max: number;
+    /** No Premium (no waiting room) but earlier orders are still waiting: nothing new can be added until they have started. */
+    locked: boolean;
   };
   /** Seconds until the soonest building order frees its slot(s); null when unknown (demo mode, nothing building). */
   nextSlotFreeInSeconds: number | null;
+  /**
+   * Seconds until every short resource is covered at the current production rates; null when nothing is short, or when
+   * some shortfall never closes (rate ≤ 0, or the cost exceeds the storage cap).
+   */
+  resourcesReadyInSeconds: number | null;
 }
 
 /** Slots one order of this definition occupies: 90 % of the slots (rounded down, min 1) for an `occupiesMostSlots` level, else its `slotCost` (default 1). Mirrors `Settlement.LonghouseSlotCost`. */
@@ -73,6 +80,28 @@ export function resourceShortfall(cost: RingCost | undefined, available: RingSto
     if (need > available[key]) short[key] = Math.ceil(need - available[key]);
   }
   return short;
+}
+
+/**
+ * How long until production (`rates`, per hour) covers every `shortfall`. The slowest resource decides. Null when a
+ * shortfall never closes: no positive rate, or a cost above the storage cap (the stock can't grow past it).
+ */
+export function resourcesReadyInSeconds(
+  shortfall: Partial<Record<RingResourceKey, number>>,
+  rates: RingStock | undefined,
+  cost: RingCost | undefined,
+  storageCap: RingStock | undefined,
+): number | null {
+  let longest = 0;
+  for (const key of RING_RESOURCE_KEYS) {
+    const missing = shortfall[key];
+    if (!missing) continue;
+    const rate = rates?.[key] ?? 0;
+    if (rate <= 0) return null;
+    if (storageCap && (cost?.[key] ?? 0) > storageCap[key]) return null;
+    longest = Math.max(longest, (missing / rate) * 3600);
+  }
+  return Object.keys(shortfall).length === 0 ? null : Math.ceil(longest);
 }
 
 /** Soonest completion among orders that are under construction, or null when none reports a time. */
@@ -100,6 +129,10 @@ export interface RingAvailabilityInput {
   cost: RingCost | undefined;
   /** `hud.available` — stock minus the waiting queue's reservation. */
   available: RingStock | undefined;
+  /** `hud.rates` — production per hour, for the "enough in ..." estimate. */
+  rates?: RingStock;
+  /** `hud.storageCap` — a cost above it can never be reached. */
+  storageCap?: RingStock;
   /** Slots one order occupies (see `slotsNeeded`). */
   slotsNeeded: number;
   construction: RingConstruction;
@@ -113,7 +146,8 @@ export interface RingAvailabilityInput {
 export function computeAvailability(input: RingAvailabilityInput): RingAvailability {
   const { construction } = input;
   const free = Math.max(0, construction.slots - construction.slotsUsed);
-  const slotsShort = !!input.hexBusy || input.slotsNeeded > free;
+  // FIFO: with any order already waiting, a new one waits behind it even when it would fit the free slots.
+  const slotsShort = !!input.hexBusy || construction.waitingOrders > 0 || input.slotsNeeded > free;
   const queueHasRoom = construction.maxWaitingOrders > 0 && construction.waitingOrders < construction.maxWaitingOrders;
   const shortfall = resourceShortfall(input.cost, input.available);
   const resourcesShort = Object.keys(shortfall).length > 0;
@@ -127,8 +161,14 @@ export function computeAvailability(input: RingAvailabilityInput): RingAvailabil
     state,
     shortfall,
     slots: { needed: input.slotsNeeded, total: construction.slots, free, short: slotsShort },
-    queue: { hasRoom: queueHasRoom, waiting: construction.waitingOrders, max: construction.maxWaitingOrders },
+    queue: {
+      hasRoom: queueHasRoom,
+      waiting: construction.waitingOrders,
+      max: construction.maxWaitingOrders,
+      locked: construction.maxWaitingOrders === 0 && construction.waitingOrders > 0,
+    },
     nextSlotFreeInSeconds: slotsShort ? nextSlotFreeInSeconds(input.queue) : null,
+    resourcesReadyInSeconds: resourcesShort ? resourcesReadyInSeconds(shortfall, input.rates, input.cost, input.storageCap) : null,
   };
 }
 

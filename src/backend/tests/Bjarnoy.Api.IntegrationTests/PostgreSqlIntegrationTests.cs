@@ -8,6 +8,7 @@ using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -56,13 +57,30 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture postgres)
         var name = $"pg-{Guid.CreateVersion7():N}"[..20];
         var created = await factory.CreateWorldAsync(name, seed: 7, radius: 30, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{created.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(created.Id, Ct);
 
         Assert.NotNull(islands);
         // The islands endpoint hides wasted islands until the reveal.
         Assert.Equal(created.Islands.Count(i => !i.IsWasted), islands.Count);
         Assert.Contains(islands, i => i.StartPositions.Count > 0);
+    }
+
+    [Fact]
+    public async Task The_terrain_chunks_and_start_positions_are_served_from_postgresql()
+    {
+        await using var factory = CreateFactory();
+        await factory.MigrateAsync(Ct);
+        using var client = factory.CreateClient();
+
+        var created = await factory.CreateWorldAsync($"pgt-{Guid.CreateVersion7():N}"[..20], seed: 7, radius: 30, cancellationToken: Ct);
+
+        var islands = await client.GetFullIslandsAsync(created.Id, Ct);
+
+        var stored = created.Islands.Where(i => !i.IsWasted).OrderBy(i => i.Index).ToList();
+        Assert.Equal(stored.Select(i => i.Id), islands.Select(i => i.Id));
+        Assert.Equal(stored.Sum(i => i.RiverTiles.Count), islands.Sum(i => i.RiverTiles.Count));
+        Assert.Equal(stored.Sum(i => i.BogTiles.Count), islands.Sum(i => i.BogTiles.Count));
+        Assert.Equal(stored.Sum(i => i.StartPositions.Count), islands.Sum(i => i.StartPositions.Count));
     }
 
     [Fact]
@@ -163,8 +181,7 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture postgres)
         using var client = factory.CreateClient();
 
         var world = await factory.CreateWorldAsync($"pg-{Guid.CreateVersion7():N}"[..20], seed: 21, radius: 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 

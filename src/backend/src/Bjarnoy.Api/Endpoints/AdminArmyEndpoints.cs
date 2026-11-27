@@ -74,7 +74,7 @@ public static class AdminArmyEndpoints
 
         foreach (var entity in entities)
         {
-            var entityWorldId = entity.Settlement!.WorldId;
+            var entityWorldId = entity.WorldId;
             if (!clocks.TryGetValue(entityWorldId, out var clock))
             {
                 var world = await worlds.GetWorldAsync(entityWorldId, cancellationToken);

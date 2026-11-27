@@ -11,6 +11,7 @@
 // tuning default below are mirrored one to one by `Camp.cs` / `CampGenerator.cs`.
 import { coordKey, hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
 import { hash2 } from './worldGenerator';
+import { enclosedWaterTiles } from './enclosedWater';
 import { TILE_ORIENTATIONS } from './types';
 import type { RiverTile, Terrain, TileOrientation } from './types';
 
@@ -453,8 +454,10 @@ export function placeWhaleRoads(
     frontier = next;
   }
 
+  // Water the island encloses (an inland lake or a bog pocket) is no sea: no whale road there.
+  const enclosed = new Set(enclosedWaterTiles(islandTiles, isLand).map(coordKey));
   const candidates: WhaleCandidate[] = [...shore.values()]
-    .filter((e) => e.d >= WhaleMinShoreDistance)
+    .filter((e) => e.d >= WhaleMinShoreDistance && !enclosed.has(coordKey(e.coord)))
     .sort((a, b) => a.coord.q - b.coord.q || a.coord.r - b.coord.r)
     .map((e) => ({ coord: e.coord, shore: e.d, hash: hash2(e.coord.q, e.coord.r, seed + WhaleHashSalt) }));
   if (candidates.length === 0) return [];

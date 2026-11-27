@@ -139,3 +139,29 @@ describe('the bake worker and the inline bake agree on pocket lakes', () => {
     expect(model.waterMaskRevision).not.toBe(before);
   });
 });
+
+describe('the bake worker and the inline bake agree on inland lakes', () => {
+  // An inland lake is drawn like the sea, shader and foam included: it is water to both bake paths. The seed calls its hexes sea, so
+  // the worker needs no list of them (unlike a pocket bog lake).
+  const seed = 40;
+  const sea = { q: -83, r: 256 };
+
+  it('bakes an inland lake on a seed-sea hex as water on both paths', () => {
+    const model = new WorldModel(seed);
+    model.setInlandLakeTiles([sea]);
+
+    const worker = withLandHexes(isLandFor(seed, model.generation, false), model.seaBogHexKeys());
+    const inline = waterMaskTerrainFor(model).isLand;
+    expect(model.terrainOf(sea.q, sea.r)).toBe('inlandlake');
+    expect(inline(sea.q, sea.r)).toBe(false);
+    expect(worker(sea.q, sea.r)).toBe(false);
+    expect(model.seaBogHexKeys()).toEqual([]);
+  });
+
+  it('moves the water mask revision when the lakes arrive, so the mask is rebaked', () => {
+    const model = new WorldModel(seed);
+    const before = model.waterMaskRevision;
+    model.setInlandLakeTiles([sea]);
+    expect(model.waterMaskRevision).not.toBe(before);
+  });
+});

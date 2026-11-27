@@ -32,7 +32,7 @@ public class GarrisonSpotTests
 
     private static PlacedBuilding Tower(int q, int r, int level = 1) => new(new HexCoord(q, r), BuildingType.Tower, level);
 
-    private static PlacedBuilding Dock(int q, int r) => new(new HexCoord(q, r), BuildingType.Dockyard, 1);
+    private static PlacedBuilding Dock(int q, int r) => new(new HexCoord(q, r), BuildingType.Harbour, 1);
 
     private static TrainingOrder Batch(HexCoord at, UnitType type, int count) => new()
     {
@@ -64,6 +64,46 @@ public class GarrisonSpotTests
     }
 
     [Fact]
+    public void Only_the_tower_and_the_two_docks_hold_a_garrison()
+    {
+        Assert.Equal(
+            [BuildingType.Tower, BuildingType.Harbour, BuildingType.Shipyard],
+            Enum.GetValues<BuildingType>().Where(t => t.HoldsGarrison()).OrderBy(t => t == BuildingType.Tower ? 0 : (int)t));
+        Assert.Equal([BuildingType.Harbour, BuildingType.Shipyard], BuildingTypeExtensions.DockTypes);
+    }
+
+    [Fact]
+    public void A_shipyard_is_a_ship_only_garrison_spot_like_a_harbour_and_holds_every_ship()
+    {
+        var shipyard = new PlacedBuilding(new HexCoord(4, 1), BuildingType.Shipyard, 1);
+        var spots = Found(false, Dock(3, 0), shipyard).GarrisonSpots;
+
+        Assert.Equal([Centre, new HexCoord(3, 0), new HexCoord(4, 1)], spots.Select(s => s.Coord));
+        Assert.All(spots.Skip(1), s => Assert.Equal(GarrisonSpotKind.Dock, s.Kind));
+        foreach (var spot in spots.Skip(1))
+        {
+            Assert.False(spot.Holds(UnitType.Spearman));
+            foreach (var ship in UnitCatalogue.AllTypes.Where(t => UnitCatalogue.Get(t).Class == UnitClass.Ship))
+            {
+                Assert.True(spot.Holds(ship), $"{ship} cannot lie at a {spot.Kind} spot");
+            }
+        }
+    }
+
+    [Fact]
+    public void A_fleet_lies_at_the_shipyard_it_was_trained_in_and_a_shipyard_under_construction_is_no_spot()
+    {
+        var shipyard = new PlacedBuilding(new HexCoord(4, 1), BuildingType.Shipyard, 1);
+        var settlement = TrainedAt(Found(false, Dock(3, 0), shipyard), shipyard.Coord, UnitType.Snekkja, 3);
+
+        Assert.Equal(3, settlement.GarrisonSpots.Single(s => s.Coord == shipyard.Coord).Stacks.Single().Count);
+        Assert.Empty(settlement.GarrisonSpots.Single(s => s.Coord == new HexCoord(3, 0)).Stacks);
+        Assert.DoesNotContain(
+            Found(false, shipyard with { Level = 0 }).GarrisonSpots,
+            s => s.Coord == shipyard.Coord);
+    }
+
+    [Fact]
     public void A_foundation_under_construction_is_not_a_spot_and_a_tower_outside_the_realm_is()
     {
         var outside = Tower(4, 0) with { OutsideRealmSince = T0 };
@@ -83,7 +123,7 @@ public class GarrisonSpotTests
         Assert.True(inland.Single(s => s.Kind == GarrisonSpotKind.Tower).Holds(UnitType.Spearman));
         Assert.False(inland.Single(s => s.Kind == GarrisonSpotKind.Tower).Holds(UnitType.Karve));
         Assert.False(inland.Single(s => s.Kind == GarrisonSpotKind.Dock).Holds(UnitType.Spearman));
-        Assert.True(inland.Single(s => s.Kind == GarrisonSpotKind.Dock).Holds(UnitType.Longship));
+        Assert.True(inland.Single(s => s.Kind == GarrisonSpotKind.Dock).Holds(UnitType.Snekkja));
         Assert.True(harbour[0].Holds(UnitType.Karve));
         Assert.True(harbour[0].Holds(UnitType.Spearman));
     }

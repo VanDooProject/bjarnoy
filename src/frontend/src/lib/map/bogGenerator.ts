@@ -8,6 +8,7 @@
 // `src/shared/bog-generation-golden.json` and against the server's own output for whole worlds. Keep the
 // iteration orders, the tie-breaks and the hash salts identical to the C# when changing either side.
 import { coordKey, hexDistance, type AxialCoord } from '../hex/coords';
+import { enclosedWaterPockets } from './enclosedWater';
 import { hash2, valueNoise } from './worldGenerator';
 import { TILE_ORIENTATIONS } from './types';
 import type { BogTile, BogTileKind, RiverTile, Terrain } from './types';
@@ -271,6 +272,8 @@ export class BogGenerator {
 
   /** The water tiles of accepted pockets: sea that became lake. */
   readonly pocketWater = new HexSet();
+  /** Enclosed water the bog did not fill (a pocket too small or too large, or whose ring broke a rule): it becomes an inland lake. */
+  readonly inlandLake = new HexSet();
   /** The bog ring tiles of accepted pockets (and the island tiles filled into their lakes): drainage treats them as blocked. */
   readonly pocketRing = new HexSet();
 
@@ -321,101 +324,23 @@ export class BogGenerator {
 
   // ---------------------------------------------------------------- pockets
 
+  /** The inland-lake hexes, sorted by (q, r). */
+  inlandLakeTiles(): AxialCoord[] {
+    return sorted(this.inlandLake);
+  }
+
   /** Finds enclosed sea pockets and turns the ones that satisfy every rule into lakes with a bog ring — mirrors `FindPockets`. */
   findPockets(): void {
     if (this.islandTiles.length === 0) return;
-
-    let minQ = Number.MAX_SAFE_INTEGER;
-    let maxQ = -Number.MAX_SAFE_INTEGER;
-    let minR = Number.MAX_SAFE_INTEGER;
-    let maxR = -Number.MAX_SAFE_INTEGER;
-    for (const t of this.islandTiles) {
-      minQ = Math.min(minQ, t.q);
-      maxQ = Math.max(maxQ, t.q);
-      minR = Math.min(minR, t.r);
-      maxR = Math.max(maxR, t.r);
-    }
-    minQ--;
-    maxQ++;
-    minR--;
-    maxR++;
-    const w = maxQ - minQ + 1;
-    const h = maxR - minR + 1;
-    const state = new Uint8Array(w * h); // 0 water not yet seen, 1 island land, 2 open sea
-    for (const t of this.islandTiles) state[(t.r - minR) * w + (t.q - minQ)] = 1;
-
-    const queue: number[] = [];
-    for (let q = 0; q < w; q++) {
-      for (const r of [0, h - 1]) {
-        const idx = r * w + q;
-        if (state[idx] === 0) {
-          state[idx] = 2;
-          queue.push(idx);
-        }
+    for (const comp of enclosedWaterPockets(this.islandTiles, this.isLand)) {
+      if (comp.length < BOG_POCKET_MIN_TILES || comp.length > BOG_POCKET_MAX_TILES) {
+        for (const t of comp) this.inlandLake.add(t);
+        continue;
       }
-    }
-    for (let r = 0; r < h; r++) {
-      for (const q of [0, w - 1]) {
-        const idx = r * w + q;
-        if (state[idx] === 0) {
-          state[idx] = 2;
-          queue.push(idx);
-        }
-      }
-    }
-    for (let head = 0; head < queue.length; head++) {
-      const idx = queue[head]!;
-      const q = (idx % w) + minQ;
-      const r = Math.floor(idx / w) + minR;
-      for (let d = 0; d < 6; d++) {
-        const n = nb({ q, r }, d);
-        const nq = n.q - minQ;
-        const nr = n.r - minR;
-        if (nq < 0 || nr < 0 || nq >= w || nr >= h) continue;
-        const ni = nr * w + nq;
-        if (state[ni] === 0) {
-          state[ni] = 2;
-          queue.push(ni);
-        }
-      }
-    }
-
-    // Remaining water cells are enclosed: group them.
-    const seen = new Set<number>();
-    let components: AxialCoord[][] = [];
-    for (let r = 0; r < h; r++) {
-      for (let q = 0; q < w; q++) {
-        const idx = r * w + q;
-        if (state[idx] !== 0 || seen.has(idx)) continue;
-        seen.add(idx);
-        const comp: AxialCoord[] = [];
-        const pending: number[] = [idx];
-        while (pending.length > 0) {
-          const cur = pending.pop()!;
-          const c = { q: (cur % w) + minQ, r: Math.floor(cur / w) + minR };
-          comp.push(c);
-          for (let d = 0; d < 6; d++) {
-            const n = nb(c, d);
-            const nq = n.q - minQ;
-            const nr = n.r - minR;
-            if (nq < 0 || nr < 0 || nq >= w || nr >= h) continue;
-            const ni = nr * w + nq;
-            if (state[ni] === 0 && !seen.has(ni)) {
-              seen.add(ni);
-              pending.push(ni);
-            }
-          }
-        }
-        components.push(comp);
-      }
-    }
-
-    // Nothing but sea-level water may be in the pocket: another landmass inside it means it is not ours.
-    components = components.filter((c) => !c.some((t) => this.isLand(t)));
-    for (const comp of components) {
-      if (comp.length < BOG_POCKET_MIN_TILES || comp.length > BOG_POCKET_MAX_TILES) continue;
       if (this.stats) this.stats.pocketsFound++;
-      if (this.tryBuildPocket(comp) && this.stats) this.stats.pocketsFilled++;
+      if (!this.tryBuildPocket(comp)) {
+        for (const t of comp) this.inlandLake.add(t);
+      } else if (this.stats) this.stats.pocketsFilled++;
     }
 
     // The pockets' rings are now bog: re-measure the distance to anything a bog site must keep away from.
@@ -491,13 +416,13 @@ export class BogGenerator {
       layer = next;
     }
 
-    // R7 for the whole ring: nothing touches the open sea. (Sand is fine here: the pocket is inside the island, its own
-    // beach and the sand beside it turn to bog as far as the ring reaches; see docs/design/bog.md.)
+    // R7 for the whole ring: nothing touches the open sea or sand.
     for (const t of ring) {
       for (let d = 0; d < 6; d++) {
         const n = nb(t, d);
         if (lake.has(n) || ring.has(n)) continue;
         if (openSea(n)) return false;
+        if (this.inIsland(n) && this.terrainOf(n) === 'sand') return false;
       }
     }
 
@@ -524,7 +449,7 @@ export class BogGenerator {
     }
 
     if (connected.size !== ring.size) {
-      // A stranded piece would have to be dropped, and the sand rule may need it: keep only the connected part
+      // A stranded piece would have to be dropped, and R7 may need it: keep only the connected part
       // when nothing was dropped that touches sand, else give the pocket up.
       for (const t of [...ring].filter((x) => !connected.has(x))) {
         for (let d = 0; d < 6; d++) if (connected.has(nb(t, d))) return false;

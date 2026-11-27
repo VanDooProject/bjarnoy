@@ -14,7 +14,8 @@ public sealed record AdminUserResponse(
     int SettlementCount,
     DateTimeOffset CreatedAt,
     DateTimeOffset? LastLoginAt,
-    bool IsPremium)
+    bool IsPremium,
+    double Renown)
 {
     public static AdminUserResponse From(UserEntity user, int settlementCount)
     {
@@ -31,7 +32,8 @@ public sealed record AdminUserResponse(
             settlementCount,
             user.CreatedAt,
             user.LastLoginAt,
-            user.IsPremium);
+            user.IsPremium,
+            user.RenownTotal);
     }
 }
 
@@ -126,3 +128,6 @@ public sealed record SetUserStatusRequest(string Status, string? Reason = null);
 
 /// <param name="IsPremium">Grants premium (true) or revokes it (false).</param>
 public sealed record SetUserPremiumRequest(bool IsPremium);
+
+/// <param name="Renown">The account's new renown total; zero or more.</param>
+public sealed record SetUserRenownRequest(double Renown);

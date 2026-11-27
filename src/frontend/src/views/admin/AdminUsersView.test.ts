@@ -11,18 +11,19 @@ import adminUsers from '../../i18n/locales/en/adminUsers.json';
 
 const global = { plugins: [createTestI18n({ adminUsers })] };
 
-const { adminListUsers, adminUpdateUser, adminSetUserStatus, adminSetUserPremium } = vi.hoisted(() => ({
+const { adminListUsers, adminUpdateUser, adminSetUserStatus, adminSetUserPremium, adminSetUserRenown } = vi.hoisted(() => ({
   adminListUsers: vi.fn(),
   adminUpdateUser: vi.fn(),
   adminSetUserStatus: vi.fn(),
   adminSetUserPremium: vi.fn(),
+  adminSetUserRenown: vi.fn(),
 }));
 
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
   return {
     ...actual,
-    api: { adminListUsers, adminUpdateUser, adminSetUserStatus, adminSetUserPremium },
+    api: { adminListUsers, adminUpdateUser, adminSetUserStatus, adminSetUserPremium, adminSetUserRenown },
   };
 });
 
@@ -39,6 +40,7 @@ function user(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
     createdAt: '2026-01-01T00:00:00Z',
     lastLoginAt: null,
     isPremium: false,
+    renown: 0,
     ...overrides,
   };
 }
@@ -119,5 +121,48 @@ describe('AdminUsersView guards', () => {
     expect(wrapper.text()).toContain('This is the last remaining admin; demote another admin first.');
     // The row's own status/role display is untouched by the rejected edit.
     expect(wrapper.find('.status').text()).toBe('active');
+  });
+});
+
+describe('AdminUsersView renown', () => {
+  it('sets the typed renown and shows the value the server returns', async () => {
+    adminListUsers.mockResolvedValue({
+      items: [user({ id: 'player-1', userName: 'someone', role: 'player', renown: 12.7 })],
+      totalCount: 1,
+      page: 1,
+      pageSize: 25,
+    });
+    adminSetUserRenown.mockResolvedValue(user({ id: 'player-1', userName: 'someone', role: 'player', renown: 80000 }));
+
+    const wrapper = mount(AdminUsersView, { global });
+    await flushPromises();
+
+    const input = wrapper.find('input.renown-input');
+    expect((input.element as HTMLInputElement).value).toBe('12');
+    await input.setValue('80000');
+    await wrapper.find('button.renown-set').trigger('click');
+    await flushPromises();
+
+    expect(adminSetUserRenown).toHaveBeenCalledWith('player-1', { renown: 80000 });
+    expect((wrapper.find('input.renown-input').element as HTMLInputElement).value).toBe('80000');
+  });
+
+  it('does not call the API for a negative renown and shows a row error', async () => {
+    adminListUsers.mockResolvedValue({
+      items: [user({ id: 'player-1', userName: 'someone', role: 'player' })],
+      totalCount: 1,
+      page: 1,
+      pageSize: 25,
+    });
+
+    const wrapper = mount(AdminUsersView, { global });
+    await flushPromises();
+
+    await wrapper.find('input.renown-input').setValue('-5');
+    await wrapper.find('button.renown-set').trigger('click');
+    await flushPromises();
+
+    expect(adminSetUserRenown).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('Renown must be a number of zero or more.');
   });
 });

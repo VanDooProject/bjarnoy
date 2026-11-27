@@ -36,10 +36,16 @@ public sealed class ConstructionSlotTests
     [Theory]
     [InlineData(1, 2)]
     [InlineData(2, 2)]
-    [InlineData(3, 3)]
-    [InlineData(4, 4)]
-    [InlineData(10, 10)]
-    [InlineData(30, 30)]
+    [InlineData(3, 2)]
+    [InlineData(4, 3)]
+    [InlineData(5, 3)]
+    [InlineData(6, 4)]
+    [InlineData(7, 4)]
+    [InlineData(8, 5)]
+    [InlineData(9, 5)]
+    [InlineData(10, 6)]
+    [InlineData(20, 11)]
+    [InlineData(30, 16)]
     public void Construction_slots_follow_the_longhouse_level_formula(int longhouseLevel, int expectedSlots)
     {
         var settlement = Found(longhouseLevel);
@@ -59,19 +65,30 @@ public sealed class ConstructionSlotTests
     [InlineData(2, 1)]
     [InlineData(3, 2)]
     [InlineData(5, 4)]
-    [InlineData(10, 9)]
-    [InlineData(30, 27)]
+    [InlineData(6, 5)]
+    [InlineData(11, 9)]
+    [InlineData(16, 14)]
     public void A_longhouse_upgrade_occupies_90_percent_of_the_slots_rounded_down(int slots, int expectedCost)
     {
         Assert.Equal(expectedCost, Settlement.LonghouseSlotCost(slots));
     }
 
+    [Theory]
+    [InlineData(10, 5)]
+    [InlineData(20, 9)]
+    public void A_longhouse_upgrade_at_level_costs_90_percent_of_that_levels_slots(int longhouseLevel, int expectedCost)
+    {
+        var settlement = Found(longhouseLevel);
+
+        Assert.Equal(expectedCost, Settlement.LonghouseSlotCost(settlement.ConstructionSlots));
+    }
+
     [Fact]
     public void A_longhouse_upgrade_needs_90_percent_of_the_slots_free_and_blocks_most_of_the_rest()
     {
-        // Longhouse level 3 has 3 slots; an upgrade occupies floor(0.9 * 3) = 2.
+        // Longhouse level 4 has 3 slots; an upgrade occupies floor(0.9 * 3) = 2.
         // Two other builds occupy two slots, so only one is free.
-        var settlement = Found(3);
+        var settlement = Found(4);
         var first = settlement.PlanBuild(
             BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
         Assert.True(first.Accepted);
@@ -108,6 +125,65 @@ public sealed class ConstructionSlotTests
     }
 
     [Fact]
+    public void A_new_order_waits_behind_a_waiting_longhouse_upgrade_even_when_it_would_fit_the_free_slot()
+    {
+        // Longhouse level 4: 3 slots, the upgrade needs 2. Two builds run, one slot is free, the upgrade waits for a second.
+        var settlement = Found(4);
+        var first = settlement.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var withFirst = settlement.Enqueue(first.Order!, T0);
+        var t1 = T0.AddMinutes(1);
+        var second = withFirst.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(-1, 0), Terrain.Grass, t1, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var withTwo = withFirst.Enqueue(second.Order!, t1);
+        var upgrade = withTwo.PlanBuild(
+            BuildingType.Longhouse, Centre, Terrain.Grass, t1, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var queued = withTwo.Enqueue(upgrade.Order!, t1);
+        Assert.True(upgrade.Order!.IsWaiting);
+        Assert.Equal(1, queued.FreeSlots);
+
+        // A one-slot build planned after the waiting upgrade fits the free slot, but must not start ahead of it.
+        var later = queued.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, T0.AddMinutes(2), Guid.CreateVersion7(), maxWaitingOrders: 3);
+        Assert.True(later.Accepted);
+        Assert.True(later.Order!.IsWaiting);
+
+        // When the first build completes (the second still runs), the upgrade takes the two free slots; the later build
+        // keeps waiting.
+        var withLater = queued.Enqueue(later.Order!, T0.AddMinutes(2));
+        var afterOne = withLater.SettleTo(first.Order!.CompletesAt!.Value).Settlement;
+        Assert.False(afterOne.Queue.Single(o => o.Id == upgrade.Order.Id).IsWaiting);
+        Assert.True(afterOne.Queue.Single(o => o.Id == later.Order.Id).IsWaiting);
+    }
+
+    [Fact]
+    public void Cancelling_a_waiting_head_starts_the_order_it_held_back_at_once()
+    {
+        // Level 4: 3 slots. Two builds run (1 free), the upgrade (2 slots) waits, a one-slot build waits behind it.
+        var settlement = Found(4);
+        var first = settlement.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var withFirst = settlement.Enqueue(first.Order!, T0);
+        var second = withFirst.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(-1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var withTwo = withFirst.Enqueue(second.Order!, T0);
+        var upgrade = withTwo.PlanBuild(
+            BuildingType.Longhouse, Centre, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var withUpgrade = withTwo.Enqueue(upgrade.Order!, T0);
+        var later = withUpgrade.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var queued = withUpgrade.Enqueue(later.Order!, T0);
+        Assert.True(later.Order!.IsWaiting);
+
+        var cancelAt = T0.AddSeconds(10);
+        var cancelled = queued.CancelBuild(upgrade.Order!.Id, cancelAt);
+
+        Assert.True(cancelled.Accepted);
+        var started = cancelled.Settlement!.Queue.Single(o => o.Id == later.Order.Id);
+        Assert.Equal(cancelAt, started.StartedAt);
+    }
+
+    [Fact]
     public void A_longhouse_upgrade_at_level_1_leaves_one_of_two_slots_free()
     {
         var settlement = Found();
@@ -116,6 +192,29 @@ public sealed class ConstructionSlotTests
         Assert.True(upgrade.Accepted);
 
         Assert.Equal(1, settlement.Enqueue(upgrade.Order!, T0).FreeSlots);
+    }
+
+    [Fact]
+    public void Without_premium_nothing_new_can_be_added_while_an_earlier_order_still_waits()
+    {
+        // Same setup as the FIFO test above: the longhouse upgrade waits, one slot is free.
+        var settlement = Found(4);
+        var first = settlement.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var withFirst = settlement.Enqueue(first.Order!, T0);
+        var second = withFirst.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(-1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var withTwo = withFirst.Enqueue(second.Order!, T0);
+        var upgrade = withTwo.PlanBuild(
+            BuildingType.Longhouse, Centre, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        var queued = withTwo.Enqueue(upgrade.Order!, T0);
+        Assert.True(upgrade.Order!.IsWaiting);
+        Assert.Equal(1, queued.FreeSlots);
+
+        var later = queued.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(0, 1), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 0);
+
+        Assert.Equal(BuildRejection.QueueLockedWithoutPremium, later.Rejection);
     }
 
     [Fact]
