@@ -27,7 +27,7 @@ export const PACE_ABOVE_MS = 50;
 export const PACE_BELOW_MS = 35;
 /** The idle gap left after a paced frame, as a share of the frame's own cost. */
 export const GAP_SHARE = 0.6;
-/** Weight of the newest frame in the smoothed cost. */
+/** Weight of the newest frame in the smoothed cost, for a frame that followed straight on from the last one. */
 const SMOOTHING = 0.1;
 
 /** The slice of Pixi's Ticker this needs, so it can be driven without a canvas. */
@@ -43,9 +43,19 @@ export class FramePacer {
   private smoothedMs = 0;
   private paced = false;
 
-  /** Records one frame's cost (ms of main-thread work, render included) and returns the `maxFPS` to apply: 0 is uncapped. */
-  record(frameMs: number): number {
-    this.smoothedMs = this.smoothedMs === 0 ? frameMs : this.smoothedMs + (frameMs - this.smoothedMs) * SMOOTHING;
+  /**
+   * Records one frame's cost (ms of main-thread work, render included) and returns the `maxFPS` to apply: 0 is uncapped.
+   *
+   * `sinceLastMs` is the time since the previous recorded frame started. Unpaced, that is the previous frame's own cost and
+   * each frame weighs `SMOOTHING`. Paced, it also holds the gap the cap left, and the frame weighs as much as the frames
+   * that would have filled that time at its cost: averaged per drawn frame, a cap set by a short spike (a load, a texture
+   * upload burst) held a loop that had long gone cheap at a few frames a second for several seconds, because each of those
+   * few frames moved the average by a tenth only.
+   */
+  record(frameMs: number, sinceLastMs = frameMs): number {
+    const frames = frameMs > 0 ? Math.max(1, sinceLastMs / frameMs) : 1;
+    const weight = 1 - (1 - SMOOTHING) ** frames;
+    this.smoothedMs = this.smoothedMs === 0 ? frameMs : this.smoothedMs + (frameMs - this.smoothedMs) * weight;
     if (!this.paced && this.smoothedMs > PACE_ABOVE_MS) this.paced = true;
     else if (this.paced && this.smoothedMs < PACE_BELOW_MS) this.paced = false;
     return this.paced ? 1000 / (this.smoothedMs * (1 + GAP_SHARE)) : 0;
@@ -103,7 +113,8 @@ export function attachFramePacing(ticker: PacedTicker, env: PacingEnv = browserE
     ticker.minFPS = Math.min(minFPS, cap / 2);
     ticker.maxFPS = cap;
   };
-  let startedAt = 0;
+  let startedAt = -1;
+  let sinceLastMs = 0;
   let workMs = 0;
   let endedAt = -1;
   let raf = 0;
@@ -114,10 +125,13 @@ export function attachFramePacing(ticker: PacedTicker, env: PacingEnv = browserE
     if (endedAt < 0 || frameStart <= endedAt) return;
     const cost = Math.min(MAX_FRAME_MS, workMs + (frameStart - endedAt));
     endedAt = -1;
-    apply(pacer.record(cost));
+    apply(pacer.record(cost, Math.min(MAX_FRAME_MS, sinceLastMs)));
   };
   const begin = () => {
-    startedAt = env.now();
+    const now = env.now();
+    // The first frame has nothing before it; 0 makes it count as one frame.
+    sinceLastMs = startedAt < 0 ? 0 : now - startedAt;
+    startedAt = now;
     // Pixi asks for its next animation frame after its listeners have run, so asking from in here puts this watcher ahead of it:
     // it sees the new frame's start before the tick that frame runs can overwrite the render it is waiting to measure.
     env.cancelFrame(raf);

@@ -78,6 +78,47 @@ describe('against Pixi\'s real Ticker', () => {
     expect(ticker.maxFPS).toBe(0);
   });
 
+  it('lifts a cap set by a short spike within about a second once frames are cheap again', () => {
+    // Regression: the cost was averaged per drawn frame, so a load spike that set a ~3 fps cap took ~20 of those
+    // slow frames (~3.5 s measured on the landing view) to lift, though each of them cost a vsync only.
+    const ticker = new Ticker();
+    ticker.autoStart = false;
+    const clock = { t: 1 };
+    const watcher: { fn: ((frameStart: number) => void) | null } = { fn: null };
+    attachFramePacing(ticker, {
+      now: () => clock.t,
+      requestFrame: (fn) => {
+        watcher.fn = fn;
+        return 1;
+      },
+      cancelFrame: () => {},
+    });
+    let rendered = false;
+    ticker.add(() => {
+      rendered = true;
+    });
+    const VSYNC = 1000 / 60;
+    /** One animation frame; a drawn one is followed by `stallMs` before the browser delivers the next. */
+    const frame = (stallMs: number) => {
+      clock.t += VSYNC;
+      watcher.fn?.(clock.t);
+      rendered = false;
+      ticker.update(clock.t);
+      if (rendered) clock.t += stallMs;
+    };
+    // The spike: a dozen drawn frames that stall 200 ms each, enough to pace the loop.
+    let drawn = 0;
+    while (drawn < 12) {
+      frame(200);
+      if (rendered) drawn++;
+    }
+    expect(ticker.maxFPS).toBeGreaterThan(0);
+    // Then the frames are cheap: a drawn frame costs one vsync.
+    const cheapFrom = clock.t;
+    while (ticker.maxFPS > 0 && clock.t - cheapFrom < 10_000) frame(0);
+    expect(clock.t - cheapFrom).toBeLessThan(1200);
+  });
+
   it('puts the ticker back as it found it when the pacing is detached', () => {
     const ticker = new Ticker();
     const minBefore = ticker.minFPS;
