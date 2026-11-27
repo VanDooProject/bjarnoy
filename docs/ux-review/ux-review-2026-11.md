@@ -39,7 +39,7 @@ Rating scale:
 | A7 | Place the building | demo / live | 3 / 4 | Demo: placed instantly although the card said "Build time 1:00"; no confirmation besides the arrow moving on. Live: queue panel opens, but the location reads "hex -142-128" (two negative numbers without separator) |
 | A8 | Finish onboarding | both | 2 | No "continue" call to action: the only prompt is the register nudge; the way into the game is the small "SETTLEMENT" link in the top bar. Nudge says "Three buildings" while the quest beside it counts 2 of 3 producers |
 | A9 | "Name your jarl" nudge | both | 3 | Popover bobs permanently (never stable; a moving click target); stays over the map on every view until answered; on phone it covers the open drawer's nav links |
-| A10 | Enter the settlement view | both | 3 | Fog dominates the viewport; four HUD clusters in the corners; demo Armies panel shows dev status text ("requires the live backend and isn't wired up in demo mode yet"); live anonymous players get no Quests panel until they register |
+| A10 | Enter the settlement view | both | 3 | Fog dominates the viewport; four HUD clusters in the corners; live anonymous players get no Quests panel until they register |
 | A11 | Read resources | both | 3 | Icons without names; no tooltip on hover; live storage cap 750 is reached within hours at start rates |
 | A12 | Click own Longhouse | both | 3 | Offers "Send army here" on your own longhouse with no armies; "Raze" shown but disabled; hub text "LV 1 · HEX 61, -2" wraps over three lines |
 | A13 | Upgrade the Longhouse | demo | 3 | Card says cost 160 Wood / 80 Food and 2:50, but demo upgrades instantly and for free (resource bar unchanged); premium quick-upgrade hint inside the card is fine |
@@ -56,7 +56,7 @@ Rating scale:
 | A24 | Dispatch army | live | 1 | Button looks enabled (gold) but is disabled; no tooltip or explanation that you have no army |
 | A25 | Reports | live | 3 | Modal; empty state is fine; "Loading…" for several seconds on an empty list |
 | A26 | Messages | live | 3 | Full page, while Reports / Guild / Profile / Leaderboards are modals over the map; empty state says "visit a player's profile", but nothing here leads to players |
-| A27 | Leaderboards | both | 3 | 6 of 8 boards locked with dev status text ("Unlocks once battles exist", "once guilds exist"); demo shows the heading twice |
+| A27 | Leaderboards | live | 3 | 6 of 8 boards locked with dev status text ("Unlocks once battles exist", "once armies exist", "once guilds exist") although battles, armies and guilds exist; the reasons are hardcoded in `LeaderboardCatalogue.cs` |
 | A28 | Alliance / Guild | live | 3 | Menu says "Alliance", the page says "Guild" |
 | A29 | Profile | live | 4 | Fine |
 | A30 | Settings | both | 3 | Technical texts ("Measured: 1 fps · 0 of 10 s at 30 fps or more", "Auto — measuring frame rate…"); "HUD bar — applies on small screens only" is shown on desktop |
@@ -77,9 +77,23 @@ Rating scale:
 2. **A35 / A34** — blank page on unknown URLs; Impressum placeholder text is public.
 3. **A8 onboarding hand-off** — after the guided builds there is no "continue"; the register nudge is the only prompt.
 4. **A24 / A23 / A22 army and world map** — disabled actions look enabled and give no reason; the world map shows nothing.
-5. **Technical text in player UI** — hex coordinates in ring hubs and the queue, dev status lines in the Armies panel,
-   leaderboards and settings, raw API paths in error banners.
+5. **Technical text in player UI (live)** — see [Developer text visible with the backend](#developer-text-visible-with-the-backend).
 6. **Naming drift** — realm / settlement / longhouse, Alliance / Guild, Storehouse / Storage House, Bjarnøy / Bjarnoy.
+
+### Developer text visible with the backend
+
+Checked against the live screenshots; these show up with the backend, not only in demo mode:
+
+| Where | Text | Source |
+|---|---|---|
+| Leaderboards (A27) | "Unlocks once battles exist.", "Unlocks once armies exist.", "Unlocks once guilds exist.", "Unlocks once weekly windows are tracked." | reasons hardcoded per board in `src/backend/src/Bjarnoy.Infrastructure/Services/LeaderboardCatalogue.cs`, texts in `leaderboard.json` `darkReasons` |
+| Ring hub (A4, A12, A23) | "HEX -133, 110", "LV 1 · HEX 61, -2", "OPEN WATER HEX -178, 121" | ring hub label |
+| Construction queue (A14) | "hex -142-128", "Reserved for queued construction: 31w 0b …" | queue rows and footer |
+| Settings (A30) | "Auto — measuring frame rate…", "Measured: 1 fps · 0 of 10 s at 30 fps or more" | graphics section |
+| Map error / connection banner (A36) | "GET /settlements/<id> → 403", "Connection problem — retrying GET /worlds/<id>/fog-chunks?…" | error overlay and banner |
+
+Demo-only (fine as long as demo mode stays a dev tool): Armies panel "Dispatching armies requires the live backend…",
+training "Training requires the live backend…", reports "Reports require the live backend…", the worlds page error.
 
 ---
 
@@ -197,8 +211,8 @@ After the Lumberjack the checklist disappears and the register nudge opens.
 
 - Fog takes most of the viewport at the default zoom.
 - Four HUD areas: Quests (bottom-left), four icon buttons, Armies (bottom-right), nudge (top-right).
-- Demo Armies panel: "Dispatching armies requires the live backend and isn't wired up in demo mode yet." — a dev note in
-  player UI, above a gold "Dispatch army" button.
+- Demo only: the Armies panel says "Dispatching armies requires the live backend and isn't wired up in demo mode yet."
+  With the backend it says "No armies on the road." (next screenshot).
 
 ![Settlement view (live, before registering)](img/14-settlement-live-anon.jpg)
 
