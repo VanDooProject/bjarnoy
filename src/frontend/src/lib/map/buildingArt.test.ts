@@ -11,7 +11,7 @@
 //   only working by accident against whatever was open in an editor at the
 //   time.
 import { describe, expect, it } from 'vitest';
-import { buildingArt, buildingArtByFamily, buildingLayers, buildingLayersForType, forestLookLayers, terrainArt, terrainLookLayers, terrainLooksOf, terrainVariantArt } from './buildingArt';
+import { buildingArt, buildingArtByFamily, buildingArtOnTile, buildingLayers, buildingLayersForType, forestLookLayers, terrainArt, terrainLookLayers, terrainLooksOf, terrainVariantArt } from './buildingArt';
 
 describe('buildingArtByFamily', () => {
   it('resolves art for each of the sawmill families', () => {
@@ -43,6 +43,15 @@ describe('buildingArtByFamily', () => {
 
   it('returns undefined for a family with no art in the pack', () => {
     expect(buildingArtByFamily('not-a-real-family', 1)).toBeUndefined();
+  });
+});
+
+describe('buildingArtOnTile', () => {
+  it('pictures a Reindeer Herder on forest with the forest herder and on grass with the plain one', () => {
+    const forest = buildingArtByFamily('reindeerherder_mixed', 1);
+    expect(forest).toBeDefined();
+    expect(buildingArtOnTile('reindeerherder', 1, { terrain: 'forest' })).toEqual(forest);
+    expect(buildingArtOnTile('reindeerherder', 1, { terrain: 'grass' })).toEqual(buildingArt('reindeerherder', 1));
   });
 });
 
@@ -98,6 +107,14 @@ describe('buildingLayersForType', () => {
 
   it('resolves FishingHut through the shared fisherhut family, not the old single-level art', () => {
     expect(buildingLayersForType('fishinghut', 1)?.top).toBeDefined();
+  });
+
+  it('draws the Barracks with the ring barracks art at every level', () => {
+    for (const level of [1, 2, 3, 4]) {
+      const ring = buildingLayers('barracksring', level);
+      expect(ring.top).toBeDefined();
+      expect(buildingLayersForType('barracks', level)).toEqual(ring);
+    }
   });
 
   it('draws the Harbour with its own harbour art and the Shipyard with the old dockyard art', () => {

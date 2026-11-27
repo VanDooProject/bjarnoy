@@ -46,7 +46,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   harbour: 'harbour',
   shipyard: 'dockyard',
   greatstorehouse: 'bigstoragehouse',
-  barracks: 'barracks',
+  barracks: 'barracksring',
   // Fishing Hut used to fall back to a legacy single-level composite
   // (`fishinghutbuilding`, no per-level art) — the pack's real, leveled
   // fisherman's-hut art (the `fisherhut` art family, which was once also a
@@ -80,7 +80,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,stavetower,farm_pumpkin,freyjashrine,storagebuilding,archeryrange,dockyard,bigstoragehouse,barracks,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,stavetower,farm_pumpkin,freyjashrine,storagebuilding,archeryrange,dockyard,bigstoragehouse,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
   { eager: true, import: 'default' },
 ) as Record<string, string>;
 
@@ -179,7 +179,7 @@ export function buildingArt(type: string, level = 1): ArtRef | undefined {
 /**
  * `buildingArt` for a building standing on `tile`: a Fishing Hut on a bog lake's inlet, shore or half shore is the lake hut
  * (`fisherhut_inlet`, `fisherhut_lakeshore` or `fisherhut_lake`), a Hammer Forge on a creek bend the bend mill (`hammerschmiede_bend`; the river mill is the
- * placeholder art for now), a tower on sand, forest or plain bog moss the stave tower made for that ground, a Longhouse on sand the beach longhouse. Everything else is `buildingArt`.
+ * placeholder art for now), a tower on sand, forest or plain bog moss the stave tower made for that ground, a Longhouse on sand the beach longhouse, a Reindeer Herder on forest the forest herder. Everything else is `buildingArt`.
  */
 export function buildingArtOnTile(
   type: string,
@@ -190,6 +190,7 @@ export function buildingArtOnTile(
   if (type === 'tower' && tile.terrain === 'forest') return buildingArtByFamily('stavetower_forest', level);
   if (type === 'tower' && tile.terrain === 'sand') return buildingArtByFamily('stavetower_sand', level);
   if (type === 'longhouse' && tile.terrain === 'sand') return buildingArtByFamily('greathall_sand', level);
+  if (type === 'reindeerherder' && tile.terrain === 'forest') return buildingArtByFamily('reindeerherder_mixed', level);
   const lakeHut = isLakeFishingHut({ buildingType: type, bog: tile.bog }) ? lakeFishingHutArt(tile.bog?.kind) : undefined;
   if (lakeHut) return buildingArtByFamily(lakeHut.family, level);
   if (type === 'hammerschmiede' && tile.bog?.kind === 'creek') {

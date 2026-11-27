@@ -12,13 +12,13 @@ describe('art lookups follow the lazily loaded manifests', () => {
     const removed = unregisterAtlasManifestsForTests('showcase');
     try {
       const grass = computed(() => terrainArt('grass').kind);
-      const barracks = computed(() => buildingArt('barracks', 3)?.kind);
+      const archeryRange = computed(() => buildingArt('archeryrange', 3)?.kind);
       expect(grass.value).toBe('png');
-      expect(barracks.value).toBe('png');
+      expect(archeryRange.value).toBe('png');
 
       registerAtlasManifestsForTests(removed);
       expect(grass.value).toBe('atlas');
-      expect(barracks.value).toBe('atlas');
+      expect(archeryRange.value).toBe('atlas');
     } finally {
       registerAtlasManifestsForTests(removed);
     }
