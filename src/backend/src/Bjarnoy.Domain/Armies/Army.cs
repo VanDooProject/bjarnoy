@@ -397,6 +397,11 @@ public sealed partial record Army
     /// Whether the dispatching player has a premium account: only lifts the waypoint cap from <see cref="MaxWaypoints"/> to
     /// <see cref="MaxWaypointsPremium"/> (a dispatch from home has free waypoints).
     /// </param>
+    /// <param name="isUnexplored">
+    /// Whether the dispatching player never explored a hex (null: all explored). A waypoint, and the destination of a
+    /// <see cref="ArmyMission.Move"/>, that is unexplored and off-terrain for the unit kind snaps to the nearest traversable hex
+    /// instead of being refused, see <see cref="ResolveStops"/>.
+    /// </param>
     public static DispatchDecision PlanDispatch(
         Settlement settlement,
         HexCoord fromSpot,
@@ -424,7 +429,8 @@ public sealed partial record Army
         IReadOnlyList<GarrisonSpot>? targetSpots = null,
         Func<HexCoord, bool>? isCampSiteOccupied = null,
         int routeSearchBudget = HexPathfinder.MaxExpandedNodes,
-        bool isPremium = false)
+        bool isPremium = false,
+        Func<HexCoord, bool>? isUnexplored = null)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
@@ -480,15 +486,18 @@ public sealed partial record Army
         // every HexPathfinder call for this dispatch.
         var isLandUnit = !isFleet;
 
-        var endpointRejection = ValidateEndpoints(isFleet, mission, targetCampIsSand, routeDestination, waypoints, terrainAt);
+        var (endpointRejection, routeWaypoints, snappedDestination) = ResolveStops(
+            isFleet, mission, targetCampIsSand, fromSpot, routeDestination, waypoints, terrainAt, isUnexplored);
         if (endpointRejection != DispatchRejection.None)
         {
             return DispatchDecision.Rejected(endpointRejection);
         }
 
+        routeDestination = snappedDestination;
+
         // The army leaves from (and returns to) the garrison spot its units stood at.
         var router = new Router(terrainAt, speedFactor, isRiver, isWideRiver, walls, routeSearchBudget);
-        var (fullPath, routeRejection) = router.Chain(fromSpot, [.. waypoints, routeDestination], isLandUnit);
+        var (fullPath, routeRejection) = router.Chain(fromSpot, [.. routeWaypoints, routeDestination], isLandUnit);
         if (fullPath is null)
         {
             return DispatchDecision.Rejected(routeRejection);
@@ -621,33 +630,119 @@ public sealed partial record Army
     }
 
     /// <summary>
-    /// The terrain rules for the hexes a dispatch names, shared by both dispatch planners: the route's end and every waypoint must be
-    /// traversable for the unit kind, except where a fleet lands (see <see cref="SkipsDestinationTerrainCheck"/>).
+    /// How far (hex distance) a never-explored hex that is off-terrain for the unit kind is moved to the nearest hex it can stand
+    /// on: a click into the fog on the water snaps a land army's stop to the closest shore point (a fleet's on land to the closest
+    /// sea), see <see cref="ResolveStops"/>.
     /// </summary>
-    private static DispatchRejection ValidateEndpoints(
-        bool isFleet, ArmyMission mission, bool targetCampIsSand, HexCoord routeDestination, IReadOnlyList<HexCoord> waypoints,
-        Func<HexCoord, Terrain> terrainAt)
+    public const int FogShoreSnapRadius = 50;
+
+    /// <summary>
+    /// The terrain rules for the hexes a dispatch or field order names, in one place for all three planners: the route's end and every
+    /// waypoint must be traversable for the unit kind, except where a fleet lands (see <see cref="SkipsDestinationTerrainCheck"/>).
+    /// A waypoint (and the destination of a plain <see cref="ArmyMission.Move"/>) the player never explored that is not traversable is
+    /// not refused but moved to the nearest traversable hex within <see cref="FogShoreSnapRadius"/> (ties: closest to the previous stop,
+    /// then lowest Q, then lowest R); with none in reach, or on an explored hex, the usual rejection stands. Returns the stops the route
+    /// is built from. <paramref name="start"/> is the previous stop of the first stop; <paramref name="isUnexplored"/> null means
+    /// everything is explored.
+    /// </summary>
+    private static (DispatchRejection Rejection, IReadOnlyList<HexCoord> Waypoints, HexCoord Destination) ResolveStops(
+        bool isFleet, ArmyMission mission, bool targetCampIsSand, HexCoord start, HexCoord routeDestination,
+        IReadOnlyList<HexCoord> waypoints, Func<HexCoord, Terrain> terrainAt, Func<HexCoord, bool>? isUnexplored)
     {
         var isLandUnit = !isFleet;
+        var previous = start;
+        var resolvedWaypoints = new List<HexCoord>(waypoints.Count);
+        var waypointRejection = DispatchRejection.None;
+
+        foreach (var waypoint in waypoints)
+        {
+            var stop = waypoint;
+            if (!terrainAt(waypoint).IsTraversable(isLandUnit))
+            {
+                if (isUnexplored?.Invoke(waypoint) == true && SnapToTraversable(waypoint, previous, isLandUnit, terrainAt) is { } snapped)
+                {
+                    stop = snapped;
+                }
+                else if (waypointRejection == DispatchRejection.None)
+                {
+                    waypointRejection = isFleet ? DispatchRejection.WaypointNotSea : DispatchRejection.WaypointNotLand;
+                }
+            }
+
+            resolvedWaypoints.Add(stop);
+            previous = stop;
+        }
 
         // A land army's Attack/Support destination is always a real settlement's own centre — inherently land. A fleet's
         // Attack/Raid destination is the shore building it was sent at and its Support destination is the settlement centre; landing
         // on land is exactly the point for a fleet (see HexPathfinder.FindPath's beaching exemption at both route endpoints), so the
         // generic sea-only check is skipped for those missions, and for a sea Found convoy's landing hex (issue #55 §2).
+        var destination = routeDestination;
         if (!SkipsDestinationTerrainCheck(isFleet, mission, targetCampIsSand) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
         {
-            return isFleet ? DispatchRejection.DestinationNotSea : DispatchRejection.DestinationNotLand;
-        }
-
-        foreach (var waypoint in waypoints)
-        {
-            if (!terrainAt(waypoint).IsTraversable(isLandUnit))
+            if (mission == ArmyMission.Move && isUnexplored?.Invoke(routeDestination) == true
+                && SnapToTraversable(routeDestination, previous, isLandUnit, terrainAt) is { } snapped)
             {
-                return isFleet ? DispatchRejection.WaypointNotSea : DispatchRejection.WaypointNotLand;
+                destination = snapped;
+            }
+            else
+            {
+                return (isFleet ? DispatchRejection.DestinationNotSea : DispatchRejection.DestinationNotLand, waypoints, routeDestination);
             }
         }
 
-        return DispatchRejection.None;
+        return (waypointRejection, resolvedWaypoints, destination);
+    }
+
+    /// <summary>
+    /// The hex within <see cref="FogShoreSnapRadius"/> of <paramref name="hex"/> that is traversable for the unit kind and nearest to it
+    /// (rings outward); among equally near ones the one closest to <paramref name="previous"/>, then lowest Q, then lowest R.
+    /// <see langword="null"/> when there is none.
+    /// </summary>
+    private static HexCoord? SnapToTraversable(HexCoord hex, HexCoord previous, bool isLandUnit, Func<HexCoord, Terrain> terrainAt)
+    {
+        for (var radius = 1; radius <= FogShoreSnapRadius; radius++)
+        {
+            HexCoord? best = null;
+            var bestDistance = int.MaxValue;
+            foreach (var candidate in Ring(hex, radius))
+            {
+                if (!terrainAt(candidate).IsTraversable(isLandUnit))
+                {
+                    continue;
+                }
+
+                var distance = HexCoord.Distance(candidate, previous);
+                if (best is null || distance < bestDistance
+                    || (distance == bestDistance && (candidate.Q, candidate.R).CompareTo((best.Value.Q, best.Value.R)) < 0))
+                {
+                    best = candidate;
+                    bestDistance = distance;
+                }
+            }
+
+            if (best is not null)
+            {
+                return best;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The hexes at exactly <paramref name="radius"/> steps from <paramref name="centre"/> (radius at least 1).</summary>
+    private static IEnumerable<HexCoord> Ring(HexCoord centre, int radius)
+    {
+        // Start at the corner `radius` steps along direction 4, then walk each of the six sides.
+        var hex = new HexCoord(centre.Q + (HexCoord.Directions[4].Q * radius), centre.R + (HexCoord.Directions[4].R * radius));
+        for (var side = 0; side < 6; side++)
+        {
+            for (var step = 0; step < radius; step++)
+            {
+                yield return hex;
+                hex += HexCoord.Directions[side];
+            }
+        }
     }
 
     /// <summary>
@@ -2101,7 +2196,8 @@ public sealed partial record Army
         IReadOnlyList<UnitStack>? requestedUnits = null,
         Guid? splitArmyId = null,
         IReadOnlyList<GarrisonSpot>? targetSpots = null,
-        int routeSearchBudget = HexPathfinder.MaxExpandedNodes)
+        int routeSearchBudget = HexPathfinder.MaxExpandedNodes,
+        Func<HexCoord, bool>? isUnexplored = null)
     {
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(waypoints);
@@ -2178,23 +2274,13 @@ public sealed partial record Army
             return FieldOrderResult.Rejected(ToFieldOrderRejection(target.Rejection));
         }
 
-        var routeDestination = target.RouteDestination;
-
-        if (!SkipsDestinationTerrainCheck(isFleet, mission, targetCampIsSand) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
+        // The route's first stop is reached from where the order starts: the hex the army stands on, or the end of its running leg.
+        var orderStart = arrived ? movement.PositionAt(now) : movement.Path[^1];
+        var (endpointRejection, routeWaypoints, routeDestination) = ResolveStops(
+            isFleet, mission, targetCampIsSand, orderStart, target.RouteDestination, waypoints, terrainAt, isUnexplored);
+        if (endpointRejection != DispatchRejection.None)
         {
-            return FieldOrderResult.Rejected(isLandUnit
-                ? FieldOrderRejection.DestinationNotLand
-                : FieldOrderRejection.DestinationNotSea);
-        }
-
-        foreach (var waypoint in waypoints)
-        {
-            if (!terrainAt(waypoint).IsTraversable(isLandUnit))
-            {
-                return FieldOrderResult.Rejected(isLandUnit
-                    ? FieldOrderRejection.WaypointNotLand
-                    : FieldOrderRejection.WaypointNotSea);
-            }
+            return FieldOrderResult.Rejected(ToFieldOrderRejection(endpointRejection));
         }
 
         if (!arrived)
@@ -2229,7 +2315,7 @@ public sealed partial record Army
                 (provisionsAtDeparture, remainder) = SplitStanding(army, leavingStacks, remainingStacks, now);
             }
 
-            List<HexCoord> stops = [fromHex, .. waypoints, routeDestination];
+            List<HexCoord> stops = [fromHex, .. routeWaypoints, routeDestination];
             fullPath = [fromHex];
             for (var i = 0; i < stops.Count - 1; i++)
             {
@@ -2250,7 +2336,7 @@ public sealed partial record Army
             provisionsAtDeparture = army.Provisions;
 
             var originalDestination = movement.Path[^1];
-            List<HexCoord> stops = [originalDestination, .. waypoints, routeDestination];
+            List<HexCoord> stops = [originalDestination, .. routeWaypoints, routeDestination];
             fullPath = [.. movement.Path];
             for (var i = 0; i < stops.Count - 1; i++)
             {
@@ -2415,7 +2501,7 @@ public sealed partial record Army
         return (leavingFood, remainder);
     }
 
-    /// <summary>The field-order name of a rule <see cref="ValidateMissionTarget"/> broke (the names match the dispatch ones).</summary>
+    /// <summary>The field-order name of a rule <see cref="ValidateMissionTarget"/> or <see cref="ResolveStops"/> broke (the names match the dispatch ones).</summary>
     private static FieldOrderRejection ToFieldOrderRejection(DispatchRejection rejection) => rejection switch
     {
         DispatchRejection.TargetSettlementRequired => FieldOrderRejection.TargetSettlementRequired,
@@ -2430,6 +2516,10 @@ public sealed partial record Army
         DispatchRejection.InsufficientShipCapacity => FieldOrderRejection.InsufficientShipCapacity,
         DispatchRejection.SupportSpotRequired => FieldOrderRejection.SupportSpotRequired,
         DispatchRejection.SupportSpotCannotHold => FieldOrderRejection.SupportSpotCannotHold,
+        DispatchRejection.DestinationNotLand => FieldOrderRejection.DestinationNotLand,
+        DispatchRejection.DestinationNotSea => FieldOrderRejection.DestinationNotSea,
+        DispatchRejection.WaypointNotLand => FieldOrderRejection.WaypointNotLand,
+        DispatchRejection.WaypointNotSea => FieldOrderRejection.WaypointNotSea,
         _ => throw new ArgumentOutOfRangeException(nameof(rejection), rejection, "Not a rule ValidateMissionTarget can break."),
     };
 

@@ -103,6 +103,8 @@ players cannot.
 
 An order takes at most 5 waypoints, or 10 with a premium account.
 
+A waypoint, or a Move's destination, on ground the player has never explored doesn't have to suit the units. If it is water for a land army, or land for a fleet, the order isn't refused. The hex moves to the nearest hex the units can stand on (up to 50 hexes away), so the army marches along the shore. If there is a tie, the hex nearest the previous stop wins. On explored ground, including ground that is explored but out of sight, a hex that doesn't suit the units is still refused. Attack, Support, Raid and Hunt targets are not affected.
+
 A movement always finishes: an in-flight order may only *extend* the route, never
 divert it. That makes **append** the same operation as **move on** with the current
 destination auto-prepended as a waypoint — one domain method, one endpoint.

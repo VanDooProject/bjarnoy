@@ -8,6 +8,7 @@ using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
+using Bjarnoy.Infrastructure.World;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -136,6 +137,87 @@ public sealed class ArmyMovementRulesEndpointsTests : IAsyncLifetime
         var problem = await refused.Content.ReadFromJsonAsync<ProblemDetails>(SqliteApiFixture.StrictJson, Ct);
         Assert.Equal("TooManyWaypoints", problem!.Extensions["rejection"]?.ToString());
         Assert.Equal("Too many waypoints: an order takes at most 5, or 10 with premium.", problem.Detail);
+    }
+
+    [Fact]
+    public async Task A_waypoint_on_unexplored_water_is_snapped_to_the_shore_but_one_on_explored_water_is_refused()
+    {
+        using var client = _factory.CreateClient();
+        var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
+        var island = islands!.Where(i => i.StartPositions.Count > 3).OrderByDescending(i => i.TileCount).First();
+        var plot = island.StartPositions[0];
+
+        var ownerId = Unique("local-owner-");
+        var settlement = await (await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Bjornstad", "Ulf", ownerId), Ct))
+            .ReadStrictAsync<SettlementResponse>(Ct);
+        var player = await (await client.PostJsonAsync(
+            "/api/v1/auth/register", new RegisterRequest(Unique("ulf-"), "correct-horse-battery", ownerId), Ct))
+            .ReadStrictAsync<AuthResponse>(Ct);
+        var adminName = Unique("admin");
+        var admin = await (await client.PostJsonAsync(
+            "/api/v1/auth/register", new RegisterRequest(adminName, "correct-horse-battery"), Ct))
+            .ReadStrictAsync<AuthResponse>(Ct);
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            (await db.Users.SingleAsync(u => u.Id == admin.User.Id, Ct)).Role = UserRole.Admin;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var adminToken = (await (await client.PostJsonAsync(
+            "/api/v1/auth/login", new LoginRequest(adminName, "correct-horse-battery"), Ct))
+            .ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
+        Authorize(client, adminToken);
+        var granted = await client.PostJsonAsync(
+            $"/api/v1/admin/settlements/{settlement.Id}/garrison", new AdjustGarrisonRequest("spearman", settlement.Spot(), 5), Ct);
+        Assert.Equal(HttpStatusCode.OK, granted.StatusCode);
+        Authorize(client, player.AccessToken);
+
+        // Water hexes around the settlement, split by what the player has explored: the nearest unexplored one that touches land (a click
+        // into the fog), and the nearest explored one.
+        var start = new HexCoord(settlement.Q, settlement.R);
+        HexCoord unexploredWater;
+        HexCoord exploredWater;
+        Func<HexCoord, bool> isLand;
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var worldEntity = await db.Worlds.SingleAsync(w => w.Id == world.Id, Ct);
+            var sampler = await WorldTerrain.SamplerAsync(db, worldEntity, Ct);
+            isLand = hex => sampler.TerrainAt(hex).IsLand();
+
+            var coastalWater = start.WithinRadius(40)
+                .Where(hex => !isLand(hex) && hex.Neighbours().Any(isLand))
+                .OrderBy(hex => hex.DistanceTo(start)).ThenBy(hex => hex.Q).ThenBy(hex => hex.R)
+                .ToList();
+            var exploredService = scope.ServiceProvider.GetRequiredService<ExploredAreaService>();
+            var area = await exploredService.GetAsync(world.Id, ownerId, persist: false, Ct);
+            var explored = await exploredService.ExploredAmongAsync(area!, coastalWater, Ct);
+            unexploredWater = coastalWater.First(hex => !explored.Contains(hex));
+            exploredWater = coastalWater.First(explored.Contains);
+        }
+
+        var target = await FindWalkableTargetAsync(client, world.Id, settlement);
+        DispatchArmyRequest Via(HexCoord waypoint) => new(
+            [new(settlement.Spot(), [new UnitCountRequest("spearman", 5)])],
+            [new HexPointRequest(waypoint.Q, waypoint.R)], new HexPointRequest(target.Q, target.R), 100);
+
+        var refused = await client.PostJsonAsync($"/api/v1/settlements/{settlement.Id}/armies", Via(exploredWater), Ct);
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        var problem = await refused.Content.ReadFromJsonAsync<ProblemDetails>(SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal("WaypointNotLand", problem!.Extensions["rejection"]?.ToString());
+
+        var accepted = await client.PostJsonAsync($"/api/v1/settlements/{settlement.Id}/armies", Via(unexploredWater), Ct);
+        Assert.True(accepted.IsSuccessStatusCode, await accepted.Content.ReadAsStringAsync(Ct));
+        var army = await accepted.Content.ReadFromJsonAsync<ArmyResponse>(SqliteApiFixture.StrictJson, Ct);
+        var path = army!.Movement!.Path.Select(p => new HexCoord(p.Q, p.R)).ToList();
+        Assert.DoesNotContain(unexploredWater, path);
+        Assert.All(path, hex => Assert.True(isLand(hex), $"{hex} is not land"));
+        Assert.Equal(new HexCoord(target.Q, target.R), path[^1]);
+        Assert.Equal(start, path[0]);
     }
 
     /// <summary>

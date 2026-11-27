@@ -1359,7 +1359,8 @@
       "enemies": "Hostile armies that meet on the road fight a field battle. Armies of the same owner or guild never fight each other.",
       "fleeing": "Only an army fleeing from a lost field battle is safe from field battles and camp ambushes, for up to 6 hours. You can give it orders like any other army, but an order ends that protection.",
       "newWalls": "If a new wall blocks an army's way, out or home, it looks for another route. If there is none, it stops on the last hex before the wall and you get a report. An army stuck on its way out drops its target and stands there.",
-      "orders": "Every order has one destination for free. Waypoints along the way are a premium feature."
+      "orders": "Every order has one destination for free. Waypoints along the way are a premium feature.",
+      "fogStops": "If you set a waypoint or destination in unexplored land and it turns out to be water (or land, for ships), your army goes to the nearest shore hex instead."
     },
     "sendOut": {
       "heading": "Sending an army that is already out",
