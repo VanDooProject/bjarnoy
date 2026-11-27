@@ -53,4 +53,13 @@ describe('useQuestSeen', () => {
     expect(hasUnseen(['a:open'])).toBe(false);
     expect(localStorage.length).toBe(0);
   });
+
+  it('shows what one instance marked to the others (the quest card and the panel column\'s dot)', async () => {
+    const card = useQuestSeen(ref('s1'));
+    const column = useQuestSeen(ref('s1'));
+    expect(column.hasUnseen(['a:open'])).toBe(true);
+    card.markSeen(['a:open']);
+    await nextTick();
+    expect(column.hasUnseen(['a:open'])).toBe(false);
+  });
 });

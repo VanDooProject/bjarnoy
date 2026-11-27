@@ -42,7 +42,8 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   storagehouse: 'storagebuilding',
   archeryrange: 'archeryrange',
   siegeworkshop: 'siegeworkshop',
-  dockyard: 'dockyard',
+  harbour: 'dockyard',
+  shipyard: 'shipyard',
   greatstorehouse: 'bigstoragehouse',
   barracks: 'barracks',
   // Fishing Hut used to fall back to a legacy single-level composite
@@ -63,6 +64,8 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   smithy: 'smithy',
   druidhut: 'druidhut',
   cartworkshop: 'cartworkshop',
+  // The beach camp's showcase art is not in the pack yet; the lookup is for the finished state.
+  beachcamp: 'beachcamp',
   claybrickworks: 'claybrickworks',
   bogoreworks: 'bogoreworks',
   // The river hammer mill: a placeholder for the Hammer Forge on a bog creek (TODO(art): bog-creek Hammer Forge).
@@ -76,7 +79,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,stavetower,farm_pumpkin,freyjashrine,storagebuilding,archeryrange,dockyard,bigstoragehouse,barracks,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,stavetower,farm_pumpkin,freyjashrine,storagebuilding,archeryrange,dockyard,shipyard,bigstoragehouse,barracks,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
   { eager: true, import: 'default' },
 ) as Record<string, string>;
 
@@ -96,6 +99,7 @@ function pngBuildingArt(family: string, level: number): string | undefined {
 
 const TERRAIN_SHOWCASE_FAMILY: Record<string, string> = {
   sea: 'watertile',
+  inlandlake: 'watertile',
   sand: 'sandtile',
   grass: 'grasstile',
   forest: 'foresttile',
@@ -174,7 +178,7 @@ export function buildingArt(type: string, level = 1): ArtRef | undefined {
 /**
  * `buildingArt` for a building standing on `tile`: a Fishing Hut on a bog lake's half shore is the lake hut
  * (`fisherhut_lake`), a Hammer Forge on a creek bend the bend mill (`hammerschmiede_bend`; the river mill is the
- * placeholder art for now), a tower on sand, forest or plain bog moss the stave tower made for that ground. Everything else is `buildingArt`.
+ * placeholder art for now), a tower on sand, forest or plain bog moss the stave tower made for that ground, a Longhouse on sand the beach longhouse. Everything else is `buildingArt`.
  */
 export function buildingArtOnTile(
   type: string,
@@ -184,6 +188,7 @@ export function buildingArtOnTile(
   if (type === 'tower' && tile.bog?.kind === 'bog') return buildingArtByFamily('stavetower_bog', level);
   if (type === 'tower' && tile.terrain === 'forest') return buildingArtByFamily('stavetower_forest', level);
   if (type === 'tower' && tile.terrain === 'sand') return buildingArtByFamily('stavetower_sand', level);
+  if (type === 'longhouse' && tile.terrain === 'sand') return buildingArtByFamily('greathall_sand', level);
   if (type === 'fishinghut' && tile.bog?.kind === 'half') return buildingArtByFamily('fisherhut_lake', level);
   if (type === 'hammerschmiede' && tile.bog?.kind === 'creek') {
     const straight =

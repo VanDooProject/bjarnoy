@@ -16,6 +16,17 @@ public class RenownTests
     }
 
     [Fact]
+    public void SettleTo_multiplies_the_accrual_by_the_world_speed_factor()
+    {
+        var account = RenownAccount.Empty(T0);
+
+        // 10 levels for 3 hours on a 4x world: 4x the 1x figure of 30.
+        var settled = account.SettleTo(T0.AddHours(3), totalBuildingLevels: 10, speedFactor: 4);
+
+        Assert.Equal(120, settled.Total);
+    }
+
+    [Fact]
     public void SettleTo_accrues_points_per_level_per_hour()
     {
         var account = RenownAccount.Empty(T0);
@@ -64,10 +75,10 @@ public class RenownTests
 
     [Theory]
     [InlineData(1, 0)]
-    [InlineData(2, 55_000)]
-    [InlineData(3, 110_000)]
-    [InlineData(4, 220_000)]
-    [InlineData(5, 440_000)]
+    [InlineData(2, 80_000)]
+    [InlineData(3, 160_000)]
+    [InlineData(4, 320_000)]
+    [InlineData(5, 640_000)]
     public void RequiredFor_follows_the_documented_escalating_curve(int settlementNumber, double expected)
     {
         Assert.Equal(expected, RenownThresholds.RequiredFor(settlementNumber));
@@ -83,16 +94,16 @@ public class RenownTests
     [Fact]
     public void AllowsAnotherSettlement_is_false_below_threshold_and_true_at_or_above_it()
     {
-        Assert.False(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 1, renownTotal: 54_999));
-        Assert.True(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 1, renownTotal: 55_000));
-        Assert.True(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 1, renownTotal: 55_001));
+        Assert.False(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 1, renownTotal: 79_999));
+        Assert.True(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 1, renownTotal: 80_000));
+        Assert.True(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 1, renownTotal: 80_001));
     }
 
     [Fact]
     public void AllowsAnotherSettlement_scales_with_existing_settlement_count()
     {
-        // Holding 2 settlements already, the 3rd needs 110 000.
-        Assert.False(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 2, renownTotal: 109_999));
-        Assert.True(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 2, renownTotal: 110_000));
+        // Holding 2 settlements already, the 3rd needs 160 000.
+        Assert.False(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 2, renownTotal: 159_999));
+        Assert.True(RenownThresholds.AllowsAnotherSettlement(existingSettlementCount: 2, renownTotal: 160_000));
     }
 }

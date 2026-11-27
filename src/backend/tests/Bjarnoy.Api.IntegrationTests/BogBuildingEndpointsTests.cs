@@ -9,6 +9,7 @@ using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -46,8 +47,7 @@ public sealed class BogBuildingEndpointsTests : IAsyncLifetime
     {
         var client = _factory.CreateClient();
         var world = await _factory.CreateWorldAsync(Unique("w"), seed: 21, radius: 60, cancellationToken: Ct);
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -88,6 +88,18 @@ public sealed class BogBuildingEndpointsTests : IAsyncLifetime
 
             var longhouse = await db.PlacedBuildings.SingleAsync(b => b.SettlementId == settlement.Id && b.Type == BuildingType.Longhouse, Ct);
             longhouse.Level = 20;
+            // The late buildings cost more than a fresh settlement can hold: fund it beyond its storage.
+            var entity = await db.Settlements.SingleAsync(x => x.Id == settlement.Id, Ct);
+            entity.StockWood = entity.StockStone = entity.StockFood = 1_000_000;
+            entity.CapacityWood = entity.CapacityStone = entity.CapacityFood = 1_000_000;
+            db.PlacedBuildings.Add(new PlacedBuildingEntity
+            {
+                SettlementId = settlement.Id,
+                Q = centre.Q - 2,
+                R = centre.R + 2,
+                Type = BuildingType.GreatStorehouse,
+                Level = 10,
+            });
             db.PlacedBuildings.Add(new PlacedBuildingEntity
             {
                 SettlementId = settlement.Id,
@@ -107,7 +119,7 @@ public sealed class BogBuildingEndpointsTests : IAsyncLifetime
             await db.SaveChangesAsync(Ct);
         }
 
-        WorldTerrain.Invalidate(world.Id);
+        WorldIslandCaches.Invalidate(world.Id);
         return (client, settlement, hexes);
     }
 
@@ -157,7 +169,8 @@ public sealed class BogBuildingEndpointsTests : IAsyncLifetime
             Assert.Equal("TerrainNotAllowed", await response.RejectionAsync(Ct));
         }
 
-        Assert.Equal(HttpStatusCode.Accepted, (await Build(client, settlement.Id, "hammerschmiede", hexes["creek"])).StatusCode);
+        var built = await Build(client, settlement.Id, "hammerschmiede", hexes["creek"]);
+        Assert.True(built.StatusCode == HttpStatusCode.Accepted, await built.Content.ReadAsStringAsync(Ct));
     }
 
     [Fact]

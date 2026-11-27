@@ -78,8 +78,12 @@ public static class MovementOccupancy
     /// in the first place, so no special-case logic is needed to exclude it
     /// (issue #206's own design history: this was considered and dropped).
     /// </summary>
+    /// <remarks>
+    /// <paramref name="notBefore"/> rules out every meeting before that instant (the flee protection of either side, see
+    /// <see cref="Movement.FieldBattleImmuneUntil"/>): two armies that share a hex across <paramref name="notBefore"/> meet at it.
+    /// </remarks>
     public static (HexCoord Hex, DateTimeOffset At)? EarliestMeeting(
-        Movement a, Movement b, HexCoord? excludeHexA = null, HexCoord? excludeHexB = null)
+        Movement a, Movement b, HexCoord? excludeHexA = null, HexCoord? excludeHexB = null, DateTimeOffset? notBefore = null)
     {
         var occupancyA = Compute(a);
         var occupancyB = Compute(b);
@@ -111,6 +115,16 @@ public static class MovementOccupancy
                 }
 
                 var meetAt = oa.Start > ob.Start ? oa.Start : ob.Start;
+                if (notBefore is { } floor && meetAt < floor)
+                {
+                    // Together on this hex from meetAt, but protected until floor: they meet then, if both are still here.
+                    meetAt = floor;
+                    if ((oa.End is { } endA && meetAt >= endA) || (ob.End is { } endB && meetAt >= endB))
+                    {
+                        continue;
+                    }
+                }
+
                 if (earliest is null || meetAt < earliest.Value.At)
                 {
                     earliest = (oa.Hex, meetAt);

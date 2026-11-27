@@ -15,16 +15,18 @@ namespace Bjarnoy.Domain.Units;
 /// <remarks>
 /// Iron and the unlock ladder (<c>docs/design/economy.md</c> section 8): every unit except the
 /// <see cref="UnitType.Thrall"/> costs iron, so raising troops is gated by iron income. Each unit's
-/// Longhouse gate follows the building that trains it: Spearman with the Barracks (LH 5; the Thrall has no gate of its own, its Barracks is the gate), Axeman
-/// at LH 6, three levels after the bog-ore works open (LH 3), Karve with the Dockyard (LH 8), Bowman with the Archery Range (LH 9),
-/// Provisioner and Settler with the Cart Workshop (LH 10), and the elite units (Berserker, Catapult,
-/// Longship) at LH 20, where the Hammerschmiede boosts the bog-ore works.
+/// Longhouse gate follows the building that trains it: Spearman and Axeman with the Barracks (LH 5; the Thrall has no gate of
+/// its own, its Barracks is the gate; the Axeman's own gate is the Barracks one, its Barracks level 6 orders it after the
+/// Spearman), Bowman and Skirmisher with the Archery Range (LH 9), Provisioner and Settler with the Cart Workshop (LH 10),
+/// and the elite units (Berserker, Skeid) at LH 20, where the Hammerschmiede boosts the bog-ore works. The siege engines and
+/// the ships have no Longhouse gate of their own: the level of their Siege Workshop, Harbour or Shipyard orders them. No unit
+/// needs another unit (<see cref="UnitDefinition.RequiredUnitType"/> stays unset); the building levels order the roster.
 /// </remarks>
 /// <remarks>
 /// <see cref="BuildingType.Barracks"/> and <see cref="BuildingType.ArcheryRange"/>
 /// split the land-army roster with no overlap by <see cref="UnitDefinition.RequiredBuildingType"/>:
 /// Barracks trains the core line (Thrall, Spearman, Axeman, Berserker),
-/// ArcheryRange trains the archer (Bowman), and the
+/// ArcheryRange trains the ranged units (Bowman, Skirmisher), and the
 /// <see cref="BuildingType.SiegeWorkshop"/> the siege engines (Catapult, Ram) — no
 /// unit is ever trainable from two of them.
 /// </remarks>
@@ -66,6 +68,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 80, Stone: 40, Food: 20, Iron: 40),
             TrainingDuration = TimeSpan.FromMinutes(15),
             RequiredLonghouseLevel = 5,
+            RequiredBuildingLevel = 3,
             RequiredBuildingType = BuildingType.Barracks,
         },
         [UnitType.Axeman] = new UnitDefinition
@@ -76,13 +79,14 @@ public static class UnitCatalogue
             Attack = 40,
             Defense = 15,
             Speed = 4,
-            CarryCapacity = 30,
+            CarryCapacity = 40,
             FoodCarryCapacity = 40,
             CargoSlots = 2,
             UpkeepPerHour = 0.5,
             TrainingCost = new ResourceAmounts(Wood: 100, Stone: 30, Food: 20, Iron: 60),
             TrainingDuration = TimeSpan.FromMinutes(20),
-            RequiredLonghouseLevel = 6,
+            RequiredLonghouseLevel = 5,
+            RequiredBuildingLevel = 6,
             RequiredBuildingType = BuildingType.Barracks,
         },
         [UnitType.Bowman] = new UnitDefinition
@@ -90,15 +94,34 @@ public static class UnitCatalogue
             Type = UnitType.Bowman,
             VisionRadius = 2,
             Class = UnitClass.Infantry,
-            Attack = 30,
-            Defense = 30,
+            Attack = 20,
+            Defense = 12,
             Speed = 4,
-            CarryCapacity = 15,
+            CarryCapacity = 2,
             FoodCarryCapacity = 40,
             CargoSlots = 2,
             UpkeepPerHour = 0.5,
-            TrainingCost = new ResourceAmounts(Wood: 90, Stone: 60, Food: 20, Iron: 50),
-            TrainingDuration = TimeSpan.FromMinutes(20),
+            Ranged = true,
+            TrainingCost = new ResourceAmounts(Wood: 80, Stone: 50, Food: 20, Iron: 35),
+            TrainingDuration = TimeSpan.FromMinutes(15),
+            RequiredLonghouseLevel = 9,
+            RequiredBuildingType = BuildingType.ArcheryRange,
+        },
+        [UnitType.Skirmisher] = new UnitDefinition
+        {
+            Type = UnitType.Skirmisher,
+            VisionRadius = 2,
+            Class = UnitClass.Infantry,
+            Attack = 10,
+            Defense = 3,
+            Speed = 6,
+            CarryCapacity = 2,
+            FoodCarryCapacity = 30,
+            CargoSlots = 1,
+            UpkeepPerHour = 0.25,
+            Ranged = true,
+            TrainingCost = new ResourceAmounts(Wood: 60, Stone: 25, Food: 20, Iron: 15),
+            TrainingDuration = TimeSpan.FromMinutes(8),
             RequiredLonghouseLevel = 9,
             RequiredBuildingType = BuildingType.ArcheryRange,
         },
@@ -110,14 +133,14 @@ public static class UnitCatalogue
             Attack = 70,
             Defense = 20,
             Speed = 5,
-            CarryCapacity = 25,
+            CarryCapacity = 15,
             FoodCarryCapacity = 64,
-            CargoSlots = 4,
+            CargoSlots = 3,
             UpkeepPerHour = 1,
-            TrainingCost = new ResourceAmounts(Wood: 150, Stone: 60, Food: 30, Iron: 120),
-            TrainingDuration = TimeSpan.FromMinutes(35),
+            TrainingCost = new ResourceAmounts(Wood: 140, Stone: 60, Food: 30, Iron: 90),
+            TrainingDuration = TimeSpan.FromMinutes(30),
             RequiredLonghouseLevel = 20,
-            RequiredUnitType = UnitType.Axeman,
+            RequiredBuildingLevel = 10,
             RequiredBuildingType = BuildingType.Barracks,
         },
         [UnitType.Provisioner] = new UnitDefinition
@@ -153,13 +176,33 @@ public static class UnitCatalogue
             FoodCarryCapacity = 40,
             CargoSlots = 1,
             UpkeepPerHour = 0.25,
-            // Base cost before Bjarnoy.Domain.Settlers.SettlerCostScaling's
-            // per-existing-settlement multiplier (issue #55 §4) — deliberately
-            // steep even at the base rate, mirroring Travian's settlers being
-            // one of the most expensive units in the game.
+            // Flat price, the same for every settlement a player holds (only the
+            // renown asked for the next settlement escalates) — deliberately
+            // steep, mirroring Travian's settlers being one of the most
+            // expensive units in the game.
             TrainingCost = new ResourceAmounts(Wood: 120, Stone: 90, Food: 60, Iron: 60),
             TrainingDuration = TimeSpan.FromMinutes(24),
             RequiredLonghouseLevel = 10,
+            RequiredBuildingLevel = 5,
+            RequiredBuildingType = BuildingType.CartWorkshop,
+        },
+        [UnitType.CampBuilder] = new UnitDefinition
+        {
+            Type = UnitType.CampBuilder,
+            VisionRadius = 2,
+            Class = UnitClass.Civilian,
+            Attack = 0,
+            Defense = 3,
+            Speed = 4,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 40,
+            CargoSlots = 1,
+            UpkeepPerHour = 0.25,
+            // Flat price like the Settler's, but far cheaper: a camp is a stopgap base, not a new realm.
+            TrainingCost = new ResourceAmounts(Wood: 80, Stone: 40, Food: 40, Iron: 20),
+            TrainingDuration = TimeSpan.FromMinutes(12),
+            RequiredLonghouseLevel = 10,
+            RequiredBuildingLevel = 10,
             RequiredBuildingType = BuildingType.CartWorkshop,
         },
         [UnitType.Catapult] = new UnitDefinition
@@ -184,8 +227,8 @@ public static class UnitCatalogue
             SiegeTargets = SiegeTargets.Towers | SiegeTargets.Buildings,
             TrainingCost = new ResourceAmounts(Wood: 300, Stone: 200, Food: 40, Iron: 250),
             TrainingDuration = TimeSpan.FromHours(1),
-            RequiredLonghouseLevel = 20,
-            RequiredUnitType = UnitType.Berserker,
+            RequiredLonghouseLevel = 1,
+            RequiredBuildingLevel = 5,
             RequiredBuildingType = BuildingType.SiegeWorkshop,
         },
         [UnitType.Ram] = new UnitDefinition
@@ -206,9 +249,63 @@ public static class UnitCatalogue
             SiegeTargets = SiegeTargets.Walls | SiegeTargets.Towers,
             TrainingCost = new ResourceAmounts(Wood: 400, Stone: 100, Food: 40, Iron: 150),
             TrainingDuration = TimeSpan.FromHours(1),
-            RequiredLonghouseLevel = 20,
-            RequiredUnitType = UnitType.Berserker,
+            RequiredLonghouseLevel = 1,
+            RequiredBuildingLevel = 10,
             RequiredBuildingType = BuildingType.SiegeWorkshop,
+        },
+        [UnitType.Faering] = new UnitDefinition
+        {
+            Type = UnitType.Faering,
+            VisionRadius = 7,
+            Class = UnitClass.Ship,
+            Attack = 0,
+            Defense = 3,
+            Speed = 8,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 40,
+            ShipSlots = 0,
+            UpkeepPerHour = 0.25,
+            TrainingCost = new ResourceAmounts(Wood: 40, Stone: 10, Food: 10, Iron: 0),
+            TrainingDuration = TimeSpan.FromMinutes(6),
+            RequiredLonghouseLevel = 1,
+            RequiredBuildingLevel = 1,
+            RequiredBuildingType = BuildingType.Harbour,
+        },
+        [UnitType.Byrding] = new UnitDefinition
+        {
+            Type = UnitType.Byrding,
+            VisionRadius = 5,
+            Class = UnitClass.Ship,
+            Attack = 0,
+            Defense = 10,
+            Speed = 6,
+            CarryCapacity = 160,
+            FoodCarryCapacity = 150,
+            ShipSlots = 0,
+            UpkeepPerHour = 0.5,
+            TrainingCost = new ResourceAmounts(Wood: 120, Stone: 50, Food: 20, Iron: 20),
+            TrainingDuration = TimeSpan.FromMinutes(20),
+            RequiredLonghouseLevel = 1,
+            RequiredBuildingLevel = 3,
+            RequiredBuildingType = BuildingType.Harbour,
+        },
+        [UnitType.Knarr] = new UnitDefinition
+        {
+            Type = UnitType.Knarr,
+            VisionRadius = 5,
+            Class = UnitClass.Ship,
+            Attack = 0,
+            Defense = 20,
+            Speed = 4,
+            CarryCapacity = 600,
+            FoodCarryCapacity = 1200,
+            ShipSlots = 0,
+            UpkeepPerHour = 1,
+            TrainingCost = new ResourceAmounts(Wood: 300, Stone: 120, Food: 40, Iron: 135),
+            TrainingDuration = TimeSpan.FromMinutes(50),
+            RequiredLonghouseLevel = 1,
+            RequiredBuildingLevel = 8,
+            RequiredBuildingType = BuildingType.Harbour,
         },
         [UnitType.Karve] = new UnitDefinition
         {
@@ -222,18 +319,15 @@ public static class UnitCatalogue
             FoodCarryCapacity = 600,
             ShipSlots = 10,
             UpkeepPerHour = 1.5,
-            // Starting value, to be tuned: a won fleet attack damages the building it was sent at by
-            // SiegeResolver.LevelsDestroyed over the surviving ships' summed SiegePower (catapult: 40).
-            SiegePower = 10,
-            SiegeTargets = SiegeTargets.Walls | SiegeTargets.Towers | SiegeTargets.Buildings,
             TrainingCost = new ResourceAmounts(Wood: 250, Stone: 100, Food: 40, Iron: 100),
             TrainingDuration = TimeSpan.FromMinutes(45),
-            RequiredLonghouseLevel = 8,
-            RequiredBuildingType = BuildingType.Dockyard,
+            RequiredLonghouseLevel = 1,
+            RequiredBuildingLevel = 5,
+            RequiredBuildingType = BuildingType.Harbour,
         },
-        [UnitType.Longship] = new UnitDefinition
+        [UnitType.Snekkja] = new UnitDefinition
         {
-            Type = UnitType.Longship,
+            Type = UnitType.Snekkja,
             VisionRadius = 4,
             Class = UnitClass.Ship,
             Attack = 60,
@@ -243,14 +337,67 @@ public static class UnitCatalogue
             FoodCarryCapacity = 320,
             ShipSlots = 20,
             UpkeepPerHour = 2,
-            // Starting value, to be tuned (see Karve).
-            SiegePower = 20,
-            SiegeTargets = SiegeTargets.Walls | SiegeTargets.Towers | SiegeTargets.Buildings,
             TrainingCost = new ResourceAmounts(Wood: 400, Stone: 200, Food: 60, Iron: 220),
-            TrainingDuration = TimeSpan.FromHours(1.5),
+            TrainingDuration = TimeSpan.FromMinutes(90),
+            RequiredLonghouseLevel = 1,
+            RequiredBuildingLevel = 1,
+            RequiredBuildingType = BuildingType.Shipyard,
+        },
+        [UnitType.Skeid] = new UnitDefinition
+        {
+            Type = UnitType.Skeid,
+            VisionRadius = 4,
+            Class = UnitClass.Ship,
+            Attack = 90,
+            Defense = 60,
+            Speed = 11,
+            CarryCapacity = 120,
+            FoodCarryCapacity = 480,
+            ShipSlots = 30,
+            UpkeepPerHour = 3,
+            TrainingCost = new ResourceAmounts(Wood: 550, Stone: 250, Food: 80, Iron: 300),
+            TrainingDuration = TimeSpan.FromMinutes(120),
             RequiredLonghouseLevel = 20,
-            RequiredUnitType = UnitType.Karve,
-            RequiredBuildingType = BuildingType.Dockyard,
+            RequiredBuildingLevel = 10,
+            RequiredBuildingType = BuildingType.Shipyard,
+        },
+        [UnitType.FireRaft] = new UnitDefinition
+        {
+            Type = UnitType.FireRaft,
+            VisionRadius = 2,
+            Class = UnitClass.Ship,
+            Attack = 0,
+            Defense = 3,
+            Speed = 5,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 30,
+            ShipSlots = 0,
+            UpkeepPerHour = 1,
+            TrainingCost = new ResourceAmounts(Wood: 50, Stone: 10, Food: 10, Iron: 10),
+            TrainingDuration = TimeSpan.FromMinutes(10),
+            RequiredLonghouseLevel = 1,
+            RequiredBuildingLevel = 3,
+            RequiredBuildingType = BuildingType.Shipyard,
+            FireCraftPerLevel = 50,
+        },
+        [UnitType.FireHulk] = new UnitDefinition
+        {
+            Type = UnitType.FireHulk,
+            VisionRadius = 6,
+            Class = UnitClass.Ship,
+            Attack = 0,
+            Defense = 25,
+            Speed = 8,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 200,
+            ShipSlots = 0,
+            UpkeepPerHour = 5,
+            TrainingCost = new ResourceAmounts(Wood: 300, Stone: 60, Food: 40, Iron: 80),
+            TrainingDuration = TimeSpan.FromMinutes(40),
+            RequiredLonghouseLevel = 12,
+            RequiredBuildingLevel = 5,
+            RequiredBuildingType = BuildingType.Shipyard,
+            FireCraftPerLevel = 10,
         },
     };
 
@@ -276,23 +423,24 @@ public static class UnitCatalogue
     /// <summary>
     /// Whether <paramref name="type"/> is trainable at <paramref name="longhouseLevel"/>:
     /// the longhouse is high enough, its training building (see
-    /// <see cref="UnitDefinition.RequiredBuildingType"/>) stands if
+    /// <see cref="UnitDefinition.RequiredBuildingType"/>) stands at <see cref="UnitDefinition.RequiredBuildingLevel"/> if
     /// <paramref name="buildingLevelOf"/> is supplied, and (recursively) any
     /// prerequisite unit is itself available under the same conditions.
     /// </summary>
     /// <param name="buildingLevelOf">
-    /// Looks up a settlement's level of a given building type (0 if it has
-    /// none). <see langword="null"/> skips the training-building check
-    /// entirely — the old longhouse-only behavior — so existing callers that
-    /// have no settlement to check against keep working unchanged.
+    /// Looks up the level of a settlement's best building of a given type (0 if it has
+    /// none). <see langword="null"/> skips the training-building check entirely.
+    /// </param>
+    /// <param name="checkOwnBuildingLevel">
+    /// <see langword="false"/> only asks that the training building stands (level 1); the caller then checks the level of the
+    /// building the order goes to itself. Prerequisite units are always checked in full.
     /// </param>
     /// <remarks>
-    /// "Available" means "unlockable here", not "one stands in the garrison" —
-    /// Berserker only needs Axeman to be a buildable option, not an owned unit.
-    /// The roster has no cycles, so plain recursion terminates; a cycle would
-    /// be a data bug, not something this needs to guard against defensively.
+    /// "Available" means "unlockable here", not "one stands in the garrison". The roster has no cycles, so plain recursion
+    /// terminates.
     /// </remarks>
-    public static bool IsAvailable(UnitType type, int longhouseLevel, Func<BuildingType, int>? buildingLevelOf = null)
+    public static bool IsAvailable(
+        UnitType type, int longhouseLevel, Func<BuildingType, int>? buildingLevelOf = null, bool checkOwnBuildingLevel = true)
     {
         var definition = Get(type);
         if (longhouseLevel < definition.RequiredLonghouseLevel)
@@ -300,7 +448,8 @@ public static class UnitCatalogue
             return false;
         }
 
-        if (buildingLevelOf is not null && buildingLevelOf(definition.RequiredBuildingType) < 1)
+        if (buildingLevelOf is not null
+            && buildingLevelOf(definition.RequiredBuildingType) < (checkOwnBuildingLevel ? definition.RequiredBuildingLevel : 1))
         {
             return false;
         }

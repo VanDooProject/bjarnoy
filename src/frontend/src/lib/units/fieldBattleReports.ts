@@ -39,17 +39,19 @@ function linesFor(lines: FieldBattleReportLine[], side: FieldBattleSide): FieldB
  * `side`'s loss and survivor lines merged into one row per unit type (the
  * backend stores them as separate `isLoss` rows — see
  * `FieldBattleReportLineEntity` — but the card renders "unit / lost /
- * survived" per row like `BattleReportAttackerLine` does).
+ * survived" per row like `BattleReportAttackerLine` does; `volleyLost` is the part of `lost` the volley took).
  */
 export function groupFieldBattleLinesByUnit(
   lines: FieldBattleReportLine[],
   side: FieldBattleSide,
-): Array<{ unit: string; lost: number; survived: number }> {
-  const byUnit = new Map<string, { unit: string; lost: number; survived: number }>();
+): Array<{ unit: string; lost: number; volleyLost: number; survived: number }> {
+  const byUnit = new Map<string, { unit: string; lost: number; volleyLost: number; survived: number }>();
   for (const line of linesFor(lines, side)) {
-    const row = byUnit.get(line.unit) ?? { unit: line.unit, lost: 0, survived: 0 };
-    if (line.isLoss) row.lost += line.count;
-    else row.survived += line.count;
+    const row = byUnit.get(line.unit) ?? { unit: line.unit, lost: 0, volleyLost: 0, survived: 0 };
+    if (line.isLoss) {
+      row.lost += line.count;
+      row.volleyLost += line.volleyCount;
+    } else row.survived += line.count;
     byUnit.set(line.unit, row);
   }
   return [...byUnit.values()];
@@ -93,16 +95,6 @@ export function fieldBattleSummaryLine(
     parts.push(i18n.global.t('hud.fieldBattleReport.summaryLooted', { n: Math.round(loot) }));
   }
   return parts.join(', ');
-}
-
-/** Which side `settlementId` fought on in this report, or `null` if it fought neither (shouldn't happen for reports fetched for that settlement). */
-export function fieldBattleSideFor(
-  report: { sideASettlementId: string; sideBSettlementId: string },
-  settlementId: string,
-): FieldBattleSide | null {
-  if (report.sideASettlementId === settlementId) return 'sidea';
-  if (report.sideBSettlementId === settlementId) return 'sideb';
-  return null;
 }
 
 /** Who `viewerSide` fought: the other side's owner and settlement name, `null` for a part that is not known. */

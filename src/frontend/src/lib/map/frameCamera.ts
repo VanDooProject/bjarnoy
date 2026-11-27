@@ -55,3 +55,30 @@ export function frameCameraFor(
   // Moving the content right on screen by dx means the camera centre moves left by dx / zoom in world px.
   return { x: camera.x - dx / zoom, y: camera.y - dy / zoom, zoom };
 }
+
+/**
+ * The share (0..1) of what the camera shows above a bottom sheet that is explored ground, sampled on a `cols` x `rows` grid of
+ * world points. The picker's framing compares it before and after a move: a move that shows more white mist than the player
+ * sees now is not made at all.
+ */
+export function exploredShare(
+  camera: FrameCamera,
+  viewport: { width: number; height: number },
+  isExploredAt: (x: number, y: number) => boolean,
+  bottomInset = 0,
+  cols = 12,
+  rows = 16,
+): number {
+  const visibleH = Math.max(1, viewport.height - Math.max(0, bottomInset));
+  let explored = 0;
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < rows; j++) {
+      const sx = ((i + 0.5) / cols) * viewport.width;
+      const sy = ((j + 0.5) / rows) * visibleH;
+      const x = camera.x + (sx - viewport.width / 2) / camera.zoom;
+      const y = camera.y + (sy - viewport.height / 2) / camera.zoom;
+      if (isExploredAt(x, y)) explored++;
+    }
+  }
+  return explored / (cols * rows);
+}

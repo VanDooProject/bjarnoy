@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { WorldModel } from '../WorldModel';
 import { buildDemoFogMask, demoMaskBounds } from './demoFogMask';
-import { toTexel } from './fogMaskLayout';
+import type { FogCoverageLookup } from './fogCoverage';
+import { maskBounds, toTexel } from './fogMaskLayout';
+import { texelLump } from './fogLump';
+import { ARMY_FOG_WHITE_MARGIN, ARMY_FOG_WHITE_OFFSET, OUT_OF_SIGHT_RAMP_MARGIN_HEXES } from './fogRamp';
+import { hexEuclideanDistance } from '../../hex/coords';
 
 // The bake used to round-trip every texel through an OffscreenCanvas 2D
 // context (`putImageData` -> `convertToBlob({type: 'image/png'})` ->
@@ -115,6 +119,86 @@ describe('buildDemoFogMask', () => {
     expect(capturedData![homeIndex * 4 + 0]).toBe(0);
     expect(capturedData![homeIndex * 4 + 3]).toBe(255); // alpha always opaque
     vi.unstubAllGlobals();
+  });
+
+  it('bakes the lump of the texel itself into B, hex and interpolation texels alike, and a 4-hex dark ramp into G', async () => {
+    stubBitmapGlobals();
+    const model = new WorldModel();
+    model.foundSettlement('player-1', 'Player', 'Realm', { q: 0, r: 0 });
+    let data: Uint8ClampedArray | null = null;
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn(async (source: FakeImageData) => {
+        data = source.data;
+        return {} as ImageBitmap;
+      }),
+    );
+
+    await buildDemoFogMask(model);
+
+    const bounds = demoMaskBounds(model);
+    for (let v = bounds.minV; v < bounds.maxV; v += 3) {
+      for (let u = bounds.minU; u < bounds.maxU; u += 2) {
+        const i = ((v - bounds.minV) * bounds.width + (u - bounds.minU)) * 4;
+        expect(data![i + 2], `texel (${u}, ${v})`).toBe(texelLump(u, v));
+      }
+    }
+    // The visible ring is radius 3 (border 2 + 1): a hex 2 hexes past it is half way up the 4-hex dark ramp.
+    const probe = toTexel({ q: 5, r: 0 });
+    const g = data![((probe.v - bounds.minV) * bounds.width + (probe.u - bounds.minU)) * 4 + 1];
+    const distance = hexEuclideanDistance({ q: 0, r: 0 }, { q: 5, r: 0 }) - 3;
+    expect(g).toBe(Math.round((255 * distance) / OUT_OF_SIGHT_RAMP_MARGIN_HEXES));
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('explored-ground fringe', () => {
+  // The troop's white ramp, baked around explored ground so a stored trail reads like the live clearing.
+  const ramp = (d: number) =>
+    Math.round(255 * Math.min(1, Math.max(0, (d - ARMY_FOG_WHITE_OFFSET) / ARMY_FOG_WHITE_MARGIN)));
+
+  async function bake(exploredHexes: Array<{ q: number; r: number }>, window?: ReturnType<typeof maskBounds>) {
+    stubBitmapGlobals();
+    const model = new WorldModel();
+    model.foundSettlement('player-1', 'Player', 'Realm', { q: 0, r: 0 });
+    const keys = new Set(exploredHexes.map((h) => `${h.q},${h.r}`));
+    model.setFogCoverage({ isExplored: (q: number, r: number) => keys.has(`${q},${r}`) } as unknown as FogCoverageLookup);
+    let data: Uint8ClampedArray | null = null;
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn(async (source: FakeImageData) => {
+        data = source.data;
+        return {} as ImageBitmap;
+      }),
+    );
+    const bounds = window ?? demoMaskBounds(model);
+    await buildDemoFogMask(model, bounds);
+    vi.unstubAllGlobals();
+    return (q: number, r: number) => {
+      const t = toTexel({ q, r });
+      return data![((t.v - bounds.minV) * bounds.width + (t.u - bounds.minU)) * 4];
+    };
+  }
+
+  it('ramps the unknown channel from explored ground far from any settlement, 0 on the ground itself', async () => {
+    const trail = [-1, 0, 1].map((q) => ({ q: 40 + q, r: 0 }));
+    const window = maskBounds(20, 10, 70, 70);
+    const unknownAt = await bake(trail, window);
+
+    for (const h of trail) expect(unknownAt(h.q, h.r)).toBe(0);
+    expect(unknownAt(42, 0)).toBe(11); // d = 1 from (41,0)
+    const probe = { q: 40, r: 3 };
+    const nearest = Math.min(...trail.map((h) => hexEuclideanDistance(probe, h)));
+    expect(unknownAt(probe.q, probe.r)).toBe(ramp(nearest));
+    expect(unknownAt(probe.q, probe.r)).toBeGreaterThan(0);
+    expect(unknownAt(40, 10)).toBe(255);
+  });
+
+  it('takes the fringe from explored ground just outside the window', async () => {
+    const window = maskBounds(40, 20, 60, 60);
+    const unknownAt = await bake([{ q: 38, r: 0 }], window);
+    // (41,0) is inside the window, 3 hexes from the explored hex outside it.
+    expect(unknownAt(41, 0)).toBe(ramp(3));
   });
 });
 

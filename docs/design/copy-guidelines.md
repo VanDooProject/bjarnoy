@@ -16,6 +16,12 @@ Example (player docs, what an army sees), both sentences cut:
 - "A realm's name appears over the nearest building you can see." Where the label is anchored is an implementation
   detail; the player just reads the name.
 
+## German terms: Reich and Gebiet
+
+- „Reich" is the realm as a polity: one of your settlements, or a linked group of them, that you run (switch between, name, send troops from). „Deine Reiche", „Reich wechseln".
+- „Gebiet" is the land a realm claims: its area and hexes. „Dein Gebiet erweitern", „außerhalb deines Gebiets".
+- Use either, by what the sentence means; the English "realm" covers both.
+
 ## Rejected copy
 
 Lines that were rejected as cringe. Don't reuse them or write in their style.

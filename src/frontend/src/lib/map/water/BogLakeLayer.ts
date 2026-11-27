@@ -4,7 +4,7 @@ import { GlProgram, Mesh, MeshGeometry, Shader, UniformGroup, type Texture } fro
 import { BOG_LAKE_FRAGMENT, BOG_LAKE_VERTEX } from './bogLakeShader';
 import { GUST_PEAK_PHASE, gustTime } from './bogLakeGust';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
-import { placeholderDryTexture } from './WaterLayer';
+import { placeholderDryTexture } from '../shaderResources';
 
 let sharedGlProgram: GlProgram | null = null;
 function bogLakeGlProgram(): GlProgram {

@@ -30,6 +30,8 @@ export interface RiverFlowEntry {
   fadeDirection?: TileOrientation;
   /** The river hex behind each in and out edge (its base art's frame name and sprite position), when there is one. */
   neighbours?: { direction: TileOrientation; name: string; x: number; y: number }[];
+  /** The entry of the river hex behind the out edge, drawn or not (see riverFlowEntries.ts); undefined when there is none. */
+  downstream?: () => RiverFlowEntry | undefined;
 }
 
 /**
@@ -255,24 +257,43 @@ export class RiverFlowLayer {
     const masks = this.masks;
     if (!masks) return this.target.texture;
     // Each cell's psi range in the stream function of the whole river: a cell feeding an arm of a confluence takes that arm's share of
-    // the confluence's own range, composed up the chain of drawn cells (a cell with no confluence downstream keeps [0, 1]).
-    const byPosition = new Map(entries.map((e) => [`${e.x},${e.y}`, e]));
+    // the confluence's own range, composed up the chain of cells downstream, drawn or not (a cell with no confluence downstream keeps [0, 1]).
     const ranges = new Map<RiverFlowEntry, readonly [number, number]>();
     const polygon = topFacePolygonTexels(0, 0);
-    const rangeOf = (entry: RiverFlowEntry, depth = 0): readonly [number, number] => {
+    const rangeOf = (entry: RiverFlowEntry): readonly [number, number] => {
       const known = ranges.get(entry);
       if (known) return known;
-      let range: readonly [number, number] = [0, 1];
-      const outNeighbour = entry.neighbours?.find((n) => n.direction === entry.outDirection);
-      const down = outNeighbour ? byPosition.get(`${outNeighbour.x},${outNeighbour.y}`) : undefined;
-      if (down && depth < 32) {
-        const arm = confluenceArmRanges(polygon, topFaceEdgeIndex(down.outDirection), down.inDirections.map(topFaceEdgeIndex)).get((topFaceEdgeIndex(entry.outDirection) + 3) % 6);
-        const [lo, hi] = rangeOf(down, depth + 1);
-        if (arm) range = [lo + (hi - lo) * arm[0], lo + (hi - lo) * arm[1]];
-        else range = [lo, hi];
+      // Walk downstream to the end of the chain (or to a node whose range is already known, or back into the chain on a cycle),
+      // then fold the ranges back up it, caching every node. No depth cap: a cap would make a long river's ranges depend on
+      // where the walk started.
+      const chain: RiverFlowEntry[] = [];
+      const visiting = new Set<RiverFlowEntry>();
+      let down: RiverFlowEntry | undefined = entry;
+      let downRange: readonly [number, number] = [0, 1];
+      while (down) {
+        const cached = ranges.get(down);
+        if (cached) {
+          downRange = cached;
+          break;
+        }
+        if (visiting.has(down)) break; // a real cycle: that node counts as [0, 1]
+        visiting.add(down);
+        chain.push(down);
+        down = down.downstream?.();
       }
-      ranges.set(entry, range);
-      return range;
+      for (let i = chain.length - 1; i >= 0; i--) {
+        const cell = chain[i]!;
+        let range: readonly [number, number] = [0, 1];
+        if (down) {
+          const arm = confluenceArmRanges(polygon, topFaceEdgeIndex(down.outDirection), down.inDirections.map(topFaceEdgeIndex)).get((topFaceEdgeIndex(cell.outDirection) + 3) % 6);
+          const [lo, hi] = downRange;
+          range = arm ? [lo + (hi - lo) * arm[0], lo + (hi - lo) * arm[1]] : [lo, hi];
+        }
+        ranges.set(cell, range);
+        down = cell;
+        downRange = range;
+      }
+      return ranges.get(entry)!;
     };
     const rims: MaskPlacement[] = [];
     const faces: MaskPlacement[] = [];

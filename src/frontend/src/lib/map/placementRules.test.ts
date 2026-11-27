@@ -56,13 +56,13 @@ describe('the placement rules come from the building catalogue', () => {
   it('keeps off the ring what the catalogue switches off, and shows the sea only its own buildings', () => {
     expect(newPlacementDisabled('quarry')).toBe(true);
     expect(types({ terrain: 'mountain' })).toEqual([]);
-    expect(types({ terrain: 'sea', isCoastalWater: true }).sort()).toEqual(['dockyard', 'fishinghut', 'palisade', 'shrineofnjord']);
+    expect(types({ terrain: 'sea', isCoastalWater: true }).sort()).toEqual(['fishinghut', 'harbour', 'palisade', 'shipyard', 'shrineofnjord']);
   });
 
   it('answers the bog, water and river questions from the same rules', () => {
     expect(isBogBoundBuilding('claybrickworks')).toBe(true);
     expect(isBogBoundBuilding('farm')).toBe(false);
-    expect(isWaterOnlyBuilding('dockyard')).toBe(true);
+    expect(isWaterOnlyBuilding('harbour')).toBe(true);
     expect(isLakeShoreHut({ buildingType: 'fishinghut', bog: { kind: 'half' } })).toBe(true);
     expect(isLakeShoreHut({ buildingType: 'fishinghut' })).toBe(false);
     expect(riverBuildingAllowedHere('cropmill', 'straight')).toBe(true);

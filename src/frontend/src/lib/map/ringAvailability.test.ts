@@ -5,6 +5,7 @@ import {
   missingPrerequisites,
   nextSlotFreeInSeconds,
   resourceShortfall,
+  resourcesReadyInSeconds,
   slotsNeeded,
   type RingAvailabilityInput,
 } from './ringAvailability';
@@ -66,6 +67,40 @@ describe('nextSlotFreeInSeconds', () => {
   it('is null when nothing reports a time', () => {
     expect(nextSlotFreeInSeconds([])).toBeNull();
     expect(nextSlotFreeInSeconds([{ state: 'waiting', completesInSeconds: 10 }])).toBeNull();
+  });
+});
+
+describe('resourcesReadyInSeconds', () => {
+  const rates = { wood: 60, stone: 30, food: 0, iron: 10 };
+  const cap = { wood: 1000, stone: 1000, food: 1000, iron: 1000 };
+
+  it('is null when nothing is short', () => {
+    expect(resourcesReadyInSeconds({}, rates, { wood: 5 }, cap)).toBeNull();
+  });
+
+  it('divides the shortfall by the hourly rate', () => {
+    // 30 wood at 60/h = 30 min
+    expect(resourcesReadyInSeconds({ wood: 30 }, rates, { wood: 100 }, cap)).toBe(1800);
+  });
+
+  it('waits for the slowest short resource', () => {
+    // wood 30 / 60 per h = 1800s; stone 30 / 30 per h = 3600s
+    expect(resourcesReadyInSeconds({ wood: 30, stone: 30 }, rates, { wood: 100, stone: 100 }, cap)).toBe(3600);
+  });
+
+  it('is null when a short resource has no production', () => {
+    expect(resourcesReadyInSeconds({ food: 5 }, rates, { food: 50 }, cap)).toBeNull();
+    expect(resourcesReadyInSeconds({ wood: 5 }, undefined, { wood: 50 }, cap)).toBeNull();
+  });
+
+  it('is null when the cost exceeds the storage cap', () => {
+    expect(resourcesReadyInSeconds({ wood: 5 }, rates, { wood: 2000 }, cap)).toBeNull();
+  });
+
+  it('is carried by computeAvailability only while resources are short', () => {
+    const short = computeAvailability(input({ available: { ...RICH, wood: 70 }, rates, storageCap: cap }));
+    expect(short.resourcesReadyInSeconds).toBe(1800);
+    expect(computeAvailability(input({ rates, storageCap: cap })).resourcesReadyInSeconds).toBeNull();
   });
 });
 
@@ -137,13 +172,23 @@ describe('computeAvailability', () => {
   it('is waiting when the waiting queue is full too', () => {
     const a = computeAvailability(input({ construction: { slots: 2, slotsUsed: 2, maxWaitingOrders: 2, waitingOrders: 2 } }));
     expect(a.state).toBe('waiting');
-    expect(a.queue).toEqual({ hasRoom: false, waiting: 2, max: 2 });
+    expect(a.queue).toEqual({ hasRoom: false, waiting: 2, max: 2, locked: false });
   });
 
   it('queues when slots are full but the premium waiting queue has room', () => {
     const a = computeAvailability(input({ construction: { slots: 2, slotsUsed: 2, maxWaitingOrders: 3, waitingOrders: 1 } }));
     expect(a.state).toBe('queues');
-    expect(a.queue).toEqual({ hasRoom: true, waiting: 1, max: 3 });
+    expect(a.queue).toEqual({ hasRoom: true, waiting: 1, max: 3, locked: false });
+  });
+
+  it('locks the queue without premium while earlier orders still wait', () => {
+    const locked = computeAvailability(input({ construction: { slots: 3, slotsUsed: 1, maxWaitingOrders: 0, waitingOrders: 1 } }));
+    expect(locked.state).toBe('waiting');
+    expect(locked.queue).toEqual({ hasRoom: false, waiting: 1, max: 0, locked: true });
+    const noWaiting = computeAvailability(input({ construction: { slots: 2, slotsUsed: 2, maxWaitingOrders: 0, waitingOrders: 0 } }));
+    expect(noWaiting.queue.locked).toBe(false);
+    const premium = computeAvailability(input({ construction: { slots: 2, slotsUsed: 2, maxWaitingOrders: 2, waitingOrders: 1 } }));
+    expect(premium.queue.locked).toBe(false);
   });
 
   it('needs several free slots for a multi-slot building', () => {
@@ -152,6 +197,12 @@ describe('computeAvailability', () => {
     const two = computeAvailability(input({ slotsNeeded: 2, construction }));
     expect(two.state).toBe('waiting');
     expect(two.slots).toEqual({ needed: 2, total: 3, free: 1, short: true });
+  });
+
+  it('queues behind an order already waiting even when it would fit the free slots (FIFO)', () => {
+    const a = computeAvailability(input({ construction: { slots: 3, slotsUsed: 1, maxWaitingOrders: 3, waitingOrders: 1 } }));
+    expect(a.state).toBe('queues');
+    expect(a.slots).toEqual({ needed: 1, total: 3, free: 2, short: true });
   });
 
   it('treats an unfinished earlier order on the same hex as not fitting now', () => {

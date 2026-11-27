@@ -13,14 +13,20 @@ import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { usePlayerStore } from '../../stores/player';
 import { useLoginForm } from '../../composables/useLoginForm';
+import { useLoginFlowStore } from '../../stores/loginFlow';
+import { useWorldStore } from '../../stores/world';
+import LoginFields from '../auth/LoginFields.vue';
+import AuthPrimaryButton from '../auth/AuthPrimaryButton.vue';
 import { useUnsavedInput } from '../../composables/useUnsavedInput';
 import type { MessageSchema } from '../../i18n/schema';
 
 const player = usePlayerStore();
+const world = useWorldStore();
+const flow = useLoginFlowStore();
 const router = useRouter();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-const { userName, password, submitting, error, login, restoreRealmIfAny } = useLoginForm();
+const { userName, password, submit, restoreRealmIfAny } = useLoginForm();
 
 // Prefilled from `lastAccount` but still editable — the device might be
 // shared, or the visitor might actually want a different account's login
@@ -29,19 +35,35 @@ userName.value = player.lastAccount ?? '';
 // The prefilled account name alone is not input worth keeping.
 useUnsavedInput(() => password.value !== '' || userName.value !== (player.lastAccount ?? ''));
 
-async function onSubmit() {
-  if (!(await login(userName.value, password.value))) return;
-  await restoreRealmIfAny();
-  // Straight to the settlement, not `router.push('/')`: this panel already
-  // lives on '/', and vue-router treats a push to the current location as a
-  // duplicate navigation that never re-runs the guard (router/index.ts) that
-  // would otherwise forward a founded player to /settlement — so the player
-  // stayed on the landing page after a successful login. No realm restored
-  // (demo mode, or an account with no realm in this world) means there's
-  // nowhere else to go: the gate simply disappears and founding shows.
-  if (player.hasFoundedSettlement) {
-    await router.push({ name: 'settlement' });
-  }
+function onSubmit() {
+  let restored = false;
+  return submit({
+    restore: async () => {
+      restored = await restoreRealmIfAny();
+    },
+    done: async () => {
+      // Straight to the settlement, not `router.push('/')`: this panel already
+      // lives on '/', and vue-router treats a push to the current location as a
+      // duplicate navigation that never re-runs the guard (router/index.ts) that
+      // would otherwise forward a founded player to /settlement — so the player
+      // stayed on the landing page after a successful login.
+      if (player.hasFoundedSettlement) {
+        await router.push({ name: 'settlement' });
+      } else if (restored) {
+        // The restore ran and found no realm of this account in this world:
+        // say so (LandingView keeps the gate up while this is set) instead of
+        // the panel just vanishing. Demo mode runs no restore: no notice.
+        flow.noRealm = { worldId: world.worldId ?? '', worldName: world.worldName ?? '' };
+      }
+    },
+  });
+}
+
+// "Start a realm here" after the no-realm notice: ends the gate so the normal
+// founding hero shows (forgetting `lastAccount` is what ends it).
+function startHere() {
+  flow.reset();
+  player.forgetLastAccount();
 }
 
 // "Start a new realm instead": declines the gate — forgetting `lastAccount`
@@ -54,32 +76,45 @@ function startNewRealm() {
 
 <template>
   <div class="returning-login" data-testid="returning-login-panel">
-    <div class="eyebrow">{{ t('onboarding.returningLogin.eyebrow') }}</div>
-    <h1>{{ t('onboarding.returningLogin.title', { name: player.lastAccount }) }}</h1>
-    <p class="lede">{{ t('onboarding.returningLogin.body') }}</p>
-    <form class="form" @submit.prevent="onSubmit">
-      <label for="returning-login-username">{{ t('login.usernameLabel') }}</label>
-      <input id="returning-login-username" v-model="userName" type="text" autocomplete="username" required />
-
-      <label for="returning-login-password">{{ t('login.passwordLabel') }}</label>
-      <input
-        id="returning-login-password"
-        v-model="password"
-        type="password"
-        autocomplete="current-password"
-        required
-        data-testid="returning-login-password"
+    <template v-if="flow.noRealm !== null">
+      <h1 data-testid="returning-login-no-realm-title">
+        {{ t('onboarding.returningLogin.noRealmTitle', { world: flow.noRealm.worldName }) }}
+      </h1>
+      <p class="lede">{{ t('onboarding.returningLogin.noRealmBody') }}</p>
+      <div class="notice-actions">
+        <AuthPrimaryButton data-testid="returning-login-start-here" @click="startHere">
+          {{ t('onboarding.returningLogin.startHere') }}
+        </AuthPrimaryButton>
+        <RouterLink
+          class="pick-world"
+          :to="{ name: 'worlds' }"
+          data-testid="returning-login-pick-world"
+          @click="flow.reset()"
+        >
+          {{ t('onboarding.returningLogin.pickWorld') }}
+        </RouterLink>
+      </div>
+    </template>
+    <template v-else>
+      <div class="eyebrow">{{ t('onboarding.returningLogin.eyebrow') }}</div>
+      <h1>{{ t('onboarding.returningLogin.title', { name: player.lastAccount }) }}</h1>
+      <p class="lede">{{ t('onboarding.returningLogin.body') }}</p>
+      <LoginFields
+        v-model:user-name="userName"
+        v-model:password="password"
+        class="form"
+        align="start"
+        user-name-id="returning-login-username"
+        password-id="returning-login-password"
+        password-testid="returning-login-password"
+        submit-testid="returning-login-submit"
+        error-testid="returning-login-error"
+        @submit="onSubmit"
       />
-
-      <p v-if="error" class="status error" data-testid="returning-login-error">{{ error }}</p>
-
-      <button class="submit" type="submit" :disabled="submitting" data-testid="returning-login-submit">
-        {{ submitting ? t('login.submitting') : t('login.submit') }}
+      <button type="button" class="new-realm" data-testid="returning-login-new-realm" @click="startNewRealm">
+        {{ t('onboarding.returningLogin.newRealm') }}
       </button>
-    </form>
-    <button type="button" class="new-realm" data-testid="returning-login-new-realm" @click="startNewRealm">
-      {{ t('onboarding.returningLogin.newRealm') }}
-    </button>
+    </template>
   </div>
 </template>
 
@@ -118,42 +153,18 @@ h1 {
   max-width: 42ch;
 }
 .form {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   margin-top: 20px;
   max-width: 320px;
 }
-.form label {
-  font-size: 13px;
-  color: var(--muted);
-  margin-top: 8px;
+.notice-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 20px;
 }
-.form input {
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  color: var(--text);
-  font: inherit;
-}
-.error {
-  color: var(--rival);
-}
-.submit {
-  margin-top: 16px;
-  align-self: flex-start;
-  background: var(--gold);
-  color: #1a1208;
-  border: none;
-  border-radius: 8px;
-  padding: 10px 16px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.submit:disabled {
-  opacity: 0.6;
-  cursor: default;
+.pick-world {
+  color: var(--gold);
 }
 .new-realm {
   margin-top: 16px;

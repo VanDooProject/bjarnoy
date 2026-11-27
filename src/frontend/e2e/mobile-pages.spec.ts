@@ -2,7 +2,8 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { AdminActivityPage, SettlementPage } from './pages';
-import { layoutOverflow, openRingOnGuidedHex } from './helpers';
+import { openRingOnGuidedHex } from './helpers';
+import { layoutOverflow } from './support/geometry';
 
 // Second mobile-readiness sweep (after mobile.spec.ts): defects found by
 // walking every page at phone sizes, portrait and landscape. The desktop

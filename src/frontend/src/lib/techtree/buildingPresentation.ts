@@ -21,7 +21,8 @@ const PREVIEW_LEVEL: Record<string, number> = {
   shrineofnjord: 2,
   odinstatue: 2,
   archeryrange: 2,
-  dockyard: 7,
+  harbour: 7,
+  shipyard: 7,
   greatstorehouse: 4,
   barracks: 2,
   // Shares the fisherhut art family — see buildingArt.ts's
@@ -48,7 +49,8 @@ const TYPE_LABELS: Record<string, string> = {
   reindeerherder: 'Reindeer herder',
   archeryrange: 'Archery range',
   siegeworkshop: 'Siege workshop',
-  dockyard: 'Dockyard',
+  harbour: 'Harbour',
+  shipyard: 'Shipyard',
   greatstorehouse: 'Great storehouse',
   townsquare: 'Town square',
   cropmill: 'Crop mill',
@@ -149,22 +151,23 @@ const GRAPH_CATEGORY_OF: Record<string, GraphCategory> = {
   shrineofnjord: 'religion',
   odinstatue: 'religion',
   fishinghut: 'water',
-  dockyard: 'water',
+  harbour: 'water',
+  shipyard: 'water',
 };
 
 export function graphCategoryOf(type: string): GraphCategory {
   return GRAPH_CATEGORY_OF[type] ?? 'production';
 }
 
-/** The colour token each graph category is drawn in — all already in style.css. */
+/** The colour token each graph category is drawn in: the build ring's category tints (style.css `--cat-*`). */
 export const GRAPH_CATEGORY_COLOR: Record<GraphCategory, string> = {
   anchor: 'var(--gold)',
-  production: 'var(--food)',
-  military: 'var(--iron)',
-  defense: 'var(--wood)',
-  logistics: 'var(--stone)',
-  religion: 'var(--shrine)',
-  water: 'var(--water)',
+  production: 'var(--cat-resource)',
+  military: 'var(--cat-military)',
+  defense: 'var(--cat-defense)',
+  logistics: 'var(--cat-logistics)',
+  religion: 'var(--cat-religion)',
+  water: 'var(--cat-water)',
 };
 
 /**

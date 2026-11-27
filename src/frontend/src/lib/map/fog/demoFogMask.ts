@@ -2,7 +2,7 @@
 // DEMO_MODE), so `setFogMask` (HexMapRenderer.ts) never gets called via
 // `stores/world.ts`'s `fetchFogMask`, which early-returns under DEMO_MODE.
 // Left unaddressed, both fog layers stay on their default placeholder
-// texture (fully-unknown, opaque — see FogMaskLayer.ts) forever, blanketing
+// texture (fully-unknown, opaque — see FogField.ts) forever, blanketing
 // the whole viewport. This module bakes an equivalent mask directly from the
 // client-side `WorldModel`'s own already-computed per-hex state instead,
 // mirroring `FogMaskGenerator.Generate` (backend,
@@ -10,26 +10,25 @@
 // to read correctly through the same shader — not a byte-for-byte port (see
 // fogMaskLayout.ts's own note on that being deliberately out of scope here).
 import type { AxialCoord } from '../../hex/coords';
-import { hexEuclideanDistance } from '../../hex/coords';
+import { hexEuclideanDistance, hexesInRadius, neighbors } from '../../hex/coords';
 import { FOG_SCOUT_RING } from '../WorldModel';
 import type { WorldModel } from '../WorldModel';
 import {
   diagonalNeighboursForInterpolation,
   isHexTexel,
   toHex,
+  toTexel,
   maskBounds,
   type MaskBounds,
   type MaskTexel,
 } from './fogMaskLayout';
 import { FogCoverage } from './fogCoverage';
+import { texelLump } from './fogLump';
+import { ARMY_FOG_WHITE_MARGIN, ARMY_FOG_WHITE_OFFSET, OUT_OF_SIGHT_RAMP_MARGIN_HEXES, UNKNOWN_RAMP_MARGIN_HEXES } from './fogRamp';
 
-// Mirrors FogMaskOptions' defaults (UnknownMarginHexes / OutOfSightMarginHexes)
-// — UNKNOWN_MARGIN_HEXES also matches HexMapRenderer's own
-// FOG_RAMP_MARGIN_HEXES. All three describe the same ramp and have to move
-// together; see FogMaskOptions.UnknownMarginHexes for why a mismatch is
-// silent rather than an error.
-const UNKNOWN_MARGIN_HEXES = 14;
-const OUT_OF_SIGHT_MARGIN_HEXES = 2;
+// Mirrors FogMaskOptions' defaults (UnknownMarginHexes / OutOfSightMarginHexes); the ramp widths are the shared
+// UNKNOWN_RAMP_MARGIN_HEXES / OUT_OF_SIGHT_RAMP_MARGIN_HEXES (fogRamp.ts), see FogMaskOptions.UnknownMarginHexes for why a mismatch is silent rather than an error.
+const UNKNOWN_MARGIN_HEXES = UNKNOWN_RAMP_MARGIN_HEXES;
 
 // Demo worlds are procedurally generated on demand and their islands are far apart (the nearest
 // one to the origin can be hundreds of hexes away), so the demo mask is not a fixed disc around the
@@ -72,17 +71,6 @@ function ramp(distance: number, marginHexes: number): number {
   return Math.round((255 * distance) / marginHexes);
 }
 
-// Deterministic per-hex pseudo-random seed for the shader's UV warp
-// (fogShader.ts). Doesn't need to match the backend's exact byte values —
-// unlike the mask's fog channels, this is never compared across client and
-// server, only sampled locally.
-function noiseSeed(hex: AxialCoord): number {
-  let h = (hex.q * 374761393 + hex.r * 668265263) | 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  h ^= h >>> 16;
-  return h & 0xff;
-}
-
 /**
  * Distance past the nearest source's ring, measured with the *round* metric
  * (`hexEuclideanDistance`) rather than `hexDistance`.
@@ -107,13 +95,75 @@ function ringDistance(sources: Array<{ q: number; r: number; radius: number }>, 
   return min === Infinity ? Infinity : Math.max(0, min);
 }
 
+const STEPS_PER_EUCLIDEAN_UNIT = 2 / Math.sqrt(3);
+const TRAIL_FRINGE_CAP_HEXES = ARMY_FOG_WHITE_OFFSET + ARMY_FOG_WHITE_MARGIN;
+/** Step radius from an explored hex to the farthest hex its fringe can change (mirrors FogMaskGenerator.TrailFringeReachSteps). */
+export const TRAIL_FRINGE_REACH_STEPS = Math.ceil(TRAIL_FRINGE_CAP_HEXES * STEPS_PER_EUCLIDEAN_UNIT);
+
+/** The troop's white ramp as a 0..255 value for a distance from explored ground. */
+function trailRamp(distance: number): number {
+  if (!Number.isFinite(distance)) return 255;
+  const t = Math.min(1, Math.max(0, (distance - ARMY_FOG_WHITE_OFFSET) / ARMY_FOG_WHITE_MARGIN));
+  return Math.round(255 * t);
+}
+
+/**
+ * Per hex texel index within reach of explored ground, the euclidean distance to the nearest explored hex. Only explored
+ * hexes with an unexplored neighbour can be nearest, so only those are stamped; they may lie outside the bounds (up to
+ * the fringe reach). Mirrors FogMaskGenerator.TrailFringeDistances.
+ */
+function trailFringeDistances(
+  bounds: MaskBounds,
+  isExplored: (q: number, r: number) => boolean,
+  indexOf: (texel: MaskTexel) => number,
+): Map<number, number> {
+  const distance = new Map<number, number>();
+  const steps = TRAIL_FRINGE_REACH_STEPS;
+  const cache = new Map<string, boolean>();
+  const explored = (q: number, r: number): boolean => {
+    const k = `${q},${r}`;
+    let value = cache.get(k);
+    if (value === undefined) {
+      value = isExplored(q, r);
+      cache.set(k, value);
+    }
+    return value;
+  };
+
+  for (let v = bounds.minV - 2 * steps; v < bounds.maxV + 2 * steps; v++) {
+    for (let u = bounds.minU - steps; u < bounds.maxU + steps; u++) {
+      const texel = { u, v };
+      if (!isHexTexel(texel)) continue;
+      const hex = toHex(texel);
+      if (!explored(hex.q, hex.r) || !neighbors(hex).some((n) => !explored(n.q, n.r))) continue;
+      for (const target of hexesInRadius(hex, steps)) {
+        const targetTexel = toTexel(target);
+        if (
+          targetTexel.u < bounds.minU ||
+          targetTexel.u >= bounds.maxU ||
+          targetTexel.v < bounds.minV ||
+          targetTexel.v >= bounds.maxV
+        ) {
+          continue;
+        }
+        const d = hexEuclideanDistance(target, hex);
+        if (d > TRAIL_FRINGE_CAP_HEXES) continue;
+        const i = indexOf(targetTexel);
+        const existing = distance.get(i);
+        if (existing === undefined || d < existing) distance.set(i, d);
+      }
+    }
+  }
+  return distance;
+}
+
 interface DemoFogMaskCell {
   unknown: number;
   outOfSight: number;
-  noise: number;
+  lump: number;
 }
 
-const FULLY_UNKNOWN: DemoFogMaskCell = { unknown: 255, outOfSight: 0, noise: 0 };
+const FULLY_UNKNOWN: DemoFogMaskCell = { unknown: 255, outOfSight: 0, lump: 0 };
 
 function generateCells(model: WorldModel, bounds: MaskBounds): DemoFogMaskCell[] {
   const settlements = model.listSettlements();
@@ -141,19 +191,27 @@ function generateCells(model: WorldModel, bounds: MaskBounds): DemoFogMaskCell[]
     model.visionDiscsFor(s).map((d) => ({ q: d.q, r: d.r, radius: d.radius + 1 })),
   );
 
+  const trailDistance = trailFringeDistances(bounds, (q, r) => model.isExplored(q, r), indexOf);
+
   // Pass 1: real hexes. `isExplored` still gates the unknown channel — that
   // is WorldModel's own monotonic explored set (hex-counted, as gameplay
   // reach always is), and no rendering metric should be able to fog a hex
-  // the player has actually scouted. Only the *ramp past* it is round.
+  // the player has actually scouted. Only the *ramp past* it is round. Beside explored ground the source ramp
+  // is capped by the troop's own ramp (the trail fringe), so explored history has no hard edge.
   for (const texel of hexTexels) {
     const hex = toHex(texel);
-    const unknown = model.isExplored(hex.q, hex.r) ? 0 : ramp(ringDistance(exploredSources, hex), UNKNOWN_MARGIN_HEXES);
-    const outOfSight = ramp(ringDistance(visibleSources, hex), OUT_OF_SIGHT_MARGIN_HEXES);
-    cells[indexOf(texel)] = { unknown, outOfSight, noise: noiseSeed(hex) };
+    const unknown = model.isExplored(hex.q, hex.r)
+      ? 0
+      : Math.min(
+          ramp(ringDistance(exploredSources, hex), UNKNOWN_MARGIN_HEXES),
+          trailRamp(trailDistance.get(indexOf(texel)) ?? Infinity),
+        );
+    const outOfSight = ramp(ringDistance(visibleSources, hex), OUT_OF_SIGHT_RAMP_MARGIN_HEXES);
+    cells[indexOf(texel)] = { unknown, outOfSight, lump: texelLump(texel.u, texel.v) };
   }
 
-  // Pass 2: interpolation-only texels, averaged from their four diagonal hex
-  // neighbours — an out-of-bounds neighbour (edge of the window) reads
+  // Pass 2: interpolation-only texels, R/G averaged from their four diagonal hex
+  // neighbours (B is the texel's own lump, never averaged) — an out-of-bounds neighbour (edge of the window) reads
   // as fully unknown rather than being skipped, matching the backend.
   for (let v = bounds.minV; v < bounds.maxV; v++) {
     for (let u = bounds.minU; u < bounds.maxU; u++) {
@@ -162,7 +220,6 @@ function generateCells(model: WorldModel, bounds: MaskBounds): DemoFogMaskCell[]
 
       let unknownSum = 0;
       let outOfSightSum = 0;
-      let noiseSum = 0;
       let count = 0;
       for (const neighbour of diagonalNeighboursForInterpolation(texel)) {
         const inBounds =
@@ -170,13 +227,12 @@ function generateCells(model: WorldModel, bounds: MaskBounds): DemoFogMaskCell[]
         const cell = inBounds ? cells[indexOf(neighbour)] : FULLY_UNKNOWN;
         unknownSum += cell.unknown;
         outOfSightSum += cell.outOfSight;
-        noiseSum += cell.noise;
         count++;
       }
       cells[indexOf(texel)] = {
         unknown: Math.round(unknownSum / count),
         outOfSight: Math.round(outOfSightSum / count),
-        noise: Math.round(noiseSum / count),
+        lump: texelLump(u, v),
       };
     }
   }
@@ -203,7 +259,7 @@ export async function buildDemoFogMask(
     const cell = cells[i];
     data[i * 4 + 0] = cell.unknown;
     data[i * 4 + 1] = cell.outOfSight;
-    data[i * 4 + 2] = cell.noise;
+    data[i * 4 + 2] = cell.lump;
     data[i * 4 + 3] = 255;
   }
   const coverage = new FogCoverage(bounds, data);

@@ -4,6 +4,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
+import { hexCenterScreen } from './support/renderer';
 
 // DOM and game state only: water pixels cannot change these results (see `mapLayers` in fixtures.ts).
 test.use({ mapLayers: { water: false } });
@@ -15,28 +16,25 @@ test.use({ mapLayers: { water: false } });
 test.describe('mobile queue drawer', { tag: '@g2' }, () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  interface DemoWindow {
-    __demoWorld: () => {
-      hud: {
-        queueFetchedAt: number;
-        queue: unknown[];
-        construction: { slots: number; slotsUsed: number; maxWaitingOrders: number; waitingOrders: number; maxOrdersPerHex: number; towerLimit: number; towersHeld: number };
-        trainingQueueFetchedAt: number;
-        trainingQueue: unknown[];
-        garrison: { unit: string; count: number }[];
-        tick: number;
-      };
-      selectedSettlementId: string;
-      model: { getSettlement: (id: string) => { q: number; r: number } };
-      syncHud: () => void;
+  interface DemoWorld {
+    hud: {
+      queueFetchedAt: number;
+      queue: unknown[];
+      construction: { slots: number; slotsUsed: number; maxWaitingOrders: number; waitingOrders: number; maxOrdersPerHex: number; towerLimit: number; towersHeld: number };
+      trainingQueueFetchedAt: number;
+      trainingQueue: unknown[];
+      garrison: { unit: string; count: number }[];
+      tick: number;
     };
-    __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
+    selectedSettlementId: string;
+    model: { getSettlement: (id: string) => { q: number; r: number } };
+    syncHud: () => void;
   }
 
   /** Seeds a slow + fast build order, one training order, and a garrison — mirrors QueueDrawer.test.ts's fixtures. */
   async function seedQueues(page: Page) {
     return page.evaluate(() => {
-      const world = (window as unknown as DemoWindow).__demoWorld();
+      const world = window.__demoWorld() as DemoWorld;
       const settlement = world.model.getSettlement(world.selectedSettlementId);
       const farHex = { q: settlement.q + 6, r: settlement.r - 4 };
 
@@ -174,10 +172,7 @@ test.describe('mobile queue drawer', { tag: '@g2' }, () => {
     await SettlementPage.found(page);
     const { farHex } = await seedQueues(page);
 
-    const before = await page.evaluate(
-      (coord) => (window as unknown as DemoWindow).__settlementRenderer().hexCenterScreen(coord),
-      farHex,
-    );
+    const before = await hexCenterScreen(page, farHex);
     const canvasBox = (await page.locator('canvas').boundingBox())!;
     const canvasCentre = { x: canvasBox.width / 2, y: canvasBox.height / 2 };
     // A real regression here is the target hex already sitting at the
@@ -194,10 +189,7 @@ test.describe('mobile queue drawer', { tag: '@g2' }, () => {
 
     await expect
       .poll(async () => {
-        const after = await page.evaluate(
-          (coord) => (window as unknown as DemoWindow).__settlementRenderer().hexCenterScreen(coord),
-          farHex,
-        );
+        const after = await hexCenterScreen(page, farHex);
         return Math.hypot(after.x - canvasCentre.x, after.y - canvasCentre.y);
       })
       .toBeLessThan(40);
@@ -215,7 +207,7 @@ test.describe('mobile queue drawer', { tag: '@g2' }, () => {
       await SettlementPage.found(page);
       // Enough orders that the list reaches down past the handle.
       await page.evaluate(() => {
-        const world = (window as unknown as DemoWindow).__demoWorld();
+        const world = window.__demoWorld() as DemoWorld;
         const settlement = world.model.getSettlement(world.selectedSettlementId);
         world.hud.queueFetchedAt = Date.now();
         world.hud.queue = Array.from({ length: 8 }, (_, i) => ({

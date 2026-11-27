@@ -44,7 +44,7 @@ public class QuestTests
     public void The_quests_come_in_the_tutorial_order_with_their_rewards()
     {
         Assert.Equal(
-            ["producers3", "longhouse2", "storagehouse1", "producers6", "longhouse3", "tower3", "longhouse5", "spearmen5", "hunt1"],
+            ["producers3", "longhouse2", "storagehouse1", "producers6", "longhouse3", "register", "tower3", "longhouse5", "spearmen5", "hunt1"],
             Quests.All.Select(q => q.Id));
         Assert.Equal(new ResourceAmounts(150, 120, 80, 0), Quests.Find("producers3")!.Reward);
         Assert.Equal(new ResourceAmounts(250, 200, 150, 0), Quests.Find("longhouse2")!.Reward);
@@ -194,8 +194,8 @@ public class QuestTests
         static (int, int) P(Settlement s) { var p = Quests.Find("spearmen5")!.Progress!(s); return (p.Current, p.Target); }
 
         Assert.Equal((0, 5), P(Found()));
-        Assert.Equal((3, 5), P(Found() with { Garrison = [new UnitStack(UnitType.Spearman, 3), new UnitStack(UnitType.Thrall, 9)] }));
-        Assert.Equal((5, 5), P(Found() with { Garrison = [new UnitStack(UnitType.Spearman, 9)] }));
+        Assert.Equal((3, 5), P(Found().WithGarrison([new UnitStack(UnitType.Spearman, 3), new UnitStack(UnitType.Thrall, 9)])));
+        Assert.Equal((5, 5), P(Found().WithGarrison([new UnitStack(UnitType.Spearman, 9)])));
         Assert.Equal((5, 5), P(Found() with { TroopsTrained = true }));
     }
 
@@ -215,38 +215,32 @@ public class QuestTests
         var home = Found();
 
         Assert.False(q.IsCompleted(home));
-        Assert.False(q.IsCompleted(home with { Garrison = [new UnitStack(UnitType.Spearman, 4)] }));
-        Assert.True(q.IsCompleted(home with { Garrison = [new UnitStack(UnitType.Spearman, 5)] }));
-        Assert.True(q.IsCompleted(home with
-        {
-            Garrison = [new UnitStack(UnitType.Axeman, 2), new UnitStack(UnitType.Spearman, 3)],
-        }));
-        Assert.False(q.IsCompleted(home with
-        {
-            Garrison = [new UnitStack(UnitType.Spearman, 2), new UnitStack(UnitType.Thrall, 10), new UnitStack(UnitType.Karve, 3)],
-        }));
+        Assert.False(q.IsCompleted(home.WithGarrison([new UnitStack(UnitType.Spearman, 4)])));
+        Assert.True(q.IsCompleted(home.WithGarrison([new UnitStack(UnitType.Spearman, 5)])));
+        Assert.True(q.IsCompleted(home.WithGarrison([new UnitStack(UnitType.Axeman, 2), new UnitStack(UnitType.Spearman, 3)])));
+        Assert.False(q.IsCompleted(home.WithGarrison([new UnitStack(UnitType.Spearman, 2), new UnitStack(UnitType.Thrall, 10), new UnitStack(UnitType.Karve, 3)])));
     }
 
     [Fact]
     public void The_spearmen_quest_stays_completed_once_the_troops_were_trained()
     {
         var q = Quests.Find("spearmen5")!;
-        var trained = Found() with { Garrison = [new UnitStack(UnitType.Axeman, 5)] };
+        var trained = Found().WithGarrison([new UnitStack(UnitType.Axeman, 5)]);
         var latched = trained.SettleTo(T0).Settlement;
 
         Assert.True(latched.TroopsTrained);
         Assert.False(Found().SettleTo(T0).Settlement.TroopsTrained);
 
-        var gone = latched with { Garrison = [new UnitStack(UnitType.Axeman, 1)] };
+        var gone = latched.WithGarrison([new UnitStack(UnitType.Axeman, 1)]);
         Assert.True(q.IsCompleted(gone));
         Assert.True(gone.SettleTo(T0).Settlement.TroopsTrained);
-        Assert.False(q.IsCompleted(Found() with { Garrison = [new UnitStack(UnitType.Axeman, 4)] }));
+        Assert.False(q.IsCompleted(Found().WithGarrison([new UnitStack(UnitType.Axeman, 4)])));
     }
 
     [Fact]
     public void Settling_reports_a_change_when_only_the_troops_latch_flips()
     {
-        var result = (Found() with { Garrison = [new UnitStack(UnitType.Spearman, 6)] }).SettleTo(T0);
+        var result = (Found().WithGarrison([new UnitStack(UnitType.Spearman, 6)])).SettleTo(T0);
 
         Assert.True(result.Changed);
         Assert.True(result.Settlement.TroopsTrained);
@@ -331,5 +325,37 @@ public class QuestTests
         Assert.Equal(1_000, stock.Stone, 6);
         Assert.Equal(1_000, stock.Food, 6);
         Assert.True(claimed.HasClaimed(Quests.Find("longhouse2")!));
+    }
+
+    [Fact]
+    public void The_register_quest_needs_an_account_and_pays_premium_instead_of_resources()
+    {
+        var register = Quests.Find(Quests.RegisterId)!;
+        Assert.Equal(9, register.Bit);
+        Assert.Equal(14, register.PremiumDays);
+        Assert.Equal(ResourceAmounts.Zero, register.Reward);
+
+        var anonymous = Found();
+        Assert.False(register.IsCompleted(anonymous));
+        Assert.Equal(QuestRejection.NotCompleted, anonymous.PlanClaimQuest(Quests.RegisterId).Rejection);
+
+        var registered = anonymous with { OwnerRegistered = true };
+        Assert.True(register.IsCompleted(registered));
+        var claimed = registered.ClaimQuest(registered.PlanClaimQuest(Quests.RegisterId).Quest!, T0);
+        Assert.True(claimed.HasClaimed(register));
+        Assert.Equal(QuestRejection.AlreadyClaimed, claimed.PlanClaimQuest(Quests.RegisterId).Rejection);
+    }
+
+    [Fact]
+    public void The_register_quest_sits_before_the_tower_quest_until_registered_then_comes_first()
+    {
+        var ids = (Settlement s) => Quests.For(s).Select(q => q.Id).ToList();
+
+        var anonymous = ids(Found());
+        Assert.Equal(anonymous.IndexOf("tower3") - 1, anonymous.IndexOf(Quests.RegisterId));
+
+        var registered = ids(Found() with { OwnerRegistered = true });
+        Assert.Equal(0, registered.IndexOf(Quests.RegisterId));
+        Assert.Equal(Quests.All.Count, registered.Count);
     }
 }

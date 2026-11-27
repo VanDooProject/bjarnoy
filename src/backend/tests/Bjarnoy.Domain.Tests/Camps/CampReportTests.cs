@@ -28,7 +28,7 @@ public class CampReportTests
     {
         var before = new CampGarrison(4, 9, 1);
         var sent = new[] { new UnitStack(UnitType.Axeman, 50), new UnitStack(UnitType.Spearman, 10) };
-        var plan = CampBattleResolver.Hunt(sent, before, Wolves, 2, seed: 5);
+        var plan = CampBattleResolver.Hunt(sent, before, Wolves, 2, seed: 5, provisionsAtBattle: double.PositiveInfinity);
 
         var report = Report(before, plan, sent);
 
@@ -51,7 +51,7 @@ public class CampReportTests
     {
         var before = new CampGarrison(4, 9, 1);
         var sent = new[] { new UnitStack(UnitType.Thrall, 3) };
-        var plan = CampBattleResolver.Hunt(sent, before, Wolves, 2, seed: 5);
+        var plan = CampBattleResolver.Hunt(sent, before, Wolves, 2, seed: 5, provisionsAtBattle: double.PositiveInfinity);
 
         var report = Report(before, plan, sent);
 
@@ -66,7 +66,7 @@ public class CampReportTests
     {
         var sent = new[] { new UnitStack(UnitType.Axeman, 10) };
         var plan = CampBattleResolver.Hunt(
-            sent, CampGarrison.Empty, Wolves, 2, seed: 5, leftover: new ResourceAmounts(0, 0, 100, 0));
+            sent, CampGarrison.Empty, Wolves, 2, seed: 5, provisionsAtBattle: double.PositiveInfinity, leftover: new ResourceAmounts(0, 0, 100, 0));
 
         var report = Report(CampGarrison.Empty, plan, sent);
 

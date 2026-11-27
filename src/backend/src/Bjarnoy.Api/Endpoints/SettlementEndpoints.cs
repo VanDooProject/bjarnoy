@@ -92,6 +92,14 @@ public static class SettlementEndpoints
             .AddEndpointFilter<UserActivityEndpointFilter>()
             .WithConcurrencyRetry();
 
+        settlements.MapPost("/{settlementId:guid}/units/{orderId:guid}/cancel", CancelTraining)
+            .WithName("CancelTraining")
+            .WithSummary("Cancels an order of a building's training queue; the units not trained yet are refunded at 50 %.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .RequireSettlementOwner()
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
+
         settlements.MapPost("/{settlementId:guid}/units", TrainUnits)
             .WithName("TrainUnits")
             .WithSummary("Queues training a batch of units, charging their cost immediately.")
@@ -103,6 +111,14 @@ public static class SettlementEndpoints
         settlements.MapPost("/{settlementId:guid}/feast", HoldFeast)
             .WithName("HoldFeast")
             .WithSummary("Starts a Town Square feast, charging its cost immediately; it grants renown when it ends.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .RequireSettlementOwner()
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
+
+        settlements.MapPut("/{settlementId:guid}/name", Rename)
+            .WithName("RenameSettlement")
+            .WithSummary("Renames a settlement: free, any time, names need not be unique.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>()
@@ -225,9 +241,9 @@ public static class SettlementEndpoints
 
     /// <summary>
     /// The rival-safe counterpart to <see cref="Get"/>: identity, position and
-    /// buildings only, and only once the caller has explored the settlement's
-    /// centre hex or the hex of one of its standing buildings (<see cref="RivalVisibility"/>); the buildings
-    /// returned are exactly the ones on explored hexes — see <see cref="SettlementViewResponse"/>.
+    /// buildings only, and only once the caller sees the settlement's centre hex, the hex of one of its standing buildings or a hex of
+    /// the claim disc of its Longhouse or a tower (<see cref="RivalVisibility"/>); the buildings returned are the ones on visible hexes plus
+    /// its towers and Longhouse whose claim disc reaches visible ground — see <see cref="SettlementViewResponse"/>.
     /// Resolves the caller's realm the same way the per-world reads in
     /// <see cref="WorldEndpoints"/> do (<see cref="CallerRealmResolver"/>): no
     /// realm at all is refused rather than answered with an empty view, since
@@ -278,14 +294,14 @@ public static class SettlementEndpoints
         }
         else
         {
-            var sights = await RivalVisibility.ForAsync(exploredArea, area, [entity], _ => false, cancellationToken);
+            var sights = await RivalVisibility.ForAsync(exploredArea, area, [entity], _ => false, withLabels: false, cancellationToken);
             if (sights.Count == 0)
             {
-                // Never reveal that a settlement with no explored hex even exists.
+                // Never reveal that a settlement with nothing in sight even exists.
                 return TypedResults.NotFound(SettlementNotFoundProblem());
             }
 
-            visibleBuildings = sights[0].ExploredBuildings;
+            visibleBuildings = sights[0].VisibleBuildings;
         }
 
         IReadOnlyList<PlacedBuildingResponse> buildings =
@@ -314,9 +330,9 @@ public static class SettlementEndpoints
     /// ask. Otherwise: the caller's own settlements (every realm they hold,
     /// not just their primary one — settler-convoy foundings can leave a
     /// player with several) plus every rival settlement whose centre hex or any
-    /// standing building's hex is in their explored area (<see cref="ExploredAreaService"/>,
-    /// <see cref="RivalVisibility"/>) — exactly what their own fog mask/world map already shows them. A listed
-    /// rival's summary is complete; its <c>LabelQ</c>/<c>LabelR</c> say which explored hex to label it on.
+    /// standing building's hex is in their visible area, or has a visible hex inside the claim disc of its Longhouse or one of its
+    /// towers (<see cref="ExploredAreaService"/>, <see cref="RivalVisibility"/>) — what their own fog mask/world map already shows them.
+    /// A listed rival's summary is complete; its <c>LabelQ</c>/<c>LabelR</c> say which visible hex to label it on.
     /// </summary>
     private static async Task<Ok<IReadOnlyList<SettlementSummary>>> ListForWorld(
         Guid worldId,
@@ -345,8 +361,8 @@ public static class SettlementEndpoints
 
         bool IsMine(SettlementEntity s) => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId);
 
-        var sights = await RivalVisibility.ForAsync(exploredArea, area, entities, IsMine, cancellationToken);
-        var labelHexOf = sights.ToDictionary(sight => sight.Settlement.Id, sight => sight.LabelHex);
+        var sights = await RivalVisibility.ForAsync(exploredArea, area, entities, IsMine, withLabels: true, cancellationToken);
+        var labelHexOf = sights.ToDictionary(sight => sight.Settlement.Id, sight => sight.LabelHex!.Value);
 
         // Every visible longhouse stays (the map draws them), each under its linked realm's name.
         var labels = await LinkedRealmNames.ForAsync(db, worldId, entities, cancellationToken);
@@ -507,6 +523,22 @@ public static class SettlementEndpoints
         return result.Accepted ? TypedResults.NoContent() : TypedResults.NotFound();
     }
 
+    private static async Task<Results<NoContent, NotFound, Conflict<ProblemDetails>>> CancelTraining(
+        Guid settlementId,
+        Guid orderId,
+        SettlementService settlements,
+        CancellationToken cancellationToken)
+    {
+        var result = await settlements.CancelTrainingAsync(settlementId, orderId, cancellationToken);
+
+        if (result.WorldPaused)
+        {
+            return TypedResults.Conflict(WorldPausedProblem());
+        }
+
+        return result.Accepted ? TypedResults.NoContent() : TypedResults.NotFound();
+    }
+
     private static async Task<Results<Accepted<TrainUnitsResponse>, NotFound,
         Conflict<ProblemDetails>, BadRequest<ProblemDetails>>> TrainUnits(
         Guid settlementId,
@@ -592,6 +624,41 @@ public static class SettlementEndpoints
         problem.Extensions["rejection"] = result.Rejection.ToString();
 
         return TypedResults.Conflict(problem);
+    }
+
+    private static async Task<Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>, ValidationProblem>> Rename(
+        Guid settlementId,
+        RenameSettlementRequest request,
+        SettlementService settlements,
+        GameDbContext db,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        // The attribute length checks run on the raw text; the real rule is on the trimmed name.
+        var name = request.Name.Trim();
+        if (name.Length is < 2 or > 100)
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [nameof(request.Name)] = ["The name must be 2 to 100 characters long once trimmed."],
+            });
+        }
+
+        var result = await settlements.RenameAsync(settlementId, name, cancellationToken);
+
+        if (result.SettlementNotFound)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (result.WorldPaused)
+        {
+            return TypedResults.Conflict(WorldPausedProblem());
+        }
+
+        var clock = result.Clock!.Value;
+        return TypedResults.Ok(
+            await SettlementResponse.ForOwnerAsync(db, result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow()), cancellationToken));
     }
 
     private static async Task<Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>>> ClaimQuest(
@@ -879,8 +946,8 @@ public static class SettlementEndpoints
         BuildRejection.RequiredBuildingTooLow => "A required building is not high enough level yet.",
         BuildRejection.TowerLimitReached =>
             "You already hold as many towers as your longhouse level allows. Upgrade the longhouse to raise the limit.",
-        BuildRejection.StorageHouseTooLow =>
-            "Raise your storage houses before building another: 1 at level 10, then 2 at 15, 3 at 20, 4 at 25.",
+        BuildRejection.GreatStorehouseNeedsStorageHouses =>
+            "Max out more storage houses first: each Great Storehouse needs one more Storage House at level 25 than you have Great Storehouses.",
         BuildRejection.ShrineGodAlreadyOnIsland => "That god already has a shrine on this island.",
         BuildRejection.SettlementAlreadyHasShrine => "This settlement already has a shrine.",
         BuildRejection.PalisadeWouldBranch =>
@@ -894,6 +961,8 @@ public static class SettlementEndpoints
         BuildRejection.LonghouseCannotBeRazed => "The longhouse cannot be razed.",
         BuildRejection.NoFreeSlot =>
             "Every construction slot is busy. Premium settlements can queue extra builds to wait for a free slot.",
+        BuildRejection.QueueLockedWithoutPremium =>
+            "Your waiting builds stay in the queue and start as slots free up, but without Premium you can't add new ones until all of them have started.",
         _ => "Refused.",
     };
 
@@ -902,6 +971,7 @@ public static class SettlementEndpoints
         QuestRejection.UnknownQuest => "There is no such quest.",
         QuestRejection.AlreadyClaimed => "This quest's reward was already claimed.",
         QuestRejection.NotCompleted => "This quest is not completed yet.",
+        QuestRejection.NotFirstSettlement => "Quests are only available on your first settlement.",
         _ => "Refused.",
     };
 
@@ -928,6 +998,7 @@ public static class SettlementEndpoints
             "The building that trains this unit stands outside your realm and has no function until your realm reaches it again.",
         TrainRejection.WrongBuilding => "There is no building that trains this unit on that hex.",
         TrainRejection.PremiumRequired => "Splitting an order for the fastest finish needs premium.",
+        TrainRejection.BuildingLevelTooLow => "This building is too low a level to train that unit.",
         _ => "Refused.",
     };
 

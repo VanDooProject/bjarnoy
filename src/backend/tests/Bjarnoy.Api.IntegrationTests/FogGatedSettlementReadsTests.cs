@@ -9,6 +9,7 @@ using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -51,8 +52,7 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
     /// <summary>Founds a settlement on the world's first usable plot, under <paramref name="ownerId"/>, via the anonymous header.</summary>
     private async Task<SettlementResponse> FoundAsync(HttpClient client, Guid worldId, string ownerId)
     {
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -221,9 +221,10 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
 
         // Level 1 -> ExploredRadius = 5 around the caller's own settlement.
         // The rival's centre (and its extra "near" building) sits exactly at
-        // that boundary; its "far" building sits well past it.
+        // that boundary; its "far" building sits well past the visible area (explored radius 5 + 11.2 hexes where the mist is still
+        // see-through = 16 along the q axis).
         var nearQ = settlement.Q + 5;
-        var farQ = settlement.Q + 9;
+        var farQ = settlement.Q + 20;
         var rivalId = await PlantRivalAsync(
             worldId, settlement.IslandId, Unique("rival-owner"), "Skoll",
             nearQ, settlement.R,
@@ -365,7 +366,7 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
 
         var centre = new HexCoord(own.Q + 20, own.R);
         var seenFarm = new HexCoord(own.Q + 19, own.R);
-        var hiddenFarm = new HexCoord(own.Q + 21, own.R);
+        var hiddenFarm = new HexCoord(own.Q + 26, own.R);
         var rivalId = await PlantRivalAsync(
             worldId, own.IslandId, Unique("rival-owner"), "Skoll", centre.Q, centre.R,
             extraBuildings: [(seenFarm.Q, seenFarm.R), (hiddenFarm.Q, hiddenFarm.R)]);
@@ -374,7 +375,7 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task World_list_shows_a_rival_with_only_a_building_explored_in_full_with_the_label_on_that_building()
+    public async Task World_list_shows_a_rival_next_to_one_explored_building_with_the_label_on_its_longhouse()
     {
         using var client = Client();
         var (worldId, _, _, rivalId, centre, seenFarm, _) = await SetUpRivalSeenThroughABuildingAsync(client);
@@ -385,7 +386,8 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
         var rival = Assert.Single(response!, s => s.Id == rivalId);
         Assert.Equal((centre.Q, centre.R), (rival.Q, rival.R));
         Assert.Equal(1, rival.LonghouseLevel);
-        Assert.Equal((seenFarm.Q, seenFarm.R), (rival.LabelQ, rival.LabelR));
+        // The centre lies inside the explored farm's fringe, so it is visible itself and carries the label.
+        Assert.Equal((centre.Q, centre.R), (rival.LabelQ, rival.LabelR));
     }
 
     [Fact]
@@ -426,7 +428,7 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task View_of_a_rival_with_only_a_building_explored_returns_just_the_explored_buildings()
+    public async Task View_of_a_rival_next_to_one_explored_building_returns_that_building_and_its_longhouse_and_not_a_building_beyond_the_fringe()
     {
         using var client = Client();
         var (_, _, _, rivalId, centre, seenFarm, hiddenFarm) = await SetUpRivalSeenThroughABuildingAsync(client);
@@ -436,10 +438,11 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.ReadStrictAsync<SettlementViewResponse>(Ct);
         Assert.Equal((centre.Q, centre.R), (body.Q, body.R));
-        var building = Assert.Single(body.Buildings);
-        Assert.Equal((seenFarm.Q, seenFarm.R), (building.Q, building.R));
+        // The explored farm and the Longhouse next to it (§1h: inside the 5.55-hex fringe of stored ground); the farm 7 hexes on is not.
+        Assert.Equivalent(
+            new[] { (seenFarm.Q, seenFarm.R), (centre.Q, centre.R) },
+            body.Buildings.Select(b => (b.Q, b.R)).ToArray());
         Assert.DoesNotContain(body.Buildings, b => b.Q == hiddenFarm.Q && b.R == hiddenFarm.R);
-        Assert.DoesNotContain(body.Buildings, b => b.Q == centre.Q && b.R == centre.R);
     }
 
     // ------------------------------------------------------- GET /worlds/{worldId}/plot-suggestion
@@ -458,8 +461,7 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
         var first = await (await client.GetAsync($"/api/v1/worlds/{worldId}/plot-suggestion", Ct))
             .ReadStrictAsync<PlotSuggestionResponse>(Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         var suggestedIsland = islands!.Single(i => i.Id == first.IslandId);
         var otherIsland = islands!.First(i => i.Id != first.IslandId);
 

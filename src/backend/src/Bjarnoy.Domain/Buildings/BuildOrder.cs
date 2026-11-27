@@ -174,11 +174,11 @@ public enum BuildRejection
     TowerLimitReached,
 
     /// <summary>
-    /// An additional Storage House was ordered while the settlement does not yet
-    /// hold the houses at the level <see cref="BuildingCatalogue.AdditionalStorageHouseRequirement"/> asks for.
-    /// The first storage house and upgrades are never refused for this reason.
+    /// A new Great Storehouse was ordered while the settlement does not hold one more Storage House at level
+    /// <see cref="BuildingCatalogue.GreatStorehouseStorageHouseLevel"/> than it has Great Storehouses (standing plus queued):
+    /// the n-th Great Storehouse needs n maxed Storage Houses. Upgrading one is never refused for this reason.
     /// </summary>
-    StorageHouseTooLow,
+    GreatStorehouseNeedsStorageHouses,
 
     /// <summary>
     /// A wildlife camp stands on the hex — never buildable while the camp is there. Every camp
@@ -221,6 +221,12 @@ public enum BuildRejection
 
     /// <summary>A raze was ordered on the Longhouse, which can never be razed.</summary>
     LonghouseCannotBeRazed,
+
+    /// <summary>
+    /// The order cannot start now and the realm has no waiting-queue room (no Premium), but builds that were queued while it
+    /// had Premium are still waiting: they keep going, and nothing new can be added until every one of them has started.
+    /// </summary>
+    QueueLockedWithoutPremium,
 }
 
 /// <summary>The outcome of asking to build something.</summary>

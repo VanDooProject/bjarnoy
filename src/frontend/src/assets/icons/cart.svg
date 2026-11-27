@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Trade cart, side view, shaft to the right (+x), the way it travels: a trade shipment in transit on the world map.
+       Ground line (wheel bottoms) at y 50, so the sprite reads as standing on the hex it is placed at, like the flag's pole foot. -->
+  <path d="M62 30 L48 34" stroke="#cbd6dd" stroke-width="3" stroke-linecap="round"/>
+  <path d="M50 22 L6 22 L10 38 L46 38 Z" fill="#fff"/>
+  <path d="M45 26 L11 26 L13 34 L43 34 Z" fill="#cbd6dd"/>
+  <circle cx="40" cy="42" r="8" fill="#fff"/>
+  <circle cx="40" cy="42" r="3" fill="#9fb2bd"/>
+  <circle cx="16" cy="42" r="8" fill="#fff"/>
+  <circle cx="16" cy="42" r="3" fill="#9fb2bd"/>
+</svg>

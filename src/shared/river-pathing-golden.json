@@ -30,6 +30,381 @@
   "62,0": "grass",
   "61,-1": "grass",
   "60,1": "grass",
+  "200,-14": "grass",
+  "200,-13": "grass",
+  "200,-12": "grass",
+  "200,-11": "grass",
+  "200,-10": "grass",
+  "200,-9": "grass",
+  "200,-8": "grass",
+  "200,-7": "grass",
+  "200,-6": "grass",
+  "200,-5": "grass",
+  "200,-4": "grass",
+  "200,-3": "grass",
+  "200,-2": "grass",
+  "200,-1": "grass",
+  "200,0": "grass",
+  "201,-14": "grass",
+  "201,-13": "grass",
+  "201,-12": "grass",
+  "201,-11": "grass",
+  "201,-10": "grass",
+  "201,-9": "grass",
+  "201,-8": "grass",
+  "201,-7": "grass",
+  "201,-6": "grass",
+  "201,-5": "grass",
+  "201,-4": "grass",
+  "201,-3": "grass",
+  "201,-2": "grass",
+  "201,-1": "grass",
+  "201,0": "grass",
+  "202,-14": "grass",
+  "202,-13": "grass",
+  "202,-12": "grass",
+  "202,-11": "grass",
+  "202,-10": "grass",
+  "202,-9": "grass",
+  "202,-8": "grass",
+  "202,-7": "grass",
+  "202,-6": "grass",
+  "202,-5": "grass",
+  "202,-4": "grass",
+  "202,-3": "grass",
+  "202,-2": "grass",
+  "202,-1": "grass",
+  "202,0": "grass",
+  "203,-14": "grass",
+  "203,-13": "grass",
+  "203,-12": "grass",
+  "203,-11": "grass",
+  "203,-10": "grass",
+  "203,-9": "grass",
+  "203,-8": "grass",
+  "203,-7": "grass",
+  "203,-6": "grass",
+  "203,-5": "grass",
+  "203,-4": "grass",
+  "203,-3": "grass",
+  "203,-2": "grass",
+  "203,-1": "grass",
+  "203,0": "grass",
+  "204,-14": "grass",
+  "204,-13": "grass",
+  "204,-12": "grass",
+  "204,-11": "grass",
+  "204,-10": "grass",
+  "204,-9": "grass",
+  "204,-8": "grass",
+  "204,-7": "grass",
+  "204,-6": "grass",
+  "204,-5": "grass",
+  "204,-4": "grass",
+  "204,-3": "grass",
+  "204,-2": "grass",
+  "204,-1": "grass",
+  "204,0": "grass",
+  "205,-14": "grass",
+  "205,-13": "grass",
+  "205,-12": "grass",
+  "205,-11": "grass",
+  "205,-10": "grass",
+  "205,-9": "grass",
+  "205,-8": "grass",
+  "205,-7": "grass",
+  "205,-6": "grass",
+  "205,-5": "grass",
+  "205,-4": "grass",
+  "205,-3": "grass",
+  "205,-2": "grass",
+  "205,-1": "grass",
+  "205,0": "grass",
+  "206,-14": "grass",
+  "206,-13": "grass",
+  "206,-12": "grass",
+  "206,-11": "grass",
+  "206,-10": "grass",
+  "206,-9": "grass",
+  "206,-8": "grass",
+  "206,-7": "grass",
+  "206,-6": "grass",
+  "206,-5": "grass",
+  "206,-4": "grass",
+  "206,-3": "grass",
+  "206,-2": "grass",
+  "206,-1": "grass",
+  "206,0": "grass",
+  "207,-14": "grass",
+  "207,-13": "grass",
+  "207,-12": "grass",
+  "207,-11": "grass",
+  "207,-10": "grass",
+  "207,-9": "grass",
+  "207,-8": "grass",
+  "207,-7": "grass",
+  "207,-6": "grass",
+  "207,-5": "grass",
+  "207,-4": "grass",
+  "207,-3": "grass",
+  "207,-2": "grass",
+  "207,-1": "grass",
+  "207,0": "grass",
+  "208,-14": "grass",
+  "208,-13": "grass",
+  "208,-12": "grass",
+  "208,-11": "grass",
+  "208,-10": "grass",
+  "208,-9": "grass",
+  "208,-8": "grass",
+  "208,-7": "grass",
+  "208,-6": "grass",
+  "208,-5": "grass",
+  "208,-4": "grass",
+  "208,-3": "grass",
+  "208,-2": "grass",
+  "208,-1": "grass",
+  "208,0": "grass",
+  "209,-14": "grass",
+  "209,-13": "grass",
+  "209,-12": "grass",
+  "209,-11": "grass",
+  "209,-10": "grass",
+  "209,-9": "grass",
+  "209,-8": "grass",
+  "209,-7": "grass",
+  "209,-6": "grass",
+  "209,-5": "grass",
+  "209,-4": "grass",
+  "209,-3": "grass",
+  "209,-2": "grass",
+  "209,-1": "grass",
+  "209,0": "grass",
+  "210,-14": "grass",
+  "210,-13": "grass",
+  "210,-12": "grass",
+  "210,-11": "grass",
+  "210,-10": "grass",
+  "210,-9": "grass",
+  "210,-8": "grass",
+  "210,-7": "grass",
+  "210,-6": "grass",
+  "210,-5": "grass",
+  "210,-4": "grass",
+  "210,-3": "grass",
+  "210,-2": "grass",
+  "210,-1": "grass",
+  "210,0": "grass",
+  "211,-14": "grass",
+  "211,-13": "grass",
+  "211,-12": "grass",
+  "211,-11": "grass",
+  "211,-10": "grass",
+  "211,-9": "grass",
+  "211,-8": "grass",
+  "211,-7": "grass",
+  "211,-6": "grass",
+  "211,-5": "grass",
+  "211,-4": "grass",
+  "211,-3": "grass",
+  "211,-2": "grass",
+  "211,-1": "grass",
+  "211,0": "grass",
+  "212,-14": "grass",
+  "212,-13": "grass",
+  "212,-12": "grass",
+  "212,-11": "grass",
+  "212,-10": "grass",
+  "212,-9": "grass",
+  "212,-8": "grass",
+  "212,-7": "grass",
+  "212,-6": "grass",
+  "212,-5": "grass",
+  "212,-4": "grass",
+  "212,-3": "grass",
+  "212,-2": "grass",
+  "212,-1": "grass",
+  "212,0": "grass",
+  "213,-14": "grass",
+  "213,-13": "grass",
+  "213,-12": "grass",
+  "213,-11": "grass",
+  "213,-10": "grass",
+  "213,-9": "grass",
+  "213,-8": "grass",
+  "213,-7": "grass",
+  "213,-6": "grass",
+  "213,-5": "grass",
+  "213,-4": "grass",
+  "213,-3": "grass",
+  "213,-2": "grass",
+  "213,-1": "grass",
+  "213,0": "grass",
+  "214,-14": "grass",
+  "214,-13": "grass",
+  "214,-12": "grass",
+  "214,-11": "grass",
+  "214,-10": "grass",
+  "214,-9": "grass",
+  "214,-8": "grass",
+  "214,-7": "grass",
+  "214,-6": "grass",
+  "214,-5": "grass",
+  "214,-4": "grass",
+  "214,-3": "grass",
+  "214,-2": "grass",
+  "214,-1": "grass",
+  "214,0": "grass",
+  "215,-14": "grass",
+  "215,-13": "grass",
+  "215,-12": "grass",
+  "215,-11": "grass",
+  "215,-10": "grass",
+  "215,-9": "grass",
+  "215,-8": "grass",
+  "215,-7": "grass",
+  "215,-6": "grass",
+  "215,-5": "grass",
+  "215,-4": "grass",
+  "215,-3": "grass",
+  "215,-2": "grass",
+  "215,-1": "grass",
+  "215,0": "grass",
+  "216,-14": "grass",
+  "216,-13": "grass",
+  "216,-12": "grass",
+  "216,-11": "grass",
+  "216,-10": "grass",
+  "216,-9": "grass",
+  "216,-8": "grass",
+  "216,-7": "grass",
+  "216,-6": "grass",
+  "216,-5": "grass",
+  "216,-4": "grass",
+  "216,-3": "grass",
+  "216,-2": "grass",
+  "216,-1": "grass",
+  "216,0": "grass",
+  "217,-14": "grass",
+  "217,-13": "grass",
+  "217,-12": "grass",
+  "217,-11": "grass",
+  "217,-10": "grass",
+  "217,-9": "grass",
+  "217,-8": "grass",
+  "217,-7": "grass",
+  "217,-6": "grass",
+  "217,-5": "grass",
+  "217,-4": "grass",
+  "217,-3": "grass",
+  "217,-2": "grass",
+  "217,-1": "grass",
+  "217,0": "grass",
+  "218,-14": "grass",
+  "218,-13": "grass",
+  "218,-12": "grass",
+  "218,-11": "grass",
+  "218,-10": "grass",
+  "218,-9": "grass",
+  "218,-8": "grass",
+  "218,-7": "grass",
+  "218,-6": "grass",
+  "218,-5": "grass",
+  "218,-4": "grass",
+  "218,-3": "grass",
+  "218,-2": "grass",
+  "218,-1": "grass",
+  "218,0": "grass",
+  "219,-14": "grass",
+  "219,-13": "grass",
+  "219,-12": "grass",
+  "219,-11": "grass",
+  "219,-10": "grass",
+  "219,-9": "grass",
+  "219,-8": "grass",
+  "219,-7": "grass",
+  "219,-6": "grass",
+  "219,-5": "grass",
+  "219,-4": "grass",
+  "219,-3": "grass",
+  "219,-2": "grass",
+  "219,-1": "grass",
+  "219,0": "grass",
+  "220,-14": "grass",
+  "220,-13": "grass",
+  "220,-12": "grass",
+  "220,-11": "grass",
+  "220,-10": "grass",
+  "220,-9": "grass",
+  "220,-8": "grass",
+  "220,-7": "grass",
+  "220,-6": "grass",
+  "220,-5": "grass",
+  "220,-4": "grass",
+  "220,-3": "grass",
+  "220,-2": "grass",
+  "220,-1": "grass",
+  "220,0": "grass",
+  "221,-14": "grass",
+  "221,-13": "grass",
+  "221,-12": "grass",
+  "221,-11": "grass",
+  "221,-10": "grass",
+  "221,-9": "grass",
+  "221,-8": "grass",
+  "221,-7": "grass",
+  "221,-6": "grass",
+  "221,-5": "grass",
+  "221,-4": "grass",
+  "221,-3": "grass",
+  "221,-2": "grass",
+  "221,-1": "grass",
+  "221,0": "grass",
+  "222,-14": "grass",
+  "222,-13": "grass",
+  "222,-12": "grass",
+  "222,-11": "grass",
+  "222,-10": "grass",
+  "222,-9": "grass",
+  "222,-8": "grass",
+  "222,-7": "grass",
+  "222,-6": "grass",
+  "222,-5": "grass",
+  "222,-4": "grass",
+  "222,-3": "grass",
+  "222,-2": "grass",
+  "222,-1": "grass",
+  "222,0": "grass",
+  "223,-14": "grass",
+  "223,-13": "grass",
+  "223,-12": "grass",
+  "223,-11": "grass",
+  "223,-10": "grass",
+  "223,-9": "grass",
+  "223,-8": "grass",
+  "223,-7": "grass",
+  "223,-6": "grass",
+  "223,-5": "grass",
+  "223,-4": "grass",
+  "223,-3": "grass",
+  "223,-2": "grass",
+  "223,-1": "grass",
+  "223,0": "grass",
+  "224,-14": "grass",
+  "224,-13": "grass",
+  "224,-12": "grass",
+  "224,-11": "grass",
+  "224,-10": "grass",
+  "224,-9": "grass",
+  "224,-8": "grass",
+  "224,-7": "grass",
+  "224,-6": "grass",
+  "224,-5": "grass",
+  "224,-4": "grass",
+  "224,-3": "grass",
+  "224,-2": "grass",
+  "224,-1": "grass",
+  "224,0": "grass",
   "70,-3": "grass",
   "70,-2": "grass",
   "70,-1": "grass",
@@ -309,62 +684,7 @@
   "176,2": "grass",
   "176,3": "grass",
   "173,-4": "mountain",
-  "173,4": "mountain",
-  "200,-4": "grass",
-  "200,-3": "grass",
-  "200,-2": "grass",
-  "200,-1": "grass",
-  "200,0": "grass",
-  "201,-4": "grass",
-  "201,-3": "grass",
-  "201,-2": "grass",
-  "201,-1": "grass",
-  "201,0": "grass",
-  "202,-4": "grass",
-  "202,-3": "grass",
-  "202,-2": "grass",
-  "202,-1": "grass",
-  "202,0": "grass",
-  "203,-4": "grass",
-  "203,-3": "grass",
-  "203,-2": "grass",
-  "203,-1": "grass",
-  "203,0": "grass",
-  "204,-4": "grass",
-  "204,-3": "grass",
-  "204,-2": "grass",
-  "204,-1": "grass",
-  "204,0": "grass",
-  "205,-4": "grass",
-  "205,-3": "grass",
-  "205,-2": "grass",
-  "205,-1": "grass",
-  "205,0": "grass",
-  "206,-4": "grass",
-  "206,-3": "grass",
-  "206,-2": "grass",
-  "206,-1": "grass",
-  "206,0": "grass",
-  "207,-4": "grass",
-  "207,-3": "grass",
-  "207,-2": "grass",
-  "207,-1": "grass",
-  "207,0": "grass",
-  "208,-4": "grass",
-  "208,-3": "grass",
-  "208,-2": "grass",
-  "208,-1": "grass",
-  "208,0": "grass",
-  "209,-4": "grass",
-  "209,-3": "grass",
-  "209,-2": "grass",
-  "209,-1": "grass",
-  "209,0": "grass",
-  "210,-4": "grass",
-  "210,-3": "grass",
-  "210,-2": "grass",
-  "210,-1": "grass",
-  "210,0": "grass"
+  "173,4": "mountain"
  },
  "riverTiles": [
   {
@@ -719,6 +1039,295 @@
  ],
  "findPathCases": [
   {
+   "name": "open_grass_line_along_an_edge_direction_offset_10_minus5",
+   "comment": "Same grass patch, endpoints offset (+10, -5): the straight line runs between two hex axes, where the cube lerp lands on .5 rounding ties without the fixed 1e-6 nudge. Both sides must pick the same hexes.",
+   "from": {
+    "q": 205,
+    "r": -2
+   },
+   "to": {
+    "q": 215,
+    "r": -7
+   },
+   "army": "friendly",
+   "isLandUnit": true,
+   "expectedPath": [
+    {
+     "q": 205,
+     "r": -2
+    },
+    {
+     "q": 206,
+     "r": -2
+    },
+    {
+     "q": 207,
+     "r": -3
+    },
+    {
+     "q": 208,
+     "r": -3
+    },
+    {
+     "q": 209,
+     "r": -4
+    },
+    {
+     "q": 210,
+     "r": -4
+    },
+    {
+     "q": 211,
+     "r": -5
+    },
+    {
+     "q": 212,
+     "r": -5
+    },
+    {
+     "q": 213,
+     "r": -6
+    },
+    {
+     "q": 214,
+     "r": -6
+    },
+    {
+     "q": 215,
+     "r": -7
+    }
+   ],
+   "expectedCumulativeHours": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+   ]
+  },
+  {
+   "name": "open_grass_line_along_an_edge_direction_offset_minus5_10",
+   "comment": "Same grass patch, endpoints offset (-5, +10): another between-axis direction, again exactly on the rounding-tie case.",
+   "from": {
+    "q": 215,
+    "r": -12
+   },
+   "to": {
+    "q": 210,
+    "r": -2
+   },
+   "army": "friendly",
+   "isLandUnit": true,
+   "expectedPath": [
+    {
+     "q": 215,
+     "r": -12
+    },
+    {
+     "q": 215,
+     "r": -11
+    },
+    {
+     "q": 214,
+     "r": -10
+    },
+    {
+     "q": 214,
+     "r": -9
+    },
+    {
+     "q": 213,
+     "r": -8
+    },
+    {
+     "q": 213,
+     "r": -7
+    },
+    {
+     "q": 212,
+     "r": -6
+    },
+    {
+     "q": 212,
+     "r": -5
+    },
+    {
+     "q": 211,
+     "r": -4
+    },
+    {
+     "q": 211,
+     "r": -3
+    },
+    {
+     "q": 210,
+     "r": -2
+    }
+   ],
+   "expectedCumulativeHours": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+   ]
+  },
+  {
+   "name": "open_grass_route_is_straightened_into_one_hex_line",
+   "comment": "A 25 x 15 grass patch with off-axis endpoints (24 hexes apart): A* alone would walk an axis leg and a diagonal leg; the route is smoothed to the straight hex line between the endpoints, at the same cost.",
+   "from": {
+    "q": 200,
+    "r": 0
+   },
+   "to": {
+    "q": 224,
+    "r": -9
+   },
+   "army": "friendly",
+   "isLandUnit": true,
+   "expectedPath": [
+    {
+     "q": 200,
+     "r": 0
+    },
+    {
+     "q": 201,
+     "r": 0
+    },
+    {
+     "q": 202,
+     "r": -1
+    },
+    {
+     "q": 203,
+     "r": -1
+    },
+    {
+     "q": 204,
+     "r": -1
+    },
+    {
+     "q": 205,
+     "r": -2
+    },
+    {
+     "q": 206,
+     "r": -2
+    },
+    {
+     "q": 207,
+     "r": -3
+    },
+    {
+     "q": 208,
+     "r": -3
+    },
+    {
+     "q": 209,
+     "r": -3
+    },
+    {
+     "q": 210,
+     "r": -4
+    },
+    {
+     "q": 211,
+     "r": -4
+    },
+    {
+     "q": 212,
+     "r": -4
+    },
+    {
+     "q": 213,
+     "r": -5
+    },
+    {
+     "q": 214,
+     "r": -5
+    },
+    {
+     "q": 215,
+     "r": -6
+    },
+    {
+     "q": 216,
+     "r": -6
+    },
+    {
+     "q": 217,
+     "r": -6
+    },
+    {
+     "q": 218,
+     "r": -7
+    },
+    {
+     "q": 219,
+     "r": -7
+    },
+    {
+     "q": 220,
+     "r": -7
+    },
+    {
+     "q": 221,
+     "r": -8
+    },
+    {
+     "q": 222,
+     "r": -8
+    },
+    {
+     "q": 223,
+     "r": -9
+    },
+    {
+     "q": 224,
+     "r": -9
+    }
+   ],
+   "expectedCumulativeHours": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24
+   ]
+  },
+  {
    "name": "stream_crossing_no_detour_available",
    "comment": "A single grass corridor with a stream tile in the middle and nothing else reachable (everywhere else is sea): a stream is walkable at a flat 1.0 + 8.0 = 9.0.",
    "from": {
@@ -1007,8 +1616,8 @@
      "r": 0
     },
     {
-     "q": 92,
-     "r": 0
+     "q": 91,
+     "r": 1
     },
     {
      "q": 92,
@@ -1060,8 +1669,8 @@
      "r": 0
     },
     {
-     "q": 92,
-     "r": 0
+     "q": 91,
+     "r": 1
     },
     {
      "q": 92,
@@ -1437,79 +2046,6 @@
     0,
     6.5,
     7.5
-   ]
-  },
-  {
-   "name": "open_grass_ties_follow_the_straight_line",
-   "comment": "An 11 x 5 block of plain grass: many equal-cost routes exist from (200,0) to (210,-4). Equal-f ties are broken toward the goal and then toward the straight start-to-goal line, so the route runs the line instead of hugging an edge of the block.",
-   "from": {
-    "q": 200,
-    "r": 0
-   },
-   "to": {
-    "q": 210,
-    "r": -4
-   },
-   "army": "friendly",
-   "isLandUnit": true,
-   "expectedPath": [
-    {
-     "q": 200,
-     "r": 0
-    },
-    {
-     "q": 201,
-     "r": 0
-    },
-    {
-     "q": 202,
-     "r": -1
-    },
-    {
-     "q": 203,
-     "r": -1
-    },
-    {
-     "q": 204,
-     "r": -2
-    },
-    {
-     "q": 205,
-     "r": -2
-    },
-    {
-     "q": 206,
-     "r": -2
-    },
-    {
-     "q": 207,
-     "r": -3
-    },
-    {
-     "q": 208,
-     "r": -3
-    },
-    {
-     "q": 209,
-     "r": -4
-    },
-    {
-     "q": 210,
-     "r": -4
-    }
-   ],
-   "expectedCumulativeHours": [
-    0,
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    10
    ]
   }
  ],

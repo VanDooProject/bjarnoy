@@ -17,10 +17,8 @@ const props = defineProps<{ state: MapLoadState }>();
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-// Checked once at setup, same as WastedIsland.vue's own reducedMotion — this
-// is a fixed, per-session device preference, not something that needs a
-// live-updating watcher for a loading indicator that's on screen for at most
-// a few seconds.
+// The resolved HUD motion setting, checked once at setup: no live-updating
+// watcher for a loading indicator that's on screen for at most a few seconds.
 const reducedMotion = prefersReducedMotion();
 
 const FADE_MS = 250;

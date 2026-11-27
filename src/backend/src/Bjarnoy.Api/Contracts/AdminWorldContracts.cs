@@ -18,6 +18,7 @@ public sealed record AdminWorldResponse(
     DateTimeOffset? StartsAt,
     bool JoinsClosed,
     bool FrozenIslesEnabled,
+    bool RenownFollowsSpeed,
     bool Hidden,
     DateTimeOffset? EndbossAt,
     DateTimeOffset? EndbossTriggeredAt,
@@ -44,6 +45,7 @@ public sealed record AdminWorldResponse(
             world.StartsAt,
             world.JoinsClosed,
             world.FrozenIslesEnabled,
+            world.RenownFollowsSpeed,
             world.Hidden,
             world.EndbossAt,
             world.EndbossTriggeredAt,
@@ -188,6 +190,9 @@ public sealed record UpdateWorldSettingsRequest
 
     /// <summary>Omit to leave unchanged. See <see cref="WorldEntity.Hidden"/>.</summary>
     public bool? Hidden { get; init; }
+
+    /// <summary>Omit to leave unchanged. See <see cref="WorldEntity.RenownFollowsSpeed"/>.</summary>
+    public bool? RenownFollowsSpeed { get; init; }
 
     /// <summary>
     /// Omit to leave unchanged; send explicit <c>null</c> to cancel a scheduled

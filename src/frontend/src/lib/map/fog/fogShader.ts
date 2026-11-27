@@ -10,15 +10,19 @@
 // name Pixi's own macro layer expects (`#define finalColor gl_FragColor`) —
 // any other name leaves a stray `out` declaration that fails to compile.
 //
-// One shared fragment shader for both fog tiers (§4's "one layer that draws
-// two passes") — `uTier` (0 = out-of-sight/black, 1 = unknown/white) picks
-// which channel a given FogMaskLayer instance outputs, so the sampling/edge
-// math (identical for both tiers) is written once, not duplicated.
+// The mask/noise/army/edge math lives in ONE pass, FOG_FIELD_FRAGMENT, run by
+// FogField into a world-anchored render texture: R = out-of-sight (dark)
+// tier alpha, G = unknown (white mist) tier alpha. The mist is a cheap stage
+// quad (FogMaskLayer, FOG_COMPOSITE_FRAGMENT) that samples that texture and
+// tints it with the constant uUnexploredColor. The dark tier is not drawn as
+// an overlay at all: FogDesaturateFilter (FOG_DESATURATE_FRAGMENT) samples
+// the same field and desaturates / dims what is under the markers where R is
+// set. Both read the field through one shared snippet (FOG_FIELD_SAMPLE_GLSL).
 //
 // §1c's live army-granted vision: `uArmyVisionSources` is a small, bounded
 // (MAX_ARMY_VISION_SOURCES) array of world-space points, uploaded fresh every
 // frame from HexMapRenderer's already-computed live army render positions
-// (FogMaskLayer.setArmyVisionSources) — never written into `uMask`/`uMaskPrev`
+// (FogField.setArmyVisionSources) — never written into `uMask`/`uMaskPrev`
 // themselves, so an army in transit never busts the server's cached PNG (see
 // FogMaskService's own remarks on why §1c stays shader-only). The troop writes
 // its own pair of ramps (`armyRamps` below) in the mask's own units — 0 at the
@@ -58,6 +62,32 @@
 // That windowing is also what keeps the deep mist exactly as opaque as it
 // is today — the organic, drifting, cloudy behaviour is confined to the
 // vision edge, which is the only place it belongs.
+//
+// --- Why the edge used to read as an ellipse, and how A+B breaks it --------
+//
+// The mask's ramps are euclidean distance in hex units, and the map is drawn
+// squashed (TILE_H < TILE_W), so every contour is a flat ellipse on screen.
+// Three things kept the edge from reading as anything else: the dark ramp was
+// only 2 hexes wide, so a displacement of a hex or so covered most of it and
+// the window it acts in was tiny; the mist's outer noise reach was one fixed
+// ramp value everywhere, so its outermost contour was a clean ellipse however
+// ragged the inside was; and the only per-hex variation was a hash, which is
+// grain, not shape.
+//
+// A: the mask's B channel is now a smooth baked lump (fogLump.ts), a value
+// that is constant over a hex or two and different between lumps, so it pushes
+// the edge in or out by whole lumps of terrain, the same in every frame.
+// B: the clouds are domain-warped (fbm sampled at a coordinate that is itself
+// displaced by a coarse fbm) so the drifting displacement has swirls and
+// pinches instead of round blobs. Both displace the ramp by the same
+// amplitude (uEdgeNoise), summed. The dark ramp is 4 hexes wide so there is
+// room for that displacement, and the mist's fade is only 2.6 hexes wide
+// (UNKNOWN_EDGE) so the lumps read as a ragged edge rather than a gradient.
+// The outer reach is pulled in by up to 4 hexes where the lump / second cloud
+// layer is high: the noise window closes earlier in some directions, so the
+// mist's outermost contour is no longer one ellipse. The reach only ever
+// shrinks, so FOG_MIST_OPAQUE_AT_RAMP (terrain culling, derived from
+// NOISE_REACH[0]) stays a valid bound.
 
 import { NOISE_LATTICE_GLSL } from '../shaderNoise';
 import { EDGE_NOISE_FADE_RAMP } from './fogRamp';
@@ -70,7 +100,7 @@ out vec2 vUV;
 
 void main() {
   vUV = aUV;
-  // Positions are already in clip space (see FogMaskLayer's geometry) — this
+  // Positions are already in clip space (see fullscreenGeometry in FogMaskLayer.ts) — this
   // mesh always covers the whole viewport, independent of camera/world
   // transforms, so there is no projection/world matrix to apply.
   gl_Position = vec4(aPosition, 0.0, 1.0);
@@ -82,12 +112,12 @@ void main() {
  * — see FOG_FRAGMENT's `uArmyVisionSources` array. "A handful of entries —
  * current armies in transit" per §1c; a real GLSL array needs a fixed
  * compile-time size, and 8 is comfortably above what a single settlement
- * view or world map would ever show moving at once. FogMaskLayer.ts truncates
+ * view or world map would ever show moving at once. FogField.setArmyVisionSources truncates
  * to this count if HexMapRenderer ever hands it more.
  */
 export const MAX_ARMY_VISION_SOURCES = 8;
 
-export const FOG_FRAGMENT = `
+export const FOG_FIELD_FRAGMENT = `
 precision highp float;
 
 in vec2 vUV;
@@ -97,30 +127,25 @@ uniform sampler2D uMask;
 uniform sampler2D uMaskPrev;
 
 uniform float uMaskBlend;
-uniform vec2 uViewport;
-uniform vec2 uCameraPos;
-uniform float uZoom;
+// The world rectangle this render covers: vUV (0..1, top-down) maps onto it.
+uniform vec2 uFieldOrigin;
+uniform vec2 uFieldSize;
 uniform vec2 uWorldToMaskScale;
 uniform vec2 uWorldToMaskOffset;
 // The placement uMaskPrev was uploaded with: the mask is a chunk window that
 // moves with the camera, so the texture being faded out generally sits at a
-// different place than the one fading in (see FogMaskLayer.setMaskTexture).
+// different place than the one fading in (see FogField.setMaskTexture).
 uniform vec2 uWorldToMaskScalePrev;
 uniform vec2 uWorldToMaskOffsetPrev;
-uniform float uTier;
-uniform vec3 uScoutedColor;
-uniform vec3 uUnexploredColor;
-uniform float uScoutedAlpha;
 // Where each tier's ramp turns over, in ramp units (0 = at the ring, 1 = the
-// generator's full margin — 10 hexes for unknown, 2 for out-of-sight). x is
+// generator's full margin — 14 hexes for unknown, 4 for out-of-sight). x is
 // where the tier starts showing at all, y where it saturates.
 uniform vec2 uUnknownEdge;
 uniform vec2 uOutOfSightEdge;
-// Per-tier amplitude of the drifting cloud displacement (x) and of the
-// mask's baked per-hex seed (y), both in ramp units. See the file header for
-// why these displace the ramp rather than the sample UV.
+// Per-tier amplitude, in ramp units, of the displacement by the drifting cloud
+// field and by the mask's baked lump (B), which share it. See the file header
+// for why these displace the ramp rather than the sample UV.
 uniform vec2 uEdgeNoise;
-uniform vec2 uSeedJitter;
 // Per-tier strength of the density thinning applied on top of the threshold
 // displacement — see tierAlpha().
 uniform vec2 uEdgeSoftness;
@@ -128,6 +153,8 @@ uniform vec2 uEdgeSoftness;
 // at 1.0. Deliberately independent of where the tier's opacity saturates —
 // see edgeBand().
 uniform vec2 uNoiseReach;
+// How far (ramp units of the mist) the mist's noise window may be pulled in where the lump / cloud field is high.
+uniform float uMistPullIn;
 // Reciprocal of the largest noise octave's feature size, in world units —
 // the fog's cloud structure is anchored to the *world*, not to the mask
 // texture, so it neither scales with world radius (a bigger world would
@@ -200,31 +227,22 @@ float fbmCoarse(vec2 p) {
 }
 
 /**
- * The drifting cloud field, in world space: two layers at different scales,
- * drifting the same way at different speeds. The scale and speed difference
- * is what keeps them from reading as one rigid sheet sliding across the map
- * — parallax, the way two layers of real cloud at different altitudes move
- * with the same wind.
+ * The drifting cloud field, in world space: a domain-warped one (x) that drives the edge displacement and a broader,
+ * cheaper layer (y) that drives the density thinning and the outer pull-in. Both drift the same way at different speeds,
+ * which is what keeps them from reading as one rigid sheet sliding across the map: parallax, the way two layers of
+ * real cloud at different altitudes move with the same wind. The warp (a coarse fbm displacing the coordinate x samples)
+ * is what gives x swirls and pinches instead of round blobs.
  *
- * They used to drift in *opposite* directions, which decorrelates them more
- * thoroughly but is visibly wrong: the edge and the haze inside it slide
- * past each other, and whichever one you happen to be watching, the other
- * one is going the wrong way.
- *
- * Note the sign. The drift offset is added to the sample *coordinate*, so a positive
- * uWind moves the pattern in the negative world direction — the wind vector
- * points where the fog comes from, not where it goes. Flip uWind to reverse
- * it; do not flip these terms individually, or the two layers separate
- * again.
- *
- * Both layers are returned rather than pre-mixed because tierAlpha wants two
- * weakly-correlated fields: x drives the edge displacement, y the density
- * thinning.
+ * Note the sign. The drift offset is added to the sample *coordinate*, so a positive uWind moves the pattern in the
+ * negative world direction: the wind vector points where the fog comes from, not where it goes. Flip uWind to reverse
+ * it; do not flip these terms individually, or the two layers separate again.
  */
 vec2 cloudLayers(vec2 world) {
   vec2 p = world * uNoiseScale;
   vec2 drift = uTime * uWind;
-  return vec2(fbm(p + drift), fbmCoarse(p * 1.9 + drift * 0.55));
+  vec2 q = p * 1.5 + drift;
+  vec2 warp = vec2(fbmCoarse(q * 0.8 + vec2(3.1, 7.7)), fbmCoarse(q * 0.8 + vec2(11.3, 1.9))) - 0.5;
+  return vec2(fbm(q + warp * 2.2), fbmCoarse(p * 1.9 + drift * 0.55));
 }
 
 /**
@@ -254,28 +272,24 @@ float edgeBand(float raw, float low, float reach) {
 }
 
 /**
- * One tier's opacity: the baked distance ramp, displaced by the drifting
- * cloud and the mask's per-hex seed (§2.2's B channel — deterministic
- * per-hex variation, so the edge breaks up differently over each hex instead
- * of tracing one clean curve), then remapped onto the tier's own window.
+ * One tier's opacity: the baked distance ramp, displaced by the drifting cloud and the mask's baked lump (§2.2's B
+ * channel: smooth, so the edge is pushed in or out by whole lumps of a hex or two, the same in every frame), then
+ * remapped onto the tier's own window.
  *
- * The displacement is what removes the hexagonal banding the raw mask has:
- * both generators measure hexDistance, an integer, so the ramp's contours
- * are concentric hexagons and the fog boundary inherits their straight
- * edges. An amplitude of more than one hex scrambles those rings into a
- * boundary with no preferred direction left.
+ * The displacement is what removes the hexagonal banding the raw mask has: the ramp's contours are ellipses (or, in
+ * the old step-count form, hexagons) and the fog boundary inherits their regular shape. An amplitude of more than one
+ * hex scrambles those rings into a boundary with no preferred direction left.
  */
 float tierAlpha(
   float raw,
   vec2 edge,
   float band,
   float noiseAmp,
-  float seedAmp,
   float softness,
   vec2 clouds,
-  float seed
+  float lump
 ) {
-  float displaced = raw + ((clouds.x - 0.5) * noiseAmp + seed * seedAmp) * band;
+  float displaced = raw + ((clouds.x - 0.5) + (lump - 0.5)) * noiseAmp * band;
   float alpha = smoothstep(edge.x, edge.y, displaced);
 
   // Displacing the threshold alone gives a *hard* edge, however irregular
@@ -324,8 +338,7 @@ vec4 sampleMask(sampler2D tex, vec2 uv) {
 }
 
 void main() {
-  vec2 screen = vUV * uViewport;
-  vec2 world = (screen - uViewport * 0.5) / uZoom + uCameraPos;
+  vec2 world = uFieldOrigin + vUV * uFieldSize;
   vec2 maskUV = world * uWorldToMaskScale + uWorldToMaskOffset;
 
   if (uShowRaw > 0.5) {
@@ -336,9 +349,7 @@ void main() {
   // uMaskPrev only matters while a reveal cross-fade is actually running
   // (§2.6), which is a few hundred milliseconds after a mask swap and never
   // again — the steady state is uMaskBlend == 1, where the mix is the
-  // identity and the second fetch is a full-viewport texture read thrown
-  // away. uMaskBlend is a uniform, so this branch is uniform across the
-  // draw, not per-pixel divergence.
+  // identity and the second fetch is a texture read thrown away.
   vec4 m = sampleMask(uMask, maskUV);
   if (uMaskBlend < 1.0) {
     vec2 maskUVPrev = world * uWorldToMaskScalePrev + uWorldToMaskOffsetPrev;
@@ -348,69 +359,170 @@ void main() {
   // §1c: a live army's real-time vision only ever reveals — min() with the
   // troop's own ramps (armyRamps) pulls each channel toward 0 (fully
   // explored/visible), never pushes it up, and it is applied to the blended
-  // mask above (uMask/uMaskPrev already mixed into m), so it can't leak into
-  // what gets cross-faded from/to on the next mask swap. Applied before the
-  // tier/band selection below so the troop's ramp opens the edge-noise
-  // window exactly like the village's, rather than being shaped separately.
+  // mask above, so it can't leak into what gets cross-faded from/to on the
+  // next mask swap. Applied before the tier/band selection below so the
+  // troop's ramp opens the edge-noise window exactly like the village's.
   vec2 army = armyRamps(world);
   m.r = min(m.r, army.x);
   m.g = min(m.g, army.y);
 
   // uShowEffective dumps right here — after the troop ramps above have landed
-  // but before tier/band selection reshapes it into an edge — so it's a
-  // direct read on what troops are actually doing to the mask, which uShowRaw
-  // (returning above, before this min()) structurally can't show.
+  // but before tier/band selection reshapes it into an edge.
   if (uShowEffective > 0.5) {
     finalColor = vec4(m.r, m.g, m.b, 1.0);
     return;
   }
 
-  // This quad draws one tier, so it reads one channel and one set of edge
-  // parameters. uTier is a uniform, so these select without divergence —
-  // and evaluating both tiers here would mean every pixel of the dark quad
-  // paying for a mist alpha it then discards.
-  //
   // The dark tier is a full underlay, deliberately unmasked by the mist —
   // see §1's "the two tiers are nested, not adjacent": never-scouted ground
-  // is also out of sight, so wherever the mist applies the dark tint
+  // is also out of sight, so wherever the mist applies the desaturation
   // applies too, and the mist quad above simply covers it up where it is
-  // opaque. The G ramp saturating a couple of hexes past the visible ring
-  // and staying saturated to the edge of the world is that underlay, not an
-  // unbounded-tint bug; the dark band you see is the window where the mist
-  // has not gone fully opaque yet, whose width UNKNOWN_EDGE
-  // (FogMaskLayer.ts) sets. Masking this by 1 minus the mist, or bounding it
-  // to the explored ring, deletes the underlay — §1 says why not.
-  bool dark = uTier < 0.5;
-  float raw = dark ? m.g : m.r;
-  vec2 edge = dark ? uOutOfSightEdge : uUnknownEdge;
-  float reach = dark ? uNoiseReach.y : uNoiseReach.x;
-  float noiseAmp = dark ? uEdgeNoise.y : uEdgeNoise.x;
-  float seedAmp = dark ? uSeedJitter.y : uSeedJitter.x;
-  float softness = dark ? uEdgeSoftness.y : uEdgeSoftness.x;
-
-  float band = edgeBand(raw, edge.x, reach);
+  // opaque. Masking this by 1 minus the mist, or bounding it to the explored
+  // ring, deletes the underlay — §1 says why not.
+  float rawDark = m.g;
+  float rawMist = m.r;
+  float bandDark = edgeBand(rawDark, uOutOfSightEdge.x, uNoiseReach.y);
+  // Gates the cloud evaluation with the widest reach; the outer pull-in below only ever shrinks it.
+  float bandMist = edgeBand(rawMist, uUnknownEdge.x, uNoiseReach.x);
 
   // Everything the cloud field feeds is multiplied by band, which is zero
-  // across solid mist and across clear ground alike — most of any frame,
-  // and nearly all of a zoomed-out one. Skipping it there isn't an
-  // optimisation of the maths, it's declining to do work with no effect:
-  // two multi-octave fbm evaluations, tens of hashes per pixel, over a
-  // full-screen quad, twice a frame for the two tiers. Left unconditional
-  // it is enough to stall a software renderer's main thread — the same
-  // hazard §2.5 documents for v1's per-frame BlurFilter, which is what its
-  // half-res pass exists to bound.
+  // across solid mist and across clear ground alike — most of any frame.
+  // Skipping it there is declining to do work with no effect: two
+  // multi-octave fbm evaluations, tens of lattice reads per pixel.
   vec2 clouds = vec2(0.5, 1.0); // neutral: no displacement, no thinning
-  if (band > 0.0) {
+  if (bandDark > 0.0 || bandMist > 0.0) {
     clouds = cloudLayers(world);
   }
 
-  float alpha = tierAlpha(raw, edge, band, noiseAmp, seedAmp, softness, clouds, m.b - 0.5);
+  // Outer mist edge: the noise window may close earlier than uNoiseReach.x where the lump / thinning layer is high,
+  // never later, so the radius past which the mist is guaranteed opaque (FOG_MIST_OPAQUE_AT_RAMP, terrain culling) holds.
+  float n = mix(m.b, clouds.y, 0.5);
+  float pull = uMistPullIn * smoothstep(0.3, 0.7, n);
+  float reach = max(uNoiseReach.x - pull, uUnknownEdge.y + 0.02);
+  bandMist = edgeBand(rawMist, uUnknownEdge.x, reach);
 
-  if (dark) {
-    alpha *= uScoutedAlpha;
-    finalColor = vec4(uScoutedColor * alpha, alpha);
-  } else {
-    finalColor = vec4(uUnexploredColor * alpha, alpha);
+  float alphaDark = tierAlpha(rawDark, uOutOfSightEdge, bandDark, uEdgeNoise.y, uEdgeSoftness.y, clouds, m.b);
+  float alphaMist = tierAlpha(rawMist, uUnknownEdge, bandMist, uEdgeNoise.x, uEdgeSoftness.x, clouds, m.b);
+  finalColor = vec4(alphaDark, alphaMist, 0.0, 1.0);
+}
+`;
+
+/**
+ * The one reading of the fog field, shared by everything that draws from it (the mist composite below and
+ * FogDesaturateFilter's FOG_DESATURATE_FRAGMENT): the field's two snapshots (FogField keeps the previous and the newest
+ * drift render), each with the world rect it was rendered for, the weight of snapshot B in the mix (0 = only A, 1 = only B),
+ * and the screen -> world inputs. `fogFieldAt(screen)` returns R = dark tier alpha, G = mist alpha (or the debug view's RGB).
+ */
+export const FOG_FIELD_SAMPLE_GLSL = `
+uniform sampler2D uFieldA;
+uniform sampler2D uFieldB;
+uniform vec2 uViewport;
+uniform vec2 uCameraPos;
+uniform float uZoom;
+uniform vec2 uFieldOriginA;
+uniform vec2 uFieldSizeA;
+uniform vec2 uFieldOriginB;
+uniform vec2 uFieldSizeB;
+uniform float uFieldBlendB;
+
+// The field is drawn through a clip-space quad, so its first texel row is its bottom edge: flip v.
+vec4 sampleField(sampler2D field, vec2 origin, vec2 size, vec2 world) {
+  vec2 f = (world - origin) / size;
+  return texture(field, vec2(f.x, 1.0 - f.y));
+}
+
+// The field at a screen position (CSS pixels, top-down, the space uViewport is in).
+vec4 fogFieldAt(vec2 screen) {
+  vec2 world = (screen - uViewport * 0.5) / uZoom + uCameraPos;
+  // Each snapshot is sampled at this pixel's world position through its own rect (the anchor can differ between them).
+  // Outside the blend only one of them is fetched.
+  if (uFieldBlendB <= 0.0) {
+    return sampleField(uFieldA, uFieldOriginA, uFieldSizeA, world);
   }
+  if (uFieldBlendB >= 1.0) {
+    return sampleField(uFieldB, uFieldOriginB, uFieldSizeB, world);
+  }
+  return mix(
+    sampleField(uFieldA, uFieldOriginA, uFieldSizeA, world),
+    sampleField(uFieldB, uFieldOriginB, uFieldSizeB, world),
+    uFieldBlendB
+  );
+}
+`;
+
+/**
+ * The mist quad's fragment shader: samples the field texture (FogField) at the pixel's world position and tints the
+ * mist alpha (G) with its constant colour, premultiplied. The debug views (raw / effective mask) are written
+ * straight into the field's RGB by FOG_FIELD_FRAGMENT and shown as-is.
+ */
+export const FOG_COMPOSITE_FRAGMENT = `
+precision highp float;
+
+in vec2 vUV;
+out vec4 finalColor;
+
+${FOG_FIELD_SAMPLE_GLSL}
+uniform float uDebugView;
+uniform vec3 uUnexploredColor;
+
+void main() {
+  vec4 field = fogFieldAt(vUV * uViewport);
+  if (uDebugView > 0.5) {
+    finalColor = vec4(field.rgb, 1.0);
+    return;
+  }
+  finalColor = vec4(uUnexploredColor * field.g, field.g);
+}
+`;
+
+/**
+ * The dark tier's look, as a Pixi filter over everything under the markers (FogDesaturateFilter): where the field's R
+ * (dark tier alpha) is set the picture is greyed instead of covered. Bright tones (sand, foam, snow) are first pulled
+ * toward mid grey, so greying does not turn them into light bands, then desaturated by uDesat, dimmed by uDarken and
+ * given a slight cool tint. Where the canvas is transparent (a CSS backdrop shows through) the old dark tint is added, so
+ * the tier stays visible there too.
+ *
+ * Pixi hands a filter a premultiplied input and wants a premultiplied output. The screen position comes from the
+ * filter's own uniforms: uOutputFrame.xy + vTextureCoord * uInputSize.xy is the pixel's position in the output target,
+ * which is the renderer's screen (FogDesaturateFilter's filterArea is the screen rectangle), the same space the composite
+ * reads the field in.
+ */
+export const FOG_DESATURATE_FRAGMENT = `
+precision highp float;
+
+in vec2 vTextureCoord;
+out vec4 finalColor;
+
+uniform sampler2D uTexture;
+uniform vec4 uInputSize;
+uniform vec4 uOutputFrame;
+
+${FOG_FIELD_SAMPLE_GLSL}
+uniform float uDesat;
+uniform float uPull;
+uniform float uDarken;
+uniform vec3 uScoutedColor;
+
+const vec3 LUMA = vec3(0.299, 0.587, 0.114);
+// Luminance above which tones are pulled toward the knee.
+const float KNEE = 0.45;
+const float TRANSPARENT_TINT_ALPHA = 0.6;
+
+void main() {
+  vec4 tex = texture(uTexture, vTextureCoord);
+  vec2 screen = uOutputFrame.xy + vTextureCoord * uInputSize.xy;
+  float aDark = fogFieldAt(screen).r;
+
+  vec3 c = tex.rgb / max(tex.a, 1e-4);
+  float lum = dot(c, LUMA);
+  float pulled = lum > KNEE ? KNEE + (lum - KNEE) * (1.0 - uPull) : lum;
+  vec3 t = c * (mix(lum, pulled, aDark) / max(lum, 1e-3));
+  float lt = dot(t, LUMA);
+  vec3 g = mix(t, vec3(lt), aDark * uDesat);
+  g *= 1.0 - uDarken * aDark;
+  c = mix(g, g * vec3(0.93, 0.98, 1.06), aDark);
+
+  float k = aDark * TRANSPARENT_TINT_ALPHA;
+  finalColor = vec4(c * tex.a, tex.a) + (1.0 - tex.a) * vec4(uScoutedColor * k, k);
 }
 `;

@@ -536,18 +536,40 @@ public sealed class LeaderboardService(
         return (items, items.Count == pageSize ? items[^1].Id : null);
     }
 
+    /// <summary>How many of the newest closed weekly windows a premium player may open.</summary>
+    public const int PremiumHistoryWindows = 4;
+
+    /// <summary>
+    /// The closed weekly windows a caller may open, out of <paramref name="windows"/> (oldest first, as
+    /// <see cref="GetClosedWindowsAsync"/> returns them): none for a free or anonymous player, the newest
+    /// <see cref="PremiumHistoryWindows"/> for a premium one, all for an admin. The one place that rule lives —
+    /// the directory lists these and the board read refuses everything else.
+    /// </summary>
+    public static IReadOnlyList<(DateTimeOffset PeriodStart, DateTimeOffset PeriodEnd)> OpenableWindows(
+        IReadOnlyList<(DateTimeOffset PeriodStart, DateTimeOffset PeriodEnd)> windows, bool isPremium, bool isAdmin)
+    {
+        if (isAdmin)
+        {
+            return windows;
+        }
+
+        return isPremium ? [.. windows.TakeLast(PremiumHistoryWindows)] : [];
+    }
+
     /// <summary>
     /// Status of every board in <see cref="LeaderboardCatalogue.Boards"/> for
     /// <paramref name="worldId"/>: live with its current snapshot's stats, or
-    /// dark with a reason (issue #43 §5, board directory).
+    /// dark with a reason (issue #43 §5, board directory). When
+    /// <paramref name="userId"/> is given, each live board also carries that
+    /// caller's rank on it (<see cref="LeaderboardBoardStatus.MyRank"/>).
     /// </summary>
     public async Task<IReadOnlyList<LeaderboardBoardStatus>> GetDirectoryAsync(
-        Guid worldId, CancellationToken cancellationToken = default)
+        Guid worldId, Guid? userId = null, CancellationToken cancellationToken = default)
     {
         var current = await _dbContext.LeaderboardSnapshots
             .AsNoTracking()
             .Where(s => s.WorldId == worldId && s.PeriodStart == null && !s.IsFinal)
-            .Select(s => new { s.Scope, s.Category, s.ComputedAt, EntryCount = s.Entries.Count })
+            .Select(s => new BoardSnapshotInfo(s.Id, s.Scope, s.Category, null, s.ComputedAt, s.Entries.Count))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         // Weekly boards have no "current" (all-time) snapshot; the latest
@@ -556,36 +578,91 @@ public sealed class LeaderboardService(
         var finals = await _dbContext.LeaderboardSnapshots
             .AsNoTracking()
             .Where(s => s.WorldId == worldId && s.IsFinal && s.PeriodStart != null)
-            .Select(s => new { s.Scope, s.Category, s.PeriodStart, s.ComputedAt, EntryCount = s.Entries.Count })
+            .Select(s => new BoardSnapshotInfo(s.Id, s.Scope, s.Category, s.PeriodStart, s.ComputedAt, s.Entries.Count))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         var latestFinal = finals
             .GroupBy(s => (s.Scope, s.Category))
             .Select(g => g.OrderByDescending(s => s.PeriodStart).First())
             .ToList();
 
+        // The snapshot each live board shows, resolved the same way CurrentSnapshotAsync does.
+        var shown = LeaderboardCatalogue.Boards.Keys
+            .Select(board => (
+                Board: board,
+                Snapshot: current.Find(s => s.Scope == board.Scope && s.Category == board.Category)
+                    ?? latestFinal.Find(s => s.Scope == board.Scope && s.Category == board.Category)))
+            .ToList();
+
+        var myRanks = userId is { } id
+            ? await MyRanksAsync(worldId, id, [.. shown.Where(x => x.Snapshot is not null).Select(x => x.Snapshot!)], cancellationToken)
+                .ConfigureAwait(false)
+            : [];
+
         return
         [
-            .. LeaderboardCatalogue.Boards.Keys.Select(board =>
-            {
-                var snapshot = current.Find(s => s.Scope == board.Scope && s.Category == board.Category);
-                if (snapshot is not null)
-                {
-                    return new LeaderboardBoardStatus(
-                        board.Scope, board.Category, Available: true, Reason: null,
-                        snapshot.ComputedAt, snapshot.EntryCount);
-                }
-
-                var final = latestFinal.Find(s => s.Scope == board.Scope && s.Category == board.Category);
-                return final is not null
-                    ? new LeaderboardBoardStatus(
-                        board.Scope, board.Category, Available: true, Reason: null,
-                        final.ComputedAt, final.EntryCount)
-                    : new LeaderboardBoardStatus(
-                        board.Scope, board.Category, Available: false,
-                        LeaderboardCatalogue.DarkReason(board.Scope, board.Category), ComputedAt: null, EntryCount: null);
-            }),
+            .. shown.Select(x => x.Snapshot is { } snapshot
+                ? new LeaderboardBoardStatus(
+                    x.Board.Scope, x.Board.Category, Available: true, Reason: null,
+                    snapshot.ComputedAt, snapshot.EntryCount,
+                    myRanks.TryGetValue(snapshot.Id, out var rank) ? rank : null)
+                : new LeaderboardBoardStatus(
+                    x.Board.Scope, x.Board.Category, Available: false,
+                    LeaderboardCatalogue.DarkReason(x.Board.Scope, x.Board.Category),
+                    ComputedAt: null, EntryCount: null, MyRank: null)),
         ];
     }
+
+    /// <summary>
+    /// The caller's rank on each of <paramref name="snapshots"/>, keyed by snapshot id; a snapshot the caller has no
+    /// entry on is absent. User boards rank the user. Settlement boards rank realms, and a realm's id is the id of
+    /// one of its owner's settlements (<c>LinkedGroups.RealmIds</c>), so the caller's rank is the best rank among
+    /// entries whose subject is any of their settlements in this world. Guild boards have no subject to match yet.
+    /// </summary>
+    private async Task<Dictionary<Guid, int>> MyRanksAsync(
+        Guid worldId, Guid userId, List<BoardSnapshotInfo> snapshots, CancellationToken cancellationToken)
+    {
+        var settlementIds = await _dbContext.Settlements
+            .AsNoTracking()
+            .Where(s => s.WorldId == worldId && s.UserId == userId)
+            .Select(s => s.Id)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var snapshotIds = snapshots.Select(s => s.Id).ToList();
+
+        var candidates = await _dbContext.LeaderboardEntries
+            .AsNoTracking()
+            .Where(e => snapshotIds.Contains(e.SnapshotId)
+                && (e.SubjectId == userId || settlementIds.Contains(e.SubjectId)))
+            .Select(e => new { e.SnapshotId, e.SubjectId, e.Rank })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var ranks = new Dictionary<Guid, int>();
+        foreach (var snapshot in snapshots)
+        {
+            var mine = candidates
+                .Where(e => e.SnapshotId == snapshot.Id && snapshot.Scope switch
+                {
+                    LeaderboardScope.User => e.SubjectId == userId,
+                    LeaderboardScope.Settlement => e.SubjectId != userId,
+                    _ => false,
+                })
+                .Select(e => e.Rank)
+                .ToList();
+            if (mine.Count > 0)
+            {
+                ranks[snapshot.Id] = mine.Min();
+            }
+        }
+
+        return ranks;
+    }
+
+    private sealed record BoardSnapshotInfo(
+        Guid Id,
+        LeaderboardScope Scope,
+        LeaderboardCategory Category,
+        DateTimeOffset? PeriodStart,
+        DateTimeOffset ComputedAt,
+        int EntryCount);
 
     /// <summary>
     /// A keyset page (<c>Rank &gt; afterRank</c>, ordered by <c>Rank</c>) of a
@@ -767,7 +844,8 @@ public sealed record LeaderboardBoardStatus(
     bool Available,
     string? Reason,
     DateTimeOffset? ComputedAt,
-    int? EntryCount);
+    int? EntryCount,
+    int? MyRank = null);
 
 /// <summary>One keyset page of a board, or its dark response.</summary>
 public sealed record LeaderboardBoardPage(

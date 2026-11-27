@@ -20,7 +20,7 @@ export const EDGE_NOISE_FADE_RAMP = 0.25;
  * it used to be. Where it shuts also sets how far terrain has to be drawn,
  * so pushing it further out is not free.
  */
-export const NOISE_REACH: [number, number] = [0.55, 0.7];
+export const NOISE_REACH: [number, number] = [0.55, 0.6];
 
 /**
  * The ramp value past which the mist's edge noise is fully shut off, and so
@@ -30,3 +30,35 @@ export const NOISE_REACH: [number, number] = [0.55, 0.7];
  * renderer that waste measured about 30ms a frame.
  */
 export const FOG_MIST_OPAQUE_AT_RAMP = NOISE_REACH[0] + EDGE_NOISE_FADE_RAMP;
+
+/**
+ * Width, in hexes, of the mask's unknown ramp — the distance past a settlement's explored ring that the R channel spends going
+ * 0 -> 255, and the budget the shader's ramp units (1.0 = this many hexes) are measured in. One number for everything that
+ * describes the ramp: the renderer's terrain cull and fog margin, the demo mask. Must equal the backend generator's
+ * `FogMaskOptions.UnknownMarginHexes`; nothing derives it from the mask itself (a PNG carries no metadata beyond its size).
+ */
+export const UNKNOWN_RAMP_MARGIN_HEXES = 14;
+
+/**
+ * Width, in hexes, of the mask's out-of-sight (dark tier) ramp: the G channel goes 0 -> 255 over this many hexes past the
+ * visible ring, and the shader's dark edge window is in units of it. The troop's dark ramp (`ARMY_FOG_BLACK_MARGIN`) uses the
+ * same width, so a troop's clearing and a settlement's share one edge shaping. Must equal the backend generator's
+ * `FogMaskOptions.OutOfSightMarginHexes`.
+ */
+export const OUT_OF_SIGHT_RAMP_MARGIN_HEXES = 4;
+
+/**
+ * How far past a settlement's or tower's explored ring (straight-line hexes) the ground is still visible through the mist:
+ * the ramp's width times where the mist turns opaque (11.2). The backend's `FogVisionRadii.SourceMistOpaqueMargin` decides
+ * which rival data to deliver from the same number.
+ */
+export const SOURCE_MIST_OPAQUE_MARGIN_HEXES = UNKNOWN_RAMP_MARGIN_HEXES * FOG_MIST_OPAQUE_AT_RAMP;
+
+/**
+ * The troop's white (unknown) ramp, in hexes past its vision radius: starts `ARMY_FOG_WHITE_OFFSET` out and fades over
+ * `ARMY_FOG_WHITE_MARGIN` (fogShader.ts's armyRamps). The server bakes the same ramp around explored ground
+ * (`FogVisionRadii.ArmyFogWhiteOffsetHexes` / `ArmyFogWhiteMarginHexes`, which must equal these), so a stored trail reads
+ * like the live clearing.
+ */
+export const ARMY_FOG_WHITE_OFFSET = 0.75;
+export const ARMY_FOG_WHITE_MARGIN = 6;

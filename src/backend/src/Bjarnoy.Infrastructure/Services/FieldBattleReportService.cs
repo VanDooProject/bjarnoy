@@ -22,8 +22,8 @@ public sealed class FieldBattleReportService(GameDbContext dbContext)
             .FirstOrDefaultAsync(r => r.Id == reportId, cancellationToken);
 
     /// <summary>Reports where <paramref name="settlementId"/> was either side, newest first.</summary>
-    public async Task<List<FieldBattleReportEntity>> GetForSettlementAsync(
-        Guid settlementId, CancellationToken cancellationToken = default)
+    public async Task<List<FieldBattleReportEntity>> GetForOwnerAsync(
+        Guid worldId, string ownerId, CancellationToken cancellationToken = default)
     {
         // Ordered client-side rather than via OrderByDescending in the query:
         // the SQLite provider (a real, supported deployment target here, not
@@ -35,7 +35,7 @@ public sealed class FieldBattleReportService(GameDbContext dbContext)
         var reports = await _dbContext.FieldBattleReports
             .AsNoTracking()
             .Include(r => r.Lines)
-            .Where(r => r.SideASettlementId == settlementId || r.SideBSettlementId == settlementId)
+            .Where(r => r.WorldId == worldId && (r.SideAOwnerId == ownerId || r.SideBOwnerId == ownerId))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 

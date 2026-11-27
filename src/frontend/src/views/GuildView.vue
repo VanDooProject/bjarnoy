@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/auth';
 import { useGuildStore } from '../stores/guild';
 import { useWorldStore } from '../stores/world';
 import { useUnsavedInput } from '../composables/useUnsavedInput';
+import { usePhoneLayer, vPhoneHidden } from '../composables/usePhoneLayer';
 import type { GuildBoardTopicKind, GuildRole } from '../api/types';
 import type { MessageSchema } from '../i18n/schema';
 
@@ -51,6 +52,7 @@ function backToDirectory() {
 // --- founding ---
 
 const foundOpen = ref(false);
+const foundLayer = usePhoneLayer(foundOpen);
 const foundName = ref('');
 const foundTag = ref('');
 const foundDescription = ref('');
@@ -204,29 +206,32 @@ function formattedDate(iso: string): string {
           </li>
         </ul>
 
-        <div v-if="foundOpen" class="backdrop" @click.self="foundOpen = false">
-          <div class="dialog" role="dialog" :aria-label="$t('guild.foundDialog.ariaLabel')">
-            <h2>{{ $t('guild.foundDialog.title') }}</h2>
-            <label>{{ $t('guild.foundDialog.name') }} <input v-model="foundName" maxlength="50" /></label>
-            <label>{{ $t('guild.foundDialog.tag') }} <input v-model="foundTag" maxlength="5" /></label>
-            <label>
-              {{ $t('guild.foundDialog.description') }}
-              <textarea v-model="foundDescription" rows="3" maxlength="500"></textarea>
-            </label>
-            <p v-if="guild.actionError" class="error">{{ guild.actionError }}</p>
-            <div class="row">
-              <button
-                :disabled="guild.actionPending || !foundName.trim() || !foundTag.trim()"
-                @click="submitFound"
-              >
-                {{ $t('guild.foundDialog.found') }}
-              </button>
-              <button class="secondary" :disabled="guild.actionPending" @click="foundOpen = false">
-                {{ $t('guild.foundDialog.cancel') }}
-              </button>
+        <!-- Teleported so it is a sibling of the route modal: the modal hides (inert) while this layer is open on a phone. -->
+        <Teleport to="body">
+          <div v-if="foundOpen" v-phone-hidden="foundLayer.hidden.value" class="backdrop" @click.self="foundOpen = false">
+            <div class="dialog" role="dialog" :aria-label="$t('guild.foundDialog.ariaLabel')">
+              <h2>{{ $t('guild.foundDialog.title') }}</h2>
+              <label>{{ $t('guild.foundDialog.name') }} <input v-model="foundName" maxlength="50" /></label>
+              <label>{{ $t('guild.foundDialog.tag') }} <input v-model="foundTag" maxlength="5" /></label>
+              <label>
+                {{ $t('guild.foundDialog.description') }}
+                <textarea v-model="foundDescription" rows="3" maxlength="500"></textarea>
+              </label>
+              <p v-if="guild.actionError" class="error">{{ guild.actionError }}</p>
+              <div class="row">
+                <button
+                  :disabled="guild.actionPending || !foundName.trim() || !foundTag.trim()"
+                  @click="submitFound"
+                >
+                  {{ $t('guild.foundDialog.found') }}
+                </button>
+                <button class="secondary" :disabled="guild.actionPending" @click="foundOpen = false">
+                  {{ $t('guild.foundDialog.cancel') }}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </Teleport>
       </section>
     </template>
 
@@ -571,7 +576,8 @@ section.treaties {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  z-index: 50;
+  /* Above RouteModal's backdrop (z-index 60): the dialog is teleported to body. */
+  z-index: 70;
 }
 .dialog {
   background: var(--panel-bg);

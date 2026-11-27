@@ -27,12 +27,7 @@ import { RingMenuComponent } from './pages/RingMenuComponent';
  * it now asserts the ring opens and the URL stays in world mode (`/settlement#world`).
  */
 
-type FleetOrdersWindow = Window & {
-  __demoWorld: () => { model: any; selectedSettlementId: string; dispatchDraft: { route: { q: number; r: number }[] } | null; startDispatch: () => void };
-  __settlementRenderer: () => {
-    hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number };
-  };
-};
+type FleetOrdersWorld = { model: any; selectedSettlementId: string; dispatchDraft: { route: { q: number; r: number }[] } | null; startDispatch: () => void };
 
 test.describe('fleet orders on the world map', { tag: '@g3' }, () => {
   test('a click while composing a dispatch plots a waypoint instead of navigating to /settlement', async ({ page }) => {
@@ -41,11 +36,11 @@ test.describe('fleet orders on the world map', { tag: '@g3' }, () => {
     const box = await world.box();
 
     const target = await page.evaluate(() => {
-      const store = (window as unknown as FleetOrdersWindow).__demoWorld();
+      const store = window.__demoWorld() as FleetOrdersWorld;
       const settlement = store.model.getSettlement(store.selectedSettlementId);
       const at = { q: settlement.q + 2, r: settlement.r };
       store.startDispatch();
-      const screen = (window as unknown as FleetOrdersWindow).__settlementRenderer().hexCenterScreen(at);
+      const screen = window.__settlementRenderer().hexCenterScreen(at);
       return { at, screen };
     });
 
@@ -56,7 +51,7 @@ test.describe('fleet orders on the world map', { tag: '@g3' }, () => {
     await expect(page).toHaveURL(/\/settlement#world(&.*)?$/);
 
     const route = await page.evaluate(
-      () => (window as unknown as FleetOrdersWindow).__demoWorld().dispatchDraft?.route,
+      () => (window.__demoWorld() as FleetOrdersWorld).dispatchDraft?.route,
     );
     expect(route).toEqual([target.at]);
   });

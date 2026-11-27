@@ -18,10 +18,16 @@ can't be used as a raid-proof vault.
 ## The slot formula
 
 ```
-Settlement.ConstructionSlots = max(2, longhouseLevel)
+Settlement.ConstructionSlots = max(2, 1 + floor(longhouseLevel / 2))
 ```
 
-2 slots at longhouse level 1–2, then one more per level: 3 at level 3, 10 at level 10, 30 at level 30. A razed settlement (`LonghouseLevel == 0`) still reports
+Level 1 has 2 slots (the exception); from there one more every second level:
+
+| Longhouse level | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 20 | 30 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Slots | 2 | 2 | 2 | 3 | 3 | 4 | 4 | 5 | 5 | 6 | 11 | 16 |
+
+A Longhouse upgrade occupies 90 % of them, rounded down (min 1): 5 of 6 at level 10, 9 of 11 at level 20. A razed settlement (`LonghouseLevel == 0`) still reports
 2 slots — harmless, since every building needs `RequiredLonghouseLevel >= 1` and nothing can be queued on a
 razed settlement anyway.
 
@@ -44,6 +50,13 @@ A waiting order is promoted to *building* the instant a slot frees — `Settleme
 one place that happens. It is called from every path that can free a slot: `SettleTo` (after each
 completion), `CancelBuild` (cancelling a building order), and `WithQueuesDueAt` (admin instant build — which
 additionally bypasses the slot gate entirely, since it's a bypass, not a new plan).
+
+The build queue is strictly first in, first out. Only the oldest waiting order can start; while it doesn't fit the free
+slots, every order behind it waits too, even one that needs fewer slots. A newly planned order starts right away only
+when nothing is waiting; otherwise it joins the end of the queue.
+
+When Premium ends, orders already in the waiting queue stay and start as slots free up. Until all of them have
+started, no new order can be added (`BuildRejection.QueueLockedWithoutPremium`).
 
 Everything stays lazy and clock-settled: `SettleTo(now)` replays completions **and** promotions in
 chronological order (`complete → promote → starvation`, in that order, at every instant), so reading a

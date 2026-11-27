@@ -15,11 +15,14 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
     cargoSlots: 0,
     shipSlots: 0,
     upkeepPerHour: 1,
+    ranged: false,
     trainingCost: { wood: 0, stone: 0, food: 0, iron: 0 },
     trainingSeconds: 0,
     requiredLonghouseLevel: 1,
     requiredUnitType: null,
     requiredBuildingType: 'longhouse',
+    fireCraftPerLevel: 0,
+    requiredBuildingLevel: 1,
     siegeTargets: [],
     ...overrides,
   };
@@ -28,7 +31,7 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
 const byType = {
   spearman: unit({ type: 'spearman', speed: 2, upkeepPerHour: 1 }),
   ram: unit({ type: 'ram', class: 'siege', speed: 1, upkeepPerHour: 3 }),
-  longship: unit({ type: 'longship', class: 'ship', speed: 4, upkeepPerHour: 2 }),
+  snekkja: unit({ type: 'snekkja', class: 'ship', speed: 4, upkeepPerHour: 2 }),
 };
 
 const HOME: AxialCoord = { q: 0, r: 0 };
@@ -143,7 +146,7 @@ describe('fieldOrderFeasibility', () => {
       },
     });
 
-    const verdict = fieldOrderFeasibility(standing({ stacks: [{ unit: 'longship', count: 2 }] }), { q: 14, r: 0 }, 'move', env);
+    const verdict = fieldOrderFeasibility(standing({ stacks: [{ unit: 'snekkja', count: 2 }] }), { q: 14, r: 0 }, 'move', env);
 
     expect(verdict.ok && verdict.fleet).toBe(true);
     expect(asked.length).toBeGreaterThan(0);
@@ -160,9 +163,54 @@ describe('fieldOrderFeasibility', () => {
     expect(fieldOrderFeasibility(standing(), camp, 'hunt', env).ok).toBe(true);
     expect(fieldOrderFeasibility(standing(), camp, 'move', env)).toEqual({ ok: false, reason: 'unreachable' });
   });
+
+  it('is pending, not unreachable, while the way out is still being searched', () => {
+    const env = lineEnv({ route: () => 'pending' });
+
+    expect(fieldOrderFeasibility(standing(), { q: 4, r: 0 }, 'move', env)).toEqual({ ok: false, reason: 'pending' });
+  });
+
+  it('is pending while only the way home is still being searched', () => {
+    const env = lineEnv({
+      route: (from, to) => (to.q === HOME.q && to.r === HOME.r ? 'pending' : { path: [from, to], cost: Math.abs(to.q - from.q) }),
+    });
+
+    expect(fieldOrderFeasibility(standing(), { q: 4, r: 0 }, 'move', env)).toEqual({ ok: false, reason: 'pending' });
+  });
+
+  it('a hunt waits for every candidate hex around the camp, since a pending one could be the cheapest', () => {
+    const camp = { q: 10, r: 4 };
+    const env = lineEnv({
+      route: (from, to) =>
+        to.q === camp.q + 1 && to.r === camp.r ? 'pending' : { path: [from, to], cost: Math.abs(to.q - from.q) + Math.abs(to.r - from.r) },
+    });
+
+    expect(fieldOrderFeasibility(standing(), camp, 'hunt', env)).toEqual({ ok: false, reason: 'pending' });
+  });
+
+  it('no route at all is unreachable', () => {
+    const env = lineEnv({ route: () => null });
+
+    expect(fieldOrderFeasibility(standing(), { q: 4, r: 0 }, 'move', env)).toEqual({ ok: false, reason: 'unreachable' });
+  });
 });
 
 describe('stackCounts', () => {
+  it('does not claim a stranded army can go anywhere: its path is no way home, and the client does not know where home is', () => {
+    // Stranded where it stands, and stranded on the walk to the hex it stops on: neither path starts at home.
+    const standingStranded = standing({
+      position: { q: 5, r: 0 },
+      movement: { path: [{ q: 5, r: 0 }], arrivesAt: '2026-11-09T10:00:00Z', isReturning: false, isStranded: true },
+    });
+    const walking = standing({
+      position: { q: 9, r: 0 },
+      movement: { path: [{ q: 10, r: 0 }, { q: 9, r: 0 }, { q: 8, r: 0 }], arrivesAt: '2026-11-09T13:00:00Z', isReturning: false, isStranded: true },
+    });
+
+    expect(fieldOrderFeasibility(standingStranded, { q: 4, r: 0 }, 'move', lineEnv())).toEqual({ ok: false, reason: 'unreachable' });
+    expect(fieldOrderFeasibility(walking, { q: 4, r: 0 }, 'move', lineEnv())).toEqual({ ok: false, reason: 'unreachable' });
+  });
+
   it('sums stacks of one unit and skips empty ones', () => {
     expect(
       stackCounts([

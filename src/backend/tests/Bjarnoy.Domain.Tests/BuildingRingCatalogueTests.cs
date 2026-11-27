@@ -18,7 +18,7 @@ public class BuildingRingCatalogueTests
     {
         foreach (var definition in LevelOnes())
         {
-            if (definition.Type == BuildingType.Longhouse)
+            if (definition.Type is BuildingType.Longhouse or BuildingType.BeachCamp)
             {
                 Assert.Null(definition.RingCategory);
             }

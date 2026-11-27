@@ -49,7 +49,9 @@ public readonly record struct FieldBattleClaim(bool Claims, double DefenseBonusP
 /// has no way to express. What *is* reused, byte-for-byte, is the loss
 /// rounding (<see cref="BattleResolver.ApplyProportionalLossesInternal"/>) and
 /// the water-fill loot split (<see cref="BattleResolver.ComputeLootWithCapacity"/>)
-/// — no field-battle-specific divergence in either.
+/// — no field-battle-specific divergence in either. The winner also refills its provisions
+/// (<see cref="FoodRefillToWinner"/>) from the loser's carried food, never from the loser's provisions
+/// (<c>docs/design/troop-movement-range.md</c> section 1b).
 /// </summary>
 public sealed record FieldBattlePlan(
     IReadOnlyList<UnitStack> SideALosses,
@@ -61,7 +63,21 @@ public sealed record FieldBattlePlan(
     double SideAPower,
     double SideBPower,
     bool SideAWasDefending,
-    bool SideBWasDefending);
+    bool SideBWasDefending,
+    double FoodRefillToWinner = 0)
+{
+    /// <summary>What side A lost in the volley (<see cref="Volley"/>); already part of <see cref="SideALosses"/>.</summary>
+    public IReadOnlyList<UnitStack> SideAVolleyLosses { get; init; } = [];
+
+    /// <summary>What side B lost in the volley; already part of <see cref="SideBLosses"/>.</summary>
+    public IReadOnlyList<UnitStack> SideBVolleyLosses { get; init; } = [];
+
+    /// <summary>Side A's ranged attack in the volley (zero without ranged units).</summary>
+    public double SideAVolleyPower { get; init; }
+
+    /// <summary>Side B's ranged attack in the volley (zero without ranged units).</summary>
+    public double SideBVolleyPower { get; init; }
+}
 
 /// <summary>
 /// Pure combat math for an in-flight, army-vs-army interception (issue #206)
@@ -151,7 +167,7 @@ public static class FieldBattleResolver
         }
 
         var longhouseLevel = buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
-        if (Settlement.LonghouseDisc(settlementCentre, longhouseLevel) is not { } centreDisc
+        if (Settlement.CentreDisc(settlementCentre, longhouseLevel, Settlement.HasBeachCampAt(buildings, settlementCentre)) is not { } centreDisc
             || centreDisc.Centre.DistanceTo(hex) > centreDisc.Radius)
         {
             return FieldBattleClaim.None;
@@ -182,6 +198,8 @@ public static class FieldBattleResolver
     /// #206 §4). Also what side B loots if side A loses.
     /// </param>
     /// <param name="sideBLootCarried">Side B's own carried loot — the mirror of <paramref name="sideALootCarried"/>.</param>
+    /// <param name="sideAProvisions">Side A's provisions at the meeting instant: a win refills them from the loser's carried food first.</param>
+    /// <param name="sideBProvisions">Side B's provisions at the meeting instant.</param>
     /// <param name="seed">
     /// Seeds the tie-breaking RNG for proportional-loss rounding — see
     /// <see cref="BattleResolver.Resolve"/>'s own <c>seed</c> remarks. The
@@ -214,6 +232,8 @@ public static class FieldBattleResolver
         FieldBattleClaim sideBClaim,
         ResourceAmounts sideALootCarried,
         ResourceAmounts sideBLootCarried,
+        double sideAProvisions,
+        double sideBProvisions,
         int seed)
     {
         ArgumentNullException.ThrowIfNull(sideAStacks);
@@ -223,10 +243,23 @@ public static class FieldBattleResolver
         // (ShipCargo.Rejoin). A land army has no passengers and fights as before.
         var (fightersA, passengersA) = ShipCargo.SplitForFight(sideAStacks);
         var (fightersB, passengersB) = ShipCargo.SplitForFight(sideBStacks);
-        var plan = ResolveFight(fightersA, sideAClaim, fightersB, sideBClaim, sideALootCarried, sideBLootCarried, seed);
+        var plan = ResolveFight(fightersA, sideAClaim, fightersB, sideBClaim, seed);
         var (lossesA, survivorsA) = ShipCargo.Rejoin(plan.SideALosses, plan.SideASurvivors, passengersA);
         var (lossesB, survivorsB) = ShipCargo.Rejoin(plan.SideBLosses, plan.SideBSurvivors, passengersB);
-        return plan with { SideALosses = lossesA, SideASurvivors = survivorsA, SideBLosses = lossesB, SideBSurvivors = survivorsB };
+
+        // The winner takes what it can carry from the loser's carried loot, after refilling its provisions from the loser's
+        // carried food; whoever goes home with everyone who survived (passengers included) counts for the refill.
+        var (loot, refill) = plan.Winner switch
+        {
+            FieldBattleWinner.SideA => LootFor(survivorsA, sideALootCarried, sideBLootCarried, sideAProvisions),
+            FieldBattleWinner.SideB => LootFor(survivorsB, sideBLootCarried, sideALootCarried, sideBProvisions),
+            _ => (ResourceAmounts.Zero, 0),
+        };
+        return plan with
+        {
+            SideALosses = lossesA, SideASurvivors = survivorsA, SideBLosses = lossesB, SideBSurvivors = survivorsB,
+            LootTakenByWinner = loot, FoodRefillToWinner = refill,
+        };
     }
 
     private static FieldBattlePlan ResolveFight(
@@ -234,29 +267,34 @@ public static class FieldBattleResolver
         FieldBattleClaim sideAClaim,
         IReadOnlyList<UnitStack> sideBStacks,
         FieldBattleClaim sideBClaim,
-        ResourceAmounts sideALootCarried,
-        ResourceAmounts sideBLootCarried,
         int seed)
     {
-
         // Exactly one side defending is the only case that gets asymmetric
         // treatment — see the remarks above.
         var asymmetric = sideAClaim.Claims ^ sideBClaim.Claims;
+        var rng = new Random(seed);
+
+        // The volley first, on the armies as they meet: a side that stands on its own claimed ground measures its losses against
+        // its defence with the (halved) bonus the fight itself would give it. The fight is then fought by what is left.
+        var volley = Volley.Exchange(
+            sideAStacks, 0, asymmetric && sideAClaim.Claims ? sideAClaim.DefenseBonusPercent : 0,
+            sideBStacks, 0, asymmetric && sideBClaim.Claims ? sideBClaim.DefenseBonusPercent : 0,
+            rng);
+        var fightersA = volley.SurvivorsA;
+        var fightersB = volley.SurvivorsB;
 
         var sideAPower = asymmetric && sideAClaim.Claims
-            ? DefensePower(sideAStacks, sideAClaim.DefenseBonusPercent)
-            : AttackPower(sideAStacks);
+            ? DefensePower(fightersA, sideAClaim.DefenseBonusPercent)
+            : AttackPower(fightersA);
         var sideBPower = asymmetric && sideBClaim.Claims
-            ? DefensePower(sideBStacks, sideBClaim.DefenseBonusPercent)
-            : AttackPower(sideBStacks);
+            ? DefensePower(fightersB, sideBClaim.DefenseBonusPercent)
+            : AttackPower(fightersB);
 
         var winner = sideAPower > sideBPower
             ? FieldBattleWinner.SideA
             : sideBPower > sideAPower
                 ? FieldBattleWinner.SideB
                 : FieldBattleWinner.Tie;
-
-        var rng = new Random(seed);
 
         IReadOnlyList<UnitStack> sideALosses;
         IReadOnlyList<UnitStack> sideASurvivors;
@@ -266,38 +304,38 @@ public static class FieldBattleResolver
         if (winner == FieldBattleWinner.Tie)
         {
             var tieFraction = BattleResolver.RaidLossFractionInternal(1.0);
-            (sideALosses, sideASurvivors) = BattleResolver.ApplyProportionalLossesInternal(sideAStacks, tieFraction, rng);
-            (sideBLosses, sideBSurvivors) = BattleResolver.ApplyProportionalLossesInternal(sideBStacks, tieFraction, rng);
+            (sideALosses, sideASurvivors) = BattleResolver.ApplyProportionalLossesInternal(fightersA, tieFraction, rng);
+            (sideBLosses, sideBSurvivors) = BattleResolver.ApplyProportionalLossesInternal(fightersB, tieFraction, rng);
         }
         else if (winner == FieldBattleWinner.SideA)
         {
             var loserFraction = BattleResolver.RaidLossFractionInternal(1.0);
-            (sideBLosses, sideBSurvivors) = BattleResolver.ApplyProportionalLossesInternal(sideBStacks, loserFraction, rng);
+            (sideBLosses, sideBSurvivors) = BattleResolver.ApplyProportionalLossesInternal(fightersB, loserFraction, rng);
 
             var winnerFraction = BattleResolver.RaidLossFractionInternal(SafeRatioPow(sideBPower, sideAPower));
-            (sideALosses, sideASurvivors) = BattleResolver.ApplyProportionalLossesInternal(sideAStacks, winnerFraction, rng);
+            (sideALosses, sideASurvivors) = BattleResolver.ApplyProportionalLossesInternal(fightersA, winnerFraction, rng);
         }
         else
         {
             var loserFraction = BattleResolver.RaidLossFractionInternal(1.0);
-            (sideALosses, sideASurvivors) = BattleResolver.ApplyProportionalLossesInternal(sideAStacks, loserFraction, rng);
+            (sideALosses, sideASurvivors) = BattleResolver.ApplyProportionalLossesInternal(fightersA, loserFraction, rng);
 
             var winnerFraction = BattleResolver.RaidLossFractionInternal(SafeRatioPow(sideAPower, sideBPower));
-            (sideBLosses, sideBSurvivors) = BattleResolver.ApplyProportionalLossesInternal(sideBStacks, winnerFraction, rng);
+            (sideBLosses, sideBSurvivors) = BattleResolver.ApplyProportionalLossesInternal(fightersB, winnerFraction, rng);
         }
 
-        var loot = winner switch
-        {
-            FieldBattleWinner.SideA => LootFor(sideASurvivors, sideALootCarried, sideBLootCarried),
-            FieldBattleWinner.SideB => LootFor(sideBSurvivors, sideBLootCarried, sideALootCarried),
-            _ => ResourceAmounts.Zero,
-        };
-
         return new FieldBattlePlan(
-            sideALosses, sideASurvivors, sideBLosses, sideBSurvivors,
-            loot, winner, sideAPower, sideBPower,
+            Volley.TotalLosses(sideAStacks, volley.LossesA, sideALosses), sideASurvivors,
+            Volley.TotalLosses(sideBStacks, volley.LossesB, sideBLosses), sideBSurvivors,
+            ResourceAmounts.Zero, winner, sideAPower, sideBPower,
             SideAWasDefending: asymmetric && sideAClaim.Claims,
-            SideBWasDefending: asymmetric && sideBClaim.Claims);
+            SideBWasDefending: asymmetric && sideBClaim.Claims)
+        {
+            SideAVolleyLosses = volley.LossesA,
+            SideBVolleyLosses = volley.LossesB,
+            SideAVolleyPower = volley.PowerA,
+            SideBVolleyPower = volley.PowerB,
+        };
     }
 
     private static double AttackPower(IReadOnlyList<UnitStack> stacks) =>
@@ -313,15 +351,18 @@ public static class FieldBattleResolver
     /// <summary>
     /// The winner's remaining carry capacity — its total capacity minus
     /// whatever loot it is already carrying — filled from the loser's carried
-    /// loot (issue #206 §4).
+    /// loot (issue #206 §4), after the food that refills the winner's provisions
+    /// (<see cref="BattleResolver.TakeLootAndRefill"/>). A fleet carries with its ships alone.
     /// </summary>
-    private static ResourceAmounts LootFor(
-        IReadOnlyList<UnitStack> winnerSurvivors, ResourceAmounts winnerAlreadyCarried, ResourceAmounts loserCarried)
+    private static (ResourceAmounts Loot, double Refill) LootFor(
+        IReadOnlyList<UnitStack> winnerSurvivors, ResourceAmounts winnerAlreadyCarried, ResourceAmounts loserCarried,
+        double winnerProvisions)
     {
-        var totalCapacity = winnerSurvivors.Sum(s => (double)UnitCatalogue.Get(s.Type).CarryCapacity * s.Count);
+        var totalCapacity = BattleResolver.LootCapacity(winnerSurvivors);
         var alreadyUsed = winnerAlreadyCarried.Wood + winnerAlreadyCarried.Stone
             + winnerAlreadyCarried.Food + winnerAlreadyCarried.Iron;
         var remainingCapacity = Math.Max(0, totalCapacity - alreadyUsed);
-        return BattleResolver.ComputeLootWithCapacity(remainingCapacity, loserCarried);
+        return BattleResolver.TakeLootAndRefill(
+            remainingCapacity, BattleResolver.FoodCapacity(winnerSurvivors), winnerProvisions, loserCarried);
     }
 }

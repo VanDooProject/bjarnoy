@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
+import { useHiddenUnderPhoneLayer, vPhoneHidden } from '../composables/usePhoneLayer';
 import './introButton.css';
 import { introMounted } from './introSignal';
 import { mountLandingIntro } from './startLandingIntro';
 
 const { t } = useI18n({ useScope: 'global' });
+const hudHidden = useHiddenUnderPhoneLayer();
 </script>
 
 <template>
   <Transition name="play-intro-fade">
-    <button v-if="!introMounted" type="button" class="intro-btn play-intro" data-testid="play-intro" @click="mountLandingIntro({ playNow: true })">
+    <button v-if="!introMounted" v-phone-hidden="hudHidden" type="button" class="intro-btn play-intro" data-testid="play-intro" @click="mountLandingIntro({ playNow: true })">
       {{ t('intro.playIntro') }}
     </button>
   </Transition>

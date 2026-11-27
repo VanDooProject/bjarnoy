@@ -4,6 +4,7 @@ using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
 using Bjarnoy.Api.Contracts;
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.World;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
@@ -23,10 +24,11 @@ namespace Bjarnoy.AppHost.Tests;
 /// the countdown panel. Issue #95's own test plan asked for more than that,
 /// though: showing a countdown that never resolves is its own kind of
 /// "stuck" onboarding, so this also speeds the order up (see the SpeedFactor
-/// bump below) and asserts the panel clears and the onboarding tray's
-/// "Building 2" step actually flips to "Placed" once construction finishes —
-/// proving the landing page's progress genuinely moves on, not just that it
-/// shows a number that counts down.
+/// tuning below) and asserts the panel clears once construction finishes.
+/// The onboarding moves on as soon as the order is queued: the checklist's
+/// "Building 2" step ticks and the guidance pointer asks for the Lumberjack
+/// while the Reindeer Herder is still under construction (the server sends
+/// the queued building as a level-0 foundation).
 /// </summary>
 /// <remarks>
 /// Deliberately doesn't drive the ring menu's click-to-open UI here — a
@@ -83,22 +85,14 @@ public class LandingBuildQueueTests(AppHostFixture fixture)
         var grassTile = await LiveFrontendTestHelpers.FindGuidedBuildHexAsync(
             apiClient, world.Id, centre, "grass", cancellationToken);
 
-        // --- Admin: speed the world way up so a real Reindeer Herder's 3-minute build
-        // timer (BuildingCatalogue.Producer, level 1) resolves in seconds —
-        // otherwise there'd be no practical way to observe the onboarding
-        // tray actually flip to "Placed" once construction finishes. Same
-        // technique as TroopTrainingAndDispatchTests's own SpeedFactor bump,
-        // but a much more modest factor: that test only needs the order to
-        // finish quickly, while this one first asserts the order is *still
-        // queued* (the countdown panel showing "Construction") before
-        // waiting for it to complete — too high a factor (50 was tried
-        // first) let the order finish before that first assertion's own API
-        // round trip, since GetSettlementAsync lazily completes any queued
-        // build that's due whenever it's read. 40s (SpeedFactor 6) leaves
-        // comfortable room for that first check while still resolving well
-        // inside this test's overall budget. Set before queuing: PlanBuild
-        // divides the definition's BuildDuration by the world's SpeedFactor
-        // at the moment the order is planned, not later.
+        // --- Admin: tune the world's speed so the Reindeer Herder's level-1 build takes
+        // OrderSeconds, a duration this test owns instead of inheriting from the catalogue's pacing.
+        // The order has to outlast the slowest poll that can still pick it up (the 20 s budget
+        // below) and the API read after it, yet resolve inside the 60 s wait for the panel to
+        // clear. PlanBuild divides BuildDuration by the world's SpeedFactor when the order is
+        // planned, so this is set before queuing.
+        const double OrderSeconds = 40;
+        var speedFactor = BuildingCatalogue.BuildTime(BuildingType.ReindeerHerder, 1).TotalSeconds / OrderSeconds;
         var frontendEvent = await resourceNotifications.WaitForResourceAsync(
             "frontend",
             evt => evt.Snapshot.Urls.Any(u => u.DisplayProperties?.DisplayName == "Log in as admin"),
@@ -122,7 +116,7 @@ public class LandingBuildQueueTests(AppHostFixture fixture)
 
         var speedUpResponse = await adminHttpClient.PatchAsJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/settings",
-            new UpdateWorldSettingsRequest { SpeedFactor = 6.0 },
+            new UpdateWorldSettingsRequest { SpeedFactor = speedFactor },
             cancellationToken);
         speedUpResponse.EnsureSuccessStatusCode();
 
@@ -141,12 +135,17 @@ public class LandingBuildQueueTests(AppHostFixture fixture)
         // exists: the one in flight at queue time answers with the old, empty
         // queue, so the worst case is that response + one full interval + the
         // next response. On a loaded runner that took ~9 s (a 10 s budget
-        // flaked); 20 s covers it and the 40 s order (SpeedFactor 6) is still
+        // flaked); 20 s covers it and the 40 s order is still
         // running when the budget ends, so the panel can't have come and gone.
         var statusCard = page.Locator(".status-card");
         await Assertions.Expect(statusCard).ToBeVisibleAsync(new() { Timeout = 20_000 });
         await Assertions.Expect(statusCard.GetByText("Construction")).ToBeVisibleAsync();
         await Assertions.Expect(page.Locator(".status-row-time")).ToBeVisibleAsync();
+
+        // The onboarding does not wait for the construction: while the Reindeer Herder is still being built (the
+        // server sends it as a level-0 foundation) its checklist step is ticked and the pointer asks for the Lumberjack.
+        await Assertions.Expect(page.GetByTestId("guidance-pointer")).ToContainTextAsync("One more");
+        await Assertions.Expect(page.Locator("[data-testid=\"onboarding-checklist\"] .step").Nth(1)).ToHaveClassAsync(new System.Text.RegularExpressions.Regex(@"\bdone\b"));
 
         var settlementAfterQueue = await apiClient.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlement.Id}", cancellationToken);
@@ -154,13 +153,9 @@ public class LandingBuildQueueTests(AppHostFixture fixture)
         Assert.Equal("reindeerherder", order.Building);
 
         // Issue #95's own test plan: showing the countdown isn't the whole
-        // story — the onboarding tray's "Building 2" step must actually
-        // flip to "Placed" once the order completes, and the construction
-        // panel must clear itself, purely from the landing page's existing
-        // poll (no reload, no extra click). This is what "the progress
-        // doesn't move on" would look like if it regressed: the card stays
-        // up forever and the tray never advances even though the backend
-        // finished the build.
+        // story — the construction panel must clear itself once the order
+        // completes, and the "Building 2" step stays ticked, purely from the
+        // landing page's existing poll (no reload, no extra click).
         await Assertions.Expect(statusCard).ToBeHiddenAsync(new() { Timeout = 60_000 }); // rest of the 40 s order + the poll that sees it finished
         await Assertions.Expect(page.Locator("[data-testid=\"onboarding-checklist\"] .step").Nth(1)).ToHaveClassAsync(new System.Text.RegularExpressions.Regex(@"\bdone\b"));
 

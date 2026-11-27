@@ -39,7 +39,7 @@ describe('DispatchSlots', () => {
   });
 
   it('shows the slots the troops aboard use out of what the ships offer', () => {
-    const wrapper = mountSlots({ karve: 1, longship: 1, axeman: 3, ram: 1 });
+    const wrapper = mountSlots({ karve: 1, snekkja: 1, axeman: 3, ram: 1 });
 
     expect(wrapper.get('[data-testid=ship-slots]').text()).toBe('Troop slots: 16 of 30 used');
     expect(wrapper.find('[role=alert]').exists()).toBe(false);

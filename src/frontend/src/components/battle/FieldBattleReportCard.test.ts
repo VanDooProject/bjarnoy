@@ -5,14 +5,15 @@
 // — this is the layer those helpers can't exercise (i18n keys actually
 // resolve, both side sections render, the "you"/"defending" tags show up
 // correctly, and loot only renders for the winning viewer).
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import { createMemoryHistory, createRouter } from 'vue-router';
-import FieldBattleReportCard from './FieldBattleReportCard.vue';
+import FieldBattleReportCard, { type FieldBattleReportCardData } from './FieldBattleReportCard.vue';
+import { useMapFocus } from '../../composables/useMapFocus';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 
-const baseReport = {
+const baseReport: FieldBattleReportCardData = {
   winner: 'sidea',
   hex: { q: 12, r: -4 },
   sideAName: 'Alpha' as string | null,
@@ -25,18 +26,22 @@ const baseReport = {
   sideBWasDefending: true,
   lootTaken: { wood: 40, stone: 0, food: 10, iron: 0 },
   lines: [
-    { side: 'sidea' as const, isLoss: true, unit: 'axeman', count: 3 },
-    { side: 'sidea' as const, isLoss: false, unit: 'axeman', count: 12 },
-    { side: 'sideb' as const, isLoss: true, unit: 'thrall', count: 20 },
+    { side: 'sidea' as const, isLoss: true, unit: 'axeman', count: 3, volleyCount: 0 },
+    { side: 'sidea' as const, isLoss: false, unit: 'axeman', count: 12, volleyCount: 0 },
+    { side: 'sideb' as const, isLoss: true, unit: 'thrall', count: 20, volleyCount: 0 },
   ],
 };
 
 const router = createRouter({
   history: createMemoryHistory(),
-  routes: [{ path: '/settlement', component: { template: '<div />' } }],
+  routes: [
+    { path: '/settlement', component: { template: '<div />' } },
+    { path: '/docs', component: { template: '<div />' } },
+    { path: '/reports/:reportId', component: { template: '<div />' } },
+  ],
 });
 
-function mountCard(side: 'sidea' | 'sideb' = 'sidea', report: Partial<typeof baseReport> = {}) {
+function mountCard(side: 'sidea' | 'sideb' = 'sidea', report: Partial<FieldBattleReportCardData> = {}) {
   return mount(FieldBattleReportCard, {
     props: { report: { ...baseReport, ...report }, side, occurredAt: '2026-09-09T10:00:00.000Z' },
     global: { plugins: [createTestI18n({ hud: enHud }), router] },
@@ -44,6 +49,33 @@ function mountCard(side: 'sidea' | 'sideb' = 'sidea', report: Partial<typeof bas
 }
 
 describe('FieldBattleReportCard', () => {
+  it('shows no volley figures and keeps the single Lost column without ranged units', () => {
+    const wrapper = mountCard('sidea');
+    expect(wrapper.find('[data-testid="field-battle-volley-sidea"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="lost-volley"]').exists()).toBe(false);
+    expect(wrapper.findAll('th').map((th) => th.text())).toContain('Lost');
+    wrapper.unmount();
+  });
+
+  it('shows each side\'s volley power and splits the losses into volley and fight', () => {
+    const wrapper = mountCard('sidea', {
+      sideAVolleyPower: 200,
+      sideBVolleyPower: 0,
+      lines: [
+        { side: 'sidea' as const, isLoss: false, unit: 'skirmisher', count: 20, volleyCount: 0 },
+        { side: 'sideb' as const, isLoss: true, unit: 'axeman', count: 7, volleyCount: 3 },
+      ],
+    });
+
+    expect(wrapper.get('[data-testid="field-battle-volley-sidea"]').text()).toContain('200');
+    expect(wrapper.get('[data-testid="field-battle-volley-sideb"]').text()).toContain('0');
+    expect(wrapper.findAll('th').map((th) => th.text())).toEqual(expect.arrayContaining(['Lost (volley)', 'Lost (fight)']));
+    // Side A's skirmishers lost nothing; side B's axemen lost 3 to the volley and 4 in the fight.
+    expect(wrapper.findAll('[data-testid="lost-volley"]').map((td) => td.text())).toEqual(['0', '3']);
+    expect(wrapper.findAll('[data-testid="lost-fight"]').map((td) => td.text())).toEqual(['0', '4']);
+    wrapper.unmount();
+  });
+
   it("names the opponent from the viewer's side", () => {
     const asA = mountCard('sidea');
     expect(asA.find('[data-testid="field-battle-opponent"]').text()).toBe('Ben (Beta)');
@@ -60,11 +92,36 @@ describe('FieldBattleReportCard', () => {
     wrapper.unmount();
   });
 
-  it('links the hex to the world map centred on it', () => {
+  it('the hex link goes back to the map it was opened over and asks it to centre on the hex', async () => {
+    const map = useMapFocus();
+    map.clear();
+    await router.push('/settlement#world&q=1&r=2&z=0.30');
+    await router.push({ path: '/reports/r1', state: { backgroundView: '/settlement#world&q=1&r=2&z=0.30' } });
     const wrapper = mountCard('sidea');
-    const link = wrapper.find('[data-testid="field-battle-location"]');
-    expect(link.text()).toBe('Hex (12, -4)');
-    expect(link.attributes('href')).toBe('/settlement#world&q=12&r=-4&z=0.35');
+
+    await wrapper.find('[data-testid="field-battle-location"]').trigger('click');
+    await flushPromises();
+
+    expect(map.pending.value?.coord).toEqual({ q: 12, r: -4 });
+    // Back in history to the page the modal was opened over: the link picks no mode or zoom of its own.
+    expect(router.currentRoute.value.fullPath).toBe('/settlement#world&q=1&r=2&z=0.30');
+    map.clear();
+    wrapper.unmount();
+  });
+
+  it('a report opened over a page without a map goes to the map instead of leaving the request waiting', async () => {
+    const map = useMapFocus();
+    map.clear();
+    await router.push('/docs');
+    await router.push({ path: '/reports/r1', state: { backgroundView: '/docs' } });
+    const wrapper = mountCard('sidea');
+
+    await wrapper.find('[data-testid="field-battle-location"]').trigger('click');
+    await flushPromises();
+
+    expect(router.currentRoute.value.path).toBe('/settlement');
+    expect(map.pending.value?.coord).toEqual({ q: 12, r: -4 });
+    map.clear();
     wrapper.unmount();
   });
 

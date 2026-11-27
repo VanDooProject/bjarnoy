@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -42,8 +43,7 @@ public sealed class RealmResolutionEndpointsTests : IAsyncLifetime
     /// <summary>Founds a settlement on the world's first usable plot, under <paramref name="ownerId"/>, via the anonymous header.</summary>
     private async Task<SettlementResponse> FoundAsync(HttpClient client, Guid worldId, string ownerId)
     {
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
@@ -232,8 +232,7 @@ public sealed class RealmResolutionEndpointsTests : IAsyncLifetime
         // Same account, a brand-new local id (a second browser) and a
         // different, free start position: the one-realm-per-world rule has to
         // hold per account, not just per local id.
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         var (island, plot) = islands!
             .SelectMany(i => i.StartPositions.Select(p => (Island: i, Plot: p)))
             .Skip(1)

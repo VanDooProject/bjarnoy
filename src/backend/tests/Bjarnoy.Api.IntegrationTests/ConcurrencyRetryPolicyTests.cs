@@ -48,6 +48,7 @@ public sealed class ConcurrencyRetryPolicyTests
         "GET /api/v1/settlements/{settlementId:guid}/view",
         "GET /api/v1/armies/{armyId:guid}",
         "GET /api/v1/worlds/{worldId:guid}/renown",
+        "GET /api/v1/worlds/{worldId:guid}/own-build-orders",
         "GET /api/v1/settlements/{settlementId:guid}/trade-offers/board",
         "GET /api/v1/settlements/{settlementId:guid}/trade-offers/mine",
         "GET /api/v1/settlements/{settlementId:guid}/shipments",

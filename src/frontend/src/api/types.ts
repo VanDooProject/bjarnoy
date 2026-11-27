@@ -173,7 +173,9 @@ export interface CampReportUnitLine {
 export interface CampReportBeastLine {
   tier: BeastTier;
   before: number;
+  /** Every beast of the tier that died; `volleyLost` of them fell to the army's volley before the fight. */
   lost: number;
+  volleyLost: number;
 }
 
 /** Mirrors `CampReportResponse` — a wildlife camp fight (hunt, ambush or tower attack). */
@@ -187,12 +189,33 @@ export interface CampReportResponse {
   winner: 'army' | 'camp';
   armyPower: number;
   campPower: number;
+  /** The ranged attack of the army's Bowmen and Skirmishers before the fight (the beasts throw nothing back); 0 without ranged units. */
+  armyVolleyPower: number;
   units: CampReportUnitLine[];
   beasts: CampReportBeastLine[];
   loot: ResourceLine;
   campCleared: boolean;
   tower: { q: number; r: number } | null;
   towerBurned: boolean;
+}
+
+export interface ArmyReportUnitLine {
+  type: string;
+  count: number;
+}
+
+/**
+ * Mirrors `ArmyReportResponse` — an army report that belongs to the player, not to a settlement: `stuck` (a wall blocks the army's way)
+ * or `starved` (it could not get home and its food ran out). `units` are the troops lost (`starved`) or in the army (`stuck`).
+ */
+export interface ArmyReportResponse {
+  id: string;
+  kind: 'stuck' | 'starved';
+  occurredAt: string;
+  armyId: string;
+  hex: { q: number; r: number };
+  mission: string;
+  units: ArmyReportUnitLine[];
 }
 
 /**
@@ -217,6 +240,10 @@ export interface JotunTowerResponse {
   orientation: string;
 }
 
+/**
+ * Mirrors `IslandResponse`: an island as `GET /worlds/{id}/islands` lists it. Its river and bog tiles come separately
+ * (`TerrainChunkResponse`, `GET /worlds/{id}/terrain-chunks`): they are big and only change when the world is reseeded.
+ */
 export interface IslandResponse {
   id: string;
   index: number;
@@ -224,18 +251,36 @@ export interface IslandResponse {
   q: number;
   r: number;
   tileCount: number;
-  startPositions: TileCoordinate[];
-  riverTiles: RiverTileResponse[];
   giants: GiantResponse[];
   camps: CampResponse[];
-  /** This island's bogland (empty when it has none). */
-  bogTiles: BogTileResponse[];
   /** The Utgard wall rings of a wasted island with Utgard (empty otherwise). */
   utgardWalls?: UtgardWallResponse[];
   /** The Jötun watchtowers of a wasted island with Utgard (empty otherwise). */
   jotunTowers?: JotunTowerResponse[];
   /** True for a wasted island — only ever present once the world's endboss has triggered (hidden before that). */
   wasted: boolean;
+}
+
+/** Mirrors `IslandTerrainResponse`: one island's river, bog and inland-lake tiles (empty lists when it has none). */
+export interface IslandTerrainResponse {
+  id: string;
+  riverTiles: RiverTileResponse[];
+  bogTiles: BogTileResponse[];
+  /** Water this island encloses that the bog did not fill (empty when it has none) — drawn like the sea, see `drawsAsSea`. */
+  inlandLakeTiles: TileCoordinate[];
+}
+
+/** Mirrors `TerrainChunkResponse`: the terrain of a fixed range of islands, in island index order. */
+export interface TerrainChunkResponse {
+  chunk: number;
+  islands: IslandTerrainResponse[];
+}
+
+/** Mirrors `TerrainChunkManifestResponse`: how many chunks the world's terrain is cut into. */
+export interface TerrainChunkManifestResponse {
+  chunkSize: number;
+  chunkCount: number;
+  chunks: { index: number; eTag: string }[];
 }
 
 /** Mirrors `PlotSuggestionResponse` — the plot this visitor is offered right now, pinned across reloads. */
@@ -323,6 +368,12 @@ export interface PlacedBuildingResponse {
   nextLevelLossInSeconds?: number | null;
 }
 
+/** Mirrors `OwnBuildOrdersResponse` (`GET /worlds/{id}/own-build-orders`): the build queue of one of the player's realms, named by its oldest member. */
+export interface OwnBuildOrders {
+  settlementId: string;
+  queue: BuildOrderResponse[];
+}
+
 export interface BuildOrderResponse {
   id: string;
   q: number;
@@ -350,6 +401,23 @@ export interface BuildOrderResponse {
 export interface UnitStackResponse {
   unit: string;
   count: number;
+}
+
+/** The places a garrison stands: the longhouse, a tower, a dock (a harbour). */
+export type GarrisonSpotKind = 'longhouse' | 'tower' | 'dock' | 'beachcamp';
+
+/**
+ * One garrison spot of a settlement (`docs/design/garrison.md`): the units standing there, the guests (supporting armies of
+ * others) and what it can hold. Every spot is listed, the longhouse first, empty ones included.
+ */
+export interface GarrisonSpotResponse {
+  kind: GarrisonSpotKind;
+  q: number;
+  r: number;
+  stacks: UnitStackResponse[];
+  guests: UnitStackResponse[];
+  holdsLand: boolean;
+  holdsShips: boolean;
 }
 
 /**
@@ -422,6 +490,8 @@ export interface QuestResponse {
   reward: ResourceLine;
   /** Counted progress toward the goal; null/absent for a quest without one. */
   progress?: { current: number; target: number } | null;
+  /** Days of premium the claim grants instead of resources (the register quest); 0/absent for a resource quest. */
+  premiumDays?: number;
 }
 
 /** One connected claim disc of a realm, exactly as the server resolves it. */
@@ -457,6 +527,8 @@ export interface SettlementResponse {
   queue: BuildOrderResponse[];
   /** Units standing at this settlement (issue #55: includes trained `settler`). */
   garrison: UnitStackResponse[];
+  /** The garrison split by the spot it stands at (longhouse first); `garrison` is the total over all of them. */
+  garrisonSpots: GarrisonSpotResponse[];
   trainingQueue: TrainingOrderResponse[];
   runes: RuneInstanceResponse[];
   /** The running feast, if any. */
@@ -490,12 +562,14 @@ export interface SettlementSummary {
    */
   labelQ: number;
   labelR: number;
+  /** The settlement is a beach camp: a one-hex settlement with no Longhouse (so no Longhouse level to read it from). */
+  isBeachCamp: boolean;
 }
 
 /**
- * Mirrors `RivalBuildingResponse` (`GET /worlds/{id}/rival-buildings`): one standing building of another player's settlement on a
+ * Mirrors `RivalBuildingResponse` (`GET /worlds/{id}/rival-buildings`): one building of another player's settlement (level 0: under construction) on a
  * hex the caller has explored (every building type, the caller's own settlements left out). `ownerUserId` is null for an anonymous
- * settlement.
+ * settlement. `GET /worlds/{id}/own-buildings` answers the same shape for the caller's own settlements.
  */
 export interface RivalBuilding {
   q: number;
@@ -536,7 +610,7 @@ export interface SettlementViewResponse {
 // `HexPoint` there too (used in place of what used to be `HexPointRequest`).
 // `mission` on `DispatchArmyRequest` is `"move" | "attack" | "support" |
 // "raid" | "found"` — `found` requires exactly 5 `settler` in `units`
-// (plus, for a sea convoy, enough Karve/Longship capacity to carry them) and
+// (plus, for a sea convoy, enough Karve/Snekkja capacity to carry them) and
 // no `targetSettlementId`; `destination` is the target hex to colonise.
 
 export interface RetargetFoundingRequest {
@@ -624,6 +698,8 @@ export interface TradeReportResponse {
   requestedAmount: number;
   guildTrade: boolean;
   travelHours: number;
+  /** The side the reading player traded on (a player's reports cover all their settlements); null when neither. */
+  viewerSide: 'poster' | 'acceptor' | null;
 }
 
 export interface CreateWorldRequest {
@@ -721,6 +797,8 @@ export interface AdminWorldResponse {
   startsAt: string | null;
   joinsClosed: boolean;
   frozenIslesEnabled: boolean;
+  /** Whether the renown buildings earn follows the world speed factor. */
+  renownFollowsSpeed: boolean;
   /** Left out of every public world list for non-admins. */
   hidden: boolean;
   endbossAt: string | null;
@@ -810,6 +888,7 @@ export interface UpdateWorldSettingsRequest {
   startsAt?: string | null;
   joinsClosed?: boolean;
   frozenIslesEnabled?: boolean;
+  renownFollowsSpeed?: boolean;
   hidden?: boolean;
   endbossAt?: string | null;
 }
@@ -1082,6 +1161,8 @@ export interface PlaceBuildingRequest {
 /** Signed: a positive count creates units, a negative one removes them. */
 export interface AdjustGarrisonRequest {
   unit: string;
+  /** The garrison spot the units are created at or removed from. */
+  spot: HexPoint;
   count: number;
 }
 
@@ -1122,8 +1203,11 @@ export interface AdminEditArmyRequest {
 export interface AdminArmyResponse {
   army: ArmyResponse;
   worldId: string;
-  settlementName: string;
+  /** Null for an army without a home. */
+  settlementName: string | null;
   ownerName: string;
+  /** Loot the army carries home and has not deposited yet. */
+  loot: ResourceLine;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/ChatContracts.cs.
@@ -1341,6 +1425,8 @@ export interface LeaderboardBoardInfoResponse {
   reason: string | null;
   computedAt: string | null;
   entryCount: number | null;
+  /** The caller's rank on this board; `null` when anonymous, the board is dark, or the caller has no entry. */
+  myRank: number | null;
 }
 
 export interface WeeklyWindowResponse {
@@ -1416,6 +1502,8 @@ export interface BuildingDefinitionResponse {
   requiresCoastalWater: boolean;
   /** Land terrain AND (as an exception) coastal water: the palisade's sea end. */
   alsoOnCoastalWater?: boolean;
+  /** Also stands on an inland-lake hex beside land (the fishing hut) — see BuildingDefinition.AlsoOnInlandLakeShore. */
+  alsoOnInlandLakeShore?: boolean;
   requiredLonghouseLevel: number;
   /** Construction slots one order for this building occupies while building — ignored when `occupiesMostSlots` is set. */
   slotCost: number;
@@ -1559,6 +1647,12 @@ export interface UnitCountRequest {
   count: number;
 }
 
+/** One group of a dispatch: the units that leave from one garrison spot. */
+export interface DispatchFromSpot {
+  spot: HexPoint;
+  units: UnitCountRequest[];
+}
+
 /**
  * `waypoints`: ordered intermediate hexes, empty/omitted for a direct route.
  * `destination`: required for `mission: 'move'` (the default); ignored for
@@ -1567,12 +1661,14 @@ export interface UnitCountRequest {
  * and what the settlement can afford.
  */
 export interface DispatchArmyRequest {
-  units: UnitCountRequest[];
+  /** The units split by the garrison spot each group leaves from. */
+  from: DispatchFromSpot[];
   waypoints?: HexPoint[];
   destination?: HexPoint;
   provisions: number;
   mission?: string;
   targetSettlementId?: string;
+  /** Attack: the building to hit. Support: the host's garrison spot the army joins (required). */
   targetBuildingCoord?: HexPoint;
 }
 
@@ -1618,6 +1714,10 @@ export interface MovementResponse {
   turnAroundAt: string;
   returnArrivesAt: string;
   isReturning: boolean;
+  /** The army cannot get home and stays on the last hex of `path` (that hex alone, or the walk there when a wall closed its way); `ArmyResponse.starvesAt` is when its food runs out and the whole army dies. */
+  isStranded: boolean;
+  /** The army is fleeing after a lost field battle (on its way home or stranded): it takes field orders from where it is, and an order ends its flee protection. */
+  isFleeing: boolean;
 }
 
 /**
@@ -1638,7 +1738,10 @@ export interface ForeignMovementResponse {
  */
 export interface ForeignArmyResponse {
   id: string;
-  settlementId: string;
+  /** Null for an army without a home. */
+  settlementId: string | null;
+  /** How the army's owner stands to the viewer (never the owner's ids): picks its colour, for an army without a home too. */
+  relation: 'mine' | 'guild' | 'treaty' | 'rival';
   isFleet: boolean;
   position: HexPoint;
   movement: ForeignMovementResponse;
@@ -1655,7 +1758,8 @@ export interface ForeignArmyResponse {
  */
 export interface ArmyResponse {
   id: string;
-  settlementId: string;
+  /** The army's home settlement; null for an army without a home (its beach camp was destroyed): it cannot be recalled, it still takes field orders. */
+  settlementId: string | null;
   mission: string;
   targetSettlementId: string | null;
   atHome: boolean;
@@ -1668,6 +1772,14 @@ export interface ArmyResponse {
   visionRadius: number;
   stacks: ArmyUnitStackResponse[];
   movement: MovementResponse | null;
+  /** When the provisions of an army that cannot get home run out and the whole army dies; null for every other army. */
+  starvesAt: string | null;
+  /** Set while this army is one group of a gathering army from several garrison spots; all groups of one army share it. */
+  gatheringId?: string | null;
+  /** The hex the groups of a gathering army meet on. */
+  gatherHex?: HexPoint | null;
+  /** When the gathering leaves the meeting hex for its target (`Gathering.DepartAt`); a group that has arrived waits there until then. */
+  gatherDepartsAt?: string | null;
 }
 
 export interface ArmyUnitStackResponse {
@@ -1678,6 +1790,8 @@ export interface ArmyUnitStackResponse {
 /** An army as it appears in a settlement's army list — lighter than `ArmyResponse`. */
 export interface ArmySummary {
   id: string;
+  /** The army's home settlement; null for an army without a home, which every realm of its owner lists. */
+  settlementId: string | null;
   mission: string;
   atHome: boolean;
   supporting: boolean;
@@ -1694,7 +1808,8 @@ export interface ArmySummary {
  */
 export interface GuestArmySummary {
   armyId: string;
-  ownerSettlementId: string;
+  /** Null for a guest without a home. */
+  ownerSettlementId: string | null;
   totalUpkeepPerHour: number;
   stacks: ArmyUnitStackResponse[];
 }
@@ -1706,14 +1821,18 @@ export interface GuestArmySummary {
 export interface BattleReportAttackerLine {
   unit: string;
   sent: number;
+  /** Every loss of the fight; `volleyLost` of them fell to the volley before the main fight. */
   lost: number;
   survived: number;
+  volleyLost: number;
 }
 
 export interface BattleReportDefenderLine {
   unit: string;
+  /** Every loss of the fight; `volleyLost` of them fell to the volley before the main fight. */
   lost: number;
   survived: number;
+  volleyLost: number;
 }
 
 /**
@@ -1730,11 +1849,28 @@ export interface BattleReportSiege {
 }
 
 /**
+ * The fight at sea of a fleet's attack: its ships against the defender's ships. Mirrors `BattleReportShipFightResponse`.
+ * `winner` is `'attacker'` or `'defender'`.
+ */
+export interface BattleReportShipFight {
+  attackerLines: BattleReportAttackerLine[];
+  defenderLines: BattleReportDefenderLine[];
+  attackPower: number;
+  defensePower: number;
+  winner: string;
+}
+
+/**
  * Mirrors `BattleReportResponse`. `mission` is `'attack'` or `'raid'`
  * (backend phase 7) — this phase's dispatch UI only offers Attack, but a
  * report can still come back as a Raid (e.g. from another player), so it's
  * rendered with its own label rather than assumed to always be an Attack.
- * `winner` is `'attacker'` or `'defender'` (no draw).
+ * `winner` is `'attacker'` or `'defender'` (no draw): the whole attack's, the attacker unless a fight was lost.
+ *
+ * A land army fights one fight, a fleet two: `attackPower`/`defensePower`/`attackerLines`/`defenderLines`/`siege` are the
+ * land fight (the only fight of a land army, empty for a fleet that fought none) and `shipFight` the fight at sea (`null` for
+ * a land army, a target without ships and reports stored before ships fought separately). `drowned` are the passengers the
+ * surviving ships could not carry, `fireShipsBurned` the Fire Hulks the fire used up and `fireSiege` the building it burned.
  */
 export interface BattleReportResponse {
   id: string;
@@ -1746,11 +1882,20 @@ export interface BattleReportResponse {
   winner: string;
   attackPower: number;
   defensePower: number;
+  /** The ranged attack of each side in the land fight's volley before the main fight; 0 without ranged units. */
+  attackerVolleyPower: number;
+  defenderVolleyPower: number;
   seed: number;
   lootTaken: ResourceLine;
   attackerLines: BattleReportAttackerLine[];
   defenderLines: BattleReportDefenderLine[];
   siege: BattleReportSiege | null;
+  shipFight: BattleReportShipFight | null;
+  drowned: ArmyUnitStackResponse[];
+  fireShipsBurned: number;
+  fireSiege: BattleReportSiege | null;
+  /** The side the reading player fought on (a player's reports cover all their settlements); null when neither. */
+  viewerSide: 'attacker' | 'defender' | null;
 }
 
 // Issue #206 (frontend): in-flight field battles — army-vs-army interception
@@ -1766,6 +1911,8 @@ export interface FieldBattleReportLine {
   isLoss: boolean;
   unit: string;
   count: number;
+  /** On a loss line: how many of `count` fell to the volley before the fight. */
+  volleyCount: number;
 }
 
 /** `winner` is `'sidea'`, `'sideb'`, or `'tie'` (see `FieldBattleWinner`). */
@@ -1785,11 +1932,16 @@ export interface FieldBattleReportResponse {
   winner: string;
   sideAPower: number;
   sideBPower: number;
+  /** The ranged attack of each side in the volley before the fight; 0 without ranged units. */
+  sideAVolleyPower: number;
+  sideBVolleyPower: number;
   sideAWasDefending: boolean;
   sideBWasDefending: boolean;
   seed: number;
   lootTaken: ResourceLine;
   lines: FieldBattleReportLine[];
+  /** The side the reading player fought on (a player's reports cover all their settlements); null when neither. */
+  viewerSide: 'sidea' | 'sideb' | null;
 }
 
 // Issue #40 phase 7 (frontend): the premium fight simulator. Mirrors
@@ -1826,18 +1978,29 @@ export interface SimulatorRequest {
  * Mirrors `SimulatorResponse` — deliberately the same field shape as
  * `BattleReportResponse` minus the persistence-only identity fields no
  * simulated battle has (no `id`, `occurredAt`, army/settlement ids), so the
- * same report-rendering markup (`BattleReportCard.vue`) can display either.
+ * same report-rendering markup (`BattleReportCard.vue`) can display either —
+ * a fleet's ship fight and land fight included, from the one `AttackResolver` a real attack uses.
  */
 export interface SimulatorResponse {
   mission: string;
   winner: string;
   attackPower: number;
   defensePower: number;
+  attackerVolleyPower: number;
+  defenderVolleyPower: number;
   seed: number;
   lootTaken: ResourceLine;
   attackerLines: BattleReportAttackerLine[];
   defenderLines: BattleReportDefenderLine[];
   siege: BattleReportSiege | null;
+  /**
+   * A fleet's fight at sea and what followed (the drowned passengers; the Fire Hulks burned and their fire damage are always
+   * zero/`null` here, a simulated attack names no building). `attackPower`/`defensePower`/the lines are the land fight.
+   */
+  shipFight: BattleReportShipFight | null;
+  drowned: ArmyUnitStackResponse[];
+  fireShipsBurned: number;
+  fireSiege: BattleReportSiege | null;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/SettlementContracts.cs's
@@ -1861,6 +2024,8 @@ export interface UnitDefinitionResponse {
   /** Slots this ship offers to land troops (0 for every other unit). */
   shipSlots: number;
   upkeepPerHour: number;
+  /** True for the units that strike in the volley before a land fight (Bowman, Skirmisher). */
+  ranged: boolean;
   trainingCost: ResourceLine;
   trainingSeconds: number;
   requiredLonghouseLevel: number;
@@ -1868,6 +2033,10 @@ export interface UnitDefinitionResponse {
   requiredUnitType: string | null;
   /** The building type whose ring trains this unit (`UnitDefinition.RequiredBuildingType`, e.g. `"longhouse"`, `"barracks"`, `"cartworkshop"`) — at least one must stand for the unit to be trainable. */
   requiredBuildingType: string;
+  /** The minimum level of the building the order is placed in (`UnitDefinition.RequiredBuildingLevel`). */
+  requiredBuildingLevel: number;
+  /** For a fire craft: how many take one building level off a building in the water (`UnitDefinition.FireCraftPerLevel`); 0 for every other unit. */
+  fireCraftPerLevel: number;
   /** What this siege engine can damage (`UnitDefinition.SiegeTargets`): `"walls"`, `"towers"`, `"buildings"`; empty for a unit without siege power. */
   siegeTargets: string[];
 }

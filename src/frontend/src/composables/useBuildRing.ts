@@ -25,6 +25,7 @@ import {
   buildingAllowedOnHex,
   cropAllowedHere,
   formatBuildTime,
+  hexOccupantLock,
   scaledBuildSeconds,
   isWallBuilding,
   longhouseLock,
@@ -33,7 +34,7 @@ import {
   riverBuildingAllowedHere,
   riverFitLock,
   shrineLimitLock,
-  storageHouseLock,
+  greatStorehouseLock,
   towerLimitLock,
 } from '../lib/map/ringCatalogue';
 import {
@@ -42,7 +43,7 @@ import {
   slotsNeeded,
   type RingAvailability,
 } from '../lib/map/ringAvailability';
-import type { RingBuilding, RingCard, RingCategory } from '../components/hud/RingMenu.vue';
+import type { RingAction, RingBuilding, RingCard, RingCategory } from '../components/hud/RingMenu.vue';
 import type { Resources, Tile } from '../lib/map/types';
 import type { RiverVariant } from '../lib/map/worldGenerator';
 import { towerThreatAt } from '../lib/map/campRules';
@@ -80,15 +81,39 @@ export function categoriesFor(tile: Tile): BuildCategory[] {
 // Category tints, carried into each category's own buildings so a building
 // bubble reads as belonging to the category it fanned out of.
 export const CATEGORY_COLORS: Record<string, string> = {
-  resource: 'var(--food)',
-  military: 'var(--iron)',
-  defense: 'var(--stone)',
-  religion: 'var(--shrine)',
-  logistics: 'var(--stone)',
-  water: 'var(--water)',
+  resource: 'var(--cat-resource)',
+  military: 'var(--cat-military)',
+  defense: 'var(--cat-defense)',
+  religion: 'var(--cat-religion)',
+  logistics: 'var(--cat-logistics)',
+  water: 'var(--cat-water)',
 };
 
 const RESOURCE_KINDS: (keyof Resources)[] = ['wood', 'stone', 'food', 'iron'];
+
+type WorldStore = ReturnType<typeof useWorldStore>;
+
+/**
+ * The highest level of each building type the selected settlement has — what a building's `prerequisites` are judged
+ * against (like Settlement.HighestLevelOf on the server). Live mode reads the polled building list (reactive), demo the
+ * local model.
+ */
+export function builtBuildingLevels(world: WorldStore): Record<string, number> {
+  if (DEMO_MODE) {
+    const id = world.selectedSettlementId;
+    return id ? world.model.highestBuildingLevels(id) : {};
+  }
+  const levels: Record<string, number> = {};
+  for (const b of world.hud.buildings) levels[b.type] = Math.max(levels[b.type] ?? 0, b.level);
+  return levels;
+}
+
+/** Every building the selected settlement has: the polled list live, the local model in the demo (`hud.buildings` is empty there). */
+export function ownBuildings(world: WorldStore): { q: number; r: number; type: string; level: number }[] {
+  if (!DEMO_MODE) return world.hud.buildings;
+  const id = world.selectedSettlementId;
+  return id ? world.model.listBuildings(id) : [];
+}
 
 export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<AxialCoord | null | undefined>) {
   const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -137,7 +162,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
     return world.selectedSettlementId ? world.model.soilForSettlement(world.selectedSettlementId) : undefined;
   }
 
-  const STORAGE_HOUSE_TYPES: ReadonlySet<string> = new Set(['storagehouse']);
+  const GREAT_STOREHOUSE_TYPES: ReadonlySet<string> = new Set(['greatstorehouse']);
 
   // Towers counting against the limit. Live mode reads the server's numbers for the whole (linked) realm
   // (`construction.towersHeld` / `towerLimit`: connected standing plus queued towers, the members' limits added up), the same
@@ -176,16 +201,19 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
     return heldHexes(SHRINE_BUILDING_TYPES, standing).size;
   }
 
-  // Storage houses held (standing plus queued, distinct hexes like Settlement.PlanBuild counts them; a linked realm's
-  // whole set) and the standing levels, for the additional-storage-house lock.
-  function storageHouseLockFor(): string | undefined {
+  // Great Storehouses held (standing plus queued, distinct hexes like Settlement.PlanBuild counts them; a linked realm's
+  // whole set) and the standing Storage House levels, for the Great Storehouse count lock.
+  function greatStorehouseLockFor(): string | undefined {
     const id = world.selectedSettlementId;
     if (!id) return undefined;
-    const standing = DEMO_MODE
+    const greatStanding = DEMO_MODE
+      ? world.model.greatStorehouses(id)
+      : world.hud.buildings.filter((b) => b.type === 'greatstorehouse');
+    const storageStanding = DEMO_MODE
       ? world.model.storageHouses(id)
       : world.hud.buildings.filter((b) => b.type === 'storagehouse');
-    const held = heldHexes(STORAGE_HOUSE_TYPES, standing);
-    return storageHouseLock(held.size, standing.map((h) => h.level));
+    const held = heldHexes(GREAT_STOREHOUSE_TYPES, greatStanding);
+    return greatStorehouseLock(held.size, storageStanding.map((h) => h.level));
   }
 
   // Wall orders still in the queue (live mode only; demo places instantly): the server counts them as wall hexes when it judges the next one.
@@ -213,13 +241,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
   // on the server). Live mode reads the polled building list (reactive), demo the
   // local model.
   function builtLevels(): Record<string, number> {
-    if (DEMO_MODE) {
-      const id = world.selectedSettlementId;
-      return id ? world.model.highestBuildingLevels(id) : {};
-    }
-    const levels: Record<string, number> = {};
-    for (const b of world.hud.buildings) levels[b.type] = Math.max(levels[b.type] ?? 0, b.level);
-    return levels;
+    return builtBuildingLevels(world);
   }
 
   /** One sentence per prerequisite building still missing (all of them are required). */
@@ -243,6 +265,8 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
     return computeAvailability({
       cost,
       available: world.hud.available,
+      rates: world.hud.rates,
+      storageCap: world.hud.storageCap,
       slotsNeeded: slotsNeeded(definition, construction.slots),
       construction,
       queue: world.hud.queue,
@@ -259,7 +283,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
       longhouseLock(definition?.requiredLonghouseLevel, world.hud.level),
       type === 'tower' ? towerLimitLock(towersHeld(), towerLimit()) : undefined,
       SHRINE_BUILDING_TYPES.has(type) ? shrineLimitLock(shrinesHeld()) : undefined,
-      type === 'storagehouse' ? storageHouseLockFor() : undefined,
+      type === 'greatstorehouse' ? greatStorehouseLockFor() : undefined,
       isWallBuilding(type) ? palisadeLock(world.model.palisadePlacement(coord, type === 'palisadegate', queuedWalls())) : undefined,
       type === 'bridge' ? bridgeLock(world.model.bridgePlacement(coord)) : undefined,
       riverFitLock(type, riverShapeAt(coord), riverVariantAt(coord), riverWidthAt(coord)),
@@ -272,6 +296,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
       cost,
       time: definition ? formatBuildTime(buildSeconds(definition.buildSeconds)) : undefined,
       gives: stats.output ? formatOutput(scaleOutput(stats.output, world.worldSpeedFactor)) : stats.modifier ? formatModifier(stats.modifier) : undefined,
+      givesOutput: stats.output ? scaleOutput(stats.output, world.worldSpeedFactor) : undefined,
       locks,
       warning: type === 'tower' ? towerCampWarning(coord) : undefined,
       art: buildingArt(type, 1),
@@ -288,6 +313,17 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
   });
   /** Build is offered only on a hex that takes at least one building (docs/design/ui-guidelines.md, rule 1). */
   const canBuildHere = computed(() => categories.value.length > 0);
+
+  /**
+   * The ring's Build bubble for the clicked hex, or `undefined` where the ground takes nothing. A hex held by a giant, a guarded
+   * camp or an endgame site keeps Build, locked with the reason (`hexOccupantLock`), so the map and the onboarding never offer
+   * buildings there that the placement would refuse.
+   */
+  const buildAction = computed<RingAction | undefined>(() => {
+    if (!tile.value || !canBuildHere.value) return undefined;
+    const lock = tile.value.buildingType ? undefined : hexOccupantLock(tile.value);
+    return { id: 'build', label: t('hud.ringMenu.actions.build'), disabled: !!lock, hint: lock };
+  });
 
   /** The ring's categories for the clicked hex: the placement filter, narrowed by river shape and island soil, each building with its card. */
   const categories = computed<RingCategory[]>(() => {
@@ -342,6 +378,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
   return {
     categories,
     canBuildHere,
+    buildAction,
     offersBuilding,
     placeBuildingDemo,
     // Shared with the map's Upgrade bubble, which judges the next level against the same locks, stock and slots.

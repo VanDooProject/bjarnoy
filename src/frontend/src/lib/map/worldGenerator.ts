@@ -4,7 +4,7 @@
 // from (q, r) and a seed, so nothing needs to be precomputed or stored for
 // the whole map — memory is bounded by hexes actually visited.
 import { axialToOddQ, hexDistance, hexRing, oddQToAxial, neighbors } from '../hex/coords';
-import { TILE_ORIENTATIONS } from './types';
+import { drawsAsSea, TILE_ORIENTATIONS } from './types';
 import type { ForestKind, IslandLabel, RiverTileShape, Terrain, Tile, TileOrientation } from './types';
 
 /**
@@ -1527,7 +1527,7 @@ export type TerrainSampler = (q: number, r: number) => Terrain;
 function landNeighbourMask(q: number, r: number, sample: TerrainSampler): number {
   let mask = 0;
   for (let i = 0; i < NEIGHBOR_DIRS.length; i++) {
-    if (sample(q + NEIGHBOR_DIRS[i].q, r + NEIGHBOR_DIRS[i].r) !== 'sea') mask |= 1 << i;
+    if (!drawsAsSea(sample(q + NEIGHBOR_DIRS[i].q, r + NEIGHBOR_DIRS[i].r))) mask |= 1 << i;
   }
   return mask;
 }
@@ -1582,7 +1582,7 @@ export function generateTile(q: number, r: number, world: WorldSeed, sample?: Te
   const terrainOf = sample ?? ((sq: number, sr: number) => terrainAt(sq, sr, world));
   const terrain = terrainOf(q, r);
   // Only sea can be coastal, so land hexes never pay for the neighbour walk.
-  const landMask = terrain === 'sea' ? landNeighbourMask(q, r, terrainOf) : 0;
+  const landMask = drawsAsSea(terrain) ? landNeighbourMask(q, r, terrainOf) : 0;
   const coastal = landMask !== 0;
 
   const h = hash2(q, r, world.seed + 31);

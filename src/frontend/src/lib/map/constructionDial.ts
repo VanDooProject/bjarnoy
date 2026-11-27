@@ -1,11 +1,16 @@
 /**
  * Construction progress dial: pure helpers for the hex-shaped dial drawn over
- * a building under construction (see `HexMapRenderer.drawHighlight`). Kept
+ * a building under construction (drawn by `components/hud/BuildingHudDial.vue`). Kept
  * free of Pixi so the mapping and geometry are unit-testable.
  */
 import type { BuildOrderResponse } from '../../api/types';
 import type { AxialCoord } from '../hex/coords';
 import { isPendingOrder } from '../hud/pendingBuild';
+
+/** The elapsed arc, the sweep and the finish animation. */
+export const CONSTRUCTION_DIAL_ELAPSED_COLOR = 0xffd23f;
+/** The refused-build dial: red outline, flash and rings. */
+export const CONSTRUCTION_DIAL_REJECT_COLOR = 0xff4d3d;
 
 export interface ConstructionDial {
   coord: AxialCoord;
@@ -205,8 +210,12 @@ export function polylinePartial(points: { x: number; y: number }[], fraction: nu
   return out;
 }
 
-/** The dial label's font size in px at map scale 1 (`LABEL_STYLES.dialTime` is 12 px, drawn at 1.2x). */
+/** The dial label's font size in px at map scale 1 (12 px drawn at 1.2x: the HUD dial's label, see `HUD_TIER.labelBelow`). */
 export const DIAL_LABEL_BASE_PX = 12 * 1.2;
+/** The HUD dial's level font size in px for dial radius `r` (px); larger than the countdown's (`DIAL_LABEL_BASE_PX` at zs 1). */
+export function dialLevelFontPx(r: number): number {
+  return 13 + (r - 14) * 0.5;
+}
 /** A dial's time label is hidden while it would be smaller than this many on-screen px. */
 export const DIAL_MIN_LABEL_PX = 10;
 /** How long a dial takes to grow to / shrink back from its hovered size. */
@@ -217,6 +226,11 @@ export interface DialScale {
   zs: number;
   /** Whether the time label is drawn. */
   showLabel: boolean;
+}
+
+/** `mapScale` lifted toward `target` by the eased hover progress `hoverT` (0..1, clamped): the one hover growth of the canvas dial and the HUD marker. */
+export function liftedScale(mapScale: number, target: number, hoverT: number): number {
+  return mapScale + (target - mapScale) * easeInOut(clamp01(hoverT));
 }
 
 /**
@@ -230,8 +244,7 @@ export interface DialScale {
  */
 export function dialScale(mapScale: number, hoverT: number, rejectScale = 1): DialScale {
   const t = clamp01(hoverT);
-  const eased = easeInOut(t);
-  const zs = mapScale + (Math.max(mapScale, 1) - mapScale) * eased;
+  const zs = liftedScale(mapScale, Math.max(mapScale, 1), t);
   return { zs, showLabel: t >= 0.5 || DIAL_LABEL_BASE_PX * zs * rejectScale >= DIAL_MIN_LABEL_PX };
 }
 
@@ -254,32 +267,6 @@ export function dialRadiusPx(zs: number, rejectScale = 1): number {
 
 /** How long a tap-revealed dial stays revealed without another tap. */
 export const DIAL_TAP_REVEAL_MS = 4000;
-
-export interface DialHitTarget {
-  key: string;
-  cx: number;
-  cy: number;
-  /** Currently drawn radius in px. */
-  r: number;
-}
-
-/**
- * The dial a touch at `point` lands on: within its drawn radius `r` (only the
- * dial itself is tappable, so the tiles around and under it stay reachable);
- * the nearest centre wins when several qualify. Null for none.
- */
-export function pickTappedDial(point: { x: number; y: number }, dials: DialHitTarget[]): string | null {
-  let best: string | null = null;
-  let bestDist = Infinity;
-  for (const d of dials) {
-    const dist = Math.hypot(point.x - d.cx, point.y - d.cy);
-    if (dist <= d.r && dist < bestDist) {
-      best = d.key;
-      bestDist = dist;
-    }
-  }
-  return best;
-}
 
 /**
  * Next tap-revealed dial after a tap: tapping a dial reveals it, tapping the
@@ -351,12 +338,25 @@ export interface DialRejectFrame {
 const REJECT_SHAKE_OFFSETS = [0, -6, 6, -5, 5, -3, 0];
 
 /**
+ * Which parts of the rejection animation play. The default is the refused order's dial: the cross and the fade-out. A refused
+ * quick upgrade only tells that the building cannot be upgraded now (`BLOCKED_DIAL_OPTIONS`): its marker stays, so no cross and no
+ * fade-out (the red flash fades out instead, over the same last 350 ms).
+ */
+export interface DialRejectOptions {
+  cross: boolean;
+  fadeOut: boolean;
+}
+export const REFUSED_DIAL_OPTIONS: DialRejectOptions = { cross: true, fadeOut: true };
+export const BLOCKED_DIAL_OPTIONS: DialRejectOptions = { cross: false, fadeOut: false };
+
+/**
  * Rejection animation state `msSinceReject` after the server refused the
  * build: shake (420 ms), pop, red flash, a cross drawn over it, two red
  * shockwaves, then fade and shrink from 1150 ms; null outside 0..1500 ms.
- * With reduced motion there is no shake, pop or rings.
+ * With reduced motion there is no shake, pop or rings. `options` leaves out the
+ * cross and the fade-out (shrink and opacity stay at 1, the flash ends instead).
  */
-export function dialRejectFrame(msSinceReject: number, reducedMotion: boolean): DialRejectFrame | null {
+export function dialRejectFrame(msSinceReject: number, reducedMotion: boolean, options: DialRejectOptions = REFUSED_DIAL_OPTIONS): DialRejectFrame | null {
   if (msSinceReject < 0 || msSinceReject >= DIAL_REJECT_MS) return null;
   const s = msSinceReject;
   let offsetX = 0;
@@ -371,15 +371,17 @@ export function dialRejectFrame(msSinceReject: number, reducedMotion: boolean): 
     if (s < 150) scale = 1 + 0.12 * easeOut(s / 150);
     else if (s < 400) scale = 1.12 - 0.12 * ((s - 150) / 250);
   }
-  const flash = s < 150 ? s / 150 : s < 500 ? 1 - 0.65 * ((s - 150) / 350) : 0.35;
+  const f = clamp01((s - 1150) / 350);
+  const flash0 = s < 150 ? s / 150 : s < 500 ? 1 - 0.65 * ((s - 150) / 350) : 0.35;
+  const flash = options.fadeOut ? flash0 : flash0 * (1 - f);
   const rings = reducedMotion
     ? []
     : [0, 160].flatMap((start) => {
         const p = clamp01((s - start) / 700);
         return s < start || p >= 1 ? [] : [{ scale: 1 + 1.1 * easeOut(p), alpha: 0.9 * (1 - p) }];
       });
-  const f = clamp01((s - 1150) / 350);
-  return { offsetX, scale: scale * (1 - 0.4 * f), flash, cross: clamp01((s - 150) / 300), rings, alpha: 1 - f };
+  const shrink = options.fadeOut ? f : 0;
+  return { offsetX, scale: scale * (1 - 0.4 * shrink), flash, cross: options.cross ? clamp01((s - 150) / 300) : 0, rings, alpha: 1 - shrink };
 }
 
 /**
@@ -414,4 +416,42 @@ export function rejectDialAt(dials: ConstructionDial[], coord: AxialCoord, nowMs
   const here = (d: ConstructionDial) => d.coord.q === coord.q && d.coord.r === coord.r;
   if (dials.some((d) => here(d) && d.endMs !== null)) return dials;
   return [...dials.filter((d) => !here(d)), { coord, startMs: null, endMs: null, state: 'pending', queuePosition: null, rejectedAtMs: nowMs }];
+}
+
+/** A marker playing the blocked-upgrade animation: its hex ("q,r") and when it started. */
+export interface BlockedMarker {
+  key: string;
+  atMs: number;
+}
+
+/** The blocked markers after `coord` was hit at `nowMs`: its entry starts over, the ones whose animation has played out are dropped. */
+export function flashBlockedAt(list: readonly BlockedMarker[], coord: AxialCoord, nowMs: number): BlockedMarker[] {
+  const key = `${coord.q},${coord.r}`;
+  return [...list.filter((b) => b.key !== key && nowMs - b.atMs < DIAL_REJECT_MS), { key, atMs: nowMs }];
+}
+
+/**
+ * What a dial shows at `nowMs`, for every surface that draws one (the canvas and the building HUD's marker dial): the finish
+ * or rejection animation frame while one plays, else the order's own state. Null once a finish / rejection has played out (the
+ * dial is pruned then).
+ */
+export type DialPhase =
+  | { kind: 'finish'; frame: DialFinishFrame }
+  | { kind: 'reject'; frame: DialRejectFrame }
+  | { kind: 'pending' }
+  | { kind: 'queued'; position: number | null }
+  | { kind: 'building'; progress: number; remaining: number | null };
+
+export function dialPhase(d: ConstructionDial, nowMs: number, reducedMotion: boolean): DialPhase | null {
+  if (d.rejectedAtMs !== undefined) {
+    const frame = dialRejectFrame(nowMs - d.rejectedAtMs, reducedMotion);
+    return frame ? { kind: 'reject', frame } : null;
+  }
+  if (d.endMs !== null && nowMs >= d.endMs) {
+    const frame = dialFinishFrame(nowMs - d.endMs);
+    return frame ? { kind: 'finish', frame } : null;
+  }
+  if (d.state === 'pending') return { kind: 'pending' };
+  if (d.state === 'queued') return { kind: 'queued', position: d.queuePosition };
+  return { kind: 'building', progress: dialProgress(d, nowMs), remaining: dialRemainingSeconds(d, nowMs) };
 }

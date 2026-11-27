@@ -35,9 +35,8 @@ public sealed class LinkedStoreTests
             Centre = centre,
             Buildings = [new PlacedBuilding(centre, BuildingType.Longhouse, longhouse), .. extra ?? []],
             Queue = queue ?? [],
-            Garrison = garrison ?? [],
             Resources = ResourcePool.Create(ResourceAmounts.Zero, ResourceAmounts.Zero, ResourceAmounts.Zero, T0),
-        };
+        }.WithGarrison(garrison ?? []);
         var (production, capacity) = bare.CurrentTotals(1.0, guests);
         return bare with { Resources = ResourcePool.Create(stock, production, capacity, settledAt ?? T0) };
     }
@@ -152,10 +151,17 @@ public sealed class LinkedStoreTests
             Assert.Equal(fraction, stockB[r] / capB[r], 9);
         }
 
-        // Far later both are exactly full.
+        // Far later both are exactly full of every resource that is produced at all (the Longhouse makes wood and food only).
         store.SettleTo(T0.AddDays(30));
-        AssertNear(store.Outcome(a.Id).Settlement.Resources.Capacity, store.Outcome(a.Id).Settlement.Resources.At(T0.AddDays(30)));
-        AssertNear(store.Outcome(b.Id).Settlement.Resources.Capacity, store.Outcome(b.Id).Settlement.Resources.At(T0.AddDays(30)));
+        foreach (var member in new[] { a, b })
+        {
+            var resources = store.Outcome(member.Id).Settlement.Resources;
+            var (cap, stock) = (V(resources.Capacity), V(resources.At(T0.AddDays(30))));
+            for (var r = 0; r < 4; r++)
+            {
+                Assert.Equal(poolRate[r] > 0 ? cap[r] : 0, stock[r], 6);
+            }
+        }
     }
 
     [Fact]
@@ -368,7 +374,7 @@ public sealed class LinkedStoreTests
         var b = Member(CentreB, new ResourceAmounts(0, 0, 10, 0), garrison: [new UnitStack(UnitType.Catapult, 20)]);
         var store = Store([guestsA, []], a, b);
 
-        var gross = Rate(a with { Garrison = [] }).Food + Rate(b with { Garrison = [] }).Food;
+        var gross = Rate(a.WithGarrison([])).Food + Rate(b.WithGarrison([])).Food;
         var upkeep = (80 * thrallUpkeep) + (30 * catapultUpkeep);
         Assert.True(upkeep > gross);
         var kills = (int)Math.Ceiling((upkeep - gross) / catapultUpkeep);

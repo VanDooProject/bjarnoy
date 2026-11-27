@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { coordKey, hexDistance, type AxialCoord } from '../hex/coords';
-import { BURNT_BRIDGE_LEAVE_COST, findPath, findSeaPath, HALF_OPEN_END_COST, hoursFrom, leaveCost, MAX_TINT_HEXES, pathCost, reachableFrom, reachableRange, timeOnHex, type MovementRules, type PathContext } from './hexPath';
+import { coordKey, hexDistance, hexLine, neighbors, type AxialCoord } from '../hex/coords';
+import { BURNT_BRIDGE_LEAVE_COST, findPath, findSeaPath, FLEET_SAND_COST, HALF_OPEN_END_COST, hoursFrom, leaveCost, MAX_TINT_HEXES, pathCost, reachableFrom, reachableRange, seaPathCost, timeOnHex, type MovementRules, type PathContext } from './hexPath';
 import type { Terrain } from './types';
 
 // Mirrors HexPathfinder's own cost tables (issue #159 part A/B) — kept as a
@@ -478,9 +478,102 @@ describe('findSeaPath (a fleet)', () => {
     expect(path[path.length - 1]).toEqual({ q: 3, r: 0 });
   });
 
+  it('prices a sand beach at the end of the route at twice a sea hex, other land at 1', () => {
+    const beach = (terrain: Terrain) => (c: AxialCoord): Terrain => (c.q === 3 && c.r === 0 ? terrain : 'sea');
+    const toSand = findSeaPath({ q: 0, r: 0 }, { q: 3, r: 0 }, beach('sand'))!;
+    const toGrass = findSeaPath({ q: 0, r: 0 }, { q: 3, r: 0 }, beach('grass'))!;
+
+    // two full sea steps, then the beaching hop: half a sea hex plus half the beach
+    expect(seaPathCost(toGrass, beach('grass'))).toBe(1 + 1 + (1 + 1) / 2);
+    expect(seaPathCost(toSand, beach('sand'))).toBe(1 + 1 + (1 + FLEET_SAND_COST) / 2);
+    expect(FLEET_SAND_COST).toBe(2);
+  });
+
+  it('prices pushing off a sand harbour at the start the same way', () => {
+    const harbour = (c: AxialCoord): Terrain => (c.q === 0 && c.r === 0 ? 'sand' : 'sea');
+    const path = findSeaPath({ q: 0, r: 0 }, { q: 2, r: 0 }, harbour)!;
+
+    expect(seaPathCost(path, harbour)).toBe((FLEET_SAND_COST + 1) / 2 + 1);
+  });
+
   it('finds nothing when the target is walled off by land', () => {
     const walled = (c: AxialCoord): Terrain => (Math.max(Math.abs(c.q - 8), Math.abs(c.r), Math.abs(-(c.q - 8) - c.r)) <= 1 && !(c.q === 8 && c.r === 0) ? 'grass' : 'sea');
 
     expect(findSeaPath({ q: 0, r: 0 }, { q: 8, r: 0 }, walled)).toBeNull();
+  });
+});
+
+/** Direction changes along a route: 0 for one straight run, 1 for two legs with a corner. */
+function turns(path: AxialCoord[]): number {
+  let n = 0;
+  for (let i = 2; i < path.length; i++) {
+    const a = { q: path[i - 1]!.q - path[i - 2]!.q, r: path[i - 1]!.r - path[i - 2]!.r };
+    const b = { q: path[i]!.q - path[i - 1]!.q, r: path[i]!.r - path[i - 1]!.r };
+    if (a.q !== b.q || a.r !== b.r) n++;
+  }
+  return n;
+}
+
+function expectHexByHex(path: AxialCoord[]): void {
+  for (let i = 1; i < path.length; i++) expect(neighbors(path[i - 1]!).some((n) => n.q === path[i]!.q && n.r === path[i]!.r)).toBe(true);
+}
+
+describe('route smoothing', () => {
+  it('sails open sea between off-axis points on one straight hex line, not two legs with a corner', () => {
+    const from = { q: 0, r: 0 };
+    const to = { q: 30, r: -11 };
+    const path = findSeaPath(from, to, () => 'sea')!;
+    expect(path).toEqual(hexLine(from, to));
+    expect(path).toHaveLength(hexDistance(from, to) + 1);
+    expect(turns(path)).not.toBe(1); // not the unsmoothed two-leg shape (axis leg + diagonal leg, one corner)
+    expectHexByHex(path);
+  });
+
+  it('walks open grass between off-axis points on the straight hex line', () => {
+    const from = { q: 0, r: 0 };
+    const to = { q: 30, r: -11 };
+    const ctx: PathContext = { ...contextFor(new Map()), terrainAt: () => 'grass' };
+    expect(findPath(from, to, ctx)).toEqual(hexLine(from, to));
+  });
+
+  it('keeps the detour when the straight line is passable but dearer', () => {
+    // Forest band across the straight line (0,0)..(8,0) with a grass strip one row above: the line costs more than the detour.
+    const t = new Map<string, Terrain>();
+    for (let q = 0; q <= 8; q++) {
+      t.set(coordKey({ q, r: 0 }), 'forest');
+      t.set(coordKey({ q, r: -1 }), 'grass');
+    }
+    t.set(coordKey({ q: 0, r: 0 }), 'grass');
+    t.set(coordKey({ q: 8, r: 0 }), 'grass');
+    const ctx = contextFor(t);
+    const from = { q: 0, r: 0 };
+    const to = { q: 8, r: 0 };
+    const path = findPath(from, to, ctx)!;
+    const line = hexLine(from, to);
+    expect(pathCost(line, ctx)).toBeGreaterThan(pathCost(path, ctx));
+    expect(path).not.toEqual(line);
+    expect(path.some((c) => c.r === -1)).toBe(true);
+    expectHexByHex(path);
+  });
+
+  it('never prices a route above the cheapest cost on mixed terrain, and keeps it hex by hex', () => {
+    const kinds: Terrain[] = ['grass', 'grass', 'forest', 'sand', 'bog'];
+    const t = new Map<string, Terrain>();
+    for (let q = 0; q <= 14; q++) for (let r = -14; r <= 0; r++) t.set(coordKey({ q, r }), kinds[(q * 7 + r * 5 + 140) % kinds.length]!);
+    const ctx = contextFor(t);
+    const from = { q: 0, r: 0 };
+    const to = { q: 14, r: -9 };
+    const path = findPath(from, to, ctx)!;
+    expectHexByHex(path);
+    // hoursFrom is a plain Dijkstra over the same step pricing: the smoothed route must still reach its optimum.
+    expect(pathCost(path, ctx)).toBeCloseTo(hoursFrom(from, ctx, Number.POSITIVE_INFINITY).get(coordKey(to))!, 9);
+  });
+
+  it('keeps a fleet route hex by hex with the shore goal as its only land hex', () => {
+    const t = new Map<string, Terrain>([[coordKey({ q: 20, r: -7 }), 'sand']]);
+    const terrainAt = (c: AxialCoord): Terrain => t.get(coordKey(c)) ?? 'sea';
+    const path = findSeaPath({ q: 0, r: 0 }, { q: 20, r: -7 }, terrainAt)!;
+    expectHexByHex(path);
+    expect(seaPathCost(path, terrainAt)).toBe(19 + (1 + FLEET_SAND_COST) / 2);
   });
 });

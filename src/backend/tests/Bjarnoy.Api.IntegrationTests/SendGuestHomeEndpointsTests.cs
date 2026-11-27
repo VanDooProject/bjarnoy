@@ -138,7 +138,13 @@ public sealed class SendGuestHomeEndpointsTests : IAsyncLifetime
         };
         return await WithDbAsync(async db =>
         {
-            db.Armies.Add(army);
+            var host = await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == hostSettlementId, Ct);
+            army.TargetBuildingQ = host.CentreQ;
+            army.TargetBuildingR = host.CentreR;
+            var guestHome = await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == guestHomeSettlementId, Ct);
+            army.HomeSpotQ = guestHome.CentreQ;
+            army.HomeSpotR = guestHome.CentreR;
+            db.AddArmyRows(army);
             await db.SaveChangesAsync(Ct);
             return army.Id;
         });
@@ -223,7 +229,7 @@ public sealed class SendGuestHomeEndpointsTests : IAsyncLifetime
                 TurnAroundAt = _factory.Time.GetUtcNow() + TimeSpan.FromHours(100),
                 Stacks = [new ArmyUnitStackEntity { UnitType = UnitType.Spearman, Count = 5 }],
             };
-            db.Armies.Add(army);
+            db.AddArmyRows(army);
             await db.SaveChangesAsync(Ct);
             return army.Id;
         });

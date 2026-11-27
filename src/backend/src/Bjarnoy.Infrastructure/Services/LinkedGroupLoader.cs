@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
@@ -33,9 +34,11 @@ public sealed class LinkedGroupSession
         TerrainSampler sampler,
         GameClock clock,
         DateTimeOffset now,
-        IGiantIndex? giants)
+        IGiantIndex? giants,
+        Guid firstSettlementId)
     {
         _dbContext = dbContext;
+        FirstSettlementId = firstSettlementId;
         Anchor = anchor;
         Members = members;
         _entities = members.ToDictionary(m => m.Id);
@@ -47,11 +50,17 @@ public sealed class LinkedGroupSession
         _giants = giants;
     }
 
+    /// <summary>
+    /// The owner's oldest settlement in this world (by founding time, then id), across every island: the only one whose onboarding
+    /// quests are enabled (economy.md section 7).
+    /// </summary>
+    public Guid FirstSettlementId { get; }
+
     /// <summary>The settlement the session was loaded for (tracked, with its world and owner).</summary>
     public SettlementEntity Anchor { get; }
 
     /// <summary>Every settlement of the player's island set, oldest first (tracked, full includes).</summary>
-    public IReadOnlyList<SettlementEntity> Members { get; }
+    public IReadOnlyList<SettlementEntity> Members { get; private set; }
 
     public LinkedStore Store { get; }
 
@@ -84,8 +93,22 @@ public sealed class LinkedGroupSession
 
     public void Apply(Guid id, Settlement updated) => Store.Apply(id, updated);
 
+    /// <summary>
+    /// Takes the member <paramref name="id"/> out of the group (a beach camp that was destroyed): <see cref="WriteBackAsync"/> no longer
+    /// writes it, so what its own piles held is lost. Its entity stays tracked for the caller to delete.
+    /// </summary>
+    public void Drop(Guid id)
+    {
+        Members = [.. Members.Where(m => m.Id != id)];
+        _entities.Remove(id);
+    }
+
     /// <summary>The guest armies hosted by <paramref name="id"/> that still hold units.</summary>
     public IReadOnlyList<ArmyEntity> GuestArmiesOf(Guid id) => [.. _guestArmies[id].Where(a => a.Stacks.Count > 0)];
+
+    /// <summary>The guest units standing at the garrison spot <paramref name="spot"/> of <paramref name="id"/>, pooled by type.</summary>
+    public IReadOnlyList<UnitStack> GuestStacksAt(Guid id, HexCoord spot) =>
+        Army.GuestsAt(_guestArmies[id].Select(a => a.ToDomain()), id, spot);
 
     /// <summary>The units hosted by <paramref name="id"/>, pooled by type.</summary>
     public List<UnitStack> GuestStacksOf(Guid id) => AggregateStacks(
@@ -98,8 +121,19 @@ public sealed class LinkedGroupSession
     /// Writes every member that changed back onto its tracked entity (<see cref="SettlementEntity.ApplyDomain"/>) and takes the
     /// guest deaths of the settle off the hosted armies. Does not save.
     /// </summary>
+    /// <remarks>
+    /// The one write path that persists a settlement also finds the garrisons whose Tower, Harbour or Shipyard is gone
+    /// (<see cref="Settlement.TakeOrphanedGarrisons"/>) and sends them marching to the owner's nearest fitting spot, and gives the
+    /// armies that were homed there a new home (<see cref="GarrisonRelocation"/>).
+    /// </remarks>
     /// <returns>Whether anything changed (the caller then saves).</returns>
-    public bool WriteBack()
+    public async Task<bool> WriteBackAsync(CancellationToken cancellationToken = default)
+    {
+        await RelocateLostSpotsAsync(cancellationToken).ConfigureAwait(false);
+        return WriteBackCore();
+    }
+
+    private bool WriteBackCore()
     {
         var changed = new List<Guid>();
         foreach (var member in Members)
@@ -117,6 +151,63 @@ public sealed class LinkedGroupSession
         ApplyGuestDeaths();
         ChangedMembers = changed;
         return changed.Count > 0;
+    }
+
+    private async Task RelocateLostSpotsAsync(CancellationToken cancellationToken)
+    {
+        GarrisonRelocation? relocation = null;
+        GarrisonRelocation.Routing? routing = null;
+
+        foreach (var member in Members)
+        {
+            var outcome = Store.Outcome(member.Id);
+            if (!outcome.Changed)
+            {
+                continue;
+            }
+
+            var spotsNow = outcome.Settlement.GarrisonSpots.Select(s => s.Coord).ToHashSet();
+            var lost = member.Buildings
+                .Where(b => b.Type.HoldsGarrison() && b.Level >= 1)
+                .Select(b => new HexCoord(b.Q, b.R))
+                .Where(c => !spotsNow.Contains(c))
+                .ToList();
+
+            var (taken, orphans) = Store.PooledView(member.Id).TakeOrphanedGarrisons();
+            if (lost.Count == 0 && orphans.Count == 0)
+            {
+                continue;
+            }
+
+            relocation ??= new GarrisonRelocation(_dbContext);
+            routing ??= await relocation.LoadRoutingAsync(
+                member.WorldId, SpeedFactor, TerrainAt, member.UserId, member.Id, Now, cancellationToken).ConfigureAwait(false);
+
+            var known = Members.ToDictionary(m => m.Id, m => m.Id == member.Id ? taken : Store.Outcome(m.Id).Settlement);
+            var candidates = await relocation.OwnerSpotsAsync(member.WorldId, member.OwnerId, TerrainAt, known, cancellationToken).ConfigureAwait(false);
+
+            var view = taken;
+            foreach (var orphan in orphans)
+            {
+                if (GarrisonRelocation.NearestMarch(orphan.Stacks, orphan.From, candidates, Now, routing, Guid.CreateVersion7()) is not { } found)
+                {
+                    // No spot of the owner's can be reached: the units stay where they stood until one can.
+                    view = view.WithOrphanedGarrison(orphan);
+                    continue;
+                }
+
+                var (army, resources) = GarrisonRelocation.WithWalkFood(found.March, view.Resources, Now);
+                view = view with { Resources = resources };
+                relocation.AddArmy(army, member);
+            }
+
+            Store.Apply(member.Id, view);
+
+            foreach (var coord in lost)
+            {
+                await relocation.RehomeAsync(member.Id, coord, candidates, Now, routing, cancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 
     /// <summary>Takes the guest deaths not yet taken off the hosted armies (starvation) and drops armies left empty.</summary>
@@ -186,6 +277,13 @@ public sealed class LinkedGroupLoader(GameDbContext dbContext, TimeProvider time
             .ToListAsync(ct).ConfigureAwait(false);
         var guestsByHost = guestArmies.ToLookup(a => a.TargetSettlementId!.Value);
 
+        // Ordered on the client: SQLite cannot ORDER BY a DateTimeOffset, and one player has few settlements per world.
+        var owned = await _dbContext.Settlements
+            .Where(s => s.UserId == anchor.UserId && s.WorldId == anchor.WorldId)
+            .Select(s => new { s.Id, s.FoundedAt })
+            .ToListAsync(ct).ConfigureAwait(false);
+        var firstSettlementId = owned.OrderBy(s => s.FoundedAt).ThenBy(s => s.Id).First().Id;
+
         var world = anchor.World;
         var clock = world.ToClock();
         var now = settleTo ?? clock.ToGameTime(_timeProvider.GetUtcNow());
@@ -196,11 +294,11 @@ public sealed class LinkedGroupLoader(GameDbContext dbContext, TimeProvider time
 
         var store = LinkedStore.Create(
             [.. members.Select(m => new LinkedMember(
-                m.ToDomain(), m.FoundedAt, LinkedGroupSession.AggregateStacks(guestsByHost[m.Id].SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count)))))) ],
+                m.ToDomain(sampler.TerrainAt), m.FoundedAt, LinkedGroupSession.AggregateStacks(guestsByHost[m.Id].SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count)))))) ],
             world.SpeedFactor, sampler.TerrainAt, giants ?? GiantIndex.Empty);
         store.SettleTo(now);
 
-        var session = new LinkedGroupSession(_dbContext, anchor, members, guestArmies, store, sampler, clock, now, giants);
+        var session = new LinkedGroupSession(_dbContext, anchor, members, guestArmies, store, sampler, clock, now, giants, firstSettlementId);
         session.ApplyGuestDeaths();
 
         if (forceRealm

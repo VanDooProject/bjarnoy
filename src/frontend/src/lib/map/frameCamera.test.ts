@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { frameCameraFor, type FrameCamera } from './frameCamera';
+import { exploredShare, frameCameraFor, type FrameCamera } from './frameCamera';
 
 const viewport = { width: 400, height: 800 };
 const opts = { margin: 40, bottomInset: 0, minZoom: 0.3 };
@@ -63,5 +63,31 @@ describe('frameCameraFor', () => {
     const to = frameCameraFor(camera, viewport, [{ x: 0, y: 1000 }, { x: 4000, y: 1000 }], opts)!;
     expect(to.zoom).toBe(0.3);
     expect(to.x).toBeCloseTo(2000);
+  });
+});
+
+describe('exploredShare', () => {
+  // At zoom 1 the 400 x 800 viewport shows world x 800..1200 and y 600..1400 round the centre (1000, 1000).
+  const camera = { x: 1000, y: 1000, zoom: 1 };
+  const exploredLeftOf1000 = (x: number) => x < 1000;
+
+  it('is the share of the view that is explored', () => {
+    expect(exploredShare(camera, viewport, exploredLeftOf1000)).toBe(0.5);
+    expect(exploredShare(camera, viewport, () => true)).toBe(1);
+    expect(exploredShare(camera, viewport, () => false)).toBe(0);
+  });
+
+  it('drops when the camera pans or zooms out into the mist', () => {
+    expect(exploredShare({ ...camera, x: 1100 }, viewport, exploredLeftOf1000)).toBeLessThan(0.5);
+    const island = (x: number, y: number) => Math.abs(x - 1000) < 200 && Math.abs(y - 1000) < 400;
+    expect(exploredShare(camera, viewport, island)).toBe(1);
+    expect(exploredShare({ ...camera, zoom: 0.5 }, viewport, island)).toBeCloseTo(0.25);
+  });
+
+  it('does not count what a bottom sheet covers', () => {
+    // Explored only below world y 1100: under a sheet covering the bottom 300 px, nothing of it is seen.
+    const below = (_x: number, y: number) => y > 1100;
+    expect(exploredShare(camera, viewport, below)).toBeGreaterThan(0);
+    expect(exploredShare(camera, viewport, below, 300)).toBe(0);
   });
 });

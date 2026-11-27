@@ -7,6 +7,7 @@ using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Bjarnoy.TestSupport;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -56,8 +57,7 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     {
         var world = await _factory.CreateWorldAsync(Unique("w"), seed, radius, cancellationToken: Ct);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(world.Id, Ct);
 
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
@@ -110,8 +110,7 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     private async Task<(SettlementResponse Settlement, string OwnerId)> FoundAdjacentAsync(
         HttpClient client, Guid worldId, SettlementResponse near)
     {
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islands = await client.GetFullIslandsAsync(worldId, Ct);
         var islandId = islands!.First().Id;
         var coord = new HexCoord(near.Q + 1, near.R);
         var ownerId = Unique("owner");
@@ -518,10 +517,10 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
             $"/api/v1/settlements/{poster.Id}/shipments", SqliteApiFixture.StrictJson, Ct);
 
         var posterReports = await client.GetFromJsonAsync<List<TradeReportResponse>>(
-            $"/api/v1/settlements/{poster.Id}/trade-reports", SqliteApiFixture.StrictJson, Ct);
+            $"/api/v1/worlds/{worldId}/trade-reports", SqliteApiFixture.StrictJson, Ct);
         SetOwner(client, acceptorOwnerId);
         var acceptorReports = await client.GetFromJsonAsync<List<TradeReportResponse>>(
-            $"/api/v1/settlements/{acceptor.Id}/trade-reports", SqliteApiFixture.StrictJson, Ct);
+            $"/api/v1/worlds/{worldId}/trade-reports", SqliteApiFixture.StrictJson, Ct);
 
         var posterReport = Assert.Single(posterReports!, r => r.OfferId == posted.Id);
         var acceptorReport = Assert.Single(acceptorReports!, r => r.OfferId == posted.Id);

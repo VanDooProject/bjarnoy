@@ -206,6 +206,7 @@ public static class AdminWorldEndpoints
                 request.EndbossAt.Value,
                 newName,
                 request.Hidden,
+                request.RenownFollowsSpeed,
                 cancellationToken);
         }
         catch (WorldCreationException ex)

@@ -114,6 +114,7 @@ public static class ProfileEndpoints
         UpdateLocaleRequest request,
         ProfileService profileService,
         ClaimsPrincipal principal,
+        TimeProvider time,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -130,7 +131,7 @@ public static class ProfileEndpoints
             {
                 ["preferredLocale"] = ["Unsupported locale."],
             }),
-            _ => TypedResults.Ok(UserResponse.From(user!)),
+            _ => TypedResults.Ok(UserResponse.From(user!, time)),
         };
     }
 

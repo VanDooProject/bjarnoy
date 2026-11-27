@@ -16,6 +16,21 @@ describe('buildSimulatorRequest', () => {
     });
   });
 
+  it('sends a fleet and its passengers as one attacking force, with the ship bonus alongside the land one', () => {
+    const request = buildSimulatorRequest({ snekkja: 5, firehulk: 10, axeman: 80 }, { snekkja: 1 }, {}, 0, 'attack', null, 10, 50);
+    expect(request).toEqual({
+      attackerStacks: [
+        { unit: 'snekkja', count: 5 },
+        { unit: 'firehulk', count: 10 },
+        { unit: 'axeman', count: 80 },
+      ],
+      defenderStacks: [{ unit: 'snekkja', count: 1 }],
+      landAttackBonusPercent: 10,
+      shipAttackBonusPercent: 50,
+      mission: 'attack',
+    });
+  });
+
   it('drops zero/blank counts from every stack list', () => {
     const request = buildSimulatorRequest(
       { spearman: 10, huscarl: 0 },

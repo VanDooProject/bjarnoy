@@ -3,6 +3,7 @@ import type { BuildOrderResponse } from '../../api/types';
 import { makePendingOrder } from '../hud/pendingBuild';
 import {
   rejectDialAt,
+  dialPhase,
   constructionDialsFromQueue,
   DIAL_HOVER_MS,
   DIAL_LABEL_BASE_PX,
@@ -13,6 +14,7 @@ import {
   DIAL_REJECT_MS,
   dialFinishFrame,
   dialRejectFrame,
+  flashBlockedAt,
   dialProgress,
   dialRemainingSeconds,
   hexPerimeterPath,
@@ -22,7 +24,6 @@ import {
   polylinePartial,
   retainFinishingDials,
   dialRadiusPx,
-  pickTappedDial,
   nextTapReveal,
   type ConstructionDial,
 } from './constructionDial';
@@ -311,6 +312,48 @@ describe('retainFinishingDials', () => {
   });
 });
 
+describe('flashBlockedAt', () => {
+  it('adds the hex and starts an entry over when it is hit again', () => {
+    const once = flashBlockedAt([], { q: 1, r: 2 }, 1000);
+    expect(once).toEqual([{ key: '1,2', atMs: 1000 }]);
+    expect(flashBlockedAt(once, { q: 1, r: 2 }, 1200)).toEqual([{ key: '1,2', atMs: 1200 }]);
+  });
+  it('keeps other hexes that still play and drops the ones that have played out', () => {
+    const list = [{ key: '0,0', atMs: 1000 }, { key: '3,3', atMs: 2000 }];
+    expect(flashBlockedAt(list, { q: 1, r: 2 }, 2000 + DIAL_REJECT_MS - 1).map((b) => b.key)).toEqual(['3,3', '1,2']);
+  });
+});
+
+describe('dialRejectFrame without the cross and the fade-out (a refused quick upgrade)', () => {
+  const opts = { cross: false, fadeOut: false };
+  it('never draws the cross', () => {
+    for (const s of [0, 150, 300, 450, 1200]) expect(dialRejectFrame(s, false, opts)!.cross).toBe(0);
+  });
+  it('keeps the size and opacity of the marker to the end, with the same shake, pop and shockwaves', () => {
+    for (const s of [1150, 1325, DIAL_REJECT_MS - 0.01]) expect(dialRejectFrame(s, false, opts)).toMatchObject({ scale: 1, alpha: 1 });
+    for (const s of [35, 150, 275, 350, 750]) {
+      const plain = dialRejectFrame(s, false)!;
+      const blocked = dialRejectFrame(s, false, opts)!;
+      expect(blocked.offsetX).toBe(plain.offsetX);
+      expect(blocked.scale).toBe(plain.scale);
+      expect(blocked.rings).toEqual(plain.rings);
+      expect(blocked.flash).toBe(plain.flash);
+    }
+  });
+  it('lets the red flash end instead, so the marker is exactly as before afterwards', () => {
+    expect(dialRejectFrame(1150, false, opts)!.flash).toBeCloseTo(0.35);
+    expect(dialRejectFrame(1325, false, opts)!.flash).toBeCloseTo(0.175);
+    expect(dialRejectFrame(DIAL_REJECT_MS - 0.01, false, opts)!.flash).toBeCloseTo(0, 2);
+  });
+  it('keeps the flash and drops shake, pop and rings under reduced motion; still null outside the window', () => {
+    const f = dialRejectFrame(150, true, opts)!;
+    expect(f).toMatchObject({ offsetX: 0, scale: 1, rings: [], cross: 0 });
+    expect(f.flash).toBeCloseTo(1);
+    expect(dialRejectFrame(-1, false, opts)).toBeNull();
+    expect(dialRejectFrame(DIAL_REJECT_MS, false, opts)).toBeNull();
+  });
+});
+
 describe('dialRejectFrame', () => {
   it('shakes through seven keyframes over 420 ms: 0, -6, 6, -5, 5, -3, 0', () => {
     for (const [i, x] of [0, -6, 6, -5, 5, -3].entries()) expect(dialRejectFrame(i * 70, false)!.offsetX).toBeCloseTo(x);
@@ -461,36 +504,11 @@ describe('dialHoverStep', () => {
   });
 });
 
-describe('dial touch hit test', () => {
-  const dials = [
-    { key: 'a', cx: 100, cy: 100, r: 7 },
-    { key: 'b', cx: 110, cy: 100, r: 7 },
-    { key: 'big', cx: 300, cy: 300, r: 40 },
-  ];
-
+describe('dial radius', () => {
   it('scales the radius with zoom and reject shrink', () => {
     expect(dialRadiusPx(1)).toBeCloseTo(27.5);
     expect(dialRadiusPx(0.22)).toBeCloseTo(6.05);
     expect(dialRadiusPx(1, 0.6)).toBeCloseTo(16.5);
-  });
-
-  it('hits a tiny dial only on its drawn disc, so the tile under it stays tappable', () => {
-    expect(pickTappedDial({ x: 100, y: 106 }, [dials[0]])).toBe('a');
-    expect(pickTappedDial({ x: 100, y: 108 }, [dials[0]])).toBeNull();
-  });
-
-  it('hits a big dial anywhere on its drawn disc', () => {
-    expect(pickTappedDial({ x: 335, y: 300 }, dials)).toBe('big');
-    expect(pickTappedDial({ x: 345, y: 300 }, dials)).toBeNull();
-  });
-
-  it('picks the nearest centre when several dials are hit', () => {
-    expect(pickTappedDial({ x: 104, y: 100 }, dials)).toBe('a');
-    expect(pickTappedDial({ x: 106, y: 100 }, dials)).toBe('b');
-  });
-
-  it('returns null with no dials', () => {
-    expect(pickTappedDial({ x: 0, y: 0 }, [])).toBeNull();
   });
 });
 
@@ -517,5 +535,29 @@ describe('rejectDialAt', () => {
   it('keeps a running build on the hex (an upgrade refused behind it) instead of replacing it', () => {
     const running = { coord: at, startMs: 0, endMs: 9000, state: 'building' as const, queuePosition: null };
     expect(rejectDialAt([other, running], at, 500)).toEqual([other, running]);
+  });
+});
+
+describe('dialPhase', () => {
+  const base: ConstructionDial = { coord: { q: 1, r: 0 }, startMs: 0, endMs: 10_000, state: 'building', queuePosition: null };
+
+  it('reads a running build as progress and time left', () => {
+    expect(dialPhase(base, 2_500, false)).toEqual({ kind: 'building', progress: 0.25, remaining: 7.5 });
+  });
+
+  it('reads queued with its place and pending as such', () => {
+    expect(dialPhase({ ...base, startMs: null, endMs: null, state: 'queued', queuePosition: 2 }, 0, false)).toEqual({ kind: 'queued', position: 2 });
+    expect(dialPhase({ ...base, startMs: null, endMs: null, state: 'pending' }, 0, false)).toEqual({ kind: 'pending' });
+  });
+
+  it('plays the finish frame from the end on and is over after DIAL_FINISH_MS', () => {
+    expect(dialPhase(base, 10_000 + 300, false)).toEqual({ kind: 'finish', frame: dialFinishFrame(300) });
+    expect(dialPhase(base, 10_000 + DIAL_FINISH_MS, false)).toBeNull();
+  });
+
+  it('plays the rejection frame of a refused order and is over after DIAL_REJECT_MS', () => {
+    const rejected: ConstructionDial = { ...base, startMs: null, endMs: null, state: 'pending', rejectedAtMs: 1_000 };
+    expect(dialPhase(rejected, 1_200, true)).toEqual({ kind: 'reject', frame: dialRejectFrame(200, true) });
+    expect(dialPhase(rejected, 1_000 + DIAL_REJECT_MS, false)).toBeNull();
   });
 });

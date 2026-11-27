@@ -13,40 +13,22 @@
 // has no concept of trained units yet), so both halves render only when
 // there is something to show — same as BuildQueuePanel not rendering when
 // `world.hud.queue` is empty.
-import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
-import { unitName } from '../../i18n/catalogueNames';
-import GuestList from './GuestList.vue';
-import { useWorldStore } from '../../stores/world';
+import GarrisonList from './GarrisonList.vue';
 import { useTrainingOrders } from '../../composables/useQueueOrders';
+import { useHudPanelContent } from '../../composables/useHudPanelContent';
 
-const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const orders = useTrainingOrders();
-
-const garrison = computed(() =>
-  world.hud.garrison
-    .filter((g) => g.count > 0)
-    .map((g) => ({ key: g.unit, label: unitName(g.unit), count: g.count })),
-);
-
-// Issue #40 phase 4: guest (Support) armies stationed at this settlement —
-// the host's view (`GET /settlements/{id}/guests`, fetched alongside
-// `world.armies` — see world.ts's `refreshArmies`), with a "Send home" per
-// row (GuestList.vue, shared with QueueDrawer). Shown as a small section
-// under Garrison rather than a separate HUD panel: most screen corners are
-// already taken (BuildQueuePanel top-left, this panel top-right, ArmyPanel
-// bottom-right), and a guest garrison is close kin to "who's standing at
-// home" shown just above it.
-const guestCount = computed(() => world.guestArmies.length);
+const { garrison: hasContent } = useHudPanelContent();
 </script>
 
 <template>
-  <div v-if="orders.length || garrison.length || guestCount" class="status-card training-queue-panel">
+  <div v-if="hasContent" class="status-card training-queue-panel" data-testid="garrison-panel">
     <template v-if="orders.length">
-      <div class="status-card-header">
+      <div class="status-card-header" data-dock-handle>
         <span class="status-card-title">{{ t('hud.trainingQueue.title') }}</span>
         <span class="status-card-count">{{ t('hud.trainingQueue.orders', { count: orders.length }) }}</span>
       </div>
@@ -68,24 +50,10 @@ const guestCount = computed(() => world.guestArmies.length);
     </template>
 
     <div class="garrison" :class="{ 'has-orders-above': orders.length }">
-      <div class="status-card-header">
+      <div class="status-card-header" :data-dock-handle="orders.length ? undefined : ''">
         <span class="status-card-title">{{ t('hud.trainingQueue.garrison') }}</span>
       </div>
-      <div v-if="garrison.length" class="garrison-grid">
-        <div v-for="g in garrison" :key="g.key" class="garrison-row">
-          <span class="garrison-name">{{ g.label }}</span>
-          <span class="garrison-count">{{ g.count }}</span>
-        </div>
-      </div>
-      <div v-else class="status-subtext garrison-empty">{{ t('hud.trainingQueue.garrisonEmpty') }}</div>
-    </div>
-
-    <div v-if="guestCount" class="guests has-orders-above">
-      <div class="status-card-header">
-        <span class="status-card-title">{{ t('hud.trainingQueue.guests') }}</span>
-        <span class="status-card-count">{{ guestCount }}</span>
-      </div>
-      <GuestList />
+      <GarrisonList />
     </div>
   </div>
 </template>
@@ -99,42 +67,12 @@ const guestCount = computed(() => world.guestArmies.length);
   color: var(--muted);
 }
 /*
- * `.status-card`/`.status-row`/`.status-progress`/`.status-subtext`/
- * `.status-card-header`/`.status-card-title`/`.status-card-count` are
- * intentionally mirrored from BuildQueuePanel.vue's scoped styles (Vue
- * scoped styles don't leak across components) rather than shared, so both
- * panels stay visually identical without introducing a cross-component CSS
- * dependency for four small rulesets.
+ * The card box and its header (`.status-card`, `.status-card-header/-title/-count`) are shared in style.css; only this panel's
+ * place is set here. `.status-row`/`.status-progress`/`.status-subtext` are still mirrored from BuildQueuePanel.vue.
  */
 .status-card {
-  position: absolute;
   right: 16px;
   top: 76px;
-  z-index: 10;
-  width: 240px;
-  padding: 14px 15px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 0;
-}
-.status-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--panel-border);
-}
-.status-card-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text);
-}
-.status-card-count {
-  font-size: 12px;
-  color: var(--muted);
 }
 .status-row {
   padding: 8px 0;
@@ -178,30 +116,6 @@ const guestCount = computed(() => world.guestArmies.length);
 }
 
 .garrison.has-orders-above {
-  margin-top: 12px;
-}
-.garrison-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.garrison-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-}
-.garrison-name {
-  color: var(--text);
-}
-.garrison-count {
-  color: var(--gold);
-  font-weight: 600;
-}
-.garrison-empty {
-  margin-top: 0;
-}
-
-.guests.has-orders-above {
   margin-top: 12px;
 }
 </style>

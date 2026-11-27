@@ -14,7 +14,7 @@
 // settlement's towers, so it cannot rebuild the realm itself); demo mode
 // resolves it locally from the settlements the model knows (`resolveRealm`).
 import { hexDistance, type AxialCoord } from '../hex/coords';
-import { longhouseDiscs, towerClaimRadiusForLevel, type ClaimDisc } from './shoreline';
+import { centreClaimDiscs, towerClaimRadiusForLevel, type ClaimDisc } from './shoreline';
 
 /** One settlement as the chain rule sees it: its longhouse hex and level, and its standing towers (level 1 or more). */
 export interface RealmSettlementInput {
@@ -22,6 +22,8 @@ export interface RealmSettlementInput {
   q: number;
   r: number;
   level: number;
+  /** A beach camp: a `beachcamp` stands at its centre; its centre claim is its own hex (`centreClaimDiscs`). */
+  isBeachCamp?: boolean;
   towers: ReadonlyArray<{ q: number; r: number; level: number }>;
 }
 
@@ -64,7 +66,7 @@ export function resolveRealm(settlements: readonly RealmSettlementInput[]): Conn
   for (const s of settlements) {
     // A settlement whose Longhouse is destroyed (level 0) contributes no disc; its towers can still be reached by another
     // longhouse of the player.
-    const centre = longhouseDiscs({ q: s.q, r: s.r }, s.level);
+    const centre = centreClaimDiscs({ q: s.q, r: s.r }, s.level, s.isBeachCamp === true);
     discsBySettlement.set(s.id, centre);
     reached.push(...centre);
     for (const t of s.towers) {

@@ -96,6 +96,38 @@ describe('TrainingModal', () => {
     expect(names).not.toContain('karve');
   });
 
+  it('lists the Harbour\'s ships under white job headings and names the missing building level', () => {
+    setup([placed('harbour', 3, -2, 5)]);
+    const wrapper = mountModal(placed('harbour', 3, -2, 5));
+    expect(wrapper.findAll('.group-heading').map((h) => [h.attributes('data-group'), h.text()])).toEqual([
+      ['scouts', 'Scouts'], ['cargo', 'Cargo'], ['transport', 'Transport'],
+    ]);
+    expect(wrapper.findAll('.unit-name').map((n) => n.text())).toEqual(['Færing', 'Byrding', 'Knarr', 'Karve']);
+    const rows = wrapper.findAll('.unit-row');
+    expect(rows.map((r) => r.classes().includes('locked'))).toEqual([false, false, true, false]);
+    expect(rows[2]!.text()).toContain('Harbour 8 (now 5)');
+  });
+
+  it('lists the Shipyard\'s warships and fire craft in their groups', () => {
+    setup([placed('shipyard', 3, -2, 10)]);
+    const wrapper = mountModal(placed('shipyard', 3, -2, 10));
+    expect(wrapper.findAll('.group-heading').map((h) => h.text())).toEqual(['Warships', 'Fire craft']);
+    expect(wrapper.findAll('.unit-name').map((n) => n.text())).toEqual(['Snekkja', 'Skeid', 'Fire Raft', 'Fire Hulk']);
+  });
+
+  it('offers the camp builder next to the settler at the Cart Workshop, as the live catalogue lists it', () => {
+    const world = setup([placed('cartworkshop', 3, -2, 5)]);
+    const settler = definitions.find((d) => d.type === 'settler')!;
+    useUnitCatalogueStore().definitions = [
+      ...definitions,
+      { ...settler, type: 'campbuilder', trainingCost: { wood: 80, stone: 40, food: 40, iron: 20 } },
+    ];
+    expect(world.hud.buildings).toHaveLength(1);
+    const names = mountModal(placed('cartworkshop', 3, -2, 5)).findAll('.unit-name').map((n) => n.text());
+    expect(names).toContain('Settler');
+    expect(names).toContain('Camp builder');
+  });
+
   it('shows the duration with the building level factor', () => {
     setup([placed('barracks', 3, -2, 7)]);
     const thrall = definitions.find((d) => d.type === 'thrall')!;
@@ -105,6 +137,23 @@ describe('TrainingModal', () => {
     const m = Math.floor(total / 60);
     const s = total % 60;
     expect(text).toContain(m > 0 ? `${m}m ${s}s` : `${s}s`);
+  });
+
+  it('shows costs as resource icons with numbers, and marks an uncovered resource red in the footer total', async () => {
+    const world = setup([placed('barracks', 3, -2, 7)]);
+    const thrall = definitions.find((d) => d.type === 'thrall')!;
+    const wrapper = mountModal();
+    const row = wrapper.findAll('.unit-row')[0]!;
+    expect(row.findAll('.unit-cost .cost-item svg').length).toBeGreaterThan(0);
+    expect(row.get('.unit-cost .cost-item b').text()).toBe(String(thrall.trainingCost.wood));
+    await row.findAll('.step-btn')[1]!.trigger('click');
+    const total = wrapper.get('.foot .sum .resource-cost');
+    expect(total.get('b').text()).toBe(String(thrall.trainingCost.wood));
+    expect(total.get('b').classes()).not.toContain('short');
+    // The stock drops below the picked total (e.g. a build reserves it).
+    world.hud.available = { wood: thrall.trainingCost.wood - 1, stone: 99999, food: 99999, iron: 99999 };
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('.foot .sum .resource-cost b').classes()).toContain('short');
   });
 
   it('hides the "Train in" selector when the settlement has only one such building', () => {
@@ -144,39 +193,90 @@ describe('TrainingModal', () => {
     expect(wrapper.find('.premium-note').exists()).toBe(false);
   });
 
-  it('sends the building hex and split "here" by default', async () => {
+  it('starts every row at 0 and places nothing until a type is picked', () => {
     setup(twoBarracks);
     const wrapper = mountModal();
-    await wrapper.get('.unit-row .primary').trigger('click');
+    expect(wrapper.findAll('.unit-row .qty').every((q) => (q.element as HTMLInputElement).value === '0')).toBe(true);
+    expect(wrapper.get('.foot .primary').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('.foot .sum').text()).toContain('Pick units to train');
+  });
+
+  it('steps the quantity with − / + and fills the largest affordable count with Max', async () => {
+    const world = setup(twoBarracks);
+    // Thrall costs 60 wood: 130 wood affords 2.
+    world.hud.available = { wood: 130, stone: 99999, food: 99999, iron: 99999 };
+    const wrapper = mountModal();
+    const row = wrapper.findAll('.unit-row')[0]!;
+    const buttons = row.findAll('.step-btn');
+    await buttons[1]!.trigger('click');
+    await buttons[1]!.trigger('click');
+    expect((row.get('.qty').element as HTMLInputElement).value).toBe('2');
+    await buttons[0]!.trigger('click');
+    expect((row.get('.qty').element as HTMLInputElement).value).toBe('1');
+    await row.get('.max').trigger('click');
+    expect((row.get('.qty').element as HTMLInputElement).value).toBe('2');
+  });
+
+  it('shows the count next to the largest affordable count and lowers it when another row claims stock', async () => {
+    const world = setup(twoBarracks);
+    world.hud.available = { wood: 130, stone: 99999, food: 99999, iron: 99999 };
+    const wrapper = mountModal();
+    const rows = wrapper.findAll('.unit-row');
+    const first = rows[0]!;
+    expect((first.get('.qty').element as HTMLInputElement).value).toBe('0');
+    expect(first.get('[data-testid="qty-max"]').text()).toBe('/ 2');
+    // Spearman costs 80 wood: one pick leaves 50, too little for a Thrall (60).
+    await rows[1]!.findAll('.step-btn')[1]!.trigger('click');
+    expect(first.get('[data-testid="qty-max"]').text()).toBe('/ 0');
+  });
+
+  it('places one order per picked type with one button and stays open', async () => {
+    setup(twoBarracks);
+    const wrapper = mountModal();
+    const rows = wrapper.findAll('.unit-row');
+    await rows[0]!.findAll('.step-btn')[1]!.trigger('click');
+    await rows[1]!.findAll('.step-btn')[1]!.trigger('click');
+    await rows[1]!.findAll('.step-btn')[1]!.trigger('click');
+    expect(wrapper.get('.foot .sum').text()).toContain('2 orders');
+    expect(wrapper.get('.foot .primary').text()).toBe('Train 2 orders');
+    await wrapper.get('.foot .primary').trigger('click');
     await flushPromises();
-    expect(trainUnits).toHaveBeenCalledWith('s1', { unit: 'thrall', count: 1, q: 3, r: -2, split: 'here' }, undefined);
-    expect(wrapper.emitted('trained')).toHaveLength(1);
+    expect(trainUnits).toHaveBeenCalledTimes(2);
+    expect(trainUnits).toHaveBeenNthCalledWith(1, 's1', { unit: 'thrall', count: 1, q: 3, r: -2, split: 'here' }, undefined);
+    expect(trainUnits).toHaveBeenNthCalledWith(2, 's1', { unit: 'spearman', count: 2, q: 3, r: -2, split: 'here' }, undefined);
+    // Stays open (no close/trained event) and the picks reset.
+    expect(wrapper.emitted('close')).toBeUndefined();
+    expect((wrapper.findAll('.unit-row')[0]!.get('.qty').element as HTMLInputElement).value).toBe('0');
   });
 
   it('sends "evenly" for Distribute and "fastest" once picked by a premium account', async () => {
     setup(twoBarracks, true);
     const wrapper = mountModal();
-    await wrapper.findAll('.seg')[1].trigger('click');
-    await wrapper.get('.unit-row .primary').trigger('click');
+    await wrapper.findAll('.seg')[1]!.trigger('click');
+    await wrapper.get('.unit-row .step-btn:last-of-type').trigger('click');
+    await wrapper.get('.foot .primary').trigger('click');
     await flushPromises();
-    expect(trainUnits.mock.calls[0][1]).toMatchObject({ split: 'evenly', q: 3, r: -2 });
+    expect(trainUnits.mock.calls[0]![1]).toMatchObject({ split: 'evenly', q: 3, r: -2 });
 
     await wrapper.get('.seg.fastest').trigger('click');
-    await wrapper.get('.unit-row .primary').trigger('click');
+    await wrapper.get('.unit-row .step-btn:last-of-type').trigger('click');
+    await wrapper.get('.foot .primary').trigger('click');
     await flushPromises();
-    expect(trainUnits.mock.calls[1][1]).toMatchObject({ split: 'fastest' });
+    expect(trainUnits.mock.calls[1]![1]).toMatchObject({ split: 'fastest' });
   });
 
-  it('says when this building is full and disables Train, but only for "This building"', async () => {
+  it('says when this building is full and refuses more orders, but only for "This building"', async () => {
     const world = setup(twoBarracks);
     world.hud.trainingQueue = [1, 2, 3, 4, 5].map((i) => order(3, -2, `p${i}`));
     const wrapper = mountModal();
     expect(wrapper.get('.error-note').text()).toContain('5 of 5 orders');
-    expect(wrapper.get('.unit-row .primary').attributes('disabled')).toBeDefined();
+    await wrapper.get('.unit-row .step-btn:last-of-type').trigger('click');
+    expect(wrapper.get('.foot .primary').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('.foot .sum').text()).toContain('Not enough free slots');
 
-    await wrapper.findAll('.seg')[1].trigger('click');
+    await wrapper.findAll('.seg')[1]!.trigger('click');
     expect(wrapper.find('.error-note').exists()).toBe(false);
-    expect(wrapper.get('.unit-row .primary').attributes('disabled')).toBeUndefined();
+    expect(wrapper.get('.foot .primary').attributes('disabled')).toBeUndefined();
   });
 
   it('does not count another building\'s orders toward this one', () => {
@@ -184,6 +284,119 @@ describe('TrainingModal', () => {
     world.hud.trainingQueue = [1, 2, 3, 4, 5].map((i) => order(5, 0, `p${i}`));
     const wrapper = mountModal();
     expect(wrapper.find('.error-note').exists()).toBe(false);
-    expect(wrapper.get('.unit-row .primary').attributes('disabled')).toBeUndefined();
+    expect(wrapper.findAll('.qrow')).toHaveLength(0);
+    expect(wrapper.get('[data-testid="training-here"]').text()).toContain('0 of 5 slots used');
+  });
+
+  it('lists exactly the missing requirements of a locked row as chips', () => {
+    // Barracks 4 (opened), Longhouse 12: the Berserker needs Barracks 10 and Longhouse 20.
+    const world = setup([placed('barracks', 3, -2, 4)]);
+    world.hud.level = 12;
+    const wrapper = mountModal(placed('barracks', 3, -2, 4));
+    const berserker = wrapper.findAll('.unit-row').find((r) => r.get('.unit-name').text() === 'Berserker')!;
+    expect(berserker.findAll('.chip').map((c) => c.text())).toEqual(['Barracks 10 (now 4)', 'Longhouse 20 (now 12)']);
+    expect(berserker.find('.step').exists()).toBe(false);
+  });
+
+  it('gates a row on the opened building\'s level, not on another building of the type', () => {
+    const world = setup([placed('barracks', 3, -2, 2), placed('barracks', 5, 0, 20)]);
+    world.hud.level = 30;
+    const wrapper = mountModal(placed('barracks', 3, -2, 2));
+    const spearman = wrapper.findAll('.unit-row').find((r) => r.get('.unit-name').text() === 'Spearman')!;
+    expect(spearman.findAll('.chip').map((c) => c.text())).toEqual(['Barracks 3 (now 2)']);
+  });
+
+  it('shows the unlock ladder of this building with the reached level marked', () => {
+    setup([placed('barracks', 3, -2, 7)]);
+    const text = mountModal().get('[data-testid="unlock-ladder"]').text();
+    expect(text).toContain('Level 1');
+    expect(text).toContain('Level 3');
+    expect(text).toContain('Level 10');
+    expect(text).toContain('now');
+  });
+
+  it('shows this building\'s orders and cancels one after an inline confirm that names the refund', async () => {
+    const world = setup(twoBarracks);
+    const o = { ...order(3, -2, 'p1'), unit: 'spearman', count: 4, completedCount: 1 };
+    world.hud.trainingQueue = [o];
+    const cancelTraining = vi.spyOn(world, 'cancelTrainingLive').mockResolvedValue(undefined);
+    const wrapper = mountModal();
+    expect(wrapper.get('[data-testid="training-here"]').text()).toContain('4× Spearman');
+    await wrapper.get('.qx').trigger('click');
+    const spearman = definitions.find((d) => d.type === 'spearman')!;
+    // 3 units not trained yet: half of 3 × the cost.
+    const refundWood = wrapper.get('.cbox .cost-item');
+    expect(refundWood.get('b').text()).toBe(String(Math.floor((spearman.trainingCost.wood * 3) / 2)));
+    expect(refundWood.attributes('title')).toBe('Wood');
+    expect(wrapper.get('.cbox').text()).toContain('1 already trained stay');
+    expect(cancelTraining).not.toHaveBeenCalled();
+    await wrapper.get('.danger').trigger('click');
+    await flushPromises();
+    expect(cancelTraining).toHaveBeenCalledWith('p1');
+  });
+
+  it('counts only siblings that have the unit\'s level for free slots in Distribute mode', async () => {
+    // Barracks A (level 6) is full, Barracks B (level 2) is empty: the Axeman (Barracks 6) can only go to A.
+    const world = setup([placed('barracks', 3, -2, 6), placed('barracks', 5, 0, 2)]);
+    world.hud.trainingQueue = [1, 2, 3, 4, 5].map((i) => order(3, -2, `p${i}`));
+    const wrapper = mountModal(placed('barracks', 3, -2, 6));
+    await wrapper.findAll('.seg')[1]!.trigger('click');
+    const axeman = wrapper.findAll('.unit-row').find((r) => r.get('.unit-name').text() === 'Axeman')!;
+    await axeman.findAll('.step-btn')[1]!.trigger('click');
+    expect(wrapper.get('.foot .primary').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('.foot .sum').text()).toContain('Not enough free slots');
+    // The Thrall (level 1) fits in B.
+    await axeman.findAll('.step-btn')[0]!.trigger('click');
+    await wrapper.findAll('.unit-row')[0]!.findAll('.step-btn')[1]!.trigger('click');
+    expect(wrapper.get('.foot .primary').attributes('disabled')).toBeUndefined();
+  });
+
+  it('counts the buildings that have the level in the Distribute button', async () => {
+    setup([placed('barracks', 3, -2, 6), placed('barracks', 5, 0, 2), placed('barracks', 7, 0, 6)]);
+    const wrapper = mountModal(placed('barracks', 3, -2, 6));
+    await wrapper.findAll('.seg')[1]!.trigger('click');
+    // Nothing picked: the most buildings any unlocked unit can spread over (the Thrall: all three).
+    expect(wrapper.findAll('.seg')[1]!.text()).toBe('Distribute (3)');
+    const axeman = wrapper.findAll('.unit-row').find((r) => r.get('.unit-name').text() === 'Axeman')!;
+    await axeman.findAll('.step-btn')[1]!.trigger('click');
+    expect(wrapper.findAll('.seg')[1]!.text()).toBe('Distribute (2)');
+  });
+
+  it('unlocks a row in Distribute mode from a building below the level when a sibling has it, but not in "This building"', async () => {
+    setup([placed('barracks', 3, -2, 2), placed('barracks', 5, 0, 6)]);
+    const wrapper = mountModal(placed('barracks', 3, -2, 2));
+    const spearman = () => wrapper.findAll('.unit-row').find((r) => r.get('.unit-name').text() === 'Spearman')!;
+    expect(spearman().findAll('.chip')).toHaveLength(1);
+    await wrapper.findAll('.seg')[1]!.trigger('click');
+    expect(spearman().findAll('.chip')).toHaveLength(0);
+    await spearman().findAll('.step-btn')[1]!.trigger('click');
+    await wrapper.get('.foot .primary').trigger('click');
+    await flushPromises();
+    expect(trainUnits).toHaveBeenCalledWith('s1', { unit: 'spearman', count: 1, q: 3, r: -2, split: 'evenly' }, undefined);
+  });
+
+  it('reads the open building\'s level live, so an upgrade that finishes while open updates subtitle, rows and ladder', async () => {
+    const world = setup([placed('barracks', 3, -2, 2)]);
+    const wrapper = mountModal(placed('barracks', 3, -2, 2));
+    expect(wrapper.get('.sub').text()).toContain('Level 2');
+    const spearman = () => wrapper.findAll('.unit-row').find((r) => r.get('.unit-name').text() === 'Spearman')!;
+    expect(spearman().findAll('.chip')).toHaveLength(1);
+
+    world.hud.buildings = [placed('barracks', 3, -2, 3)];
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.get('.sub').text()).toContain('Level 3');
+    expect(spearman().findAll('.chip')).toHaveLength(0);
+    expect(wrapper.get('[data-testid="unlock-ladder"] .now').element.closest('.stop')!.textContent).toContain('Level 3');
+  });
+
+  it('disables + once the row is at the largest affordable count', async () => {
+    const world = setup(twoBarracks);
+    world.hud.available = { wood: 130, stone: 99999, food: 99999, iron: 99999 };
+    const wrapper = mountModal();
+    const plus = wrapper.findAll('.unit-row')[0]!.findAll('.step-btn')[1]!;
+    await plus.trigger('click');
+    await plus.trigger('click');
+    expect(plus.attributes('disabled')).toBeDefined();
   });
 });

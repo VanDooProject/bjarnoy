@@ -19,7 +19,9 @@ import {
   isFieldBattleVictoryFor,
   totalFieldBattleLoot,
 } from '../../lib/units/fieldBattleReports';
-import { worldMapLocation } from '../../lib/mapCameraHash';
+import { useRouter } from 'vue-router';
+import { useMapFocus } from '../../composables/useMapFocus';
+import { backgroundViewPath, closeModalRoute } from '../../lib/modalRoute';
 
 /**
  * Everything the card needs to render — the subset of `FieldBattleReportResponse`
@@ -35,6 +37,9 @@ export interface FieldBattleReportCardData {
   sideBOwnerName: string | null;
   sideAPower: number;
   sideBPower: number;
+  /** The ranged attack each side threw in the volley before the fight; 0 without ranged units. */
+  sideAVolleyPower?: number;
+  sideBVolleyPower?: number;
   sideAWasDefending: boolean;
   sideBWasDefending: boolean;
   lootTaken: ResourceLine;
@@ -63,7 +68,17 @@ const opponentLabel = computed(() => {
   if (ownerName && settlementName) return `${ownerName} (${settlementName})`;
   return ownerName ?? settlementName ?? t('hud.fieldBattleReport.unknownOpponent');
 });
-const mapLocation = computed(() => worldMapLocation(props.report.hex));
+const router = useRouter();
+const mapFocus = useMapFocus();
+// Back to the map as it was (same mode, same zoom), centred on where the battle was fought. A report opened over a page
+// without a map (the docs) has no map to go back to, so it goes to the map instead; a request must never wait for a later
+// visit.
+function showOnMap() {
+  mapFocus.request(props.report.hex);
+  const background = backgroundViewPath(router);
+  if (background === null || background === '/settlement') closeModalRoute(router);
+  else void router.replace('/settlement');
+}
 
 const sideARows = computed(() => groupFieldBattleLinesByUnit(props.report.lines, 'sidea'));
 const sideBRows = computed(() => groupFieldBattleLinesByUnit(props.report.lines, 'sideb'));
@@ -77,6 +92,11 @@ function wasDefending(side: FieldBattleSide): boolean {
 function powerOf(side: FieldBattleSide): number {
   return side === 'sidea' ? props.report.sideAPower : props.report.sideBPower;
 }
+function volleyPowerOf(side: FieldBattleSide): number {
+  return (side === 'sidea' ? props.report.sideAVolleyPower : props.report.sideBVolleyPower) ?? 0;
+}
+// A fight without ranged units has no volley: the tables keep the single "Lost" column.
+const hasVolley = computed(() => volleyPowerOf('sidea') > 0 || volleyPowerOf('sideb') > 0);
 </script>
 
 <template>
@@ -91,9 +111,15 @@ function powerOf(side: FieldBattleSide): number {
       <span data-testid="field-battle-opponent">{{ opponentLabel }}</span>
       <span class="where-sep">·</span>
       <span class="where-label">{{ t('hud.fieldBattleReport.location') }}:</span>
-      <RouterLink :to="mapLocation" class="where-link" data-testid="field-battle-location">
+      <button
+        type="button"
+        class="where-link"
+        data-testid="field-battle-location"
+        :title="t('hud.fieldBattleReport.showOnMap')"
+        @click="showOnMap"
+      >
         {{ t('hud.fieldBattleReport.hexCoord', { q: report.hex.q, r: report.hex.r }) }}
-      </RouterLink>
+      </button>
     </p>
 
     <div class="sides">
@@ -104,23 +130,34 @@ function powerOf(side: FieldBattleSide): number {
           <span v-if="wasDefending(s)" class="defending-tag">{{ t('hud.fieldBattleReport.defending') }}</span>
         </h3>
         <p class="power">{{ t('hud.fieldBattleReport.power') }}: {{ Math.round(powerOf(s)) }}</p>
+        <p v-if="hasVolley" class="power" :data-testid="`field-battle-volley-${s}`">
+          {{ t('hud.battleReport.volleyPower') }}: {{ Math.round(volleyPowerOf(s)) }}
+        </p>
         <div class="lines-scroll">
           <table class="lines">
             <thead>
               <tr>
                 <th>{{ t('hud.battleReport.unit') }}</th>
-                <th>{{ t('hud.battleReport.lost') }}</th>
+                <template v-if="hasVolley">
+                  <th>{{ t('hud.battleReport.lostVolley') }}</th>
+                  <th>{{ t('hud.battleReport.lostFight') }}</th>
+                </template>
+                <th v-else>{{ t('hud.battleReport.lost') }}</th>
                 <th>{{ t('hud.battleReport.survived') }}</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="row in rowsFor(s)" :key="row.unit">
                 <td>{{ unitName(row.unit) }}</td>
-                <td class="lost">{{ row.lost }}</td>
+                <template v-if="hasVolley">
+                  <td class="lost" data-testid="lost-volley">{{ row.volleyLost }}</td>
+                  <td class="lost" data-testid="lost-fight">{{ row.lost - row.volleyLost }}</td>
+                </template>
+                <td v-else class="lost">{{ row.lost }}</td>
                 <td class="survived">{{ row.survived }}</td>
               </tr>
               <tr v-if="!rowsFor(s).length">
-                <td colspan="3" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
+                <td :colspan="hasVolley ? 4 : 3" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
               </tr>
             </tbody>
           </table>
@@ -203,7 +240,13 @@ function powerOf(side: FieldBattleSide): number {
   color: var(--muted);
 }
 .where-link {
+  padding: 0;
+  background: none;
+  border: 0;
+  font: inherit;
   color: var(--gold);
+  text-decoration: underline;
+  cursor: pointer;
 }
 .sides {
   display: grid;

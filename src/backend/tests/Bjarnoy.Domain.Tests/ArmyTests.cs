@@ -25,11 +25,10 @@ public class ArmyTests
             Name = "Bjornstad",
             Centre = Home,
             Buildings = [new PlacedBuilding(Home, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = garrison ?? [new UnitStack(UnitType.Spearman, 10)],
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: food, Iron: 1_000_000),
                 production, capacity, T0),
-        };
+        }.WithGarrison(garrison ?? [new UnitStack(UnitType.Spearman, 10)]);
     }
 
     private static DispatchDecision Dispatch(
@@ -40,7 +39,7 @@ public class ArmyTests
         IReadOnlyList<UnitStack>? requested = null,
         Func<HexCoord, Terrain>? terrainAt = null)
     {
-        return Army.PlanDispatch(
+        return TestArmy.PlanDispatch(
             settlement,
             requested ?? [new UnitStack(UnitType.Spearman, 5)],
             provisions,
@@ -114,7 +113,7 @@ public class ArmyTests
         var settlement = Found();
         var riverWall = Enumerable.Range(-15, 31).Select(r => new HexCoord(2, r)).ToHashSet();
 
-        DispatchDecision Send(Func<HexCoord, bool>? isWide) => Army.PlanDispatch(
+        DispatchDecision Send(Func<HexCoord, bool>? isWide) => TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Spearman, 5)], 40, [], new HexCoord(5, 0), T0, Guid.CreateVersion7(),
             AllGrass(), isRiver: riverWall.Contains, isWideRiver: isWide);
 
@@ -156,6 +155,38 @@ public class ArmyTests
         Assert.False(movement.IsReturning);
     }
 
+    private static int Expansions(HexCoord from, HexCoord to) =>
+        HexPathfinder.Search(from, to, AllGrass(), isLandUnit: true).Expanded;
+
+    [Fact]
+    public void Dispatch_legs_share_one_search_budget_so_legs_that_each_fit_alone_can_be_refused_together()
+    {
+        var settlement = Found();
+        var waypoint = new HexCoord(3, 0);
+        var destination = new HexCoord(3, 3);
+        var firstLeg = Expansions(Home, waypoint);
+        var secondLeg = Expansions(waypoint, destination);
+        var total = firstLeg + secondLeg;
+        Assert.True(firstLeg > 0 && secondLeg > 0);
+
+        DispatchDecision PlanWith(int budget) => TestArmy.PlanDispatch(
+            settlement, [new UnitStack(UnitType.Spearman, 5)], 40, [waypoint], destination, T0, Guid.CreateVersion7(),
+            AllGrass(), routeSearchBudget: budget);
+
+        // Each leg alone fits in the budget, together they do not.
+        Assert.True(Math.Max(firstLeg, secondLeg) <= total - 1);
+        Assert.Equal(DispatchRejection.RouteTooLong, PlanWith(total - 1).Rejection);
+        Assert.True(PlanWith(total).Accepted);
+    }
+
+    [Fact]
+    public void Dispatch_with_waypoints_under_the_default_budget_still_succeeds()
+    {
+        var decision = Dispatch(Found(), new HexCoord(3, 3), provisions: 40, waypoints: [new HexCoord(3, 0), new HexCoord(0, 3)]);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
     [Fact]
     public void Waypoints_are_visited_in_order_in_the_concatenated_path()
     {
@@ -195,10 +226,10 @@ public class ArmyTests
         var settlement = Found();
         var destination = new HexCoord(4, 0);
 
-        var normal = Army.PlanDispatch(
+        var normal = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Spearman, 5)], provisions: 40, [], destination, T0,
             Guid.CreateVersion7(), AllGrass());
-        var doubled = Army.PlanDispatch(
+        var doubled = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Spearman, 5)], provisions: 40, [], destination, T0,
             Guid.CreateVersion7(), AllGrass(), speedFactor: 2.0);
 
@@ -431,6 +462,7 @@ public class ArmyTests
         {
             Id = Guid.CreateVersion7(),
             SettlementId = Guid.CreateVersion7(),
+            HomeSpot = new HexCoord(0, 0),
             Location = new ArmyLocation.AtHome(),
         };
 
@@ -504,6 +536,7 @@ public class ArmyTests
         {
             Id = Guid.CreateVersion7(),
             SettlementId = Guid.CreateVersion7(),
+            HomeSpot = new HexCoord(0, 0),
             Location = new ArmyLocation.AtHome(),
         };
 
@@ -519,7 +552,8 @@ public class ArmyTests
         {
             Id = Guid.CreateVersion7(),
             SettlementId = Guid.CreateVersion7(),
-            Location = new ArmyLocation.Supporting(Guid.CreateVersion7()),
+            HomeSpot = new HexCoord(0, 0),
+            Location = new ArmyLocation.Supporting(Guid.CreateVersion7(), new HexCoord(0, 0)),
         };
 
         var result = Army.PlanFieldOrder(army, [], new HexCoord(1, 0), Home, T0, AllGrass(), isPremium: true);
@@ -553,6 +587,88 @@ public class ArmyTests
         Assert.Equal(new HexCoord(10, 0), movement.Path[0]);
         Assert.Equal(new HexCoord(15, 0), movement.Path[^1]);
         Assert.False(movement.IsReturning);
+    }
+
+    [Fact]
+    public void FieldOrder_way_home_counts_against_the_same_search_budget_as_the_legs()
+    {
+        var standingAt = new HexCoord(10, 0);
+        var destination = new HexCoord(15, 0);
+        var army = Standing(standingAt);
+        var outbound = Expansions(standingAt, destination);
+        var wayHome = Expansions(destination, Home);
+        var total = outbound + wayHome;
+        Assert.True(outbound > 0 && wayHome > 0);
+
+        FieldOrderResult PlanWith(int budget) => Army.PlanFieldOrder(
+            army, [], destination, Home, ArrivedAt(army), AllGrass(), isPremium: false, routeSearchBudget: budget);
+
+        // The outbound leg fits alone, and so does the way home; it is the pair that runs over.
+        Assert.Equal(FieldOrderRejection.RouteTooLong, PlanWith(total - 1).Rejection);
+        Assert.True(PlanWith(total).Accepted);
+    }
+
+    [Fact]
+    public void FieldOrder_legs_share_one_search_budget()
+    {
+        var standingAt = new HexCoord(10, 0);
+        var waypoint = new HexCoord(10, 6);
+        var destination = new HexCoord(15, 0);
+        var army = Standing(standingAt);
+        var total = Expansions(standingAt, waypoint) + Expansions(waypoint, destination) + Expansions(destination, Home);
+
+        FieldOrderResult PlanWith(int budget) => Army.PlanFieldOrder(
+            army, [waypoint], destination, Home, ArrivedAt(army), AllGrass(), isPremium: true, routeSearchBudget: budget);
+
+        Assert.Equal(FieldOrderRejection.RouteTooLong, PlanWith(total - 1).Rejection);
+        Assert.True(PlanWith(total).Accepted);
+    }
+
+    private static List<HexCoord> WaypointsOf(int count) => [.. Enumerable.Range(1, count).Select(i => new HexCoord(i, 0))];
+
+    [Theory]
+    [InlineData(5, false, true)]
+    [InlineData(6, false, false)]
+    [InlineData(10, true, true)]
+    [InlineData(11, true, false)]
+    public void Dispatch_takes_at_most_five_waypoints_or_ten_with_premium(int count, bool isPremium, bool accepted)
+    {
+        var decision = TestArmy.PlanDispatch(
+            Found(), [new UnitStack(UnitType.Spearman, 5)], 100, WaypointsOf(count), new HexCoord(count + 1, 0), T0,
+            Guid.CreateVersion7(), AllGrass(), isPremium: isPremium);
+
+        Assert.Equal(accepted, decision.Accepted);
+        if (!accepted)
+        {
+            Assert.Equal(DispatchRejection.TooManyWaypoints, decision.Rejection);
+        }
+    }
+
+    [Fact]
+    public void Dispatch_with_six_waypoints_is_refused_for_a_free_account_before_any_search()
+    {
+        var decision = TestArmy.PlanDispatch(
+            Found(), [new UnitStack(UnitType.Spearman, 5)], 100, WaypointsOf(6), new HexCoord(7, 0), T0,
+            Guid.CreateVersion7(), AllGrass(), routeSearchBudget: 0);
+
+        Assert.Equal(DispatchRejection.TooManyWaypoints, decision.Rejection);
+    }
+
+    [Theory]
+    [InlineData(10, true)]
+    [InlineData(11, false)]
+    public void FieldOrder_move_on_takes_at_most_ten_waypoints_for_premium(int count, bool accepted)
+    {
+        var army = Standing(new HexCoord(0, 0));
+
+        var result = Army.PlanFieldOrder(
+            army, WaypointsOf(count), new HexCoord(count + 1, 0), Home, ArrivedAt(army), AllGrass(), isPremium: true);
+
+        Assert.Equal(accepted, result.Accepted);
+        if (!accepted)
+        {
+            Assert.Equal(FieldOrderRejection.TooManyWaypoints, result.Rejection);
+        }
     }
 
     [Fact]
@@ -673,8 +789,8 @@ public class ArmyTests
     [Theory]
     [InlineData(UnitType.Karve, 1, 1, true)]
     [InlineData(UnitType.Karve, 1, 2, false)]
-    [InlineData(UnitType.Longship, 1, 2, true)]
-    [InlineData(UnitType.Longship, 1, 3, false)]
+    [InlineData(UnitType.Snekkja, 1, 2, true)]
+    [InlineData(UnitType.Snekkja, 1, 3, false)]
     [InlineData(UnitType.Karve, 2, 2, true)]
     public void Siege_engines_ride_aboard_at_ten_slots_each(UnitType ship, int ships, int rams, bool accepted)
     {
@@ -828,6 +944,10 @@ public class ArmyTests
 
     private static readonly HexCoord Beyond = new(12, 0);
 
+    /// <summary>The target's longhouse at <see cref="Beyond"/>: the garrison spot a support order joins.</summary>
+    private static readonly IReadOnlyList<GarrisonSpot> BeyondSpots =
+        [new GarrisonSpot(new HexCoord(12, 0), GarrisonSpotKind.Longhouse, [], HoldsLand: true, HoldsShips: false)];
+
     private static Army StandingWith(
         IReadOnlyList<UnitStack> garrison, IReadOnlyList<UnitStack> sent, double provisions, HexCoord? destination = null)
     {
@@ -868,12 +988,12 @@ public class ArmyTests
 
         var result = Army.PlanFieldOrder(
             army, [], Beyond, Home, ArrivedAt(army), AllGrass(), isPremium: false,
-            mission: ArmyMission.Support, targetSettlementId: host);
+            mission: ArmyMission.Support, targetSettlementId: host, targetBuildingCoord: Beyond, targetSpots: BeyondSpots);
 
         Assert.True(result.Accepted, $"expected accept, got {result.Rejection}");
         Assert.Equal(ArmyMission.Support, result.Army!.Mission);
         Assert.Equal(host, result.Army.TargetSettlementId);
-        Assert.Null(result.Army.TargetBuildingCoord);
+        Assert.Equal(Beyond, result.Army.TargetBuildingCoord); // the spot the guest will stand at
     }
 
     [Fact]
@@ -939,15 +1059,33 @@ public class ArmyTests
     }
 
     [Fact]
-    public void FieldOrder_target_building_only_goes_with_attack_or_raid()
+    public void FieldOrder_target_building_only_goes_with_attack_raid_or_support()
     {
         var army = Standing(new HexCoord(10, 0));
 
         var result = Army.PlanFieldOrder(
             army, [], Beyond, Home, ArrivedAt(army), AllGrass(), isPremium: true,
-            mission: ArmyMission.Support, targetSettlementId: Guid.CreateVersion7(), targetBuildingCoord: Beyond);
+            mission: ArmyMission.Move, targetBuildingCoord: Beyond);
 
         Assert.Equal(FieldOrderRejection.TargetBuildingRequiresAttackMission, result.Rejection);
+    }
+
+    [Fact]
+    public void FieldOrder_support_must_name_a_spot_of_the_target_that_holds_the_army()
+    {
+        var army = Standing(new HexCoord(10, 0));
+        var now = ArrivedAt(army);
+        var host = Guid.CreateVersion7();
+
+        var unnamed = Army.PlanFieldOrder(
+            army, [], Beyond, Home, now, AllGrass(), isPremium: true,
+            mission: ArmyMission.Support, targetSettlementId: host, targetSpots: BeyondSpots);
+        Assert.Equal(FieldOrderRejection.SupportSpotRequired, unnamed.Rejection);
+
+        var elsewhere = Army.PlanFieldOrder(
+            army, [], Beyond, Home, now, AllGrass(), isPremium: true,
+            mission: ArmyMission.Support, targetSettlementId: host, targetBuildingCoord: new HexCoord(13, 0), targetSpots: BeyondSpots);
+        Assert.Equal(FieldOrderRejection.SupportSpotCannotHold, elsewhere.Rejection);
     }
 
     [Fact]
@@ -985,10 +1123,10 @@ public class ArmyTests
         var midway = MidwayOf(marching);
         Assert.Equal(FieldOrderRejection.PremiumRequired, Army.PlanFieldOrder(
             marching, [], Beyond, Home, midway, AllGrass(), isPremium: false,
-            mission: ArmyMission.Support, targetSettlementId: target).Rejection);
+            mission: ArmyMission.Support, targetSettlementId: target, targetBuildingCoord: Beyond, targetSpots: BeyondSpots).Rejection);
         Assert.True(Army.PlanFieldOrder(
             marching, [], Beyond, Home, midway, AllGrass(), isPremium: true,
-            mission: ArmyMission.Support, targetSettlementId: target).Accepted);
+            mission: ArmyMission.Support, targetSettlementId: target, targetBuildingCoord: Beyond, targetSpots: BeyondSpots).Accepted);
     }
 
     [Fact]
@@ -1173,7 +1311,7 @@ public class ArmyTests
         Assert.Equal(FieldOrderRejection.InsufficientProvisionsForRoundTrip, split.Rejection);
     }
 
-    // Fleets: a fleet stands at sea hex (5,0) of the Strait (sea in columns 3-8, grass either side); the dockyard home is (3,0).
+    // Fleets: a fleet stands at sea hex (5,0) of the Strait (sea in columns 3-8, grass either side); the harbour home is (3,0).
 
     private static Terrain Strait(HexCoord c) => c.Q is >= 3 and <= 8 ? Terrain.Sea : Terrain.Grass;
 
@@ -1191,6 +1329,7 @@ public class ArmyTests
         {
             Id = Guid.CreateVersion7(),
             SettlementId = Guid.CreateVersion7(),
+            HomeSpot = new HexCoord(0, 0),
             Stacks = stacks,
             Provisions = provisions,
             Location = new ArmyLocation.InTransit(movement),
@@ -1229,6 +1368,12 @@ public class ArmyTests
             fleet, [], new HexCoord(7, 0), Dock, now, Strait, isPremium: true,
             mission: ArmyMission.Hunt, targetCampCoord: new HexCoord(7, 0), targetCampIsWater: false);
         Assert.Equal(FieldOrderRejection.HuntRequiresLandUnits, onLand.Rejection);
+
+        // A sand camp is hunted with land troops aboard only; a fleet with none is refused.
+        var onSand = Army.PlanFieldOrder(
+            fleet, [], new HexCoord(7, 0), Dock, now, Strait, isPremium: true,
+            mission: ArmyMission.Hunt, targetCampCoord: new HexCoord(7, 0), targetCampIsSand: true);
+        Assert.Equal(FieldOrderRejection.HuntRequiresLandUnits, onSand.Rejection);
 
         var atSea = Army.PlanFieldOrder(
             fleet, [], new HexCoord(7, 0), Dock, now, Strait, isPremium: true,

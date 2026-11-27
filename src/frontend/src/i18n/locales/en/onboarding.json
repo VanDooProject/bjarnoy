@@ -19,6 +19,10 @@
     "eyebrow": "Your realm is waiting",
     "title": "Welcome back, {name}",
     "body": "Log back in to pick up your realm where you left off.",
-    "newRealm": "Start a new realm instead"
+    "newRealm": "Start a new realm instead",
+    "noRealmTitle": "No realm of yours in {world}",
+    "noRealmBody": "You're logged in. Start a realm here, or pick another world.",
+    "startHere": "Start a realm here",
+    "pickWorld": "Pick another world"
   }
 }

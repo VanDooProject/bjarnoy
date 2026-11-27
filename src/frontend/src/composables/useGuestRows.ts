@@ -4,29 +4,46 @@
 // drawer don't each re-derive the rows or the pending/error handling.
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { ApiError } from '../api/client';
+import { apiErrorMessage } from '../i18n/apiErrors';
 import { useWorldStore } from '../stores/world';
 import { unitName } from '../i18n/catalogueNames';
 import type { MessageSchema } from '../i18n/schema';
+import { useUnitCatalogueStore } from '../stores/unitCatalogue';
+import { stackUpkeepPerHour } from '../lib/units/garrisonUpkeep';
+
+export interface GuestUnitRow {
+  key: string;
+  label: string;
+  count: number;
+  foodPerHour: number;
+}
 
 export interface GuestRow {
   key: string;
   ownerName: string;
-  composition: string;
+  /** What the whole guest army eats per hour. */
+  foodPerHour: number;
+  units: GuestUnitRow[];
 }
 
 export function useGuestRows() {
   const world = useWorldStore();
   const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+  const catalogue = useUnitCatalogueStore();
 
   const guests = computed<GuestRow[]>(() =>
     world.guestArmies.map((g) => ({
       key: g.armyId,
       ownerName: world.model.getSettlement(g.ownerSettlementId)?.name ?? t('hud.trainingQueue.unknownSettlement'),
-      composition: g.stacks
+      foodPerHour: g.totalUpkeepPerHour, // the server's own total for the army
+      units: g.stacks
         .filter((s) => s.count > 0)
-        .map((s) => t('hud.trainingQueue.orderName', { count: s.count, unit: unitName(s.unit) }))
-        .join(', ') || '—',
+        .map((s) => ({
+          key: s.unit,
+          label: unitName(s.unit),
+          count: s.count,
+          foodPerHour: stackUpkeepPerHour(s, catalogue.byType),
+        })),
     })),
   );
 
@@ -39,7 +56,7 @@ export function useGuestRows() {
     try {
       await world.sendGuestHomeLive(armyId);
     } catch (err) {
-      error.value = err instanceof ApiError ? err.message : t('hud.trainingQueue.sendHomeError');
+      error.value = apiErrorMessage(err, t('hud.trainingQueue.sendHomeError'));
     } finally {
       sendingId.value = null;
     }

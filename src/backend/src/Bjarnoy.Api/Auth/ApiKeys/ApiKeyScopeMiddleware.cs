@@ -144,6 +144,10 @@ public sealed class ApiKeyScopeMiddleware(RequestDelegate next)
         {
             await Consider("reportId", id => resolver.ForCampReportAsync(id, cancellationToken));
         }
+        else if (pattern.StartsWith("/api/v1/army-reports/", StringComparison.Ordinal))
+        {
+            await Consider("reportId", id => resolver.ForArmyReportAsync(id, cancellationToken));
+        }
 
         if (endpoint.Metadata.GetMetadata<ApiKeyWorldFromQueryMarker>() is not null
             && Guid.TryParse(context.Request.Query["worldId"].ToString(), out var queryWorld))

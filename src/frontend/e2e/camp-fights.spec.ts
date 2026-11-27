@@ -16,7 +16,7 @@ type Hex = { q: number; r: number };
 async function addCamp(page: import('@playwright/test').Page, family: string, at: Hex, level = 2) {
   await page.evaluate(
     ({ family, at, level }) => {
-      const world = (window as unknown as { __demoWorld: () => { model: any } }).__demoWorld();
+      const world = window.__demoWorld() as { model: any };
       world.model.setCamps([{ family, coord: at, level, orientation: 'SE' }]);
     },
     { family, at, level },
@@ -26,7 +26,7 @@ async function addCamp(page: import('@playwright/test').Page, family: string, at
 async function setCampState(page: import('@playwright/test').Page, at: Hex, empty: boolean) {
   await page.evaluate(
     ({ at, empty }) => {
-      const world = (window as unknown as { __demoWorld: () => { model: any } }).__demoWorld();
+      const world = window.__demoWorld() as { model: any };
       const camp = world.model.campAt(at);
       const garrison = empty ? { young: 0, adult: 0, alpha: 0 } : { young: 3, adult: 6, alpha: 1 };
       world.model.setCampStates([
@@ -106,9 +106,9 @@ test.describe('wildlife camps in the settlement view', () => {
     await expect(build).toBeVisible();
     await expect(build).toHaveClass(/disabled|locked/);
     // A disabled ring action explains itself in a chip beside it on hover (and to screen readers).
-    await expect(build).toHaveAttribute('aria-description', 'Occupied by wild beasts');
+    await expect(build).toHaveAttribute('aria-description', 'Wild beasts hold this hex: clear their camp first');
     await settlement.ring.hover(build);
-    await expect(page.getByTestId('ring-hint')).toHaveText('Occupied by wild beasts');
+    await expect(page.getByTestId('ring-hint')).toHaveText('Wild beasts hold this hex: clear their camp first');
 
     // Close the ring, empty the camp (what a won hunt does server-side) and try again.
     await page.keyboard.press('Escape');
@@ -119,5 +119,33 @@ test.describe('wildlife camps in the settlement view', () => {
     await expect(settlement.ring.action('Build').first()).not.toHaveClass(/disabled|locked/);
     await settlement.ring.openBuildCategories();
     await expect(settlement.ring.category('Military').first()).toBeVisible();
+  });
+});
+
+test.describe('wildlife camps on the landing ring', () => {
+  // The onboarding ring used to offer buildings on a guarded camp hex in the claim, which the placement then refused
+  // (couldNotQueueBuild in demo, HexOccupiedByCamp live). It shows the map's locked Build bubble there instead.
+  test('a guarded camp hex in the claim shows Build locked until the camp is cleared', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.openLanding(page);
+    await settlement.claimLandfall();
+    const target = await settlement.findHex({ terrain: 'grass' });
+    await addCamp(page, 'harewarren', target.hex, 1);
+
+    await settlement.clickHex(target);
+    await settlement.ring.waitForOpen();
+    const build = settlement.ring.action('Build').first();
+    await expect(build).toHaveClass(/disabled|locked/);
+    await expect(build).toHaveAttribute('aria-description', 'Wild beasts hold this hex: clear their camp first');
+    // The onboarding pointer does not send the player into a locked Build; it points back at the guided hex.
+    await expect(settlement.guidancePointer).not.toContainText('Open Build');
+
+    await page.keyboard.press('Escape');
+    await expect(settlement.ring.bubbles).toHaveCount(0);
+    await setCampState(page, target.hex, true);
+
+    await settlement.clickHex(target);
+    await settlement.ring.waitForOpen();
+    await expect(settlement.ring.action('Build').first()).not.toHaveClass(/disabled|locked/);
   });
 });

@@ -26,7 +26,7 @@ async function mountBoth(path: string) {
   });
   await router.push(path);
   await router.isReady();
-  const global = { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })], stubs: { WorldList: true, LocaleSwitcher: true } };
+  const global = { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })], stubs: { WorldList: true, LocaleSwitcher: true, teleport: true } };
   return { router, nav: mount(HudNav, { global }), drawer: mount(MobileHudDrawer, { global }) };
 }
 

@@ -4,13 +4,16 @@
 // instant-build-on-click in SettlementView.vue with the mockup's full-screen
 // hex detail screen (Viking Realm.dc.html's `sel` overlay): art on the left,
 // name/level/description/action on the right.
+import { usePhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { Tile } from '../../lib/map/types';
 import type { ResourceLine } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
-import { formatBuildingModifier, formatBuildingOutput } from '../../lib/map/buildingStatsText';
-import { buildingName, terrainName, resourceName, runeTypeName, runeRarityName } from '../../i18n/catalogueNames';
+import { formatBuildingModifier } from '../../lib/map/buildingStatsText';
+import BuildingOutputText from './BuildingOutputText.vue';
+import ResourceCost from '../ResourceCost.vue';
+import { buildingName, terrainName, runeTypeName, runeRarityName } from '../../i18n/catalogueNames';
 import { DEMO_MODE } from '../../config';
 import { apiErrorMessage } from '../../i18n/apiErrors';
 import { FEAST_HOURS, feastCost, feastRenown } from '../../lib/economy/feasts';
@@ -28,7 +31,7 @@ const world = useWorldStore();
 const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 import { buildingArtOnTile, terrainArt } from '../../lib/map/buildingArt';
-import { tileIsBuildable } from '../../lib/map/ringCatalogue';
+import { hexOccupantLock, tileIsBuildable } from '../../lib/map/ringCatalogue';
 import AtlasSprite from '../AtlasSprite.vue';
 
 const props = defineProps<{
@@ -37,6 +40,9 @@ const props = defineProps<{
   ownerLabel: string | null;
 }>();
 const emit = defineEmits<{ close: [] }>();
+
+// A layer on the phone stack: shows alone while mounted, hides under a layer opened above it.
+const layer = usePhoneLayer();
 
 // Issue #53: shrine slots by level, mirroring ShrineCatalogue.Slots.cs.
 function shrineSlotsFor(level: number): number {
@@ -107,11 +113,11 @@ const feastOffer = computed(() => {
     renownGain: feastRenown(ts),
   };
 });
-const feastCostLine = computed(() =>
-  (['wood', 'stone', 'food'] as const)
-    .map((key) => `${Math.round(feastOffer.value.cost[key])} ${resourceName(key)}`)
-    .join(' · '),
-);
+const feastCostRounded = computed(() => ({
+  wood: Math.round(feastOffer.value.cost.wood),
+  stone: Math.round(feastOffer.value.cost.stone),
+  food: Math.round(feastOffer.value.cost.food),
+}));
 const feastHours = computed(() => Math.round(feastOffer.value.durationSeconds / 3600));
 const runningFeast = computed(() => world.hud.feast);
 const canAffordFeast = computed(() =>
@@ -204,12 +210,14 @@ const art = computed(() => {
   return (buildingType ? buildingArtOnTile(buildingType, buildingLevel ?? 1, props.tile) : undefined) ?? terrainArt(terrain);
 });
 // Open water is otherwise unbuildable, but a water building (fishing hut,
-// dockyard, shrine of Njörd — see `isWaterOnlyBuilding`) already standing
+// harbour, shrine of Njörd — see `isWaterOnlyBuilding`) already standing
 // on a coastal-water tile still has to be inspectable/upgradeable here —
 // this only ever sees such a tile with a building on it already (nothing in
 // this modal's own `build` flow offers water as a target), so it can't be
 // mistaken for turning open water buildable from empty.
 const buildable = computed(() => tileIsBuildable(props.tile));
+// An empty hex a giant, a guarded camp or an endgame site holds says why, in the ring's own words — not "open water".
+const occupiedLock = computed(() => (props.tile.buildingType ? undefined : hexOccupantLock(props.tile)));
 
 const name = computed(() =>
   props.tile.buildingType ? buildingName(props.tile.buildingType) : terrainName(props.tile.terrain),
@@ -234,9 +242,7 @@ const buildingStats = computed(() =>
 const currentStats = computed(() =>
   buildingStats.value
     ? {
-        output: buildingStats.value.output
-          ? formatBuildingOutput(scaleOutput(buildingStats.value.output, world.worldSpeedFactor), t)
-          : undefined,
+        output: buildingStats.value.output ? scaleOutput(buildingStats.value.output, world.worldSpeedFactor) : undefined,
         modifier: buildingStats.value.modifier ? formatBuildingModifier(buildingStats.value.modifier, t) : undefined,
       }
     : undefined,
@@ -244,7 +250,7 @@ const currentStats = computed(() =>
 </script>
 
 <template>
-  <div class="backdrop" @click.self="emit('close')">
+  <div v-phone-hidden="layer.hidden.value" class="backdrop" @click.self="emit('close')">
     <div class="modal panel">
       <div class="art">
         <AtlasSprite v-if="art?.kind === 'atlas'" :frame="art.frame" class="art-img" />
@@ -265,6 +271,7 @@ const currentStats = computed(() =>
           {{ t('hud.buildingModal.descHeldByOther') }}
         </p>
         <p v-else-if="!mine" class="desc">{{ t('hud.buildingModal.descOutsideBorder') }}</p>
+        <p v-else-if="occupiedLock" class="desc" data-testid="occupied-lock">{{ occupiedLock }}</p>
         <p v-else-if="!buildable" class="desc">{{ t('hud.buildingModal.descOpenWater') }}</p>
         <p v-else class="desc">
           {{ tile.buildingType ? t('hud.buildingModal.descUpgrade') : t('hud.buildingModal.descBuildEmpty') }}
@@ -273,7 +280,7 @@ const currentStats = computed(() =>
         <dl v-if="!outsideRealm && currentStats && (currentStats.output || currentStats.modifier)" class="stats">
           <template v-if="currentStats.output">
             <dt>{{ t('hud.hoverTooltip.output') }}</dt>
-            <dd>{{ currentStats.output }}</dd>
+            <dd><BuildingOutputText :output="currentStats.output" /></dd>
           </template>
           <template v-if="currentStats.modifier">
             <dt>{{ t('hud.hoverTooltip.modifier') }}</dt>
@@ -316,7 +323,7 @@ const currentStats = computed(() =>
           <p class="desc feast-desc">{{ t('hud.buildingModal.feastDesc') }}</p>
           <dl class="stats">
             <dt>{{ t('hud.buildingModal.feastCost') }}</dt>
-            <dd data-testid="feast-cost">{{ feastCostLine }}</dd>
+            <dd data-testid="feast-cost"><ResourceCost :cost="feastCostRounded" /></dd>
             <dt>{{ t('hud.buildingModal.feastDuration') }}</dt>
             <dd>{{ t('hud.buildingModal.feastHours', { hours: feastHours }) }}</dd>
             <dt>{{ t('hud.buildingModal.feastGain') }}</dt>
@@ -372,8 +379,7 @@ const currentStats = computed(() =>
   position: absolute;
   inset: 0;
   z-index: 40;
-  background: rgba(6, 12, 17, 0.86);
-  backdrop-filter: blur(8px);
+  background: var(--layer-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
