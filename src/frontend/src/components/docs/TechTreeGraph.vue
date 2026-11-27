@@ -31,7 +31,7 @@ import {
   GUTTER,
   TECH_TREE_LAYOUT,
 } from '../../lib/techtree/layout';
-import { buildTechTreeNodes, prerequisitesOf } from '../../lib/techtree/nodes';
+import { buildTechTreeNodes, prerequisiteGroups, prerequisitesOf } from '../../lib/techtree/nodes';
 import { pathD, routeEdges } from '../../lib/techtree/routing';
 
 const props = defineProps<{ byType: Record<string, BuildingDefinitionResponse[] | undefined> }>();
@@ -46,7 +46,8 @@ const nodes = computed(() => buildTechTreeNodes(props.byType));
 const graph = computed(() =>
   buildGraph(
     nodes.value.map((n) => n.type),
-    (type) => prerequisitesOf(props.byType, type),
+    // Only the plain prerequisites draw edges; another soil's variant is shown as a chip on the card, never as a link.
+    (type) => prerequisiteGroups(prerequisitesOf(props.byType, type)).main,
   ),
 );
 // Only the buildings actually drawn, so a link never runs to a missing card.

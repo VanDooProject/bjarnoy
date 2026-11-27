@@ -1010,6 +1010,10 @@
         "straightRiver": "Straight river",
         "bogCreek": "Bog creek"
       },
+      "onlySoil": {
+        "wheat": "Only on an island with wheat soil",
+        "pumpkin": "Only on an island with pumpkin soil"
+      },
       "cell": "{percent}% · {n} ring | {percent}% · {n} rings",
       "notPumpkin": "The {crop} raises Farms only and can only be built on wheat soil; a {pumpkin} gets nothing from it."
     },

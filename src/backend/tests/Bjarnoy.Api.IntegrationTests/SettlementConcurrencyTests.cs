@@ -181,6 +181,34 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_meadery_asks_for_the_farm_this_island_grows()
+    {
+        // The Meadery has no soil of its own, so this only holds if SettlementService resolves the soil for every build
+        // order: the other crop's farm at level 5 does not unlock it, the island's own crop at level 5 does.
+        var p = await SetUpAsync();
+        var level = await p.Admin.PutJsonAsync(
+            $"/api/v1/admin/settlements/{p.Settlement.Id}/buildings/{p.Settlement.Q}/{p.Settlement.R}/level",
+            new SetBuildingLevelRequest(11), Ct);
+        Assert.Equal(HttpStatusCode.OK, level.StatusCode);
+        await PlaceAsync(p, p.FreeGrass[1], p.OtherCrop, 5);
+
+        var refused = await QueueFarm(p, p.FreeGrass[0], "meadery");
+        Assert.NotEqual(HttpStatusCode.Accepted, refused.StatusCode);
+        Assert.Equal("RequiredBuildingTooLow", await refused.RejectionAsync(Ct));
+
+        await PlaceAsync(p, p.FreeGrass[2], p.Crop, 5);
+        var accepted = await QueueFarm(p, p.FreeGrass[0], "meadery");
+        Assert.True(accepted.StatusCode == HttpStatusCode.Accepted, await accepted.Content.ReadAsStringAsync(Ct));
+    }
+
+    private static async Task PlaceAsync(Player p, AdminSettlementHexResponse hex, string type, int level)
+    {
+        var placed = await p.Admin.PutJsonAsync(
+            $"/api/v1/admin/settlements/{p.Settlement.Id}/buildings/{hex.Q}/{hex.R}", new PlaceBuildingRequest(type, level), Ct);
+        Assert.True(placed.IsSuccessStatusCode, await placed.Content.ReadAsStringAsync(Ct));
+    }
+
+    [Fact]
     public async Task Two_overlapping_build_orders_both_keep_their_cost_deduction()
     {
         var p = await SetUpAsync();

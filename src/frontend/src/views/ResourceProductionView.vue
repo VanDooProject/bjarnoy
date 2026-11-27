@@ -110,6 +110,7 @@ const millRows = computed(() =>
   MILLS.map((mill) => ({
     ...mill,
     unlock: unlockOf(mill.type),
+    requiredSoil: catalogue.byType[mill.type]?.[0]?.requiredSoil ?? null,
     cells: MILL_LEVELS.map((level) => ({ level, ...millBoostAt(level) })),
   })),
 );
@@ -241,7 +242,10 @@ const tocLinks = computed(() =>
               <td>
                 <template v-for="(target, i) in row.boosts" :key="target"><template v-if="i > 0">, </template><BuildingLink :type="target" /></template>
               </td>
-              <td>{{ $t(`docs.production.mills.stands.${row.stands}`) }}</td>
+              <td>
+                {{ $t(`docs.production.mills.stands.${row.stands}`) }}
+                <span v-if="row.requiredSoil" class="line muted">{{ $t(`docs.production.mills.onlySoil.${row.requiredSoil}`) }}</span>
+              </td>
               <td class="unlock">
                 <BuildingLink type="longhouse" /> {{ row.unlock.longhouse }}
                 <DocsNeeds :needs="row.unlock.needs" bullet />
