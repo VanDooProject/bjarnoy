@@ -105,7 +105,7 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     await expect(reloaded.hud.toggle).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test("a marker never takes the pointer, yet a click on it opens its own building's ring, while the tile tooltip stays away", async ({ page }) => {
+  test("a marker never takes the pointer, yet hovering or clicking it means its own building's hex, while the tile tooltip stays away", async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
     const { hud } = settlement;
@@ -124,11 +124,17 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     // The marker is hovered (it grows): the tile tooltip does not show while it is.
     await expect(hud.marker(hex)).toHaveAttribute('style', /scale\((1\.9|2\.)/);
     await expect(settlement.tooltip).toHaveCount(0);
+    // The map's hovered hex (its outline) is the longhouse's, not the one under the dial.
+    const hovered = () => page.evaluate(() => window.__settlementRenderer().hoveredHexKey);
+    await expect.poll(hovered).toBe(`${hex.q},${hex.r}`);
 
-    // A click on the box, drawn over the hexes right of the longhouse, still opens the longhouse's own ring.
+    // The box is drawn over the hexes right of the longhouse: hovering it is the longhouse's hex, and a click opens its ring.
     const box = await hud.box(hex).boundingBox();
     expect(box).not.toBeNull();
-    await page.mouse.click(box!.x + box!.width * 0.75, box!.y + box!.height / 2);
+    const onBox = { x: box!.x + box!.width * 0.75, y: box!.y + box!.height / 2 };
+    await page.mouse.move(onBox.x, onBox.y, { steps: 4 });
+    await expect.poll(hovered).toBe(`${hex.q},${hex.r}`);
+    await page.mouse.click(onBox.x, onBox.y);
     await settlement.ring.waitForOpen();
     await expect(settlement.ring.backdrop).toHaveCount(1);
     await expect(page.locator('.hub-sub')).toContainText(`${hex.q}, ${hex.r}`);
