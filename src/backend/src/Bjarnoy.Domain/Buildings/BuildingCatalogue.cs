@@ -318,7 +318,7 @@ public static class BuildingCatalogue
             [BuildingType.SiegeWorkshop] = [new(BuildingType.ArcheryRange, 3)],
             [BuildingType.CartWorkshop] = [new(BuildingType.TownSquare, 3)],
             [BuildingType.BogOreWorks] = [new(BuildingType.ClayBrickworks, 3)],
-            [BuildingType.Meadery] = [new(BuildingType.Farm, 5)],
+            [BuildingType.Meadery] = [new(BuildingType.Farm, 5, SoilType.Wheat), new(BuildingType.PumpkinFarm, 5, SoilType.Pumpkin)],
             [BuildingType.DruidHut] = [new(BuildingType.TownSquare, 5)],
             [BuildingType.Smithy] = [new(BuildingType.Barracks, 10)],
             [BuildingType.GreatStorehouse] = [new(BuildingType.StorageHouse, 25)],
@@ -326,13 +326,24 @@ public static class BuildingCatalogue
             [BuildingType.CropMill] = [new(BuildingType.Farm, 10)],
             [BuildingType.Hammerschmiede] = [new(BuildingType.BogOreWorks, 10)],
             [BuildingType.ShrineOfUllr] = [new(BuildingType.Sawmill, 5)],
-            [BuildingType.ShrineOfFreyja] = [new(BuildingType.CropMill, 5)],
+            [BuildingType.ShrineOfFreyja] = [new(BuildingType.CropMill, 5, SoilType.Wheat), new(BuildingType.PumpkinFarm, 15, SoilType.Pumpkin)],
             [BuildingType.ShrineOfNjord] = [new(BuildingType.Harbour, 10)],
             [BuildingType.ShrineOfThor] = [new(BuildingType.Smithy, 5)],
             // A settlement holds only one shrine, so Odin cannot ask for
             // another one as a feeder; the Druid Hut is the civic line's end.
             [BuildingType.OdinStatue] = [new(BuildingType.DruidHut, 10)],
         };
+
+    /// <summary>
+    /// The island soil a building can be newly placed on (<see cref="BuildingDefinition.RequiredSoil"/>), or
+    /// <see langword="null"/> for any island. The Crop Mill grinds wheat, so it follows Farm.
+    /// </summary>
+    private static SoilType? RequiredSoilFor(BuildingType type) => type switch
+    {
+        BuildingType.Farm or BuildingType.CropMill => SoilType.Wheat,
+        BuildingType.PumpkinFarm => SoilType.Pumpkin,
+        _ => null,
+    };
 
     /// <summary>
     /// The prerequisites attached to one level's definition. Prerequisites gate
@@ -465,6 +476,7 @@ public static class BuildingCatalogue
         {
             Cost = NiceRound(definition.Cost),
             Prerequisites = PrerequisitesFor(type, level),
+            RequiredSoil = RequiredSoilFor(type),
             RequiredLonghouseLevel = RequiredLonghouseLevelFor(type, level),
             RingCategory = ring.Category,
             RingOrder = ring.Order,

@@ -1167,10 +1167,9 @@ public sealed class SettlementService(
                 .ConfigureAwait(false)
             : null;
 
-        // Likewise, only Farm and PumpkinFarm care which crop this island grows.
-        var islandSoil = type is BuildingType.Farm or BuildingType.PumpkinFarm
-            ? await IslandSoilAsync(booking.IslandId, sampler, cancellationToken).ConfigureAwait(false)
-            : null;
+        // Which crop this island grows: Farm, PumpkinFarm and Crop Mill are soil-bound, and the Meadery and the Shrine of
+        // Freyja ask for a different feeder per soil, so every build order needs it.
+        var islandSoil = await IslandSoilAsync(booking.IslandId, sampler, cancellationToken).ConfigureAwait(false);
 
         var buildGiants = await session.GiantsAsync(cancellationToken).ConfigureAwait(false);
         var decision = booked.PlanBuild(
@@ -1751,7 +1750,7 @@ public sealed class SettlementService(
     /// (<see cref="TerrainSampler.SoilAt"/>, from its stored centre) — or
     /// <see langword="null"/> if the island row is somehow missing, in which
     /// case <see cref="Settlement.PlanBuild"/> just skips the soil check
-    /// rather than refusing every Farm/PumpkinFarm build outright.
+    /// rather than refusing every soil-bound build outright.
     /// </summary>
     private async Task<SoilType?> IslandSoilAsync(Guid islandId, TerrainSampler sampler, CancellationToken cancellationToken)
     {

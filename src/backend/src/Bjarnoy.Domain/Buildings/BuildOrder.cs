@@ -155,8 +155,9 @@ public enum BuildRejection
     SettlementAlreadyHasShrine,
 
     /// <summary>
-    /// A farm was ordered for the wrong crop of its island (<see cref="World.SoilType"/>):
-    /// a Farm on a Pumpkin-soil island or a PumpkinFarm on a Wheat-soil one. See
+    /// A building was ordered on an island whose soil (<see cref="World.SoilType"/>) it does not suit
+    /// (<see cref="BuildingDefinition.RequiredSoil"/>): a Farm or Crop Mill on a Pumpkin-soil island or a PumpkinFarm on a
+    /// Wheat-soil one. See
     /// <see cref="Settlement.PlanBuild"/>'s islandSoil parameter.
     /// </summary>
     WrongCropForIslandSoil,
