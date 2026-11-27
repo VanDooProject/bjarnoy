@@ -9,20 +9,11 @@ import { SettlementPage } from './pages';
  * wiring from the open ring to the markers: a dial's opacity in the DOM, the badge through the renderer's `markerVisibility()`.
  */
 test.describe('markers beneath the ring menu', { tag: '@g2' }, () => {
-  interface Visibility {
-    badges: Record<string, number>;
-  }
-  interface W {
-    __demoWorld: () => {
-      model: any;
-      selectedSettlementId: string;
-      hud: { queueFetchedAt: number; queue: unknown[]; construction: unknown; tick: number };
-      syncHud: () => void;
-    };
-    __settlementRenderer: () => {
-      markerVisibility: () => Visibility;
-      hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number };
-    };
+  interface DemoWorld {
+    model: any;
+    selectedSettlementId: string;
+    hud: { queueFetchedAt: number; queue: unknown[]; construction: unknown; tick: number };
+    syncHud: () => void;
   }
 
   test('dials and the badge under the ring hide, a far dial stays, and all return on close', async ({ page }) => {
@@ -32,10 +23,9 @@ test.describe('markers beneath the ring menu', { tag: '@g2' }, () => {
 
     // Queue a build on the longhouse's neighbour (under the ring) and one well clear of it.
     const { near, far, settlementId } = await page.evaluate(() => {
-      const w = window as unknown as W;
-      const world = w.__demoWorld();
+      const world = window.__demoWorld() as DemoWorld;
       const s = world.model.getSettlement(world.selectedSettlementId);
-      const renderer = w.__settlementRenderer();
+      const renderer = window.__settlementRenderer();
       const origin = renderer.hexCenterScreen({ q: s.q, r: s.r });
       // The realm is smaller than the ring, so the far dial sits just outside it, on the first hex 200+ px away.
       // Both are new builds: a dial-only marker each (a hex with a building standing shows its order on the building's marker).
@@ -72,7 +62,7 @@ test.describe('markers beneath the ring menu', { tag: '@g2' }, () => {
     });
     const { hud } = settlement;
     const badgeAlpha = async () => {
-      const badges = await page.evaluate(() => (window as unknown as W).__settlementRenderer().markerVisibility().badges);
+      const badges = await page.evaluate(() => window.__settlementRenderer().markerVisibility().badges);
       // Absent from the map = fully visible.
       return badges[settlementId] ?? 1;
     };

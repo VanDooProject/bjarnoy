@@ -121,10 +121,7 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         yield return ["/api/v1/settlements/{0}/trade-offers/board"];
         yield return ["/api/v1/settlements/{0}/trade-offers/mine"];
         yield return ["/api/v1/settlements/{0}/shipments"];
-        yield return ["/api/v1/settlements/{0}/trade-reports"];
         yield return ["/api/v1/settlements/{0}/armies"];
-        yield return ["/api/v1/settlements/{0}/reports"];
-        yield return ["/api/v1/settlements/{0}/field-reports"];
     }
 
     [Theory]
@@ -232,7 +229,7 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
             var guestHome = await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == guestHomeSettlementId, Ct);
             army.HomeSpotQ = guestHome.CentreQ;
             army.HomeSpotR = guestHome.CentreR;
-            db.Armies.Add(army);
+            db.AddArmyRows(army);
             await db.SaveChangesAsync(Ct);
             return army.Id;
         });
@@ -316,7 +313,7 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         };
         return await WithDbAsync(async db =>
         {
-            db.Armies.Add(army);
+            db.AddArmyRows(army);
             await db.SaveChangesAsync(Ct);
             return army.Id;
         });
@@ -365,6 +362,7 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         };
         return await WithDbAsync(async db =>
         {
+            await OwnReportAsync(db, report, attackerSettlementId, defenderSettlementId);
             db.BattleReports.Add(report);
             await db.SaveChangesAsync(Ct);
             return report.Id;
@@ -389,10 +387,21 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         };
         return await WithDbAsync(async db =>
         {
+            var a = await db.Settlements.SingleAsync(s => s.Id == sideASettlementId, Ct);
+            var b = await db.Settlements.SingleAsync(s => s.Id == sideBSettlementId, Ct);
+            (report.WorldId, report.SideAOwnerId, report.SideBOwnerId) = (a.WorldId, a.OwnerId, b.OwnerId);
             db.FieldBattleReports.Add(report);
             await db.SaveChangesAsync(Ct);
             return report.Id;
         });
+    }
+
+    /// <summary>Hangs a planted battle report on the players of the two settlements, the way the battle writer does.</summary>
+    private static async Task OwnReportAsync(GameDbContext db, BattleReportEntity report, Guid attackerSettlementId, Guid defenderSettlementId)
+    {
+        var attacker = await db.Settlements.SingleAsync(s => s.Id == attackerSettlementId, Ct);
+        var defender = await db.Settlements.SingleAsync(s => s.Id == defenderSettlementId, Ct);
+        (report.WorldId, report.AttackerOwnerId, report.DefenderOwnerId) = (attacker.WorldId, attacker.OwnerId, defender.OwnerId);
     }
 
     [Theory]
@@ -435,16 +444,18 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
             Winner = BattleWinner.Attacker,
             Seed = 3,
             ShipFight = new BattleReportShipFight(
-                [new BattleReportAttackerLine(UnitType.FireShip, 30, 4, 26)],
-                [new BattleReportDefenderLine(UnitType.Longship, 2, 0)],
+                [new BattleReportAttackerLine(UnitType.FireHulk, 30, 4, 26)],
+                [new BattleReportDefenderLine(UnitType.Snekkja, 2, 0)],
                 120, 80, BattleWinner.Attacker),
             Drowned = [new UnitStack(UnitType.Spearman, 20)],
             FireShipsBurned = 20,
-            FireSiege = new BattleReportSiegeLine(new HexCoord(5, 0), BuildingType.Dockyard, 3, 1, false),
+            FireSiege = new BattleReportSiegeLine(new HexCoord(5, 0), BuildingType.Harbour, 3, 1, false),
         };
         await WithDbAsync(async db =>
         {
-            db.BattleReports.Add(BattleReportEntity.FromDomain(report));
+            var entity = BattleReportEntity.FromDomain(report);
+            await OwnReportAsync(db, entity, mineId, rivalId);
+            db.BattleReports.Add(entity);
             await db.SaveChangesAsync(Ct);
             return 0;
         });
@@ -452,13 +463,13 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         SetOwner(client, mineOwnerId);
         var response = await client.GetFromJsonAsync<BattleReportResponse>($"/api/v1/reports/{report.Id}", SqliteApiFixture.StrictJson, Ct);
 
-        Assert.Equal("fireship", response!.ShipFight!.AttackerLines.Single().Unit);
+        Assert.Equal("firehulk", response!.ShipFight!.AttackerLines.Single().Unit);
         Assert.Equal((120d, 80d, "attacker"), (response.ShipFight.AttackPower, response.ShipFight.DefensePower, response.ShipFight.Winner));
-        Assert.Equal("longship", response.ShipFight.DefenderLines.Single().Unit);
+        Assert.Equal("snekkja", response.ShipFight.DefenderLines.Single().Unit);
         Assert.Equal("spearman", response.AttackerLines.Single().Unit);
         Assert.Equal(new ArmyUnitStackResponse("spearman", 20), response.Drowned.Single());
         Assert.Equal(20, response.FireShipsBurned);
-        Assert.Equal("dockyard", response.FireSiege!.TargetType);
+        Assert.Equal("harbour", response.FireSiege!.TargetType);
         Assert.Equal((3, 1), (response.FireSiege.LevelBefore, response.FireSiege.LevelAfter));
         Assert.Null(response.Siege);
     }
@@ -507,6 +518,101 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         var response = await client.GetAsync($"/api/v1/field-reports/{reportId}", Ct);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    // ------------------------------------------------------- per-player report lists
+
+    public static IEnumerable<object[]> PlayerReportLists()
+    {
+        yield return ["/api/v1/worlds/{0}/reports"];
+        yield return ["/api/v1/worlds/{0}/field-reports"];
+        yield return ["/api/v1/worlds/{0}/camp-reports"];
+        yield return ["/api/v1/worlds/{0}/trade-reports"];
+    }
+
+    [Theory]
+    [MemberData(nameof(PlayerReportLists))]
+    public async Task A_player_report_list_needs_the_owner_header(string routeTemplate)
+    {
+        using var client = Client();
+        var (worldId, _, _, _, _) = await TwoSettlementsAsync();
+
+        var response = await client.GetAsync(string.Format(routeTemplate, worldId), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Theory]
+    [MemberData(nameof(PlayerReportLists))]
+    public async Task A_player_report_list_is_accepted_for_the_owner(string routeTemplate)
+    {
+        using var client = Client();
+        var (worldId, _, mineOwnerId, _, _) = await TwoSettlementsAsync();
+
+        SetOwner(client, mineOwnerId);
+        var response = await client.GetAsync(string.Format(routeTemplate, worldId), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task The_battle_report_list_holds_the_players_reports_from_both_roles_and_nobody_elses()
+    {
+        using var client = Client();
+        var (worldId, mineId, mineOwnerId, rivalId, rivalOwnerId) = await TwoSettlementsAsync();
+        var asAttacker = await PlantBattleReportAsync(mineId, rivalId);
+        var asDefender = await PlantBattleReportAsync(rivalId, mineId);
+
+        SetOwner(client, mineOwnerId);
+        var mine = await client.GetFromJsonAsync<List<BattleReportResponse>>($"/api/v1/worlds/{worldId}/reports", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(new[] { asAttacker, asDefender }.Order(), mine!.Select(r => r.Id).Order());
+
+        SetOwner(client, Unique("stranger"));
+        var stranger = await client.GetFromJsonAsync<List<BattleReportResponse>>($"/api/v1/worlds/{worldId}/reports", SqliteApiFixture.StrictJson, Ct);
+        Assert.Empty(stranger!);
+
+        SetOwner(client, rivalOwnerId);
+        var rival = await client.GetFromJsonAsync<List<BattleReportResponse>>($"/api/v1/worlds/{worldId}/reports", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(2, rival!.Count);
+    }
+
+    [Fact]
+    public async Task A_players_report_list_covers_all_their_settlements_and_survives_deleting_one()
+    {
+        using var client = Client();
+        var (worldId, mineId, mineOwnerId, rivalId, rivalOwnerId) = await TwoSettlementsAsync();
+        var secondId = await WithDbAsync(async db =>
+        {
+            var islandId = (await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == mineId, Ct)).IslandId;
+            var second = MakeSettlement(worldId, islandId, mineOwnerId, 20, 0);
+            db.Settlements.Add(second);
+            await db.SaveChangesAsync(Ct);
+            return second.Id;
+        });
+        var fromFirst = await PlantBattleReportAsync(mineId, rivalId);
+        var fromSecond = await PlantBattleReportAsync(rivalId, secondId);
+
+        SetOwner(client, mineOwnerId);
+        var before = await client.GetFromJsonAsync<List<BattleReportResponse>>($"/api/v1/worlds/{worldId}/reports", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(new[] { fromFirst, fromSecond }.Order(), before!.Select(r => r.Id).Order());
+        Assert.Equal("attacker", before!.Single(r => r.Id == fromFirst).ViewerSide);
+        Assert.Equal("defender", before!.Single(r => r.Id == fromSecond).ViewerSide);
+
+        // Deleting a settlement keeps the reports that mention it.
+        await WithDbAsync(async db =>
+        {
+            await db.Settlements.Where(s => s.Id == secondId).ExecuteDeleteAsync(Ct);
+            return 0;
+        });
+        var after = await client.GetFromJsonAsync<List<BattleReportResponse>>($"/api/v1/worlds/{worldId}/reports", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(2, after!.Count);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/v1/reports/{fromSecond}", Ct)).StatusCode);
+
+        // The rival sees its own two reports, and a stranger none.
+        SetOwner(client, rivalOwnerId);
+        Assert.Equal(2, (await client.GetFromJsonAsync<List<BattleReportResponse>>($"/api/v1/worlds/{worldId}/reports", SqliteApiFixture.StrictJson, Ct))!.Count);
+        SetOwner(client, Unique("stranger"));
+        Assert.Empty((await client.GetFromJsonAsync<List<BattleReportResponse>>($"/api/v1/worlds/{worldId}/reports", SqliteApiFixture.StrictJson, Ct))!);
     }
 
     // -------------------------------------------------------- settlements/mine

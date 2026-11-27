@@ -4,7 +4,6 @@
 // raises (BuildingCatalogue.RadiusBoostTargets) and the storage floor (BuildingCatalogue.BaseStorageCapacity).
 import {
   BOOST_TERRAIN,
-  additionalStorageHouseRequirement,
   buildingStatsFor,
   radiusBoostPercent,
   radiusBoostRange,
@@ -68,13 +67,4 @@ export function neighbourBoost(): { perNeighbour: number; max: number } {
     return m?.kind === 'terrainBoost' ? m.percent : 0;
   };
   return { perNeighbour: percentAt(1), max: percentAt(6) };
-}
-
-/** What the 2nd, 3rd, 4th and every later Storage house ask for: that many Storage houses at that level. */
-export function storageHouseSteps(): { nth: number; later: boolean; count: number; level: number }[] {
-  return [1, 2, 3, 4].map((existing) => ({
-    nth: existing + 1,
-    later: existing === 4,
-    ...additionalStorageHouseRequirement(existing),
-  }));
 }

@@ -212,14 +212,14 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, grantResponse.StatusCode);
 
         // Settler trains at a Cart Workshop (see
-        // UnitCatalogue.RequiredBuildingType) — grant one before
+        // UnitCatalogue.RequiredBuildingType) at level 10 (the Camp Builder's level) — grant one before
         // TrainFiveSettlersAsync below.
         var layout = await client.GetFromJsonAsync<AdminSettlementLayoutResponse>(
             $"/api/v1/admin/settlements/{settlement.Id}/layout", SqliteApiFixture.StrictJson, Ct);
         var grassHex = layout!.Hexes.First(h => !h.IsCentre && h.Building is null && h.Terrain == "grass");
         await client.PutJsonAsync(
             $"/api/v1/admin/settlements/{settlement.Id}/buildings/{grassHex.Q}/{grassHex.R}",
-            new PlaceBuildingRequest("cartworkshop", 1), Ct);
+            new PlaceBuildingRequest("cartworkshop", 10), Ct);
 
         Authorize(client, player.AccessToken);
 
@@ -369,7 +369,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
 
         Assert.Equal(1, renown!.SettlementCount);
-        Assert.Equal(55_000, renown.RequiredForNextSettlement);
+        Assert.Equal(80_000, renown.RequiredForNextSettlement);
         Assert.False(renown.CanFoundAnother);
     }
 
@@ -405,7 +405,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
 
         Assert.Equal(1, renown!.SettlementCount);
-        Assert.Equal(55_000, renown.RequiredForNextSettlement);
+        Assert.Equal(RenownThresholds.RequiredFor(2), renown.RequiredForNextSettlement);
 
         // The settlement list says which row is the camp: the flag, not the missing Longhouse level, tells.
         var mine = await client.GetFromJsonAsync<List<SettlementSummary>>(
@@ -423,7 +423,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         Authorize(client, player.AccessToken);
 
         // Longhouse level 10 + a Cart Workshop => 11 renown/hour; 100 hours is
-        // about a thousand renown, nowhere near the 55 000 the 2nd settlement needs.
+        // about a thousand renown, nowhere near the 80 000 the 2nd settlement needs.
         _factory.Time.Advance(TimeSpan.FromHours(100));
         await RefreshAsync(client, player.RefreshToken);
 
@@ -431,12 +431,14 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
 
         Assert.True(renown!.Total >= 500);
-        Assert.True(renown.Total < 55_000);
+        Assert.True(renown.Total < 80_000);
         Assert.False(renown.CanFoundAnother);
     }
 
-    [Fact]
-    public async Task Renown_hourly_rate_and_accrual_scale_with_the_world_speed_factor()
+    [Theory]
+    [InlineData(true, 5.0)]
+    [InlineData(false, 1.0)]
+    public async Task Renown_hourly_rate_follows_the_world_speed_only_when_the_world_flag_is_on(bool followsSpeed, double expectedFactor)
     {
         using var client = Client();
         var (worldId, settlement, player, _) = await SetUpPlayerReadyToExpandAsync(client);
@@ -448,14 +450,31 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
 
         Authorize(client, adminToken);
         var patched = await client.PatchJsonAsync(
-            $"/api/v1/admin/worlds/{worldId}/settings", new UpdateWorldSettingsRequest { SpeedFactor = 5.0 }, Ct);
+            $"/api/v1/admin/worlds/{worldId}/settings",
+            new UpdateWorldSettingsRequest { SpeedFactor = 5.0, RenownFollowsSpeed = followsSpeed },
+            Ct);
         Assert.Equal(HttpStatusCode.OK, patched.StatusCode);
+        Assert.Equal(followsSpeed, (await patched.ReadStrictAsync<AdminWorldResponse>(Ct)).RenownFollowsSpeed);
 
         Authorize(client, player.AccessToken);
         var renown = await client.GetFromJsonAsync<RenownResponse>(
             $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
 
-        Assert.Equal(levels * RenownAccount.PointsPerLevelPerHour * 5.0, renown!.PerHour);
+        Assert.Equal(levels * RenownAccount.PointsPerLevelPerHour * expectedFactor, renown!.PerHour);
+    }
+
+    [Fact]
+    public async Task A_new_world_does_not_let_renown_follow_the_world_speed()
+    {
+        using var client = Client();
+        var (worldId, _, _, _) = await SetUpPlayerReadyToExpandAsync(client);
+        var adminToken = await CreateAdminTokenAsync(client);
+
+        Authorize(client, adminToken);
+        var worlds = await client.GetFromJsonAsync<List<AdminWorldResponse>>(
+            "/api/v1/admin/worlds", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.False(worlds!.Single(w => w.Id == worldId).RenownFollowsSpeed);
     }
 
     [Fact]
@@ -642,7 +661,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         var afterTraining = await TrainFiveSettlersAsync(client, settlement.Id, player.RefreshToken);
 
         // Clear the renown threshold for a 2nd settlement (feasts and buildings
-        // are covered on their own above; 55 000 renown is weeks of play).
+        // are covered on their own above; 80 000 renown is weeks of play).
         await GrantRenownAsync(player.User.Id, RenownThresholds.RequiredFor(2));
         _factory.Time.Advance(TimeSpan.FromHours(100));
         var afterRenownWait = await RefreshAsync(client, afterTraining.RefreshToken);

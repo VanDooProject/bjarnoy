@@ -60,6 +60,15 @@ public class UserEntity
     /// </summary>
     public bool IsPremium { get; set; }
 
+    /// <summary>
+    /// Time-limited premium (e.g. the register quest's 14 days): premium until this real-time instant.
+    /// <see cref="IsPremium"/> stays the permanent grant; use <see cref="IsPremiumAt"/> to check both.
+    /// </summary>
+    public DateTimeOffset? PremiumUntil { get; set; }
+
+    /// <summary>Whether the account is premium at <paramref name="now"/>: the permanent flag or an unexpired <see cref="PremiumUntil"/>.</summary>
+    public bool IsPremiumAt(DateTimeOffset now) => IsPremium || (PremiumUntil is { } until && until > now);
+
     public string? DisplayName { get; set; }
 
     /// <summary>

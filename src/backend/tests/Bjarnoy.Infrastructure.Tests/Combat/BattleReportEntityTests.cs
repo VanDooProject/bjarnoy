@@ -48,12 +48,12 @@ public sealed class BattleReportEntityTests : IDisposable
         Seed = 7,
         Siege = new BattleReportSiegeLine(new HexCoord(1, 2), BuildingType.Farm, 5, 1, false),
         ShipFight = new BattleReportShipFight(
-            [new BattleReportAttackerLine(UnitType.Longship, 2, 1, 1), new BattleReportAttackerLine(UnitType.FireShip, 30, 4, 26)],
-            [new BattleReportDefenderLine(UnitType.Longship, 2, 0)],
+            [new BattleReportAttackerLine(UnitType.Snekkja, 2, 1, 1), new BattleReportAttackerLine(UnitType.FireHulk, 30, 4, 26)],
+            [new BattleReportDefenderLine(UnitType.Snekkja, 2, 0)],
             120, 80, BattleWinner.Attacker),
         Drowned = [new UnitStack(UnitType.Spearman, 20)],
         FireShipsBurned = 20,
-        FireSiege = new BattleReportSiegeLine(new HexCoord(5, 0), BuildingType.Dockyard, 3, 1, false),
+        FireSiege = new BattleReportSiegeLine(new HexCoord(5, 0), BuildingType.Harbour, 3, 1, false),
     };
 
     [Fact]

@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage, type HexCoord } from './pages';
+import { hexCenterScreen } from './support/renderer';
 import { palisadeTileFor } from '../src/lib/map/palisadeTiles';
 
 /**
@@ -30,7 +31,7 @@ test('a wall with a gate and a bend is placed from the ring menu and draws conne
 
   // Find the layout through the model: four free plain hexes in a row and the hex that turns 120 degrees off the last one.
   const layout = await page.evaluate((): Layout => {
-    const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } }).__demoWorld();
+    const world = window.__demoWorld() as { model: any; selectedSettlementId: string };
     const model = world.model;
     const settlement = model.getSettlement(world.selectedSettlementId);
     const radius = model.borderRadius(settlement);
@@ -60,14 +61,7 @@ test('a wall with a gate and a bend is placed from the ring menu and draws conne
     throw new Error('no free run of land with a bend found inside the realm - pick a different demo seed');
   });
 
-  const screenOf = (hex: HexCoord) =>
-    page.evaluate(
-      (at) =>
-        (window as unknown as { __settlementRenderer: () => { hexCenterScreen: (c: HexCoord) => { x: number; y: number } } })
-          .__settlementRenderer()
-          .hexCenterScreen(at),
-      hex,
-    );
+  const screenOf = (hex: HexCoord) => hexCenterScreen(page, hex);
   const openDefence = async (hex: HexCoord) => {
     await settlement.clickHex(await screenOf(hex));
     await settlement.ring.openBuildCategories();
@@ -86,7 +80,7 @@ test('a wall with a gate and a bend is placed from the ring menu and draws conne
   const piecesAt = (hexes: HexCoord[]) =>
     page.evaluate(
       (at) => {
-        const model = (window as unknown as { __demoWorld: () => { model: any } }).__demoWorld().model;
+        const model = (window.__demoWorld() as { model: any }).model;
         return at.map((hex) => ({
           type: model.getTile(hex.q, hex.r).buildingType as string | undefined,
           flags: model.wallNeighbourFlags(hex) as boolean[],
@@ -115,9 +109,9 @@ test('a wall with a gate and a bend is placed from the ring menu and draws conne
   // ring, then the run on round the bend.
   const placeInModel = (hex: HexCoord) =>
     page.evaluate((at) => {
-      const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } }).__demoWorld();
+      const world = window.__demoWorld() as { model: any; selectedSettlementId: string };
       const placed = world.model.placeBuilding(world.selectedSettlementId, at, 'palisade');
-      (window as unknown as { __settlementRenderer: () => { forceRebuild: () => void } }).__settlementRenderer().forceRebuild();
+      window.__settlementRenderer().forceRebuild();
       return placed as boolean;
     }, hex);
   expect(await placeInModel(a2)).toBe(true);
@@ -147,7 +141,7 @@ test('a wall with a gate and a bend is placed from the ring menu and draws conne
   // reason on a locked bubble, as the gate's lock above), and nothing is placed.
   const refused = await page.evaluate(
     ({ at, around }) => {
-      const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } }).__demoWorld();
+      const world = window.__demoWorld() as { model: any; selectedSettlementId: string };
       const taken = new Set(around.map((c: HexCoord) => `${c.q},${c.r}`));
       const dirs = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
       const side = dirs

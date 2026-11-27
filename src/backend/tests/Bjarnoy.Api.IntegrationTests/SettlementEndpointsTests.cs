@@ -405,10 +405,10 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             var domain = entity.ToDomain();
 
             var line = HexLine(centre, candidateCoord);
-            // Each tower stands inside the previous one's disc (the first within the founding longhouse's own radius of 2), so the
-            // whole chain is connected and claims (the chain rule).
+            // Each tower stands inside the previous one's disc (a level-5 tower claims 5 rings; the first stands within the founding
+            // longhouse's own radius of 2), so the whole chain is connected and claims (the chain rule).
             var towerCoords = Enumerable.Range(0, line.Length)
-                .Select(step => 2 + (step * 9))
+                .Select(step => 2 + (step * 4))
                 .TakeWhile(index => index < line.Length - 1)
                 .Select(index => line[index])
                 .ToList();
@@ -923,14 +923,17 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Empty(levelOne.Single(d => d.Type == "lumberjack").Prerequisites);
 
         Assert.Equal(
-            [new BuildingPrerequisiteResponse("fishinghut", 5)],
-            levelOne.Single(d => d.Type == "dockyard").Prerequisites);
+            [new BuildingPrerequisiteResponse("fishinghut", 3)],
+            levelOne.Single(d => d.Type == "harbour").Prerequisites);
+        Assert.Equal(
+            [new BuildingPrerequisiteResponse("harbour", 5)],
+            levelOne.Single(d => d.Type == "shipyard").Prerequisites);
         Assert.Empty(levelOne.Single(d => d.Type == "storagehouse").Prerequisites);
         Assert.Equal(
             [new BuildingPrerequisiteResponse("smithy", 5)],
             levelOne.Single(d => d.Type == "shrineofthor").Prerequisites);
         Assert.Equal(
-            [new BuildingPrerequisiteResponse("storagehouse", 15)],
+            [new BuildingPrerequisiteResponse("storagehouse", 25)],
             levelOne.Single(d => d.Type == "greatstorehouse").Prerequisites);
 
         // Prerequisites gate placement, so they sit on level 1 only — the
@@ -939,7 +942,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             "/api/v1/buildings?level=2", SqliteApiFixture.StrictJson, Ct);
 
         Assert.NotNull(levelTwo);
-        Assert.Empty(levelTwo.Single(d => d.Type == "dockyard").Prerequisites);
+        Assert.Empty(levelTwo.Single(d => d.Type == "harbour").Prerequisites);
         Assert.Empty(levelTwo.Single(d => d.Type == "greatstorehouse").Prerequisites);
     }
 

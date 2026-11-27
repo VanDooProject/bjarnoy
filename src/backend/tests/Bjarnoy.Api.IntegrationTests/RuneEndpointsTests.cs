@@ -102,6 +102,17 @@ public sealed class RuneEndpointsTests : IAsyncLifetime
             new PlaceBuildingRequest("smithy", 5), Ct);
         Assert.Equal(HttpStatusCode.OK, placedSmithy.StatusCode);
 
+        // A shrine costs more than a fresh settlement can hold: stand a level-10 Great Storehouse and fill the stock.
+        var storeHex = layout.Hexes.Where(h => !h.IsCentre && h.Building is null && h.Terrain == "grass").Skip(1).First();
+        var placedStore = await client.PutJsonAsync(
+            $"/api/v1/admin/settlements/{founded.Id}/buildings/{storeHex.Q}/{storeHex.R}",
+            new PlaceBuildingRequest("greatstorehouse", 10), Ct);
+        Assert.Equal(HttpStatusCode.OK, placedStore.StatusCode);
+        var funded = await client.PostJsonAsync(
+            $"/api/v1/admin/settlements/{founded.Id}/resources",
+            new GrantResourcesRequest(Wood: 1_000_000, Stone: 1_000_000, Food: 1_000_000, Iron: 0), Ct);
+        Assert.Equal(HttpStatusCode.OK, funded.StatusCode);
+
         var leveled = await client.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{founded.Id}", SqliteApiFixture.StrictJson, Ct);
 

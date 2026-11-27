@@ -59,9 +59,20 @@ public class ArmyGatheringTests
         HexCoord destination,
         Func<HexCoord, Terrain> terrain,
         params (HexCoord Spot, UnitStack[] Units)[] groups) =>
+        Send(settlement, provisions, waypoints, destination, terrain, HexPathfinder.MaxExpandedNodes, false, groups);
+
+    private static GatheredDispatchDecision Send(
+        Settlement settlement,
+        double provisions,
+        IReadOnlyList<HexCoord> waypoints,
+        HexCoord destination,
+        Func<HexCoord, Terrain> terrain,
+        int routeSearchBudget,
+        bool isPremium,
+        params (HexCoord Spot, UnitStack[] Units)[] groups) =>
         Army.PlanGatheredDispatch(
             settlement, [.. groups.Select(g => (g.Spot, (IReadOnlyList<UnitStack>)g.Units))], provisions, waypoints, destination, T0,
-            Guid.CreateVersion7, terrain);
+            Guid.CreateVersion7, terrain, routeSearchBudget: routeSearchBudget, isPremium: isPremium);
 
     private static Bjarnoy.Domain.Movement.Movement MovementOf(Army army) => ((ArmyLocation.InTransit)army.Location).Movement;
 
@@ -89,6 +100,44 @@ public class ArmyGatheringTests
         Assert.Equal(tower, MovementOf(GroupAt(decision, Centre)).Path[^1]);
         Assert.Equal([tower], MovementOf(GroupAt(decision, tower)).Path);
         Assert.All(decision.Armies!, a => Assert.Equal(gathering.Id, a.GatheringId));
+    }
+
+    [Theory]
+    [InlineData(5, false, true)]
+    [InlineData(6, false, false)]
+    [InlineData(10, true, true)]
+    [InlineData(11, true, false)]
+    public void A_gathered_dispatch_takes_at_most_five_waypoints_or_ten_with_premium(int count, bool isPremium, bool accepted)
+    {
+        var tower = new HexCoord(3, 0);
+        var settlement = WithUnits(Found((tower, BuildingType.Tower)), (Centre, Spearmen(10)), (tower, Spearmen(10)));
+        List<HexCoord> waypoints = [.. Enumerable.Range(1, count).Select(i => new HexCoord(3 + i, 0))];
+
+        var decision = Send(
+            settlement, 200, waypoints, new HexCoord(count + 4, 0), Grass, HexPathfinder.MaxExpandedNodes, isPremium,
+            (Centre, Spearmen(10)), (tower, Spearmen(10)));
+
+        Assert.True(accepted == decision.Accepted, $"expected accepted={accepted}, got {decision.Rejection}");
+        if (!accepted)
+        {
+            Assert.Equal(DispatchRejection.TooManyWaypoints, decision.Rejection);
+        }
+    }
+
+    [Fact]
+    public void Every_route_search_of_a_gathered_dispatch_draws_from_one_budget()
+    {
+        var tower = new HexCoord(3, 0);
+        var target = new HexCoord(10, 0);
+        var settlement = WithUnits(Found((tower, BuildingType.Tower)), (Centre, Spearmen(10)), (tower, Spearmen(10)));
+        var longest = HexPathfinder.Search(Centre, target, Grass, isLandUnit: true).Expanded;
+
+        // Enough for the longest single search, not for all the searches the order makes together.
+        var decision = Send(
+            settlement, 100, [], target, Grass, longest, false, (Centre, Spearmen(10)), (tower, Spearmen(10)));
+
+        Assert.Equal(DispatchRejection.RouteTooLong, decision.Rejection);
+        Assert.True(Send(settlement, 100, [], target, Grass, (Centre, Spearmen(10)), (tower, Spearmen(10))).Accepted);
     }
 
     [Fact]
@@ -205,7 +254,7 @@ public class ArmyGatheringTests
     {
         var dock = new HexCoord(3, 0);
         UnitStack[] ships = [new UnitStack(UnitType.Karve, 1)];
-        var settlement = WithUnits(Found((dock, BuildingType.Dockyard)), (Centre, Spearmen(8)), (dock, ships));
+        var settlement = WithUnits(Found((dock, BuildingType.Harbour)), (Centre, Spearmen(8)), (dock, ships));
         var decision = Send(settlement, 100, [], new HexCoord(6, 0), Strait, (Centre, Spearmen(8)), (dock, ships));
         var group = GroupAt(decision, Centre);
         var crowded = group with { Stacks = [new UnitStack(UnitType.Spearman, 15)] };
@@ -357,7 +406,7 @@ public class ArmyGatheringTests
     {
         var dock = new HexCoord(3, 0);
         UnitStack[] ships = [new UnitStack(UnitType.Karve, 1)];
-        var settlement = WithUnits(Found((dock, BuildingType.Dockyard)), (Centre, Spearmen(5)), (dock, ships));
+        var settlement = WithUnits(Found((dock, BuildingType.Harbour)), (Centre, Spearmen(5)), (dock, ships));
 
         var decision = Send(settlement, 100, [], new HexCoord(6, 0), Strait, (Centre, Spearmen(5)), (dock, ships));
 
@@ -381,7 +430,7 @@ public class ArmyGatheringTests
         var far = new HexCoord(3, 12);
         UnitStack[] ships = [new UnitStack(UnitType.Karve, 2)];
         var settlement = WithUnits(
-            Found((near, BuildingType.Dockyard), (far, BuildingType.Dockyard)), (Centre, Spearmen(5)), (near, ships), (far, ships));
+            Found((near, BuildingType.Harbour), (far, BuildingType.Harbour)), (Centre, Spearmen(5)), (near, ships), (far, ships));
 
         var decision = Send(settlement, 200, [], new HexCoord(7, 6), Strait, (Centre, Spearmen(5)), (near, ships), (far, ships));
 
@@ -406,7 +455,7 @@ public class ArmyGatheringTests
         var near = new HexCoord(3, 0);
         var far = new HexCoord(3, 12);
         var settlement = WithUnits(
-            Found((near, BuildingType.Dockyard), (far, BuildingType.Dockyard)),
+            Found((near, BuildingType.Harbour), (far, BuildingType.Harbour)),
             (Centre, Spearmen(12)), (near, [new UnitStack(UnitType.Karve, 1)]), (far, [new UnitStack(UnitType.Karve, 2)]));
 
         var decision = Send(
@@ -424,7 +473,7 @@ public class ArmyGatheringTests
         var far = new HexCoord(3, 12);
         UnitStack[] ships = [new UnitStack(UnitType.Karve, 1)];
         var settlement = WithUnits(
-            Found((near, BuildingType.Dockyard), (far, BuildingType.Dockyard)), (Centre, Spearmen(15)), (near, ships), (far, ships));
+            Found((near, BuildingType.Harbour), (far, BuildingType.Harbour)), (Centre, Spearmen(15)), (near, ships), (far, ships));
 
         var decision = Send(settlement, 200, [], new HexCoord(7, 6), Strait, (Centre, Spearmen(15)), (near, ships), (far, ships));
 

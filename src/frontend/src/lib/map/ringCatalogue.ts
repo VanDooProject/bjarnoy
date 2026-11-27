@@ -6,7 +6,7 @@
 import type { ResourceLine } from '../../api/types';
 import { resourceName } from '../../i18n/catalogueNames';
 import { i18n } from '../../i18n';
-import { additionalStorageHouseRequirement } from './buildingEconomy';
+import { GREAT_STOREHOUSE_STORAGE_HOUSE_LEVEL, greatStorehouseStorageHousesNeeded } from './buildingEconomy';
 import { campHexBuildable, NEVER_BUILDABLE_CAMP_FAMILY } from './campRules';
 import { allPlacementRules, placementRuleFor } from './placementRules';
 import type { BogTileKind } from './types';
@@ -74,17 +74,15 @@ export function shrineLimitLock(shrinesHeld: number): string | undefined {
 }
 
 /**
- * The reason an *additional* storage house can't be placed: with `n` held
- * (standing or queued) it needs `min(n, 4)` of them at level
- * `min(10 + 5·(n − 1), 25)` — mirrors `Settlement.PlanBuild`'s
- * `BuildRejection.StorageHouseTooLow`. `standingLevels` are the levels of the
- * standing houses. The first storage house is never locked by this.
+ * The reason a *new* Great Storehouse can't be placed: the n-th one needs n Storage Houses at level 25, so with `n - 1` held
+ * (standing or queued) it needs `n` of them maxed — mirrors `Settlement.PlanBuild`'s
+ * `BuildRejection.GreatStorehouseNeedsStorageHouses`. `storageHouseLevels` are the levels of the standing Storage Houses.
  */
-export function storageHouseLock(storageHousesHeld: number, standingLevels: readonly number[]): string | undefined {
-  if (storageHousesHeld < 1) return undefined;
-  const { count, level } = additionalStorageHouseRequirement(storageHousesHeld);
-  if (standingLevels.filter((l) => l >= level).length >= count) return undefined;
-  return i18n.global.t('hud.ringMenu.storageHouseLock', { count, level }, count) as string;
+export function greatStorehouseLock(greatStorehousesHeld: number, storageHouseLevels: readonly number[]): string | undefined {
+  const count = greatStorehouseStorageHousesNeeded(greatStorehousesHeld);
+  const maxed = storageHouseLevels.filter((l) => l >= GREAT_STOREHOUSE_STORAGE_HOUSE_LEVEL).length;
+  if (maxed >= count) return undefined;
+  return i18n.global.t('hud.ringMenu.greatStorehouseLock', { count, level: GREAT_STOREHOUSE_STORAGE_HOUSE_LEVEL }, count) as string;
 }
 
 /**

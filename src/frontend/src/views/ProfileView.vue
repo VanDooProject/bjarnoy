@@ -7,6 +7,7 @@ import type { ProfileResponse } from '../api/types';
 import type { MessageSchema } from '../i18n/schema';
 import { useAuthStore } from '../stores/auth';
 import { useUnsavedInput } from '../composables/useUnsavedInput';
+import { usePhoneLayer, vPhoneHidden } from '../composables/usePhoneLayer';
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -89,6 +90,7 @@ async function saveBio() {
 // --- Reporting ---
 
 const reportOpen = ref(false);
+const reportLayer = usePhoneLayer(reportOpen);
 const reportReason = ref('');
 const reportNote = ref('');
 useUnsavedInput(
@@ -213,42 +215,45 @@ function joinedDate(iso: string): string {
         <p v-else class="muted">{{ $t('profile.bio.empty') }}</p>
       </section>
 
-      <div v-if="reportOpen" class="report-backdrop" @click.self="reportOpen = false">
-        <div
-          ref="reportDialogEl"
-          class="report-dialog"
-          role="dialog"
-          tabindex="-1"
-          :aria-label="$t('profile.reportDialog.ariaLabel')"
-          @keydown.esc.stop="reportOpen = false"
-        >
-          <h2>{{ $t('profile.reportDialog.title', { userName: profile.userName }) }}</h2>
-          <p class="muted">{{ $t('profile.reportDialog.hint') }}</p>
-          <label>
-            {{ $t('profile.reportDialog.reason') }}
-            <input
-              v-model="reportReason"
-              type="text"
-              maxlength="200"
-              :placeholder="$t('profile.reportDialog.reasonPlaceholder')"
-              @keyup.enter="sendReport"
-            />
-          </label>
-          <label>
-            {{ $t('profile.reportDialog.note') }}
-            <textarea v-model="reportNote" rows="3" maxlength="2000"></textarea>
-          </label>
-          <p v-if="reportError" class="error">{{ reportError }}</p>
-          <div class="row">
-            <button :disabled="reportSending" @click="sendReport">
-              {{ $t('profile.reportDialog.send') }}
-            </button>
-            <button class="secondary" :disabled="reportSending" @click="reportOpen = false">
-              {{ $t('common.buttons.cancel') }}
-            </button>
+      <!-- Teleported so it is a sibling of the route modal: the modal hides (inert) while this layer is open on a phone. -->
+      <Teleport to="body">
+        <div v-if="reportOpen" v-phone-hidden="reportLayer.hidden.value" class="report-backdrop" @click.self="reportOpen = false">
+          <div
+            ref="reportDialogEl"
+            class="report-dialog"
+            role="dialog"
+            tabindex="-1"
+            :aria-label="$t('profile.reportDialog.ariaLabel')"
+            @keydown.esc.stop="reportOpen = false"
+          >
+            <h2>{{ $t('profile.reportDialog.title', { userName: profile.userName }) }}</h2>
+            <p class="muted">{{ $t('profile.reportDialog.hint') }}</p>
+            <label>
+              {{ $t('profile.reportDialog.reason') }}
+              <input
+                v-model="reportReason"
+                type="text"
+                maxlength="200"
+                :placeholder="$t('profile.reportDialog.reasonPlaceholder')"
+                @keyup.enter="sendReport"
+              />
+            </label>
+            <label>
+              {{ $t('profile.reportDialog.note') }}
+              <textarea v-model="reportNote" rows="3" maxlength="2000"></textarea>
+            </label>
+            <p v-if="reportError" class="error">{{ reportError }}</p>
+            <div class="row">
+              <button :disabled="reportSending" @click="sendReport">
+                {{ $t('profile.reportDialog.send') }}
+              </button>
+              <button class="secondary" :disabled="reportSending" @click="reportOpen = false">
+                {{ $t('common.buttons.cancel') }}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </Teleport>
     </template>
   </div>
 </template>
@@ -350,8 +355,8 @@ function joinedDate(iso: string): string {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  /* Above ProfileModal.vue's own backdrop (z-index 60) — the report dialog
-     opens on top of the profile modal, not behind it. */
+  /* Above RouteModal's own backdrop (z-index 60) — the report dialog is
+     teleported to body and opens on top of the profile modal, not behind it. */
   z-index: 70;
 }
 .report-dialog {

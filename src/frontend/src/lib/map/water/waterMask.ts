@@ -327,9 +327,8 @@ export function noFoamFade(distance: number, inner: number, reach: number): numb
 
 /**
  * Deterministic per-hex pseudo-random seed for the shader's foam ruggedness
- * and wave phase — the same hash `demoFogMask`'s `noiseSeed` uses, and for the
- * same reason: it is only ever sampled locally, never compared against a
- * server-baked value.
+ * and wave phase — the same hash fog's B channel used before it became a baked lump (fogLump.ts); like
+ * it, it is only ever sampled locally, never compared against a server-baked value.
  */
 export function waterNoiseSeed(q: number, r: number): number {
   let h = (Math.imul(q, 374761393) ^ Math.imul(r, 668265263)) | 0;

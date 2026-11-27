@@ -41,7 +41,7 @@ public class FleetShoreAttackTests
     }
 
     private static Settlement Attacker() =>
-        Found(Home, [new UnitStack(UnitType.Karve, 5)], new PlacedBuilding(Dock, BuildingType.Dockyard, 1));
+        Found(Home, [new UnitStack(UnitType.Karve, 5)], new PlacedBuilding(Dock, BuildingType.Harbour, 1));
 
     private static DispatchDecision Send(ArmyMission mission, HexCoord? targetBuilding, Settlement? attacker = null) =>
         TestArmy.PlanDispatch(
@@ -160,8 +160,8 @@ public class FleetShoreAttackTests
     [Fact]
     public void A_lost_fleet_fight_damages_nothing()
     {
-        var dockyard = new PlacedBuilding(ShoreHex, BuildingType.Dockyard, 9);
-        var defender = Found(TargetCentre, [new UnitStack(UnitType.Longship, 100)], dockyard);
+        var harbour = new PlacedBuilding(ShoreHex, BuildingType.Harbour, 9);
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Snekkja, 100)], harbour);
 
         var arrival = Arrive(defender);
 
@@ -186,7 +186,7 @@ public class FleetShoreAttackTests
     private static Army SendLoaded(UnitStack[] requested, ArmyMission mission = ArmyMission.Attack)
     {
         // The troops board where the ships stand: a fleet is sent from one spot.
-        var attacker = Found(Home, [], new PlacedBuilding(Dock, BuildingType.Dockyard, 1)).WithGarrisonAt(Dock, requested);
+        var attacker = Found(Home, [], new PlacedBuilding(Dock, BuildingType.Harbour, 1)).WithGarrisonAt(Dock, requested);
         var decision = TestArmy.PlanDispatch(
             attacker, requested, Math.Min(150, requested.Sum(u => UnitCatalogue.Get(u.Type).FoodCarryCapacity * u.Count)), [], TargetCentre, T0,
             Guid.CreateVersion7(), Strait, mission, Guid.CreateVersion7(),
@@ -221,12 +221,12 @@ public class FleetShoreAttackTests
     [Fact]
     public void Only_the_defenders_ships_fight_the_fleet_and_the_land_units_at_home_take_no_losses()
     {
-        var defender = Found(TargetCentre, [new UnitStack(UnitType.Spearman, 1000), new UnitStack(UnitType.Longship, 1)],
-            new PlacedBuilding(ShoreHex, BuildingType.Dockyard, 9));
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Spearman, 1000), new UnitStack(UnitType.Snekkja, 1)],
+            new PlacedBuilding(ShoreHex, BuildingType.Harbour, 9));
 
         var arrival = Arrive(defender);
 
-        // 5 Karves attack 25 against one Longship's defence of 40: the Longship holds, the spearmen did not add to it.
+        // 5 Karves attack 25 against one Snekkja's defence of 40: the Snekkja holds, the spearmen did not add to it.
         Assert.Equal(40, arrival.Battle!.DefensePower);
         Assert.Equal(BattleWinner.Defender, arrival.Battle.Winner);
         Assert.DoesNotContain(arrival.Battle.DefenderLosses, s => s.Type == UnitType.Spearman);
@@ -238,7 +238,7 @@ public class FleetShoreAttackTests
 
     private static Army SendAtCentre(HexCoord centre, UnitStack[] requested)
     {
-        var attacker = Found(Home, requested, new PlacedBuilding(Dock, BuildingType.Dockyard, 1));
+        var attacker = Found(Home, requested, new PlacedBuilding(Dock, BuildingType.Harbour, 1));
         var decision = TestArmy.PlanDispatch(
             attacker, requested, 100, [], centre, T0, Guid.CreateVersion7(), Strait, ArmyMission.Attack, Guid.CreateVersion7(),
             targetBuildingCoord: centre, targetClaimDiscs: [(centre, ClaimRadius)]);
@@ -247,9 +247,9 @@ public class FleetShoreAttackTests
     }
 
     [Fact]
-    public void A_fleet_at_the_dockyard_fights_the_home_ships()
+    public void A_fleet_at_the_harbour_fights_the_home_ships()
     {
-        var defender = Found(TargetCentre, [new UnitStack(UnitType.Longship, 1)], new PlacedBuilding(ShoreHex, BuildingType.Dockyard, 3));
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Snekkja, 1)], new PlacedBuilding(ShoreHex, BuildingType.Harbour, 3));
 
         var arrival = Arrive(defender, target: ShoreHex);
 
@@ -261,7 +261,7 @@ public class FleetShoreAttackTests
     public void A_fleet_fights_the_ships_whichever_shore_building_it_is_sent_at_and_a_lost_fight_damages_nothing()
     {
         var hut = new PlacedBuilding(CoastalWaterHex, BuildingType.FishingHut, 5);
-        var defender = Found(TargetCentre, [new UnitStack(UnitType.Longship, 100)], new PlacedBuilding(ShoreHex, BuildingType.Dockyard, 3), hut);
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Snekkja, 100)], new PlacedBuilding(ShoreHex, BuildingType.Harbour, 3), hut);
 
         var arrival = Arrive(defender, target: CoastalWaterHex);
 
@@ -276,7 +276,7 @@ public class FleetShoreAttackTests
     [Fact]
     public void A_fleet_at_the_longhouse_of_a_shoreline_centred_settlement_fights_the_home_ships()
     {
-        var defender = Found(ShoreCentre, [new UnitStack(UnitType.Longship, 1)]);
+        var defender = Found(ShoreCentre, [new UnitStack(UnitType.Snekkja, 1)]);
 
         var arrival = ArriveWith(SendAtCentre(ShoreCentre, [new UnitStack(UnitType.Karve, 5)]), defender);
 
@@ -286,8 +286,8 @@ public class FleetShoreAttackTests
     [Fact]
     public void Guest_ships_defend_with_the_home_ships_when_the_target_is_the_centre_and_guest_land_units_are_not_charged_losses()
     {
-        var defender = Found(ShoreCentre, [new UnitStack(UnitType.Longship, 1)]);
-        UnitStack[] guests = [new(UnitType.Longship, 1), new(UnitType.Spearman, 50)];
+        var defender = Found(ShoreCentre, [new UnitStack(UnitType.Snekkja, 1)]);
+        UnitStack[] guests = [new(UnitType.Snekkja, 1), new(UnitType.Spearman, 50)];
 
         var arrival = ArriveWith(SendAtCentre(ShoreCentre, [new UnitStack(UnitType.Karve, 5)]), defender, guests);
 
@@ -298,8 +298,8 @@ public class FleetShoreAttackTests
     [Fact]
     public void Guest_ships_fight_with_the_home_ships_wherever_the_fleet_lands()
     {
-        var defender = Found(TargetCentre, [new UnitStack(UnitType.Longship, 1)], new PlacedBuilding(ShoreHex, BuildingType.Dockyard, 3));
-        UnitStack[] guests = [new(UnitType.Longship, 100)];
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Snekkja, 1)], new PlacedBuilding(ShoreHex, BuildingType.Harbour, 3));
+        UnitStack[] guests = [new(UnitType.Snekkja, 100)];
 
         var arrival = ArriveWith(SendLoaded([new UnitStack(UnitType.Karve, 5)]), defender, guests);
 
@@ -308,11 +308,11 @@ public class FleetShoreAttackTests
     }
 
     [Fact]
-    public void All_home_and_guest_ships_fight_a_fleet_at_a_shore_building_away_from_the_dockyard_and_the_centre()
+    public void All_home_and_guest_ships_fight_a_fleet_at_a_shore_building_away_from_the_harbour_and_the_centre()
     {
-        var defender = Found(TargetCentre, [new UnitStack(UnitType.Longship, 50)], new PlacedBuilding(CoastalWaterHex, BuildingType.Dockyard, 3),
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Snekkja, 50)], new PlacedBuilding(CoastalWaterHex, BuildingType.Harbour, 3),
             new PlacedBuilding(ShoreHex, BuildingType.Farm, 9));
-        UnitStack[] guests = [new(UnitType.Longship, 50)];
+        UnitStack[] guests = [new(UnitType.Snekkja, 50)];
 
         var arrival = ArriveWith(SendLoaded([new UnitStack(UnitType.Karve, 5)]), defender, guests);
 
@@ -340,7 +340,7 @@ public class FleetShoreAttackTests
     [Fact]
     public void A_fleet_hits_no_building_with_its_ships_even_when_siege_engines_are_aboard()
     {
-        var army = SendLoaded([new UnitStack(UnitType.Longship, 1), new UnitStack(UnitType.Ram, 2)]);
+        var army = SendLoaded([new UnitStack(UnitType.Snekkja, 1), new UnitStack(UnitType.Ram, 2)]);
         var defender = Found(TargetCentre, [], new PlacedBuilding(ShoreHex, BuildingType.Farm, 9));
 
         var arrival = ArriveWith(army, defender);
@@ -353,13 +353,13 @@ public class FleetShoreAttackTests
     [Fact]
     public void Passengers_drown_beyond_the_slots_of_the_ships_that_survive_a_won_fight()
     {
-        var army = SendLoaded([new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Spearman, 90)]);
-        var defender = Found(TargetCentre, [new UnitStack(UnitType.Longship, 6)], new PlacedBuilding(ShoreHex, BuildingType.Dockyard, 9));
+        var army = SendLoaded([new UnitStack(UnitType.Snekkja, 5), new UnitStack(UnitType.Spearman, 90)]);
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Snekkja, 6)], new PlacedBuilding(ShoreHex, BuildingType.Harbour, 9));
 
         var arrival = ArriveWith(army, defender);
 
         Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
-        var ships = Count(arrival.Army!.Stacks, UnitType.Longship);
+        var ships = Count(arrival.Army!.Stacks, UnitType.Snekkja);
         Assert.InRange(ships, 1, 4);
         var kept = Count(arrival.Army.Stacks, UnitType.Spearman);
         Assert.Equal(Math.Min(90, ships * 20), kept);
@@ -371,7 +371,7 @@ public class FleetShoreAttackTests
     public void Passengers_drown_with_a_fleet_that_loses_all_its_ships()
     {
         var army = SendLoaded([new UnitStack(UnitType.Karve, 5), new UnitStack(UnitType.Spearman, 50)]);
-        var defender = Found(TargetCentre, [new UnitStack(UnitType.Longship, 100)], new PlacedBuilding(ShoreHex, BuildingType.Dockyard, 9));
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Snekkja, 100)], new PlacedBuilding(ShoreHex, BuildingType.Harbour, 9));
 
         var arrival = ArriveWith(army, defender);
 
@@ -390,7 +390,7 @@ public class FleetShoreAttackTests
             attacker, force, 400, [], TargetCentre, T0,
             Guid.CreateVersion7(), _ => Terrain.Grass, ArmyMission.Attack, Guid.CreateVersion7(),
             targetClaimDiscs: [(TargetCentre, ClaimRadius)]);
-        var defender = Found(TargetCentre, [new UnitStack(UnitType.Spearman, 10), new UnitStack(UnitType.Longship, 1)]);
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Spearman, 10), new UnitStack(UnitType.Snekkja, 1)]);
 
         var arrival = Army.SettleArrival(decision.Army!, defender, 1.0, MovementOf(decision.Army!).ArrivesAt, seed: 1);
 

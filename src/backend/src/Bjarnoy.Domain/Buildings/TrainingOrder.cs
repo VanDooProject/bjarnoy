@@ -102,6 +102,9 @@ public enum TrainRejection
 
     /// <summary>The "fastest" split is a premium feature.</summary>
     PremiumRequired,
+
+    /// <summary>The building the order goes to is below the unit's <see cref="Units.UnitDefinition.RequiredBuildingLevel"/>.</summary>
+    BuildingLevelTooLow,
 }
 
 /// <summary>How an order is spread over the buildings that can train the unit.</summary>
@@ -125,4 +128,23 @@ public sealed record TrainDecision(TrainRejection Rejection, IReadOnlyList<Train
     public static TrainDecision Rejected(TrainRejection reason) => new(reason, []);
 
     public static TrainDecision Accept(IReadOnlyList<TrainingOrder> orders) => new(TrainRejection.None, orders);
+}
+
+/// <summary>Why cancelling a training order was refused.</summary>
+public enum CancelTrainingRejection
+{
+    None = 0,
+
+    /// <summary>The order was never there, or it finished (settling ran first) and left the queue.</summary>
+    OrderNotFound,
+}
+
+/// <summary>The outcome of cancelling a training order.</summary>
+public sealed record CancelTrainingResult(CancelTrainingRejection Rejection, Settlement? Settlement = null)
+{
+    public bool Accepted => Rejection == CancelTrainingRejection.None && Settlement is not null;
+
+    public static CancelTrainingResult Rejected(CancelTrainingRejection reason) => new(reason);
+
+    public static CancelTrainingResult Accept(Settlement settlement) => new(CancelTrainingRejection.None, settlement);
 }

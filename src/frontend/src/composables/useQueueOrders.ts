@@ -101,6 +101,12 @@ export interface TrainingOrderRow {
   building: string;
   /** A part queued behind another one in its building: no progress bar, it shows when it starts instead. */
   waiting: boolean;
+  unit: string;
+  count: number;
+  /** Units trained so far, as of the last poll (display only). */
+  completedCount: number;
+  /** The hex of the building that trains this part. */
+  coord: { q: number; r: number };
 }
 
 export function useTrainingOrders(): ComputedRef<TrainingOrderRow[]> {
@@ -152,6 +158,10 @@ export function useTrainingOrders(): ComputedRef<TrainingOrderRow[]> {
         subtext: t('hud.trainingQueue.trainedCount', { completed: o.completedCount, total: o.count }),
         building,
         waiting,
+        unit: o.unit,
+        count: o.count,
+        completedCount: o.completedCount,
+        coord: { q: o.q, r: o.r },
       };
     });
   });

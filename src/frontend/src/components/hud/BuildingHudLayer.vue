@@ -14,9 +14,11 @@ import { buildingName } from '../../i18n/catalogueNames';
 import { useAuthStore } from '../../stores/auth';
 import { useBuildingCatalogueStore } from '../../stores/buildingCatalogue';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
+import { useQuickUpgradeStore } from '../../stores/quickUpgrade';
 import { useWorldStore } from '../../stores/world';
 import { builtBuildingLevels, ownBuildings } from '../../composables/useBuildRing';
 import { useIsMobile } from '../../composables/useIsMobile';
+import { useHiddenUnderPhoneLayer, vPhoneHidden } from '../../composables/usePhoneLayer';
 import {
   boxChangeFor,
   dialGoneAfterMs,
@@ -34,7 +36,8 @@ import {
   hasHudMarker,
   markerBoxRect,
   markerScale,
-  pointInRect,
+  markerAt,
+  type MarkerHitArea,
   rowsFor,
   rowsSignature,
   stackOrder,
@@ -53,7 +56,7 @@ import {
   dialRadiusPx,
   dialRemainingSeconds,
   nextTapReveal,
-  pickTappedDial,
+  type BlockedMarker,
   type ConstructionDial,
 } from '../../lib/map/constructionDial';
 import { circleIntersectsRect, markerFadeStep, type OcclusionCircle } from '../../lib/map/markerOcclusion';
@@ -74,12 +77,16 @@ export interface BuildingHudRenderer {
   readonly hoveredHexKey: string | null;
   /** Touch taps on the map, which still reach the map itself: a tap on a marker's dial reveals it. */
   setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null): void;
+  /** A click or tap on a marker (dial or box) reaches the hex the marker belongs to, not the one it is drawn over. */
+  setTapTarget(fn: ((screen: { x: number; y: number }) => AxialCoord | null) | null): void;
   /** Called once per rendered map frame after the camera moved: the markers are placed from it, in the frame the canvas presents. */
   setFrameObserver(fn: (() => void) | null): void;
   /** The open ring menu's footprint (canvas px); markers beneath it fade out like the progress dials do. */
   readonly markerOcclusionCircle: OcclusionCircle | null;
   /** The construction dials the renderer holds: the queue's, plus finishing and refused ones. Replaced on every change. */
   readonly constructionDialList: readonly ConstructionDial[];
+  /** The markers playing the blocked-upgrade animation (a quick upgrade hit a building that cannot be upgraded now). Replaced on every change. */
+  readonly blockedMarkerList: readonly BlockedMarker[];
 }
 
 const props = withDefaults(
@@ -100,11 +107,19 @@ const world = useWorldStore();
 const auth = useAuthStore();
 const catalogue = useBuildingCatalogueStore();
 const prefs = useHudPrefsStore();
+const quick = useQuickUpgradeStore();
 const isMobile = useIsMobile();
+const hudHidden = useHiddenUnderPhoneLayer();
 const motion = useBuildingHudMotion();
 
+/**
+ * The markers are wanted: the player switched building info on, or the quick upgrade applies (a held Shift, or its mode), whose
+ * glyphs live on them. One switch for both, so the show / hide animation below is the same one.
+ */
+const markersWanted = computed(() => prefs.buildingInfo || quick.applies);
+
 /** The markers are in the DOM: from the moment they are switched on until their hide animation has ended. */
-const rendered = ref(props.buildingMarkers && prefs.buildingInfo);
+const rendered = ref(props.buildingMarkers && markersWanted.value);
 
 /** Every marker's current tier (they differ while one is hovered); the placement loop writes it only when it changes. */
 const tiers = ref<Record<string, HudTier>>({});
@@ -112,6 +127,8 @@ const tierOf = (key: string): HudTier => tiers.value[key] ?? 'mid';
 
 /** Bumped when the renderer's dial list changes (a refusal, a finish, a new order): the markers read their order dial from it. */
 const dialsVersion = ref(0);
+/** When a quick upgrade last hit each blocked building (hex key): the marker's dial plays the refusal from then (`BuildingHudDial`). */
+const blockedAt = ref<Record<string, number>>({});
 
 /** The dial is drawn at the progress dial's default-zoom size; the marker is scaled to the live size factor `zs`. */
 const DIAL_RADIUS = dialRadiusPx(1);
@@ -176,6 +193,7 @@ const baseMarkers = computed<Marker[]>(() => {
         rates: hud.rates,
         construction: hud.construction,
         worldSpeedFactor: world.worldSpeedFactor,
+        wisdomFactor: world.model.wisdomFactor(world.selectedSettlementId!),
         matchingNeighbours: boost.matchingNeighbours,
         onLake: boost.onLake,
         feast,
@@ -268,20 +286,36 @@ const placeables = computed<Placeable[]>(() => [
   ...dialOnly.value,
 ]);
 
+/** The marker the mouse or a tap is on right now (set by the placement loop only when it changes). */
+const hoveredKey = ref<string | null>(null);
+
+type QuickMode = 'premium' | 'locked' | undefined;
+/**
+ * What the hovered marker's box adds for quick upgrade: while it applies, the next level's cost and time; a free account holding
+ * Shift gets the premium line instead (docs/design/premium-gating-ux.md: visible, disabled, explained).
+ */
+function quickModeOf(key: string): QuickMode {
+  if (hoveredKey.value !== key) return undefined;
+  if (quick.applies) return 'premium';
+  return !quick.available && quick.shiftHeld ? 'locked' : undefined;
+}
+
 /** Each marker's rows, worked out again only when its view model, its tier or the premium flag is not what the last ones were made from. */
-const rowMemo = new Map<string, { vm: BuildingHudViewModel; tier: HudTier; premium: boolean; rows: HudRow[] }>();
+const rowMemo = new Map<string, { vm: BuildingHudViewModel; tier: HudTier; premium: boolean; quick: QuickMode; shift: boolean; rows: HudRow[] }>();
 const rowsByKey = computed<Record<string, HudRow[]>>(() => {
   const out: Record<string, HudRow[]> = {};
   const premium = auth.isPremium;
+  const shift = quick.shiftHeld;
   for (const m of markers.value) {
     const tier = tierOf(m.key);
+    const mode = quickModeOf(m.key);
     const hit = rowMemo.get(m.key);
-    if (hit && hit.vm === m.vm && hit.tier === tier && hit.premium === premium) {
+    if (hit && hit.vm === m.vm && hit.tier === tier && hit.premium === premium && hit.quick === mode && hit.shift === shift) {
       out[m.key] = hit.rows;
       continue;
     }
-    const rows = rowsFor(m.vm, tier, { premium });
-    rowMemo.set(m.key, { vm: m.vm, tier, premium, rows });
+    const rows = rowsFor(m.vm, tier, { premium, quick: mode, shift });
+    rowMemo.set(m.key, { vm: m.vm, tier, premium, quick: mode, shift, rows });
     out[m.key] = rows;
   }
   for (const key of rowMemo.keys()) if (!(key in out)) rowMemo.delete(key);
@@ -297,29 +331,58 @@ const DIAL_HALF = DIAL_RADIUS + DIAL_PAD;
 const innerStyle = { left: `${-DIAL_HALF}px`, top: `${-DIAL_HALF}px`, height: `${2 * DIAL_HALF}px` };
 
 /** The box starts on the dial's vertical centre line, behind the dial, with its text clear of the dial's right half. */
-function boxStyle(currentTier: HudTier) {
+/**
+ * How far the quick look's level hex (BuildingHudDial: on the dial's lower right corner point, 0.6 of the dial) reaches past the
+ * dial's right edge, ring included: the box's content moves right by this much so the hex never covers it. The box itself keeps
+ * its place against the dial and grows to the right (no gap between dial and box).
+ */
+const LEVEL_HEX_OVERHANG = (0.866 * 0.98 + 0.6 * 0.866 - 0.866) * DIAL_RADIUS + 2;
+
+function boxStyle(currentTier: HudTier, quickLook = false) {
   const half = (DIAL_RADIUS * Math.sqrt(3)) / 2;
   return {
     maxHeight: `${2 * DIAL_RADIUS}px`,
     marginLeft: `${-DIAL_HALF}px`,
-    paddingLeft: `${half + (currentTier === 'near' ? 9 : 7)}px`,
+    paddingLeft: `${half + (currentTier === 'near' ? 9 : 7) + (quickLook ? LEVEL_HEX_OVERHANG : 0)}px`,
   };
 }
 
 const rowsOf = (m: Marker): HudRow[] => rowsByKey.value[m.key] ?? [];
 
 /**
+ * The quick upgrade look of a marker whose dial shows the plain state: while it applies, a glyph in place of the level - an
+ * upgrade that can be ordered now (`ready`) or one that cannot yet (short of resources, the longhouse, a prerequisite or room in
+ * the stores). Max, running, queued and the other order dials keep what they show; the far tier is the ring only.
+ */
+function glyphOf(m: Marker): 'up' | 'wait' | undefined {
+  if (!quick.applies || tierOf(m.key) === 'far' || m.vm.dial.kind !== 'state') return undefined;
+  switch (m.vm.upgrade.state) {
+    case 'ready':
+      return 'up';
+    case 'short':
+    case 'longhouse':
+    case 'prereq':
+    case 'storage':
+      return 'wait';
+    default:
+      return undefined;
+  }
+}
+
+/**
  * Inside the dial: the countdown of a running upgrade or raze, `#place` of a queued order, else the level; the far tier is the
- * ring only. A pending, refused or finishing dial draws its own symbols instead of a number; an upgrade or raze whose time is up
+ * ring only, the level tier hides a countdown (its smaller font would be unreadable there). A pending, refused or finishing dial draws its own symbols instead of a number; an upgrade or raze whose time is up
  * (`settling`, or the finish animation) shows none until the poll brings the new state.
  */
 function labelOf(m: Marker): string {
   if (tierOf(m.key) === 'far') return '';
+  if (glyphOf(m)) return '';
   const { dial } = m.vm;
   switch (dial.kind) {
     case 'upgrading':
     case 'razing':
       // Time up (the finish animation, or the poll has not brought the new state yet): no number.
+      if (tierOf(m.key) === 'level') return '';
       return (dial.secondsLeft ?? 0) > 0 ? formatCountdownShort(dial.secondsLeft!) : '';
     case 'queued':
       return `#${dial.queuePosition ?? ''}`;
@@ -335,20 +398,40 @@ function labelOf(m: Marker): string {
 
 // ---- hover / tap (like the progress dial: grows to its default-zoom size, comes to the front) --------------------------------
 
-// The markers take no pointer input (like the canvas dials they never block the map's hover, tap and ring): hover is the
-// mouse position the map tracks (dial disc, box or hex), a tap is reported by the map (dial disc only).
+// The markers take no pointer input (like the canvas dials they never block the map's hover, wheel and drags): hover is the
+// mouse position the map tracks (dial disc, box or hex); a click or tap is the map's, which asks the layer which marker it is on
+// (`tapTargetAt`) and then reaches that marker's hex.
 let tapKey: string | null = null;
 let tapAtMs = 0;
 const hoverT = new Map<string, number>();
-/** Where each marker's dial is drawn right now (canvas px, radius), for the tap hit test. */
+/** Where each marker's dial is drawn right now (canvas px, radius), for the tap hit test; absent while it is faded out. */
 const dialDiscs = new Map<string, { key: string; cx: number; cy: number; r: number }>();
 /** Where each marker's box is drawn right now (canvas px); absent while it has none. */
 const boxRects = new Map<string, { x: number; y: number; w: number; h: number }>();
 
-/** A tap on a dial reveals it (a second one closes it); a tap elsewhere closes a revealed one. A box takes no tap: the hex under it is another one's. */
+/** The marker (dial disc or box) at canvas point `screen` as placed in the last frame, or null: the top-most of several. */
+function placedMarkerAt(screen: { x: number; y: number }): MarkerHitArea | null {
+  if (hudHidden.value) return null;
+  const areas: MarkerHitArea[] = [];
+  for (const [key, disc] of dialDiscs) areas.push({ key, hexKey: disc.key, disc, box: boxRects.get(key), z: lastZ.get(key) ?? 0 });
+  return markerAt(screen, areas);
+}
+
+/** A tap on a marker reveals it (a second one closes it); a tap elsewhere closes a revealed one. */
 function onMapTap(screen: { x: number; y: number }) {
-  tapKey = nextTapReveal(tapKey, pickTappedDial(screen, [...dialDiscs.values()]));
+  tapKey = nextTapReveal(tapKey, placedMarkerAt(screen)?.hexKey ?? null);
   tapAtMs = Date.now();
+}
+
+/**
+ * The hex a click or tap at canvas point `screen` means (`setTapTarget`): on a marker, its building's hex, not the one it is
+ * drawn over, for the ring menu and quick upgrade. A route being plotted (dispatch, field order) or the send picker's target
+ * keeps the hex under the pointer.
+ */
+function tapTargetAt(screen: { x: number; y: number }): AxialCoord | null {
+  if (world.dispatchDraft || world.fieldOrderDraft || world.sendPicker) return null;
+  const hexKey = placedMarkerAt(screen)?.hexKey;
+  return hexKey === undefined ? null : (placeables.value.find((p) => p.hexKey === hexKey)?.coord ?? null);
 }
 
 /**
@@ -357,13 +440,12 @@ function onMapTap(screen: { x: number; y: number }) {
  */
 function directHit(mouse: { x: number; y: number } | null, candidates: { key: string; x: number; y: number; zs: number }[]): string | null {
   if (!mouse) return null;
-  const hits = candidates
-    .filter(({ key, x, y, zs }) => {
-      const size = boxSizes.get(key);
-      return Math.hypot(mouse.x - x, mouse.y - y) <= dialRadiusPx(zs) || (size !== undefined && pointInRect(mouse, markerBoxRect(x, y, size, zs)));
-    })
-    .map(({ key, x }) => ({ key, x, hovered: (hoverT.get(key) ?? 0) > 0 }));
-  return stackOrder(hits).at(-1)?.key ?? null;
+  const ranked = stackOrder(candidates.map((c) => ({ ...c, hovered: (hoverT.get(c.key) ?? 0) > 0 })));
+  const areas = ranked.map(({ key, x, y, zs }, z): MarkerHitArea => {
+    const size = boxSizes.get(key);
+    return { key, hexKey: key, disc: { cx: x, cy: y, r: dialRadiusPx(zs) }, box: size && markerBoxRect(x, y, size, zs), z };
+  });
+  return markerAt(mouse, areas)?.key ?? null;
 }
 
 // ---- per-frame placement --------------------------------------------------------------------------------------------------
@@ -371,6 +453,13 @@ function directHit(mouse: { x: number; y: number } | null, candidates: { key: st
 const root = ref<HTMLElement | null>(null);
 const elements = new Map<string, HTMLElement>();
 const lastZ = new Map<string, number>();
+/** The transform / visibility string last written per marker, so the frame loop only touches the style when one changed. */
+const lastTransform = new Map<string, string>();
+const lastVisibility = new Map<string, string>();
+
+// The layer's size, kept up to date by the same ResizeObserver as the boxes' sizes (ensureBoxObserver) so the frame loop never reads the layout for it. Until the first
+// observation it is read once from the element and then cached the same way.
+let rootSize: { w: number; h: number } | null = null;
 
 /** Ring-menu fade per marker (`markerFadeStep`); absent = fully visible. */
 const visibility = new Map<string, number>();
@@ -387,16 +476,21 @@ const boxSizes = new Map<string, { w: number; h: number }>();
 const observedBoxes = new Map<string, HTMLElement>();
 let boxObserver: ResizeObserver | null = null;
 
-function ensureBoxObserver(): ResizeObserver | null {
-  if (boxObserver || typeof ResizeObserver === 'undefined') return boxObserver;
+function ensureBoxObserver(): ResizeObserver {
+  if (boxObserver) return boxObserver;
   boxObserver = new ResizeObserver((entries) => {
     for (const entry of entries) {
       const el = entry.target as HTMLElement;
+      // The border box (the near / mid padding change a marker's box); where the entry has no border-box size, the layout size.
+      const size = entry.borderBoxSize?.[0];
+      const measured = size ? { w: size.inlineSize, h: size.blockSize } : { w: el.offsetWidth, h: el.offsetHeight };
+      if (el === root.value) {
+        rootSize = measured;
+        continue;
+      }
       const key = keyOf(el);
       if (!key || observedBoxes.get(key) !== el) continue;
-      // The border box: the near / mid padding change resizes it too. Where the entry has no border-box size, the layout size.
-      const size = entry.borderBoxSize?.[0];
-      boxSizes.set(key, size ? { w: size.inlineSize, h: size.blockSize } : { w: el.offsetWidth, h: el.offsetHeight });
+      boxSizes.set(key, measured);
     }
   });
   return boxObserver;
@@ -408,7 +502,7 @@ function setBox(key: string, el: unknown) {
     if (previous === el) return;
     if (previous) boxObserver?.unobserve(previous);
     observedBoxes.set(key, el);
-    ensureBoxObserver()?.observe(el, { box: 'border-box' });
+    ensureBoxObserver().observe(el, { box: 'border-box' });
     return;
   }
   if (previous) boxObserver?.unobserve(previous);
@@ -422,6 +516,8 @@ function setElement(key: string, el: unknown) {
   else {
     elements.delete(key);
     lastZ.delete(key);
+    lastTransform.delete(key);
+    lastVisibility.delete(key);
     dialDiscs.delete(key);
     boxRects.delete(key);
     hoverT.delete(key);
@@ -446,6 +542,7 @@ function setMouseHovering(on: boolean) {
   emit('update:hovering', on);
 }
 let lastDialList: readonly ConstructionDial[] | null = null;
+let lastBlockedList: readonly BlockedMarker[] | null = null;
 
 /** Runs from the renderer's own frame (`setFrameObserver`), never from a rAF of its own: the camera it reads is the one just drawn. */
 function tick() {
@@ -461,6 +558,10 @@ function tick() {
     lastDialList = renderer.constructionDialList;
     dialsVersion.value += 1;
   }
+  if (renderer.blockedMarkerList !== lastBlockedList) {
+    lastBlockedList = renderer.blockedMarkerList;
+    blockedAt.value = Object.fromEntries(lastBlockedList.map((b) => [b.key, b.atMs]));
+  }
   if (tapKey !== null && nowMs - tapAtMs >= DIAL_TAP_REVEAL_MS) tapKey = null;
   // Nothing to place (the landing page without an order, building info off and no dial): no layout read in the map's frame.
   if (placeables.value.length === 0) {
@@ -468,10 +569,12 @@ function tick() {
     return;
   }
   const mapScale = renderer.dialMapScale;
-  const width = root.value?.offsetWidth ?? window.innerWidth;
-  const height = root.value?.offsetHeight ?? window.innerHeight;
+  if (!rootSize && root.value) rootSize = { w: root.value.offsetWidth, h: root.value.offsetHeight };
+  const width = rootSize?.w ?? window.innerWidth;
+  const height = rootSize?.h ?? window.innerHeight;
   const circle = renderer.markerOcclusionCircle;
   const placed: { key: string; x: number; hovered: boolean }[] = [];
+  let hoveredNow: string | null = null;
   const mouse = renderer.mousePoint;
   // A marker the mouse is directly on wins over the hex under it for every marker.
   const direct = directHit(
@@ -520,6 +623,7 @@ function tick() {
     const byMouse = !occluded && (direct !== null ? direct === marker.key : renderer.hoveredHexKey === marker.hexKey);
     if (byMouse) mouseHovering = true;
     const hovered = byMouse || (!occluded && tapKey === marker.hexKey);
+    if (hovered) hoveredNow = marker.key;
     const t = dialHoverStep(hoverT.get(marker.key) ?? 0, hovered, dtMs, prefersReducedMotion());
     if (t > 0) hoverT.set(marker.key, t);
     else hoverT.delete(marker.key);
@@ -532,13 +636,25 @@ function tick() {
     else dialDiscs.set(marker.key, { key: marker.hexKey, cx: x, cy: y, r: dialRadiusPx(zs) });
     if (boxSize) boxRects.set(marker.key, markerBoxRect(x, y, boxSize, zs));
     else boxRects.delete(marker.key);
-    el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${zs.toFixed(3)})`;
+    const transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${zs.toFixed(3)})`;
+    if (lastTransform.get(marker.key) !== transform) {
+      lastTransform.set(marker.key, transform);
+      el.style.transform = transform;
+    }
     // A marker well off screen is not worth compositing.
     const reach = 320 * zs;
-    el.style.visibility = x < -reach || x > width + reach || y < -reach || y > height + reach ? 'hidden' : 'visible';
+    // Never an explicit 'visible': it would override a phone layer hiding the whole layer (usePhoneLayer's vPhoneHidden).
+    // `data-placed` lifts the CSS default hidden state until the first placement.
+    if (el.dataset.placed === undefined) el.dataset.placed = '';
+    const shown = x < -reach || x > width + reach || y < -reach || y > height + reach ? 'hidden' : '';
+    if (lastVisibility.get(marker.key) !== shown) {
+      lastVisibility.set(marker.key, shown);
+      el.style.visibility = shown;
+    }
     placed.push({ key: marker.key, x, hovered: t > 0 });
   }
   if (tiersChanged) tiers.value = nextTiers;
+  if (hoveredNow !== hoveredKey.value) hoveredKey.value = hoveredNow;
   setMouseHovering(mouseHovering);
   // Right-most on top, the hovered / tapped one above all.
   stackOrder(placed).forEach((p, i) => {
@@ -605,7 +721,7 @@ function handOverAfter(key: string, ms: number, canvasDraws: boolean) {
 
 // Show / hide: a hide keeps the markers in the DOM until it has ended; a toggle while one runs reverses it.
 watch(
-  () => prefs.buildingInfo,
+  markersWanted,
   async (on) => {
     if (!props.buildingMarkers) return;
     if (on) {
@@ -628,7 +744,7 @@ watch(
       clearHandovers();
       for (const part of parts) if (!notOwned.value.has(part.key)) handOverAfter(part.key, dialGoneAfterMs(part.delayMs, reduced), true);
       await motion.setShown(false, parts);
-      if (!prefs.buildingInfo) {
+      if (!markersWanted.value) {
         rendered.value = false;
         clearHandovers();
         notOwned.value = new Set();
@@ -689,8 +805,10 @@ function onKeyDown(e: KeyboardEvent) {
 }
 
 onMounted(() => {
+  if (root.value) ensureBoxObserver().observe(root.value, { box: 'border-box' });
   window.addEventListener('keydown', onKeyDown);
   props.renderer?.setTapObserver(onMapTap);
+  props.renderer?.setTapTarget(tapTargetAt);
   props.renderer?.setFrameObserver(tick);
 });
 watch(
@@ -698,8 +816,10 @@ watch(
   (next, previous) => {
     setMouseHovering(false);
     previous?.setTapObserver(null);
+    previous?.setTapTarget(null);
     previous?.setFrameObserver(null);
     next?.setTapObserver(onMapTap);
+    next?.setTapTarget(tapTargetAt);
     next?.setFrameObserver(tick);
   },
 );
@@ -709,16 +829,18 @@ onUnmounted(() => {
   motion.dispose();
   boxObserver?.disconnect();
   boxObserver = null;
+  rootSize = null;
   observedBoxes.clear();
   boxSizes.clear();
   window.removeEventListener('keydown', onKeyDown);
   props.renderer?.setTapObserver(null);
+  props.renderer?.setTapTarget(null);
   props.renderer?.setFrameObserver(null);
 });
 </script>
 
 <template>
-  <div ref="root" class="building-hud">
+  <div ref="root" v-phone-hidden="hudHidden" class="building-hud">
     <div class="building-hud__markers">
         <div v-for="m in markers" :key="m.key" :ref="(el) => setElement(m.key, el)" class="hud-marker" :data-coord="m.key" :data-tier="tierOf(m.key)">
           <div class="hud-marker__inner" :style="innerStyle" role="img" :aria-label="t('hud.buildingHud.markerLabel', { building: m.name, level: m.level })">
@@ -732,10 +854,13 @@ onUnmounted(() => {
                 :label-fade="labelFade(m.key)"
                 :order="m.vm.dial.order"
                 :label-visible="tierOf(m.key) !== 'far'"
+                :glyph="glyphOf(m)"
+                :level="m.level"
+                :blocked-at-ms="blockedAt[m.key]"
               />
             </span>
             <Transition :css="false" @enter="(el, done) => boxHook('in', el, done)" @leave="(el, done) => boxHook('out', el, done)">
-              <div v-if="rowsOf(m).length" :ref="(el) => setBox(m.key, el)" class="hud-marker__box" :style="boxStyle(tierOf(m.key))">
+              <div v-if="rowsOf(m).length" :ref="(el) => setBox(m.key, el)" class="hud-marker__box" :style="boxStyle(tierOf(m.key), glyphOf(m) !== undefined)">
                 <BuildingHudBox :rows="rowsOf(m)" :tier="tierOf(m.key) === 'near' ? 'near' : 'mid'" />
               </div>
             </Transition>
@@ -755,7 +880,7 @@ onUnmounted(() => {
                 :radius="DIAL_RADIUS"
                 :ring="d.ring"
                 :progress="d.progress"
-                :label="tierOf(d.key) === 'far' ? '' : d.label"
+                :label="tierOf(d.key) === 'far' || (d.time && tierOf(d.key) === 'level') ? '' : d.label"
                 :time="d.time"
                 :urgent="d.urgent"
                 :order="d.dial"
@@ -783,6 +908,8 @@ onUnmounted(() => {
 .building-hud__markers {
   position: absolute;
   inset: 0;
+  /* Its own stacking context: the markers' per-frame z-index (stackOrder) never lifts one above the phone switch. */
+  z-index: 0;
 }
 /* The marker is a zero-size anchor at the dial's centre; the placement loop moves and scales it (zs, like the progress dial). */
 .hud-marker {
@@ -792,6 +919,9 @@ onUnmounted(() => {
   width: 0;
   height: 0;
   will-change: transform;
+}
+/* Hidden until the layer has placed it (data-placed), so a marker never flashes at the origin. */
+.hud-marker:not([data-placed]) {
   visibility: hidden;
 }
 .hud-marker__inner {
@@ -827,10 +957,16 @@ onUnmounted(() => {
   border-left: 0;
   border-radius: 0 8px 8px 0;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  /* The quick look's level hex slides in over 450 ms (BuildingHudDial); the content makes room alongside it. */
+  transition: padding-left 450ms cubic-bezier(0.3, 0, 0.2, 1);
+}
+html[data-hud-motion='reduced'] .hud-marker__box {
+  transition: none;
 }
 /* Phone: the switch sits at the map's top left, below the settlement bubble that sits there (it ends about 44px under the bar). */
 .building-hud__toggle--phone {
   position: absolute;
+  z-index: 1;
   top: calc(var(--hud-inset-top, 0px) + 60px);
   left: calc(16px + var(--hud-inset-left, 0px));
 }

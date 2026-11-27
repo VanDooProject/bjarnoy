@@ -182,6 +182,7 @@ public sealed record MovementResponse(
 /// Rings of the map the army sees around itself while it travels: the highest <c>VisionRadius</c> among its unit types plus its
 /// home settlement's Odin's Ravens (<see cref="FogVisionRadii.ArmyVisionRadius"/>). The client's live fog layer draws it as is.
 /// </param>
+/// <param name="SettlementId">The army's home settlement; <see langword="null"/> for an army without a home (it cannot be recalled).</param>
 /// <param name="AtHome">True when the army is standing in its home settlement — <paramref name="Movement"/> is then null.</param>
 /// <param name="Supporting">
 /// True when the army is currently a guest garrison at
@@ -190,7 +191,8 @@ public sealed record MovementResponse(
 /// null here too, since a guest is not travelling.
 /// </param>
 /// <param name="StarvesAt">
-/// When the army's provisions run out and the whole army dies; only set while it cannot get home (<see cref="MovementResponse.IsStranded"/>).
+/// When the army's provisions run out and the whole army dies; only set while it cannot get home (<see cref="MovementResponse.IsStranded"/>,
+/// or it has no home).
 /// </param>
 /// <param name="Position">
 /// Current hex: the home settlement's centre while <paramref name="AtHome"/>,
@@ -199,7 +201,7 @@ public sealed record MovementResponse(
 /// </param>
 public sealed record ArmyResponse(
     Guid Id,
-    Guid SettlementId,
+    Guid? SettlementId,
     string Mission,
     Guid? TargetSettlementId,
     bool AtHome,
@@ -219,10 +221,13 @@ public sealed record ArmyResponse(
     public static ArmyResponse From(ArmyEntity entity, DateTimeOffset gameNow)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        ArgumentNullException.ThrowIfNull(entity.Settlement);
+        if (entity.SettlementId is not null)
+        {
+            ArgumentNullException.ThrowIfNull(entity.Settlement);
+        }
 
         var domain = entity.ToDomain();
-        var home = new HexCoord(entity.Settlement.CentreQ, entity.Settlement.CentreR);
+        var home = entity.Settlement is { } homeSettlement ? new HexCoord(homeSettlement.CentreQ, homeSettlement.CentreR) : domain.HomeSpot;
         var atHome = domain.Location is ArmyLocation.AtHome;
         var supporting = domain.Location is ArmyLocation.Supporting;
         var movement = domain.Location is ArmyLocation.InTransit inTransit ? inTransit.Movement : null;
@@ -248,7 +253,8 @@ public sealed record ArmyResponse(
             domain.ProvisionsAt(gameNow),
             domain.TotalSpeed,
             domain.TotalUpkeepPerHour,
-            FogVisionRadii.ArmyVisionRadius(domain.Stacks, entity.Settlement.ToDomain().VisionBonusRings),
+            // An army without a home has no Odin's Ravens behind it.
+            FogVisionRadii.ArmyVisionRadius(domain.Stacks, entity.Settlement?.ToDomain().VisionBonusRings ?? 0),
             [.. domain.Stacks.Select(s => new ArmyUnitStackResponse(s.Type.ToWireName(), s.Count))],
             movement is null ? null : MovementResponse.From(movement),
             domain.StarvesAt,
@@ -258,16 +264,18 @@ public sealed record ArmyResponse(
     }
 }
 
-/// <summary>An army as it appears in a settlement's army list.</summary>
-public sealed record ArmySummary(Guid Id, string Mission, bool AtHome, bool Supporting, HexPointResponse Position)
+/// <summary>
+/// An army as it appears in a settlement's army list. <paramref name="SettlementId"/> is its home settlement: null for an army
+/// without a home, which every realm of its owner lists.
+/// </summary>
+public sealed record ArmySummary(Guid Id, Guid? SettlementId, string Mission, bool AtHome, bool Supporting, HexPointResponse Position)
 {
     public static ArmySummary From(ArmyEntity entity, DateTimeOffset gameNow)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        ArgumentNullException.ThrowIfNull(entity.Settlement);
 
         var domain = entity.ToDomain();
-        var home = new HexCoord(entity.Settlement.CentreQ, entity.Settlement.CentreR);
+        var home = entity.Settlement is { } homeSettlement ? new HexCoord(homeSettlement.CentreQ, homeSettlement.CentreR) : domain.HomeSpot;
         var atHome = domain.Location is ArmyLocation.AtHome;
         var supporting = domain.Location is ArmyLocation.Supporting;
 
@@ -279,7 +287,7 @@ public sealed record ArmySummary(Guid Id, string Mission, bool AtHome, bool Supp
         };
 
         return new ArmySummary(
-            entity.Id, domain.Mission.ToString().ToLowerInvariant(), atHome, supporting,
+            entity.Id, entity.SettlementId, domain.Mission.ToString().ToLowerInvariant(), atHome, supporting,
             HexPointResponse.From(position));
     }
 }
@@ -292,7 +300,7 @@ public sealed record ArmySummary(Guid Id, string Mission, bool AtHome, bool Supp
 /// via <see cref="ArmySummary"/> on their own settlement's army list.
 /// </summary>
 public sealed record GuestArmySummary(
-    Guid ArmyId, Guid OwnerSettlementId, double TotalUpkeepPerHour, IReadOnlyList<ArmyUnitStackResponse> Stacks)
+    Guid ArmyId, Guid? OwnerSettlementId, double TotalUpkeepPerHour, IReadOnlyList<ArmyUnitStackResponse> Stacks)
 {
     public static GuestArmySummary From(ArmyEntity entity)
     {
@@ -313,9 +321,11 @@ public sealed record ResourceAmountsResponse(double Wood, double Stone, double F
         new(amounts.Wood, amounts.Stone, amounts.Food, amounts.Iron);
 }
 
-public sealed record BattleReportAttackerLineResponse(string Unit, int Sent, int Lost, int Survived);
+/// <param name="Lost">Every loss of the fight; <paramref name="VolleyLost"/> is the part the volley took.</param>
+public sealed record BattleReportAttackerLineResponse(string Unit, int Sent, int Lost, int Survived, int VolleyLost = 0);
 
-public sealed record BattleReportDefenderLineResponse(string Unit, int Lost, int Survived);
+/// <param name="Lost">Every loss of the fight; <paramref name="VolleyLost"/> is the part the volley took.</param>
+public sealed record BattleReportDefenderLineResponse(string Unit, int Lost, int Survived, int VolleyLost = 0);
 
 /// <summary>The building-damage section of a battle report (issue #40 phase 5) — present only when catapult damage actually happened.</summary>
 public sealed record BattleReportSiegeResponse(
@@ -341,8 +351,8 @@ public sealed record BattleReportShipFightResponse(
         fight is null
             ? null
             : new BattleReportShipFightResponse(
-                [.. fight.AttackerLines.Select(l => new BattleReportAttackerLineResponse(l.Type.ToWireName(), l.Sent, l.Lost, l.Survived))],
-                [.. fight.DefenderLines.Select(l => new BattleReportDefenderLineResponse(l.Type.ToWireName(), l.Lost, l.Survived))],
+                [.. fight.AttackerLines.Select(l => new BattleReportAttackerLineResponse(l.Type.ToWireName(), l.Sent, l.Lost, l.Survived, l.VolleyLost))],
+                [.. fight.DefenderLines.Select(l => new BattleReportDefenderLineResponse(l.Type.ToWireName(), l.Lost, l.Survived, l.VolleyLost))],
                 fight.AttackPower,
                 fight.DefensePower,
                 fight.Winner.ToString().ToLowerInvariant());
@@ -355,12 +365,18 @@ public sealed record BattleReportShipFightResponse(
 /// </param>
 /// <param name="Winner">The whole attack's winner: <c>"attacker"</c> unless a fight was lost.</param>
 /// <param name="AttackPower">The land fight's attack power (the only fight of a land army); zero when a fleet fought no land fight.</param>
+/// <param name="AttackerVolleyPower">The attacker's ranged attack in the land fight's volley; zero without ranged units.</param>
+/// <param name="DefenderVolleyPower">The defender's ranged attack in the land fight's volley; zero without ranged units.</param>
 /// <param name="AttackerLines">The land fight's attacking side; empty when a fleet fought no land fight.</param>
 /// <param name="Siege">The siege engines' building damage after a won land fight.</param>
 /// <param name="ShipFight">The fight at sea of a fleet; <see langword="null"/> for a land army, a target without ships and older reports.</param>
 /// <param name="Drowned">The passengers the surviving ships could not carry.</param>
 /// <param name="FireShipsBurned">The Fire Ships burned by the fire damage.</param>
 /// <param name="FireSiege">The Fire Ships' damage to a building in the water, if any burned.</param>
+/// <param name="ViewerSide">
+/// <c>"attacker"</c> or <c>"defender"</c>: the side the reading player fought on (a player's reports cover all their
+/// settlements, so the side cannot be told from one settlement id); <see langword="null"/> when the reader fought neither.
+/// </param>
 public sealed record BattleReportResponse(
     Guid Id,
     DateTimeOffset OccurredAt,
@@ -371,6 +387,8 @@ public sealed record BattleReportResponse(
     string Winner,
     double AttackPower,
     double DefensePower,
+    double AttackerVolleyPower,
+    double DefenderVolleyPower,
     int Seed,
     ResourceAmountsResponse LootTaken,
     IReadOnlyList<BattleReportAttackerLineResponse> AttackerLines,
@@ -379,13 +397,20 @@ public sealed record BattleReportResponse(
     BattleReportShipFightResponse? ShipFight,
     IReadOnlyList<ArmyUnitStackResponse> Drowned,
     int FireShipsBurned,
-    BattleReportSiegeResponse? FireSiege)
+    BattleReportSiegeResponse? FireSiege,
+    string? ViewerSide = null)
 {
-    public static BattleReportResponse From(BattleReportEntity entity)
+    /// <param name="entity">The stored report.</param>
+    /// <param name="viewerOwnerId">The reading player; <see cref="ViewerSide"/> is the side that player fought on.</param>
+    public static BattleReportResponse From(BattleReportEntity entity, string? viewerOwnerId = null)
     {
         ArgumentNullException.ThrowIfNull(entity);
 
-        return From(entity.ToDomain());
+        var side = viewerOwnerId is null ? null
+            : viewerOwnerId == entity.AttackerOwnerId ? "attacker"
+            : viewerOwnerId == entity.DefenderOwnerId ? "defender"
+            : null;
+        return From(entity.ToDomain()) with { ViewerSide = side };
     }
 
     public static BattleReportResponse From(BattleReport domain)
@@ -402,10 +427,12 @@ public sealed record BattleReportResponse(
             domain.Winner.ToString().ToLowerInvariant(),
             domain.AttackPower,
             domain.DefensePower,
+            domain.AttackerVolleyPower,
+            domain.DefenderVolleyPower,
             domain.Seed,
             ResourceAmountsResponse.From(domain.LootTaken),
-            [.. domain.AttackerLines.Select(l => new BattleReportAttackerLineResponse(l.Type.ToWireName(), l.Sent, l.Lost, l.Survived))],
-            [.. domain.DefenderLines.Select(l => new BattleReportDefenderLineResponse(l.Type.ToWireName(), l.Lost, l.Survived))],
+            [.. domain.AttackerLines.Select(l => new BattleReportAttackerLineResponse(l.Type.ToWireName(), l.Sent, l.Lost, l.Survived, l.VolleyLost))],
+            [.. domain.DefenderLines.Select(l => new BattleReportDefenderLineResponse(l.Type.ToWireName(), l.Lost, l.Survived, l.VolleyLost))],
             BattleReportSiegeResponse.From(domain.Siege),
             BattleReportShipFightResponse.From(domain.ShipFight),
             [.. domain.Drowned.Select(d => new ArmyUnitStackResponse(d.Type.ToWireName(), d.Count))],
@@ -414,10 +441,11 @@ public sealed record BattleReportResponse(
     }
 }
 
-public sealed record FieldBattleReportLineResponse(string Side, bool IsLoss, string Unit, int Count)
+/// <param name="VolleyCount">On a loss line: the part of <paramref name="Count"/> the volley took.</param>
+public sealed record FieldBattleReportLineResponse(string Side, bool IsLoss, string Unit, int Count, int VolleyCount = 0)
 {
     public static FieldBattleReportLineResponse From(FieldBattleReportLineEntity line) =>
-        new(line.Side.ToString().ToLowerInvariant(), line.IsLoss, line.UnitType.ToWireName(), line.Count);
+        new(line.Side.ToString().ToLowerInvariant(), line.IsLoss, line.UnitType.ToWireName(), line.Count, line.VolleyCount);
 }
 
 /// <summary>
@@ -443,15 +471,19 @@ public sealed record FieldBattleReportResponse(
     string Winner,
     double SideAPower,
     double SideBPower,
+    double SideAVolleyPower,
+    double SideBVolleyPower,
     bool SideAWasDefending,
     bool SideBWasDefending,
     int Seed,
     ResourceAmountsResponse LootTaken,
-    IReadOnlyList<FieldBattleReportLineResponse> Lines)
+    IReadOnlyList<FieldBattleReportLineResponse> Lines,
+    string? ViewerSide = null)
 {
     /// <param name="names">Settlement/owner names by settlement id (<c>FieldBattleReportService.GetSideNamesAsync</c>); a side whose settlement is gone has null names.</param>
+    /// <param name="viewerOwnerId">The reading player; <see cref="ViewerSide"/> is the side (<c>"sidea"</c>/<c>"sideb"</c>) that player fought on, null when neither.</param>
     public static FieldBattleReportResponse From(
-        FieldBattleReportEntity entity, IReadOnlyDictionary<Guid, FieldBattleSideName> names)
+        FieldBattleReportEntity entity, IReadOnlyDictionary<Guid, FieldBattleSideName> names, string? viewerOwnerId = null)
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(names);
@@ -474,11 +506,17 @@ public sealed record FieldBattleReportResponse(
             ((FieldBattleWinner)entity.Winner).ToString().ToLowerInvariant(),
             entity.SideAPower,
             entity.SideBPower,
+            entity.SideAVolleyPower,
+            entity.SideBVolleyPower,
             entity.SideAWasDefending,
             entity.SideBWasDefending,
             entity.Seed,
             new ResourceAmountsResponse(entity.LootWood, entity.LootStone, entity.LootFood, entity.LootIron),
-            [.. entity.Lines.Select(FieldBattleReportLineResponse.From)]);
+            [.. entity.Lines.Select(FieldBattleReportLineResponse.From)],
+            viewerOwnerId is null ? null
+                : viewerOwnerId == entity.SideAOwnerId ? "sidea"
+                : viewerOwnerId == entity.SideBOwnerId ? "sideb"
+                : null);
     }
 }
 
@@ -489,7 +527,8 @@ public sealed record CampReportCampResponse(int Q, int R, string Family, int Eff
 public sealed record CampReportUnitLineResponse(string Type, int Sent, int Lost);
 
 /// <summary>One beast tier's count before a camp fight and how many died.</summary>
-public sealed record CampReportBeastLineResponse(string Tier, int Before, int Lost);
+/// <param name="Lost">Every beast of the tier that died; <paramref name="VolleyLost"/> is the part the army's volley killed.</param>
+public sealed record CampReportBeastLineResponse(string Tier, int Before, int Lost, int VolleyLost = 0);
 
 /// <summary>
 /// A camp fight (hunt, ambush or tower attack), as read from the player's settlement inbox — see
@@ -509,6 +548,7 @@ public sealed record CampReportResponse(
     string Winner,
     double ArmyPower,
     double CampPower,
+    double ArmyVolleyPower,
     IReadOnlyList<CampReportUnitLineResponse> Units,
     IReadOnlyList<CampReportBeastLineResponse> Beasts,
     ResourceAmountsResponse Loot,
@@ -531,8 +571,9 @@ public sealed record CampReportResponse(
             report.Winner == CampFightWinner.Army ? "army" : "camp",
             report.ArmyPower,
             report.CampPower,
+            report.ArmyVolleyPower,
             [.. report.UnitLines.Select(l => new CampReportUnitLineResponse(l.Type.ToWireName(), l.Sent, l.Lost))],
-            [.. report.BeastLines.Select(l => new CampReportBeastLineResponse(l.Tier.ToWireName(), l.Before, l.Lost))],
+            [.. report.BeastLines.Select(l => new CampReportBeastLineResponse(l.Tier.ToWireName(), l.Before, l.Lost, l.VolleyLost))],
             ResourceAmountsResponse.From(report.Loot),
             report.CampCleared,
             report.TowerCoord is { } tower ? HexPointResponse.From(tower) : null,
@@ -552,19 +593,23 @@ public sealed record ForeignMovementResponse(
     DateTimeOffset ArrivesAt);
 
 /// <summary>
-/// A marching army of another player inside the viewer's sight. Deliberately nothing but identity (to colour by its realm), kind of
-/// marker and where it is going next: no mission, target, units or provisions.
+/// A marching army of another player inside the viewer's sight. Deliberately nothing but identity (to colour by: its home, and
+/// <paramref name="Relation"/>, how its owner stands to the viewer, <see cref="SettlementRelations"/>, so an army without a home
+/// wears its owner's colour too; never the owner's ids, an anonymous owner id is that player's credential), kind of marker and where
+/// it is going next: no mission, target, units or provisions.
 /// </summary>
 public sealed record ForeignArmyResponse(
     Guid Id,
-    Guid SettlementId,
+    Guid? SettlementId,
+    string Relation,
     bool IsFleet,
     HexPointResponse Position,
     ForeignMovementResponse Movement)
 {
-    public static ForeignArmyResponse From(ForeignArmy army) => new(
+    public static ForeignArmyResponse From(ForeignArmy army, string relation) => new(
         army.Id,
         army.SettlementId,
+        relation,
         army.IsFleet,
         HexPointResponse.From(army.Position),
         new ForeignMovementResponse(

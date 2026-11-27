@@ -69,7 +69,7 @@ public sealed record SimulatorRequest(
 /// <param name="Mission"><c>"attack"</c> or <c>"raid"</c> — which the request asked for.</param>
 /// <param name="Siege">
 /// Present only when the attacker's stacks included a
-/// <see cref="UnitType.Catapult"/> and the attacker won. Since the simulator
+/// <see cref="UnitType.Catapult"/> and the attacker won an attack (never a raid, which does no siege). Since the simulator
 /// models no real settlement, the siege is resolved against one nominal
 /// level-1 Longhouse — see <c>SimulatorEndpoints</c>'s remarks — so this
 /// previews the levels-destroyed math, not a real building's fate.
@@ -83,6 +83,8 @@ public sealed record SimulatorResponse(
     string Winner,
     double AttackPower,
     double DefensePower,
+    double AttackerVolleyPower,
+    double DefenderVolleyPower,
     int Seed,
     ResourceAmountsResponse LootTaken,
     IReadOnlyList<BattleReportAttackerLineResponse> AttackerLines,
@@ -100,7 +102,7 @@ public sealed record SimulatorResponse(
 
         var response = BattleReportResponse.From(report);
         return new SimulatorResponse(
-            response.Mission, response.Winner, response.AttackPower, response.DefensePower, response.Seed, response.LootTaken,
+            response.Mission, response.Winner, response.AttackPower, response.DefensePower, response.AttackerVolleyPower, response.DefenderVolleyPower, response.Seed, response.LootTaken,
             response.AttackerLines, response.DefenderLines, response.Siege, response.ShipFight, response.Drowned,
             response.FireShipsBurned, response.FireSiege);
     }

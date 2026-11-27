@@ -6,11 +6,12 @@
 // design pass reported by hand — a card appearing for a building nobody had
 // hovered yet, and Escape throwing away a whole drill-down instead of
 // stepping back out of it.
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import RingMenu, { type RingCategory } from './RingMenu.vue';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
+import { LONG_PRESS_MS } from '../../lib/map/longPress';
 import { computeAvailability, type RingAvailabilityInput } from '../../lib/map/ringAvailability';
 
 const CATEGORIES: RingCategory[] = [
@@ -525,6 +526,21 @@ describe('RingMenu', () => {
       expect(wrapper.emitted('select')).toBeUndefined();
     });
 
+    it('says the queue is locked when orders still wait and there is no premium room', async () => {
+      const wrapper = ringWith({
+        availability: availability({
+          construction: { slots: 3, slotsUsed: 1, maxWaitingOrders: 0, waitingOrders: 1 },
+        }),
+      });
+      await hoverHut(wrapper);
+      const card = wrapper.get('.ring-card');
+      expect(card.get('[data-testid="ring-card-status"]').text()).toBe(
+        'Builds are still waiting. Without Premium you can add more once they have started.',
+      );
+      expect(card.text()).toContain('QUEUE LOCKED');
+      expect(card.text()).not.toContain('NO FREE BUILD SLOT');
+    });
+
     it('shows full slots as the same waiting look, with the free count and time until the next slot', async () => {
       const wrapper = ringWith({
         availability: availability({
@@ -574,6 +590,15 @@ describe('RingMenu', () => {
       await hoverHut(wrapper);
       expect(wrapper.get('.ring-card').text()).toContain('+15 Brick/h');
       expect(wrapper.get('[data-testid="ring-card-total"]').text()).toBe('· 90 total');
+    });
+
+    it('draws a resource-rate gain with the resource icon instead of its name', async () => {
+      const wrapper = ringWith({ gives: '+15 Brick/h', givesOutput: { kind: 'resourceRate', resource: 'stone', amount: 15 }, givesTotal: '90 total' });
+      await hoverHut(wrapper);
+      const card = wrapper.get('.ring-card');
+      expect(card.find('.output-rate svg.resource-icon').exists()).toBe(true);
+      expect(card.text()).toContain('+15');
+      expect(card.text()).not.toContain('Brick/h');
     });
 
     it('lets a premium player queue when slots are full, with a gold footer, and no clock badge', async () => {
@@ -661,7 +686,7 @@ describe('RingMenu', () => {
         actions: [{ id: 'upgrade', label: 'Upgrade', card: { title: 'Upgrade to level 2', cost: { wood: 160.8, food: 80.4 } } }],
       });
       await bubble(wrapper, 'Upgrade').trigger('mouseenter');
-      expect(wrapper.get('.ring-card').findAll('.chip b').map((b) => b.text())).toEqual(['161', '81']);
+      expect(wrapper.get('.ring-card').findAll('.cost-item b').map((b) => b.text())).toEqual(['161', '81']);
     });
 
     it('shows a lock badge on a locked Upgrade bubble', () => {
@@ -1082,7 +1107,7 @@ describe('RingMenu', () => {
         actions: [{ id: 'upgrade', label: 'Upgrade', card: { title: 'Upgrade to level 2', cost: { wood: 160.8, food: 80.4 } } }],
       });
       await bubble(wrapper, 'Upgrade').trigger('mouseenter');
-      expect(wrapper.get('.ring-card').findAll('.chip b').map((b) => b.text())).toEqual(['161', '81']);
+      expect(wrapper.get('.ring-card').findAll('.cost-item b').map((b) => b.text())).toEqual(['161', '81']);
     });
 
     it('shows a lock badge on a locked Upgrade bubble', () => {
@@ -1207,5 +1232,93 @@ describe('RingMenu', () => {
         expect(card.find('button').exists()).toBe(false);
       });
     }
+  });
+
+  describe('holding a holdable bubble', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    // jsdom has no PointerEvent: a MouseEvent of the pointer type carries the coordinates the hold reads.
+    async function pointer(target: { element: Element }, type: string, x = 10, y = 10) {
+      target.element.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 }));
+      await Promise.resolve();
+    }
+
+    const actions = [
+      { id: 'upgrade', label: 'Upgrade', holdable: true },
+      { id: 'raze', label: 'Raze' },
+    ];
+
+    it('emits hold once after LONG_PRESS_MS, shows the ring meanwhile and swallows the click of the release', async () => {
+      const wrapper = ring({ actions });
+      const upgrade = bubble(wrapper, 'Upgrade');
+      await pointer(upgrade, 'pointerdown');
+      expect(wrapper.find('[data-testid="hold-progress"]').exists()).toBe(true);
+      vi.advanceTimersByTime(LONG_PRESS_MS - 1);
+      expect(wrapper.emitted('hold')).toBeUndefined();
+      vi.advanceTimersByTime(1);
+      await wrapper.vm.$nextTick();
+      expect(wrapper.emitted('hold')).toEqual([['upgrade']]);
+      expect(wrapper.find('[data-testid="hold-progress"]').exists()).toBe(false);
+      await pointer(upgrade, 'pointerup');
+      await upgrade.trigger('click');
+      expect(wrapper.emitted('select')).toBeUndefined();
+      vi.advanceTimersByTime(LONG_PRESS_MS * 2);
+      expect(wrapper.emitted('hold')).toHaveLength(1);
+    });
+
+    it('releasing before the time emits no hold and leaves the normal click alone', async () => {
+      const wrapper = ring({ actions });
+      const upgrade = bubble(wrapper, 'Upgrade');
+      await pointer(upgrade, 'pointerdown');
+      vi.advanceTimersByTime(LONG_PRESS_MS - 50);
+      await pointer(upgrade, 'pointerup');
+      expect(wrapper.find('[data-testid="hold-progress"]').exists()).toBe(false);
+      await upgrade.trigger('click');
+      vi.advanceTimersByTime(LONG_PRESS_MS * 2);
+      expect(wrapper.emitted('hold')).toBeUndefined();
+      expect(wrapper.emitted('select')).toEqual([['upgrade']]);
+    });
+
+    it('drifting off the bubble while held cancels the hold', async () => {
+      const wrapper = ring({ actions });
+      const upgrade = bubble(wrapper, 'Upgrade');
+      await pointer(upgrade, 'pointerdown');
+      await pointer(upgrade, 'pointermove', 60, 10);
+      vi.advanceTimersByTime(LONG_PRESS_MS * 2);
+      expect(wrapper.emitted('hold')).toBeUndefined();
+    });
+
+    it('a bubble that is not holdable never emits hold', async () => {
+      const wrapper = ring({ actions });
+      const raze = bubble(wrapper, 'Raze');
+      await pointer(raze, 'pointerdown');
+      expect(wrapper.find('[data-testid="hold-progress"]').exists()).toBe(false);
+      vi.advanceTimersByTime(LONG_PRESS_MS * 2);
+      expect(wrapper.emitted('hold')).toBeUndefined();
+    });
+
+    it('a disabled holdable bubble can still be held', async () => {
+      const wrapper = ring({ actions: [{ id: 'upgrade', label: 'Upgrade', holdable: true, disabled: true, hint: 'Max level' }] });
+      await pointer(bubble(wrapper, 'Upgrade'), 'pointerdown');
+      vi.advanceTimersByTime(LONG_PRESS_MS);
+      expect(wrapper.emitted('hold')).toEqual([['upgrade']]);
+    });
+
+    it('the card carries the hold hint as its last line, locked for a free account', async () => {
+      const card = { title: 'Upgrade to level 2', cost: { wood: 10 } };
+      const wrapper = ring({
+        actions: [{ id: 'upgrade', label: 'Upgrade', card: { ...card, holdHint: { text: 'Hold to keep upgrading', locked: false } } }],
+      });
+      await bubble(wrapper, 'Upgrade').trigger('mouseenter');
+      const hint = wrapper.get('[data-testid="ring-hold-hint"]');
+      expect(hint.text()).toBe('Hold to keep upgrading');
+      expect(hint.classes()).not.toContain('locked');
+      const locked = ring({
+        actions: [{ id: 'upgrade', label: 'Upgrade', card: { ...card, holdHint: { text: 'Premium: hold', locked: true } } }],
+      });
+      await bubble(locked, 'Upgrade').trigger('mouseenter');
+      expect(locked.get('[data-testid="ring-hold-hint"]').classes()).toContain('locked');
+    });
   });
 });

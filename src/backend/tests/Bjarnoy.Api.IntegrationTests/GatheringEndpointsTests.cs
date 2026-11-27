@@ -286,7 +286,7 @@ public sealed class GatheringEndpointsTests : IAsyncLifetime
             var winner = MakeArmy(
                 winnerSettlement.Id, new HexCoord(20, 0), [(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0), (3, 0), (4, 0)], [(4, 0), (3, 0)], 1_000, 10, null,
                 unit: UnitType.Axeman, outboundHours: 6);
-            db.Armies.AddRange(winner, loser, staying);
+            db.AddArmyRows(winner, loser, staying);
             await db.SaveChangesAsync(Ct);
 
             loserArmyId = loser.Id;
@@ -355,7 +355,7 @@ public sealed class GatheringEndpointsTests : IAsyncLifetime
 
         var a = Group(unitsA, [(-3, 0), (-2, 0), (-1, 0), (0, 0)], 2);
         var b = Group(unitsB, [(0, 0)], 0);
-        db.Armies.AddRange(a, b);
+        db.AddArmyRows(a, b);
         await db.SaveChangesAsync(Ct);
         return (owner, settlement.Id, a.Id, b.Id, departAt);
     }
@@ -396,7 +396,7 @@ public sealed class GatheringEndpointsTests : IAsyncLifetime
             var settlement = MakeSettlement(worldId, islandId, hostileOwner, SystemUserIds.Abandoned, new HexCoord(30, 0));
             var hostile = MakeArmy(settlement.Id, new HexCoord(30, 0), [(30, 0), (29, 0)], [(29, 0), (30, 0)], 100, 3, null, outboundHours: 1, turnAroundHours: 100);
             db.Settlements.Add(settlement);
-            db.Armies.Add(hostile);
+            db.AddArmyRows(hostile);
             await db.SaveChangesAsync(Ct);
             hostileId = hostile.Id;
         }

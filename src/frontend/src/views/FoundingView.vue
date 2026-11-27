@@ -145,7 +145,7 @@ const tocLinks = computed(() =>
     <section id="sea" class="block">
       <h2>{{ $t('docs.founding.sea.heading') }}</h2>
       <i18n-t keypath="docs.founding.sea.body" tag="p" class="text" scope="global">
-        <template #dockyard><BuildingLink type="dockyard" /></template>
+        <template #harbour><BuildingLink type="harbour" /></template>
       </i18n-t>
       <i18n-t keypath="docs.founding.sea.slots" tag="p" class="text" scope="global">
         <template #ships>

@@ -317,45 +317,33 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     expect(model.placeBuilding(settlement.id, spots[2], 'farm')).toBe(true);
   });
 
-  it('raises the bar for each further storage house (additionalStorageHouseRequirement)', () => {
+  it('lets a settlement hold any number of storage houses and asks n maxed ones for the n-th Great Storehouse', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
     const spots = hexesInRadius(at, 3).filter(
       (c) => (c.q !== at.q || c.r !== at.r) && isEmptyGrass(model, c),
     );
-    expect(spots.length).toBeGreaterThan(5);
+    expect(spots.length).toBeGreaterThan(6);
 
     settlement.level = 3; // widen the claim so the spots are reachable
     expect(model.storageHouses(settlement.id)).toEqual([]);
     const setLevel = (i: number, level: number) => {
       model.getTile(spots[i].q, spots[i].r).buildingLevel = level;
     };
-    // 1st: never refused. 2nd: needs 1 at L10.
-    expect(model.placeBuilding(settlement.id, spots[0], 'storagehouse')).toBe(true);
-    expect(model.placeBuilding(settlement.id, spots[1], 'storagehouse')).toBe(false);
-    setLevel(0, 10);
-    expect(model.placeBuilding(settlement.id, spots[1], 'storagehouse')).toBe(true);
-    // 3rd: needs 2 at L15.
-    setLevel(1, 14);
-    expect(model.placeBuilding(settlement.id, spots[2], 'storagehouse')).toBe(false);
-    setLevel(0, 15);
-    expect(model.placeBuilding(settlement.id, spots[2], 'storagehouse')).toBe(false);
-    setLevel(1, 15);
-    expect(model.placeBuilding(settlement.id, spots[2], 'storagehouse')).toBe(true);
-    // 4th: needs 3 at L20.
-    setLevel(0, 20);
-    setLevel(1, 20);
-    setLevel(2, 19);
-    expect(model.placeBuilding(settlement.id, spots[3], 'storagehouse')).toBe(false);
-    setLevel(2, 20);
-    expect(model.placeBuilding(settlement.id, spots[3], 'storagehouse')).toBe(true);
-    // 5th: needs 4 at L25, and from then on there is no limit.
-    for (const i of [0, 1, 2]) setLevel(i, 25);
-    setLevel(3, 24);
-    expect(model.placeBuilding(settlement.id, spots[4], 'storagehouse')).toBe(false);
-    setLevel(3, 25);
-    expect(model.placeBuilding(settlement.id, spots[4], 'storagehouse')).toBe(true);
-    expect(model.placeBuilding(settlement.id, spots[5], 'storagehouse')).toBe(true);
+    // Any number of storage houses, whatever their level.
+    for (const i of [0, 1, 2]) expect(model.placeBuilding(settlement.id, spots[i], 'storagehouse')).toBe(true);
+    // The 1st Great Storehouse needs 1 storage house at L25.
+    expect(model.placeBuilding(settlement.id, spots[3], 'greatstorehouse')).toBe(false);
+    setLevel(0, 25);
+    expect(model.placeBuilding(settlement.id, spots[3], 'greatstorehouse')).toBe(true);
+    // The 2nd needs 2 at L25.
+    expect(model.placeBuilding(settlement.id, spots[4], 'greatstorehouse')).toBe(false);
+    setLevel(1, 25);
+    expect(model.placeBuilding(settlement.id, spots[4], 'greatstorehouse')).toBe(true);
+    // The 3rd needs 3.
+    expect(model.placeBuilding(settlement.id, spots[5], 'greatstorehouse')).toBe(false);
+    setLevel(2, 25);
+    expect(model.placeBuilding(settlement.id, spots[5], 'greatstorehouse')).toBe(true);
   });
 
   it('lets a settlement hold only one shrine in total, of any god', () => {
@@ -771,7 +759,7 @@ describe('WorldModel.applyServerSnapshot — merged fisher hut', () => {
 });
 
 describe('WorldModel.placeBuilding — fishing hut and sawmill', () => {
-  it('places a fishing hut directly on a coastal-water hex, like the fishing hut/dockyard', () => {
+  it('places a fishing hut directly on a coastal-water hex, like the fishing hut/harbour', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
     // A settlement's *founding* spot is guaranteed no sea within two hexes
@@ -2202,7 +2190,7 @@ describe('WorldModel inland lakes', () => {
     expect(lake.every((c) => !model.isSea(c.q, c.r))).toBe(true);
   });
 
-  it('places a Fishing Hut on an inland-lake shore, and refuses a Dockyard and any other building there', () => {
+  it('places a Fishing Hut on an inland-lake shore, and refuses a Harbour and any other building there', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
     settlement.level = 6;
@@ -2213,7 +2201,7 @@ describe('WorldModel inland lakes', () => {
     model.setInlandLakeTiles([shore]);
 
     expect(model.getTile(shore.q, shore.r)).toMatchObject({ terrain: 'inlandlake', isCoastalWater: true });
-    expect(model.placeBuilding(settlement.id, shore, 'dockyard')).toBe(false);
+    expect(model.placeBuilding(settlement.id, shore, 'harbour')).toBe(false);
     expect(model.placeBuilding(settlement.id, shore, 'shrineofnjord')).toBe(false);
     expect(model.placeBuilding(settlement.id, shore, 'farm')).toBe(false);
     expect(model.placeBuilding(settlement.id, shore, 'fishinghut')).toBe(true);
@@ -2824,6 +2812,30 @@ describe('WorldModel.applyRivalBuildings', () => {
     expect(model.getTile(5, 7).buildingType).toBe('longhouse');
   });
 
+  it("a rival's cut-off tower (outsideRealm) claims no disc of its own, a connected one does", () => {
+    const model = new WorldModel(20260825);
+    const rival = model.registerSettlement({
+      id: 'rival-1',
+      ownerId: 'rival-1',
+      ownerName: 'Rival',
+      name: 'Rivalhold',
+      q: 5,
+      r: 5,
+      level: 2,
+      resources: { wood: 0, stone: 0, food: 0, brick: 0, iron: 0 } as never,
+      rates: {} as never,
+      foundedAt: 0,
+    });
+    model.applyRivalBuildings([
+      rivalBuilding(9, 5, { type: 'tower', level: 1 }),
+      { ...rivalBuilding(14, 5, { type: 'tower', level: 1 }), outsideRealm: true },
+    ]);
+
+    const centres = model.claimDiscsOf(rival.id).map((d) => `${d.q},${d.r}`);
+    expect(centres).toContain('9,5');
+    expect(centres).not.toContain('14,5');
+  });
+
   it('replaces the previous set: moved walls follow and walls gone server-side disappear', () => {
     const model = new WorldModel(20260825);
     model.applyRivalBuildings([rivalBuilding(5, 5), rivalBuilding(5, 6)]);
@@ -2973,6 +2985,17 @@ describe('WorldModel chained towers', () => {
     expect(owner(along(5))).toBe(settlement.id);
     expect(model.visionDiscsFor(settlement)).toHaveLength(2);
     expect(model.claimDiscsOf(settlement.id).some((d) => d.q === along(7).q)).toBe(false);
+  });
+
+  it('a tower cut off by a dropped link gets no border of its own, not even on its own hex', () => {
+    const { model, settlement, along, snap } = setup();
+    snap(settlement, [along(3), along(5), along(7)]);
+    expect(model.realmBorderOwnerAt(along(7).q, along(7).r)).toBe(settlement.id);
+
+    snap(settlement, [along(3), along(7)]); // the middle tower is gone: the far one is out of reach
+
+    expect(model.realmBorderOwnerAt(along(7).q, along(7).r)).toBeUndefined();
+    expect(model.realmBorderOwnerAt(along(5).q, along(5).r)).toBe(settlement.id);
   });
 
   it('reconnecting the chain claims the far side again', () => {

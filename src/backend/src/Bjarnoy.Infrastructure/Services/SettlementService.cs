@@ -59,6 +59,11 @@ public sealed record BuildResult(
     public bool Accepted => Rejection == BuildRejection.None && Order is not null;
 }
 
+public sealed record CancelTrainingServiceResult(CancelTrainingRejection Rejection, bool WorldPaused = false)
+{
+    public bool Accepted => Rejection == CancelTrainingRejection.None && !WorldPaused;
+}
+
 public sealed record CancelBuildResult(CancelBuildRejection Rejection, bool WorldPaused = false)
 {
     public bool Accepted => Rejection == CancelBuildRejection.None && !WorldPaused;
@@ -1139,7 +1144,7 @@ public sealed class SettlementService(
         // settlement's owning user (the anchor load includes Owner) — Anonymous
         // settlements are owned by SystemUserIds.Abandoned and are simply not
         // premium (issue #158).
-        var maxWaitingOrders = (session.Anchor.Owner?.IsPremium ?? false) ? Settlement.MaxWaitingOrders : 0;
+        var maxWaitingOrders = (session.Anchor.Owner?.IsPremiumAt(_timeProvider.GetUtcNow()) ?? false) ? Settlement.MaxWaitingOrders : 0;
 
         var terrain = sampler.TerrainAt(coord);
         var (riverShapeAt, onRiverTile) = await RiverSiteAsync(booking.WorldId, coord, cancellationToken)
@@ -1239,7 +1244,7 @@ public sealed class SettlementService(
         var booked = session.View(bookingId);
 
         // Same premium waiting-room gate as a build.
-        var maxWaitingOrders = (session.Anchor.Owner?.IsPremium ?? false) ? Settlement.MaxWaitingOrders : 0;
+        var maxWaitingOrders = (session.Anchor.Owner?.IsPremiumAt(_timeProvider.GetUtcNow()) ?? false) ? Settlement.MaxWaitingOrders : 0;
 
         var decision = booked.PlanRaze(
             coord, now, Guid.CreateVersion7(), session.SpeedFactor, maxWaitingOrders, Settlement.DefaultMaxOrdersPerHex);
@@ -1331,6 +1336,46 @@ public sealed class SettlementService(
     }
 
     /// <summary>
+    /// Cancels an order of a building's training queue, refunding 50 % of the cost of the units not yet trained
+    /// (see <see cref="Settlement.CancelTraining"/>).
+    /// </summary>
+    public async Task<CancelTrainingServiceResult> CancelTrainingAsync(
+        Guid settlementId,
+        Guid orderId,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
+        {
+            return new CancelTrainingServiceResult(CancelTrainingRejection.OrderNotFound);
+        }
+
+        if (!session.Clock.AllowsCommands)
+        {
+            return new CancelTrainingServiceResult(CancelTrainingRejection.None, WorldPaused: true);
+        }
+
+        var owner = session.Store.MemberOwningTrainingOrder(orderId) is { } found && session.Store.ComponentOf(settlementId).Contains(found)
+            ? found
+            : settlementId;
+
+        var decision = session.View(owner).CancelTraining(orderId, session.Now);
+        if (!decision.Accepted)
+        {
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
+            return new CancelTrainingServiceResult(decision.Rejection);
+        }
+
+        session.Apply(owner, decision.Settlement!);
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Settlement {Id} cancelled training order {OrderId}.", settlementId, orderId);
+
+        return new CancelTrainingServiceResult(CancelTrainingRejection.None);
+    }
+
+    /// <summary>
     /// Queues training a batch of units in the building on <paramref name="buildingCoord"/> (and, by <paramref name="split"/>, in
     /// its siblings), charging for it up front.
     /// </summary>
@@ -1377,7 +1422,7 @@ public sealed class SettlementService(
             .Any(sampler.IsShoreline);
 
         var decision = settled.PlanTrain(
-            unitType, count, now, Guid.CreateVersion7, buildingCoord, split, settlement.Owner?.IsPremium ?? false,
+            unitType, count, now, Guid.CreateVersion7, buildingCoord, split, settlement.Owner?.IsPremiumAt(_timeProvider.GetUtcNow()) ?? false,
             hasShoreline, session.SpeedFactor);
 
         if (!decision.Accepted)
@@ -1474,6 +1519,14 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, settled.ClaimQuest(decision.Quest!, now));
+        if (decision.Quest!.PremiumDays > 0 && session.Anchor.Owner is { } owner)
+        {
+            // Stacks on whatever premium is left; real time, since premium is not part of the game clock.
+            var realNow = _timeProvider.GetUtcNow();
+            var from = owner.PremiumUntil is { } current && current > realNow ? current : realNow;
+            owner.PremiumUntil = from.AddDays(decision.Quest.PremiumDays);
+        }
+
         await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 

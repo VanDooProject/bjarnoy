@@ -31,6 +31,10 @@ import { TILE_ORIENTATIONS, type TileOrientation } from './types';
 // avoid a textures.ts <-> giantTiles.ts import cycle (textures.ts imports
 // this module to build TileTextures.giants).
 const NATIVE_CANVAS_H = 300;
+/** The native height of the tallest shipped giant part frame (the mountain, volcano, shrine and Utgard parts); a taller one needs the renderer's margins re-checked. */
+export const GIANT_MAX_NATIVE_H = 692;
+/** How far, in native px, a giant part's art rises above the hex's normal canvas at most. */
+export const GIANT_MAX_RISE_NATIVE = GIANT_MAX_NATIVE_H - NATIVE_CANVAS_H;
 
 /** One family's atlas frame, narrowed to what `classifyGiantFrames` needs — the same shape `textures.ts`'s `FamilyFrame` uses (kept as a local structural type here, not imported, to avoid a textures.ts <-> giantTiles.ts import cycle: textures.ts imports this module to build `TileTextures.giants`). */
 export interface GiantFamilyFrame<T> {

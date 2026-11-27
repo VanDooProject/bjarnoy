@@ -43,6 +43,7 @@ import {
   dispatchTargetCoord,
   isFieldOrderMidMarch,
   isHuntUnit,
+  wouldExceedWaypointLimit,
   maxAffordableProvisions,
 } from '../lib/units/armyDispatch';
 import { CAMP_BUILDERS_PER_CAMP, SETTLERS_PER_FOUNDING } from '../lib/founding';
@@ -593,6 +594,15 @@ export const useWorldStore = defineStore('world', {
       return realms;
     },
     /** Where the open dispatch draft's units leave from: the open realm's HUD data or an other realm's snapshot; null when that realm is gone. */
+    /**
+     * The most food the dispatch being composed can take: what its units can carry, and no more than the source realm's free food
+     * (`available`: food reserved for the waiting build queue is not free to load onto an army, issue #158).
+     */
+    dispatchProvisionsCap(): number {
+      const draft = this.dispatchDraft;
+      if (!draft) return 0;
+      return maxAffordableProvisions(draft.unitCounts, useUnitCatalogueStore().byType, this.dispatchSource?.availableFood ?? this.hud.available.food);
+    },
     dispatchSource: (state) => {
       const draft = state.dispatchDraft;
       if (!draft || !state.selectedSettlementId) return null;
@@ -1111,6 +1121,12 @@ export const useWorldStore = defineStore('world', {
       await api.cancelBuild(this.selectedSettlementId, orderId, this.ownerId ?? undefined);
       await this.refreshLiveSettlement();
     },
+    /** Live mode: cancels a training order (any in the queue); the units not trained yet are refunded at 50 %. Throws `ApiError`. */
+    async cancelTrainingLive(orderId: string) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      await api.cancelTraining(this.selectedSettlementId, orderId, this.ownerId ?? undefined);
+      await this.refreshLiveSettlement();
+    },
     /**
      * Live mode: queues a training batch against the backend, charging its
      * cost immediately — mirrors `queueBuildOptimistic` above, including the
@@ -1162,8 +1178,12 @@ export const useWorldStore = defineStore('world', {
     async claimQuest(questId: string) {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
       if (!DEMO_MODE) {
+        const premiumDays = this.hud.quests.find((q) => q.id === questId)?.premiumDays ?? 0;
         await api.claimQuest(this.selectedSettlementId, questId, this.ownerId ?? undefined);
         await this.refreshLiveSettlement();
+        // The server just extended the account's premium; show it now instead of at the next /auth/me.
+        const auth = useAuthStore();
+        if (premiumDays > 0 && auth.user) auth.user.isPremium = true;
         return;
       }
       this.syncHud();
@@ -1825,7 +1845,8 @@ export const useWorldStore = defineStore('world', {
         realms.map(async ({ id: realmId, name }): Promise<OtherRealmSnapshot | null> => {
           try {
             const [settlement, summaries] = await Promise.all([api.getSettlement(realmId, owner), api.getSettlementArmies(realmId, owner)]);
-            const armies = await Promise.all(summaries.map((s) => api.getArmy(s.id, owner)));
+            // The armies without a home are in every realm's list; the open realm's already carries them, so they are not read again.
+            const armies = await Promise.all(summaries.filter((s) => s.settlementId !== null).map((s) => api.getArmy(s.id, owner)));
             return {
               realmId,
               name,
@@ -2044,6 +2065,11 @@ export const useWorldStore = defineStore('world', {
       if (!draft) return;
       if (draft.route.length >= 1 && !useAuthStore().isPremium) {
         draft.error = i18n.global.t('common.errors.fieldOrderPremiumRequired');
+        return;
+      }
+
+      if (wouldExceedWaypointLimit(draft.route.length, draft.mission === 'move' || draft.mission === 'hunt', useAuthStore().isPremium)) {
+        draft.error = i18n.global.t('apiErrors.rejections.TooManyWaypoints');
         return;
       }
 
@@ -2274,15 +2300,25 @@ export const useWorldStore = defineStore('world', {
       // A camp army's builders are fixed at two likewise.
       if (this.dispatchDraft.mission === 'setupcamp' && unit === 'campbuilder') return;
       this.dispatchDraft.unitCounts[unit] = Math.max(0, Math.floor(count));
+      // The carry capacity changed: propose the most food the units can take again (the player can still edit it after).
+      this.dispatchDraft.provisions = this.dispatchProvisionsCap;
     },
+    /** Sets the food the dispatch takes along, clamped to `dispatchProvisionsCap`, so the order is never refused for it. */
     setDispatchProvisions(provisions: number) {
-      if (!this.dispatchDraft) return;
-      this.dispatchDraft.provisions = Math.max(0, provisions);
+      const draft = this.dispatchDraft;
+      if (!draft) return;
+      draft.provisions = Math.min(this.dispatchProvisionsCap, Math.max(0, Number.isFinite(provisions) ? Math.floor(provisions) : 0));
     },
     /** Clicking a hex on the map while a dispatch is being composed appends it as the next waypoint (the last click is always the eventual destination). */
     addWaypoint(coord: AxialCoord) {
-      if (!this.dispatchDraft) return;
-      this.dispatchDraft.route.push(coord);
+      const draft = this.dispatchDraft;
+      if (!draft) return;
+      if (wouldExceedWaypointLimit(draft.route.length, draft.mission === 'move', useAuthStore().isPremium)) {
+        draft.error = i18n.global.t('apiErrors.rejections.TooManyWaypoints');
+        return;
+      }
+
+      draft.route.push(coord);
     },
     /**
      * Issue #93: repositions an already-plotted waypoint — the map's own

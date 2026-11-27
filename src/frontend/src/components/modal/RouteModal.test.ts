@@ -164,4 +164,41 @@ describe('RouteModal', () => {
 
     expect(router.currentRoute.value.path).toBe('/settlement');
   });
+  it('draws the shared × only when the content does not bring its own header, and hands it `close` otherwise', async () => {
+    setIsMobile(false);
+    const router = testRouter();
+    await router.push('/leaderboards');
+    await router.isReady();
+
+    const wrapper = mount(RouteModal, {
+      props: { title: 'Leaderboards', contentHeader: true, size: 'wide' },
+      slots: {
+        default: '<template #default="{ close }"><button class="own-close" @click="close()">x</button></template>',
+      },
+      global: { plugins: [router, createTestI18n({ profile: enProfile })] },
+    });
+
+    expect(wrapper.find('.close-button').exists()).toBe(false);
+    expect(wrapper.find('.modal-panel--wide').exists()).toBe(true);
+    await wrapper.find('.own-close').trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe('/settlement');
+  });
+
+  it('keeps the shared header bar on a phone even when the content draws its own header on desktop', async () => {
+    setIsMobile(true);
+    const router = testRouter();
+    await router.push('/leaderboards');
+    await router.isReady();
+
+    const wrapper = mount(RouteModal, {
+      props: { title: 'Leaderboards', contentHeader: true, size: 'wide' },
+      slots: { default: '<div />' },
+      global: { plugins: [router, createTestI18n({ profile: enProfile })] },
+    });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.back-button').exists()).toBe(true);
+    expect(wrapper.find('.mobile-title').text()).toBe('Leaderboards');
+  });
 });

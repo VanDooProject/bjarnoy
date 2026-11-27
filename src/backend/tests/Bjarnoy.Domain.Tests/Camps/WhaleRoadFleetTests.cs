@@ -36,7 +36,7 @@ public class WhaleRoadFleetTests
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: 1_000_000, Iron: 1_000_000),
                 production, capacity, T0),
-        }.WithGarrison([new UnitStack(UnitType.Longship, 20), new UnitStack(UnitType.Karve, 20), new UnitStack(UnitType.Axeman, 100)]);
+        }.WithGarrison([new UnitStack(UnitType.Snekkja, 20), new UnitStack(UnitType.Karve, 20), new UnitStack(UnitType.Axeman, 100)]);
     }
 
     private static DispatchDecision Dispatch(
@@ -47,7 +47,7 @@ public class WhaleRoadFleetTests
 
     private static Army Hunter(UnitStack[]? units = null)
     {
-        units ??= [new UnitStack(UnitType.Longship, 5)];
+        units ??= [new UnitStack(UnitType.Snekkja, 5)];
         var home = Found();
         // A full load, as far as the home stores can hold.
         var food = Math.Min(
@@ -84,7 +84,7 @@ public class WhaleRoadFleetTests
     [Fact]
     public void A_fleet_without_land_troops_aboard_cannot_hunt_a_sand_camp()
     {
-        var decision = Dispatch([new UnitStack(UnitType.Longship, 5)], LandCampHex, targetIsWater: false, targetIsSand: true);
+        var decision = Dispatch([new UnitStack(UnitType.Snekkja, 5)], LandCampHex, targetIsWater: false, targetIsSand: true);
 
         Assert.Equal(DispatchRejection.HuntRequiresLandUnits, decision.Rejection);
     }
@@ -93,7 +93,7 @@ public class WhaleRoadFleetTests
     public void A_fleet_with_land_troops_aboard_may_hunt_a_sand_camp_and_beaches_on_it()
     {
         var decision = Dispatch(
-            [new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 10)], LandCampHex, targetIsWater: false,
+            [new UnitStack(UnitType.Snekkja, 5), new UnitStack(UnitType.Axeman, 10)], LandCampHex, targetIsWater: false,
             destination: LandCampHex, targetIsSand: true);
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
@@ -105,7 +105,7 @@ public class WhaleRoadFleetTests
     public void A_fleet_cannot_hunt_a_land_camp_that_is_not_sand_even_with_land_troops_aboard()
     {
         var decision = Dispatch(
-            [new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 10)], LandCampHex, targetIsWater: false,
+            [new UnitStack(UnitType.Snekkja, 5), new UnitStack(UnitType.Axeman, 10)], LandCampHex, targetIsWater: false,
             destination: LandCampHex);
 
         Assert.Equal(DispatchRejection.HuntRequiresLandUnits, decision.Rejection);
@@ -128,7 +128,7 @@ public class WhaleRoadFleetTests
         Assert.True(land.Accepted, $"expected accept, got {land.Rejection}");
 
         var noCamp = TestArmy.PlanDispatch(
-            Found(), [new UnitStack(UnitType.Longship, 5)], 50, [], WhaleHex, T0, Guid.CreateVersion7(), Terr, ArmyMission.Hunt);
+            Found(), [new UnitStack(UnitType.Snekkja, 5)], 50, [], WhaleHex, T0, Guid.CreateVersion7(), Terr, ArmyMission.Hunt);
         Assert.Equal(DispatchRejection.NoCampAtDestination, noCamp.Rejection);
     }
 
@@ -136,7 +136,7 @@ public class WhaleRoadFleetTests
     public void A_fleet_hunt_needs_the_round_trip_food()
     {
         var decision = TestArmy.PlanDispatch(
-            Found(), [new UnitStack(UnitType.Longship, 5)], 1, [], WhaleHex, T0, Guid.CreateVersion7(), Terr, ArmyMission.Hunt,
+            Found(), [new UnitStack(UnitType.Snekkja, 5)], 1, [], WhaleHex, T0, Guid.CreateVersion7(), Terr, ArmyMission.Hunt,
             targetCampCoord: WhaleHex, targetCampIsWater: true);
 
         Assert.Equal(DispatchRejection.InsufficientProvisionsForRoundTrip, decision.Rejection);
@@ -230,7 +230,7 @@ public class WhaleRoadFleetTests
     {
         var camp = Whale(level: 1);
         var garrison = CampGarrison.Full(CampStrength.Strong, 1);
-        var army = Hunter([new UnitStack(UnitType.Longship, 20)]);
+        var army = Hunter([new UnitStack(UnitType.Snekkja, 20)]);
 
         var plan = CampBattleResolver.CampAttack(garrison, camp, army.Stacks, seed: 2);
         Assert.Equal(CampFightWinner.Army, plan.Winner);
@@ -248,7 +248,7 @@ public class WhaleRoadFleetTests
     {
         var camp = Whale(level: 1);
         var state = CampState.Pristine(camp, T0);
-        var army = Hunter([new UnitStack(UnitType.Longship, 5)]);
+        var army = Hunter([new UnitStack(UnitType.Snekkja, 5)]);
         var arrivesAt = ((ArmyLocation.InTransit)army.Location).Movement.ArrivesAt;
         var garrison = state.GarrisonAt(camp, arrivesAt, insideRealm: false);
 

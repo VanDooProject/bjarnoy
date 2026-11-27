@@ -331,7 +331,7 @@ export class WaterLayer {
   private retiredNoFoamTexture: Texture | null = null;
   private hasMask = false;
   // The shader's own clock, accumulated rather than read off performance.now()
-  // — same rationale as FogMaskLayer.tick's: the wave-speed slider changes the
+  // — same rationale as FogField.tick's: the wave-speed slider changes the
   // *rate* from wherever the pattern currently is, instead of rescaling the
   // whole elapsed clock and teleporting every crest on each drag of the handle.
   private lastTickAtMs: number | null = null;

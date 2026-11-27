@@ -141,6 +141,10 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
             var longhouse = await db.PlacedBuildings.SingleAsync(b => b.SettlementId == owner.Settlement.Id && b.Type == BuildingType.Longhouse, Ct);
             longhouse.Level = 15;
+            // The late buildings cost more than a fresh settlement can hold: fund it beyond its storage.
+            var entity = await db.Settlements.SingleAsync(x => x.Id == owner.Settlement.Id, Ct);
+            entity.StockWood = entity.StockStone = entity.StockFood = 1_000_000;
+            entity.CapacityWood = entity.CapacityStone = entity.CapacityFood = 1_000_000;
             var towerHex = centre.WithinRadius(2).First(c => c != centre && !line.Contains(c) && c != branch && terrain.TryGetValue(c, out var t) && t is "grass" or "sand");
             db.PlacedBuildings.Add(new PlacedBuildingEntity { SettlementId = owner.Settlement.Id, Q = towerHex.Q, R = towerHex.R, Type = BuildingType.Tower, Level = 5 });
             await db.SaveChangesAsync(Ct);

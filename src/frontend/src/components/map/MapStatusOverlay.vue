@@ -5,6 +5,7 @@
 // loading phase; `error` is whatever the failed load threw — the technical
 // part (which call, which status) comes from describeLoadError and is not
 // translated, only the title and retry button are.
+import { useHiddenUnderPhoneLayer, vPhoneHidden } from "../../composables/usePhoneLayer";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type { MessageSchema } from "../../i18n/schema";
@@ -17,6 +18,7 @@ const props = defineProps<{
   errorTitle?: string;
 }>();
 const emit = defineEmits<{ retry: [] }>();
+const hudHidden = useHiddenUnderPhoneLayer();
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: "global" });
 
@@ -43,6 +45,7 @@ const detail = computed(() =>
 <template>
   <div
     v-if="state"
+    v-phone-hidden="hudHidden"
     class="map-status"
     :class="{ 'map-status--reduced': reducedMotion }"
     data-testid="map-status-overlay"

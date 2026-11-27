@@ -29,6 +29,8 @@ test('building a sawmill from the ring menu places it without a rendering error'
   await settlement.setSettlementLevel(20);
   // ...and its prerequisite, a level-10 lumberjack (BuildingCatalogue.cs Prerequisites).
   await settlement.standBuildings([{ type: 'lumberjack', level: 10 }]);
+  // Late buildings cost more than a fresh settlement can hold: fund it (and its storage) so the bubble is affordable.
+  await settlement.fund(10_000_000);
 
   // Same grass-hex search as shrine-build.spec.ts — Sawmill lives in the
   // "Resource" category alongside Farm/PumpkinFarm. Since it's built

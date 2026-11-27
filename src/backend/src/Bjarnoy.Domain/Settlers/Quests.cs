@@ -11,6 +11,7 @@ namespace Bjarnoy.Domain.Settlers;
 /// <param name="Id">The stable wire id the API and frontend use.</param>
 /// <param name="Bit">The quest's bit in <see cref="Settlement.ClaimedQuests"/> — never renumber.</param>
 /// <param name="Reward">Wood, stone and food (no iron) paid on claim.</param>
+/// <param name="PremiumDays">Days of premium the owner's account gets on claim (0 for a resource quest).</param>
 /// <param name="IsCompleted">Whether the (settled) settlement meets the quest's condition.</param>
 /// <param name="Progress">
 /// Where the settlement stands toward the quest as (current, target), or <see langword="null"/> for a quest
@@ -21,7 +22,8 @@ public sealed record Quest(
     int Bit,
     ResourceAmounts Reward,
     Func<Settlement, bool> IsCompleted,
-    Func<Settlement, QuestProgress>? Progress = null)
+    Func<Settlement, QuestProgress>? Progress = null,
+    int PremiumDays = 0)
 {
     /// <summary>This quest's bit in the claimed mask.</summary>
     public int Mask => 1 << Bit;
@@ -39,6 +41,12 @@ public static class Quests
 {
     private const int SpearmenBit = 6;
 
+    /// <summary>Days of premium the register quest grants.</summary>
+    public const int RegisterPremiumDays = 14;
+
+    /// <summary>Id of the register quest (completed once the owner has an account).</summary>
+    public const string RegisterId = "register";
+
     /// <summary>All quests in presentation order.</summary>
     public static IReadOnlyList<Quest> All { get; } =
     [
@@ -52,6 +60,8 @@ public static class Quests
             s => QuestProgress.Of(s.ProducerCount, 6)),
         new("longhouse3", 4, new ResourceAmounts(400, 300, 200, 0), s => s.LonghouseLevel >= 3,
             s => QuestProgress.Of(s.LonghouseLevel, 3)),
+        // Needs an account, which towers need too, so it sits before the tower quest (and first once registered, see For).
+        new(RegisterId, 9, new ResourceAmounts(0, 0, 0, 0), s => s.OwnerRegistered, PremiumDays: RegisterPremiumDays),
         new("tower3", 8, new ResourceAmounts(400, 300, 200, 0), s => s.TowerLevel >= 3,
             s => QuestProgress.Of(s.TowerLevel, 3)),
         new("longhouse5", 5, new ResourceAmounts(800, 600, 400, 0), s => s.LonghouseLevel >= 5,
@@ -62,6 +72,22 @@ public static class Quests
         new("hunt1", 7, new ResourceAmounts(400, 300, 300, 0),
             s => s.TroopsTrained && s.HuntStarted),
     ];
+
+    /// <summary>
+    /// The quests in the order <paramref name="settlement"/> is shown them: the register quest first once the owner
+    /// has an account (claimable at once), otherwise it stays in its list position before the tower quest.
+    /// </summary>
+    public static IReadOnlyList<Quest> For(Settlement settlement)
+    {
+        ArgumentNullException.ThrowIfNull(settlement);
+
+        if (!settlement.OwnerRegistered)
+        {
+            return All;
+        }
+
+        return [.. All.Where(q => q.Id == RegisterId), .. All.Where(q => q.Id != RegisterId)];
+    }
 
     /// <summary>The quest with <paramref name="id"/>, or <see langword="null"/>.</summary>
     public static Quest? Find(string? id) =>

@@ -1,7 +1,7 @@
 // Desktop settlement view: the icon column at the bottom left hides and reopens the docked HUD panels, a panel's header
 // drags it into a column group (or a new column) on either side, the header chevron collapses it to its header, the icon
 // column steps aside for left columns that reach down to it, and the choices are remembered across a reload. In the demo settlement the Quests and Armies
-// panels have something to show (no build queue, no garrison), so those two are the panels under test.
+// panels have something to show (no build queue, no garrison; the Construction icon is there but disabled), so those two are the panels under test.
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
@@ -60,18 +60,19 @@ test.describe('HUD panel dock', { tag: '@g2' }, () => {
     await expect(toggle(page, 'quests')).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test('the column shows only icons of panels with something to show, building info first', async ({ page }) => {
+  test('the column shows the always-there construction icon (disabled when empty) and icons of panels with something to show, building info first', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await SettlementPage.found(page);
 
-    // No build queue and no garrison in the fresh demo settlement.
-    await expect(toggle(page, 'construction')).toHaveCount(0);
+    // No build queue and no garrison in the fresh demo settlement: Construction stays, disabled; Garrison is left out.
+    await expect(toggle(page, 'construction')).toBeDisabled();
     await expect(toggle(page, 'garrison')).toHaveCount(0);
     const buttons = page.getByTestId('hud-panel-column').locator('button');
-    await expect(buttons).toHaveCount(3);
+    await expect(buttons).toHaveCount(4);
     await expect(buttons.nth(0)).toHaveAttribute('data-testid', 'building-info-toggle');
-    await expect(buttons.nth(1)).toHaveAttribute('data-testid', 'hud-panel-toggle-armies');
-    await expect(buttons.nth(2)).toHaveAttribute('data-testid', 'hud-panel-toggle-quests');
+    await expect(buttons.nth(1)).toHaveAttribute('data-testid', 'hud-panel-toggle-construction');
+    await expect(buttons.nth(2)).toHaveAttribute('data-testid', 'hud-panel-toggle-armies');
+    await expect(buttons.nth(3)).toHaveAttribute('data-testid', 'hud-panel-toggle-quests');
     // 16px from the bottom; and right of the left column, because Quests (bottom left by default) reaches down to it.
     await expect
       .poll(async () => (await box(page.getByTestId('hud-panel-column'))).x)

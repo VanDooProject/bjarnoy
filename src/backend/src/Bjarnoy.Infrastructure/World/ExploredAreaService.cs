@@ -178,10 +178,8 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
         // contribution.
         var travellingArmies = await _dbContext.Armies
             .AsNoTracking()
-            .Include(a => a.Settlement)
             .Include(a => a.Stacks)
-            .Where(a => !a.AtHome && !a.IsSupporting && a.Settlement != null
-                && a.Settlement.WorldId == worldId && a.Settlement.OwnerId == ownerId)
+            .Where(a => !a.AtHome && !a.IsSupporting && a.WorldId == worldId && a.OwnerId == ownerId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         // Row timestamps below are bookkeeping and stay wall time; army movement times are game time.
@@ -231,11 +229,11 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
         var liveArmyDiscs = new List<ExploredDisc>();
         foreach (var armyEntity in travellingArmies)
         {
-            var home = new HexCoord(armyEntity.Settlement!.CentreQ, armyEntity.Settlement.CentreR);
-            // The army's origin settlement's Ravens widen its walked-ground reveal too.
+            // The army's origin settlement's Ravens widen its walked-ground reveal too (an army without a home has none).
             var domainArmy = armyEntity.ToDomain();
-            var armyRadius = FogVisionRadii.ArmyVisionRadius(domainArmy.Stacks, ravensBySettlement.GetValueOrDefault(armyEntity.SettlementId));
-            var reached = domainArmy.HexesReachedBy(home, gameNow);
+            var ravens = armyEntity.SettlementId is { } homeId ? ravensBySettlement.GetValueOrDefault(homeId) : 0;
+            var armyRadius = FogVisionRadii.ArmyVisionRadius(domainArmy.Stacks, ravens);
+            var reached = domainArmy.HexesReachedBy(domainArmy.HomeSpot, gameNow);
             foreach (var hex in reached)
             {
                 armyHexes.Add((hex, armyRadius));

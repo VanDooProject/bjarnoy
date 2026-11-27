@@ -576,7 +576,7 @@ describe('useWorldStore addFieldOrderWaypoint (premium gate)', () => {
     expect(store.fieldOrderDraft!.error).toMatch(/premium/i);
   });
 
-  it('lets a premium account plot as many stops as it likes', async () => {
+  it('lets a premium account plot several stops', async () => {
     const store = await withAuth(true);
     store.startFieldOrder('army-1');
 
@@ -590,6 +590,75 @@ describe('useWorldStore addFieldOrderWaypoint (premium gate)', () => {
       { q: 3, r: 0 },
     ]);
     expect(store.fieldOrderDraft!.error).toBeNull();
+  });
+
+  it('takes ten waypoints plus the destination from a premium account and refuses the eleventh waypoint', async () => {
+    const store = await withAuth(true);
+    store.startFieldOrder('army-1');
+
+    for (let i = 1; i <= 11; i++) store.addFieldOrderWaypoint({ q: i, r: 0 });
+    expect(store.fieldOrderDraft!.route).toHaveLength(11);
+    expect(store.fieldOrderDraft!.error).toBeNull();
+
+    store.addFieldOrderWaypoint({ q: 12, r: 0 });
+
+    expect(store.fieldOrderDraft!.route).toHaveLength(11);
+    expect(store.fieldOrderDraft!.error).toMatch(/at most 5, or 10 with premium/i);
+  });
+});
+
+describe('useWorldStore dispatch waypoint limit', () => {
+  async function withAuth(isPremium: boolean) {
+    const store = await loadStoreModule(true);
+    const { useAuthStore } = await import('./auth');
+    useAuthStore().user = {
+      id: 'u1',
+      userName: 'ragnar',
+      role: 'player',
+      status: 'active',
+      displayName: null,
+      isPremium,
+      preferredLocale: null,
+    };
+    return store;
+  }
+
+  it('takes five waypoints plus the destination from a free account and refuses the sixth waypoint', async () => {
+    const store = await withAuth(false);
+    store.startDispatch();
+
+    for (let i = 1; i <= 6; i++) store.addWaypoint({ q: i, r: 0 });
+    expect(store.dispatchDraft!.route).toHaveLength(6);
+    expect(store.dispatchDraft!.error).toBeNull();
+
+    store.addWaypoint({ q: 7, r: 0 });
+
+    expect(store.dispatchDraft!.route).toHaveLength(6);
+    expect(store.dispatchDraft!.error).toMatch(/at most 5, or 10 with premium/i);
+  });
+
+  it('takes ten waypoints plus the destination from a premium account and refuses the eleventh waypoint', async () => {
+    const store = await withAuth(true);
+    store.startDispatch();
+
+    for (let i = 1; i <= 11; i++) store.addWaypoint({ q: i, r: 0 });
+    expect(store.dispatchDraft!.route).toHaveLength(11);
+
+    store.addWaypoint({ q: 12, r: 0 });
+
+    expect(store.dispatchDraft!.route).toHaveLength(11);
+    expect(store.dispatchDraft!.error).toMatch(/at most 5, or 10 with premium/i);
+  });
+
+  it('counts every plotted hex of an attack route as a waypoint', async () => {
+    const store = await withAuth(false);
+    store.startDispatch();
+    store.setDispatchMission('attack');
+
+    for (let i = 1; i <= 6; i++) store.addWaypoint({ q: i, r: 0 });
+
+    expect(store.dispatchDraft!.route).toHaveLength(5);
+    expect(store.dispatchDraft!.error).toMatch(/at most 5/i);
   });
 });
 
@@ -2551,6 +2620,22 @@ describe('useWorldStore claimQuest (onboarding quests)', () => {
     expect(store.hud.resources.wood).toBe(500);
   });
 
+  it('live: claiming a premium quest marks the signed-in account premium', async () => {
+    claimQuest.mockReset().mockResolvedValue(undefined);
+    getSettlement.mockReset().mockResolvedValue(settlementResponse([], 100));
+    const store = await loadStoreModule(false);
+    register(store);
+    store.ownerId = 'player-1';
+    store.hud.quests = [{ ...quest('register', true), premiumDays: 14 }];
+    const { useAuthStore } = await import('./auth');
+    const auth = useAuthStore();
+    auth.user = { id: 'u1', userName: 'astrid', role: 'player', status: 'active', displayName: null, isPremium: false, preferredLocale: null };
+
+    await store.claimQuest('register');
+
+    expect(auth.isPremium).toBe(true);
+  });
+
   it('live: a rejected claim propagates and does not refresh', async () => {
     const store = await loadStoreModule(false);
     const { ApiError: MockedApiError } = await import('../api/client');
@@ -2996,6 +3081,18 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
       getSettlement.mockResolvedValue(settlementResponse({ queue: [upgradeOrder] }));
       release();
       await done;
+    });
+
+    it('two quick upgrades in a row, the first not answered yet, order level n+1 and then n+2', async () => {
+      const store = await setupWithLumberjack(2);
+      queueBuild.mockReturnValue(new Promise<void>(() => {}));
+
+      void store.upgradeBuildingLive(at);
+      void store.upgradeBuildingLive(at);
+
+      // The second one starts from the first one's optimistic entry, not from the built level.
+      expect(store.hud.queue.map((o) => o.targetLevel)).toEqual([3, 4]);
+      expect(queueBuild).toHaveBeenCalledTimes(2);
     });
 
     it('records the confirmed spend for the resources that really dropped', async () => {
@@ -3694,7 +3791,7 @@ describe('useWorldStore other realms as send sources', () => {
       summary('far-new', 'far', 'Vik'),
     ]);
     getSettlement.mockReset().mockImplementation(async (id: string) => realmResponse(id, 'Vik', [{ unit: 'spearman', count: 4 }]));
-    getSettlementArmies.mockReset().mockResolvedValue([{ id: 'fa' }]);
+    getSettlementArmies.mockReset().mockResolvedValue([{ id: 'fa', settlementId: 'far' }]);
     getArmy.mockReset().mockResolvedValue({ id: 'fa', settlementId: 'far', stacks: [] });
 
     await store.refreshOtherRealms();
@@ -3713,6 +3810,25 @@ describe('useWorldStore other realms as send sources', () => {
       },
     ]);
     expect(store.sendRealms.map((r) => [r.realmId, r.current])).toEqual([['open', true], ['far', false]]);
+  });
+
+  it("does not fetch an other realm's armies without a home: the open realm's list already carries them", async () => {
+    const store = await loadStoreModule(false);
+    await loggedIn();
+    store.worldId = 'w1';
+    store.selectedSettlementId = 'open';
+    listMySettlements.mockReset().mockResolvedValue([summary('open', 'open', 'Bjarnoy'), summary('far', 'far', 'Vik')]);
+    getSettlement.mockReset().mockImplementation(async (id: string) => realmResponse(id, 'Vik', []));
+    getSettlementArmies.mockReset().mockResolvedValue([
+      { id: 'fa', settlementId: 'far' },
+      { id: 'homeless', settlementId: null },
+    ]);
+    getArmy.mockReset().mockImplementation(async (id: string) => ({ id, settlementId: id === 'fa' ? 'far' : null, stacks: [] }));
+
+    await store.refreshOtherRealms();
+
+    expect(getArmy.mock.calls.map((c) => c[0])).toEqual(['fa']);
+    expect(store.otherRealms[0]!.armies.map((a) => a.id)).toEqual(['fa']);
   });
 
   it("keeps a realm's last snapshot when its read fails, and drops a realm the player no longer has", async () => {

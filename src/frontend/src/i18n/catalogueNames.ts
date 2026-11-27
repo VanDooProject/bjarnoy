@@ -7,6 +7,8 @@ function lookup(path: string, fallback: string): string {
 
 export const buildingName = (type: string) => lookup(`buildings.${type}`, type);
 export const unitName = (type: string) => lookup(`units.${type}`, type);
+/** A ship group's heading (`scouts`, `cargo`, `transport`, `warships`, `fireCraft`), see `lib/units/shipGroups.ts`. */
+export const shipGroupName = (group: string) => lookup(`shipGroups.${group}`, group);
 export const terrainName = (terrain: string) => lookup(`terrain.${terrain}`, terrain);
 /** A wasted tile's terrain name — `family` is `textures.ts`'s wasted-island `TextureKey` (e.g. `'wasteland'`), not the wire `Terrain`. */
 export const wastedTerrainName = (family: string) => lookup(`wastedTerrain.${family}`, family);

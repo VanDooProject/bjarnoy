@@ -22,6 +22,7 @@ import intro from './locales/en/intro.json';
 import adminActivityChart from './locales/en/adminActivityChart.json';
 import adminActivity from './locales/en/adminActivity.json';
 import adminEconomy from './locales/en/adminEconomy.json';
+import adminPacingBench from './locales/en/adminPacingBench.json';
 import adminIslandLab from './locales/en/adminIslandLab.json';
 import adminApiKeys from './locales/en/adminApiKeys.json';
 import adminLayout from './locales/en/adminLayout.json';
@@ -66,6 +67,7 @@ export interface MessageSchema {
   adminActivityChart: typeof adminActivityChart;
   adminActivity: typeof adminActivity;
   adminEconomy: typeof adminEconomy;
+  adminPacingBench: typeof adminPacingBench;
   adminIslandLab: typeof adminIslandLab;
   adminApiKeys: typeof adminApiKeys;
   adminLayout: typeof adminLayout;

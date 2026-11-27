@@ -22,6 +22,8 @@ import QuestTray from '../components/onboarding/QuestTray.vue';
 import QueueDrawer from '../components/hud/QueueDrawer.vue';
 import ArmyPanel from '../components/hud/ArmyPanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
+import HoldProgress from '../components/hud/HoldProgress.vue';
+import QuickUpgradeChip from '../components/hud/QuickUpgradeChip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
 import TrainingModal from '../components/hud/TrainingModal.vue';
 import BuildRefusalChip from '../components/hud/BuildRefusalChip.vue';
@@ -47,6 +49,8 @@ import { useWorldStore, type SendPickerTarget } from '../stores/world';
 import { WORLD_HASH, isWorldHash } from '../lib/mapModeRoute';
 import { parseCameraHash, serializeCameraHash } from '../lib/mapCameraHash';
 import { useAuthStore } from '../stores/auth';
+import { useQuickUpgradeStore } from '../stores/quickUpgrade';
+import { useQuickUpgradeInput } from '../composables/useQuickUpgradeInput';
 import { realmToSwitchTo } from '../lib/realmTap';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
@@ -68,6 +72,7 @@ import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
 import { useHasActiveDraft } from '../composables/useHudPanelContent';
+import { useEscapeCancelsPlanning } from '../composables/useEscapeCancelsPlanning';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
 import { buildingStatsAt, buildingUpgradeCost, scaleOutput, upgradeRateGain } from '../lib/map/buildingEconomy';
@@ -95,6 +100,7 @@ import { isGarrisonSpotTile } from '../lib/units/garrisonSpots';
 import { isHomeSourceId } from '../lib/units/sendSources';
 import { useSendBlockText, useSendPickerRows, useSendSources } from '../composables/useSendSources';
 import { motionEnabled } from '../lib/motion';
+import { useHiddenUnderPhoneLayer, vPhoneHidden } from '../composables/usePhoneLayer';
 import MobileDispatchSheet from '../components/hud/MobileDispatchSheet.vue';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -102,6 +108,7 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const world = useWorldStore();
 const player = usePlayerStore();
 const auth = useAuthStore();
+const quickUpgrade = useQuickUpgradeStore();
 const hudPrefs = useHudPrefsStore();
 
 // Mobile-only HUD bar: whether the collapsed bar (and its pull-down drawer)
@@ -162,6 +169,8 @@ const debugStackRef = ref<HTMLElement | null>(null);
 const debugStackDrag = useDraggablePosition('debugStack', debugStackRef);
 const debugStackStyle = debugStackDrag.style;
 const isMobile = useIsMobile();
+// HUD overlays hide while a layer (modal, drawer, ring, ...) is open on a phone.
+const hudHidden = useHiddenUnderPhoneLayer();
 const queueDrawerOpen = ref(false);
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
 
@@ -472,7 +481,7 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
   // docs/design/map-fog-v2.md §1g: other players' troops marching inside our sight, in their owner's colour (guild/treaty/rival like
   // the realm borders). Never selected, never returning-grey, and the renderer gives them no vision of their own.
   for (const a of world.foreignArmies) {
-    armies.push(foreignArmyMarker(a, world.model.getSettlement(a.settlementId), player.id));
+    armies.push(foreignArmyMarker(a));
   }
   const selected = world.armies.find((a) => a.id === world.selectedArmyId);
   // While the send picker is open the route drawn is the preview of the order: from where the selected army will stand to the target.
@@ -625,26 +634,31 @@ watch(
 const armyHint = ref<{ x: number; y: number; text: string } | null>(null);
 let armyHintTimer: ReturnType<typeof setTimeout> | null = null;
 const sendBlockText = useSendBlockText();
-function onArmyTap(armyId: string, screen: { x: number; y: number }) {
+function onArmyTap(armyId: string, screen: { x: number; y: number }): boolean {
   if (armyHintTimer) clearTimeout(armyHintTimer);
   armyHint.value = null;
   // No picker open: the marker selects its army, shown highlighted in the armies panel. The tap still reaches the tile (onHexClick), so
-  // while a route is being composed it adds the waypoint and selects nothing.
+  // while a route is being composed it adds the waypoint and selects nothing. A moving army only gets selected: returning true keeps the
+  // tap from reaching the tile, so no ring menu opens.
   if (!world.sendPicker) {
-    if (!world.dispatchDraft && !world.fieldOrderDraft) world.selectArmy(armyId);
-    return;
+    if (world.dispatchDraft || world.fieldOrderDraft) return false;
+    world.selectArmy(armyId);
+    // The selection shows in the Armies panel, so bring it up if it was closed or collapsed (the docked panel is settlement view, desktop only).
+    if (!isMobile.value && mode.value === 'settlement') hudPrefs.showPanel('armies');
+    return !!world.armies.find((a) => a.id === armyId)?.movement;
   }
   const row = sendPicker.rows.value.find((r) => r.id === armyId);
-  if (!row) return;
+  if (!row) return false;
   if (row.ok) {
     world.selectSendSource(armyId);
-    return;
+    return false;
   }
-  if (row.block === 'pending') return;
+  if (row.block === 'pending') return false;
   const text = sendBlockText(row, sendPicker.target.value);
-  if (!text) return;
+  if (!text) return false;
   armyHint.value = { x: Math.min(Math.max(screen.x, 110), Math.max(110, stage.value.w - 110)), y: Math.max(48, screen.y - 34), text };
   armyHintTimer = setTimeout(() => (armyHint.value = null), 3500);
+  return false;
 }
 watch(
   () => world.sendPicker,
@@ -852,6 +866,7 @@ watch(canvasInteractionLocked, (locked) => {
 // otherwise clash with it) hides, and the HUD pull-down drawer closes the
 // same way opening QueueDrawer already does above.
 const hasActiveDraft = useHasActiveDraft();
+useEscapeCancelsPlanning();
 watch(hasActiveDraft, (active) => {
   if (active) {
     queueDrawerOpen.value = false;
@@ -1042,7 +1057,7 @@ function upgradeActionFor(tile: Tile): RingAction {
   const { nextLevel, level, definition: upgradeDefinition, cost, blockers } = verdict;
   // Nothing left to upgrade to: at the last level, or the last one is already ordered.
   if (verdict.maxed || !cost) {
-    return { id: 'upgrade', label, color: 'var(--gold)', disabled: true, hint: t('hud.ringMenu.actions.maxLevel') };
+    return { id: 'upgrade', label, color: 'var(--gold)', disabled: true, hint: t('hud.ringMenu.actions.maxLevel'), holdable: quickUpgrade.available };
   }
   const locks = [
     longhouseLock(blockers.longhouse, world.hud.level),
@@ -1065,6 +1080,8 @@ function upgradeActionFor(tile: Tile): RingAction {
     id: 'upgrade',
     label,
     color: 'var(--gold)',
+    // Premium: holding the bubble turns the quick upgrade mode on (onRingHold). A free account's bubble is a plain one.
+    holdable: quickUpgrade.available,
     disabled: blocked,
     state: !blocked ? undefined : busyNote ? 'waiting' : availability.state,
     // Read out by screen readers; sighted players get the card on hover.
@@ -1088,12 +1105,28 @@ function upgradeActionFor(tile: Tile): RingAction {
           : stats.modifier
             ? formatModifier(stats.modifier)
             : undefined,
+      givesOutput: rate ? rate.gain : stats.output ? scaleOutput(stats.output, world.worldSpeedFactor) : undefined,
       givesTotal: rate ? t('hud.ringMenu.card.givesTotal', { amount: rate.total }) : undefined,
       locks: busyNote ? [busyNote, ...locks] : locks,
       art: buildingArt(type, nextLevel),
       availability: busyNote ? undefined : availability,
+      holdHint: quickUpgrade.available
+        ? { text: t('hud.quickUpgrade.holdHint'), locked: false }
+        : { text: t('hud.quickUpgrade.premiumHold'), locked: true },
     },
   };
+}
+
+/**
+ * One of the player's own buildings that has an Upgrade (a beach camp has none): what the ring's Upgrade bubble and the quick
+ * upgrade both act on, so the two cannot disagree about which buildings upgrade.
+ */
+function isOwnUpgradable(tile: Tile): tile is Tile & { buildingType: NonNullable<Tile['buildingType']> } {
+  return !!tile.buildingType && world.isRealmSettlement(tile.ownerId) && offersUpgradeAndRaze(tile.buildingType);
+}
+/** A tile the quick upgrade acts on: an own upgradable building of the realm that is run now (another realm's hex switches realm first, as any tap does). */
+function isQuickTarget(tile: Tile): boolean {
+  return isOwnUpgradable(tile) && !realmToSwitchTo(mode.value, tile.ownerId, world.selectedSettlementId, world.ownRealmOf);
 }
 
 // The Raze bubble: takes ONE level off the building (docs/design/construction-slots.md, "Razing"). Like Upgrade it says up
@@ -1214,8 +1247,8 @@ function rootActionList(): RingAction[] {
     ];
   }
   // A beach camp has nothing to upgrade, raze, train or build: its one hex offers only the army action.
-  if (isMineTile.value && tile.buildingType && !offersUpgradeAndRaze(tile.buildingType)) return [sendArmyAction(tile)];
-  if (isMineTile.value && tile.buildingType) {
+  if (isMineTile.value && tile.buildingType && !isOwnUpgradable(tile)) return [sendArmyAction(tile)];
+  if (isOwnUpgradable(tile)) {
     // The previous ring floated "Lv n / upgrade" as a gold badge above the
     // orbit, joined to it by a guide line. 2a has no badge — every action is
     // a bubble on the inner lane — so upgrade becomes an ordinary bubble and
@@ -1306,6 +1339,12 @@ async function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y:
   // does — mutually exclusive interaction modes, same as above.
   if (world.fieldOrderDraft) {
     world.addFieldOrderWaypoint(coord);
+    return;
+  }
+  // Quick upgrade (premium; the mode, or Shift held): a click on an own building orders its next level, no ring. Anything else
+  // opens the ring below as usual.
+  if (mode.value === 'settlement' && quickUpgrade.applies && isQuickTarget(tile)) {
+    quickUpgradeAt(coord, tile);
     return;
   }
   // World mode used to click-to-enter the settlement unconditionally here —
@@ -1547,16 +1586,20 @@ async function raze() {
 }
 
 async function upgrade() {
-  if (!world.selectedSettlementId || !selectedCoord.value || !selectedTile.value?.buildingType) return;
+  if (!selectedCoord.value || !selectedTile.value) return;
+  await upgradeAt(selectedCoord.value, selectedTile.value);
+}
+
+/** Orders the next level of the building on `tile`: the ring's Upgrade bubble and the quick upgrade both come through here. */
+async function upgradeAt(coord: AxialCoord, tile: Tile) {
+  if (!world.selectedSettlementId || !tile.buildingType) return;
   actionError.value = null;
   if (DEMO_MODE) {
-    world.model.upgradeBuilding(world.selectedSettlementId, selectedCoord.value);
+    world.model.upgradeBuilding(world.selectedSettlementId, coord);
     canvasRef.value?.renderer?.forceRebuild();
     closeModal();
     return;
   }
-  const coord = selectedCoord.value;
-  const tile = selectedTile.value;
   // What the Upgrade card promised (read before the ring closes: the card follows the selected tile).
   const card = upgradeActionFor(tile).card;
   const level = nextUpgradeLevel(tile.buildingLevel ?? 1, world.hud.queue, coord);
@@ -1568,6 +1611,52 @@ async function upgrade() {
     confirmed: queuedBehind ? undefined : { name: buildingName(tile.buildingType!), level, time: card?.time ?? null },
   });
 }
+
+/**
+ * The quick upgrade's click on an own building: orders its next level at once, or, when the ring's Upgrade bubble would be
+ * blocked (short on resources, no slot, locked, max level, hex busy), sends nothing and shows that bubble's reason in the refusal
+ * chip under the hex.
+ */
+function quickUpgradeAt(coord: AxialCoord, tile: Tile) {
+  const action = upgradeActionFor(tile);
+  if (action.disabled) {
+    canvasRef.value?.renderer?.flashBlockedMarker(coord);
+    showBuildRefusal(coord, action.hint ?? t('hud.ringMenu.actions.maxLevel'));
+    return;
+  }
+  void upgradeAt(coord, tile);
+}
+
+// Holding the ring's Upgrade bubble turns the quick upgrade mode on, closes the ring and orders that building's upgrade (or shows
+// the refusal chip, with the mode staying on).
+function onRingHold(id: string) {
+  if (id !== 'upgrade' || !selectedCoord.value || !selectedTile.value) return;
+  const coord = selectedCoord.value;
+  const tile = selectedTile.value;
+  quickUpgrade.start();
+  closeRing();
+  quickUpgradeAt(coord, tile);
+}
+
+// The mode's ways out that live on the map: a long press anywhere on the canvas (the renderer reports it only while the mode is
+// on) ends it, with a white ring filling under the finger or cursor while the press is held. Everything else that ends the mode
+// (the chip's ✕, Esc, outside presses, navigation) is composables/useQuickUpgradeInput.ts. The progress ring has no leave
+// animation on purpose: it is the gesture itself, and it ends the instant the press does.
+watch(
+  [() => canvasRef.value?.renderer, () => quickUpgrade.active],
+  ([renderer, active]) => renderer?.setLongPressEnabled(active),
+  { immediate: true },
+);
+const mapHold = ref<{ x: number; y: number } | null>(null);
+function onMapLongPressProgress(state: { screen: { x: number; y: number } } | null) {
+  mapHold.value = state?.screen ?? null;
+}
+useQuickUpgradeInput({
+  mapElement: () => canvasRef.value?.$el as Element | undefined,
+  ringOpen: () => ringOpen.value,
+  inSettlement: () => mode.value === 'settlement',
+  settlementId: () => world.selectedSettlementId,
+});
 </script>
 
 <template>
@@ -1595,6 +1684,8 @@ async function upgrade() {
       @waypoint-move="onWaypointMove"
       @waypoint-tap="onWaypointTap"
       @army-tap="onArmyTap"
+      @long-press="quickUpgrade.stop()"
+      @long-press-progress="onMapLongPressProgress"
       @zoom-mode-change="onZoomModeChange"
       @camera-change="onCameraChange"
     />
@@ -1625,7 +1716,7 @@ async function upgrade() {
          the camera starts — this scrim (matching Viking Realm.dc.html's own
          top-bar gradient) keeps the logo/resources/nav readable regardless
          of what's under them. -->
-    <div class="hud-scrim" :class="{ 'hud-scrim--bottom': hudBarAtBottom }" />
+    <div v-phone-hidden="hudHidden" class="hud-scrim" :class="{ 'hud-scrim--bottom': hudBarAtBottom }" />
     <TopBar @focus-home="onFocusHome" @focus-realm="onFocusRealm">
       <ResourceBar :ring-open="ringOpen" />
       <HudNav has-resource-bar />
@@ -1641,11 +1732,13 @@ async function upgrade() {
       </template>
       <template v-else>
         <!-- Desktop: the four panels dock to the map's corners; their icons sit in the column at the bottom left. -->
-        <HudPanelColumn />
-        <HudPanelDock @select="onQueueSelect" @focus-army="onArmySelect" />
+        <HudPanelColumn v-phone-hidden="hudHidden" />
+        <HudPanelDock v-phone-hidden="hudHidden" @select="onQueueSelect" @focus-army="onArmySelect" />
       </template>
       <QuestTray v-if="isMobile && !hasActiveDraft" />
-      <HexTooltip v-if="hoverInfo && !hudHovering" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
+      <HexTooltip v-if="hoverInfo && !hudHovering" v-phone-hidden="hudHidden" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
+      <QuickUpgradeChip :shown="quickUpgrade.active" @stop="quickUpgrade.stop()" />
+      <div v-if="mapHold" class="map-hold" :style="{ left: mapHold.x + 'px', top: mapHold.y + 'px' }"><HoldProgress :size="64" tone="white" /></div>
       <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu
           v-if="selectedTile && ringScreen"
@@ -1662,6 +1755,7 @@ async function upgrade() {
           :error="actionError"
           :dock="ringDock"
           @select="onRingSelect"
+          @hold="onRingHold"
           @close="closeRing"
           @outside-pointer-down="onRingOutsidePointerDown"
           @footprint="onRingFootprint"
@@ -1678,7 +1772,6 @@ async function upgrade() {
         v-if="selectedTile?.buildingType && trainModalOpen"
         :building="{ type: selectedTile.buildingType, q: selectedTile.q, r: selectedTile.r, level: selectedTile.buildingLevel ?? 0 }"
         @close="closeTrainModal"
-        @trained="closeTrainModal"
       />
     </template>
     <template v-else>
@@ -1692,7 +1785,7 @@ async function upgrade() {
            queue drawer (mobile fleets need to be tracked here too) are
            mode-agnostic. -->
       <QueueDrawer v-if="isMobile && !hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
-      <ArmyPanel v-if="!isMobile" @focus-army="onArmySelect" />
+      <ArmyPanel v-if="!isMobile" v-phone-hidden="hudHidden" @focus-army="onArmySelect" />
       <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu
           v-if="selectedTile && ringScreen"
@@ -1717,12 +1810,14 @@ async function upgrade() {
     </template>
     <BuildRefusalChip
       v-if="buildRefusal"
+      v-phone-hidden="hudHidden"
       :renderer="canvasRef?.renderer"
       :coord="buildRefusal.coord"
       :message="buildRefusal.message"
     />
     <div
       v-if="armyHint"
+      v-phone-hidden="hudHidden"
       class="army-hint"
       role="status"
       :style="{ left: armyHint.x + 'px', top: armyHint.y + 'px' }"
@@ -1747,6 +1842,12 @@ async function upgrade() {
      cancelling the pointer capture the drag-to-open drawer gesture
      (TopBar.vue's useHudDrawer) relies on. */
   overscroll-behavior-y: none;
+}
+.map-hold {
+  position: absolute;
+  z-index: 37;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 .army-hint {
   position: absolute;

@@ -531,16 +531,25 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .HasConversion(new DoubleListConverter())
                 .Metadata.SetValueComparer(DoubleListConverter.Comparer);
 
-            // Restrict rather than cascade: nothing should delete a
-            // settlement out from under an army still travelling. In
-            // practice settlements are never deleted today, but the intent
-            // matches UserEntity/SettlementEntity's ownership FK below.
+            // Restrict rather than SetNull: the one place that deletes a settlement (a destroyed beach camp, ArmyService) first gives
+            // every army homed there the nearest garrison spot it can reach, and only the rest lose their home (and so start to
+            // starve). A delete anywhere else must make the same choice, not silently leave armies homeless.
             army.HasOne(a => a.Settlement)
                 .WithMany()
                 .HasForeignKey(a => a.SettlementId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.Restrict);
 
             army.HasIndex(a => a.SettlementId);
+
+            // The army's own world and owner (it keeps them when it loses its home): ownership checks and the player's army
+            // list read these, not the home settlement's.
+            army.Property(a => a.OwnerId).HasMaxLength(200).IsRequired();
+            army.HasOne(a => a.World)
+                .WithMany()
+                .HasForeignKey(a => a.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+            army.HasIndex(a => new { a.WorldId, a.OwnerId });
 
             // Same Restrict posture as the SettlementId FK above — an attack
             // or support target/host settlement is never expected to vanish
@@ -622,6 +631,12 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             report.HasIndex(r => r.AttackerSettlementId);
             report.HasIndex(r => r.DefenderSettlementId);
 
+            // The player inbox reads by (world, owner) — see BattleReportService.GetForOwnerAsync.
+            report.Property(r => r.AttackerOwnerId).HasMaxLength(200).IsRequired();
+            report.Property(r => r.DefenderOwnerId).HasMaxLength(200).IsRequired();
+            report.HasIndex(r => new { r.WorldId, r.AttackerOwnerId });
+            report.HasIndex(r => new { r.WorldId, r.DefenderOwnerId });
+
             report.HasMany(r => r.AttackerLines)
                 .WithOne(l => l.BattleReport!)
                 .HasForeignKey(l => l.BattleReportId)
@@ -670,6 +685,11 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             report.HasIndex(r => r.SideASettlementId);
             report.HasIndex(r => r.SideBSettlementId);
 
+            report.Property(r => r.SideAOwnerId).HasMaxLength(200).IsRequired();
+            report.Property(r => r.SideBOwnerId).HasMaxLength(200).IsRequired();
+            report.HasIndex(r => new { r.WorldId, r.SideAOwnerId });
+            report.HasIndex(r => new { r.WorldId, r.SideBOwnerId });
+
             report.HasMany(r => r.Lines)
                 .WithOne(l => l.FieldBattleReport!)
                 .HasForeignKey(l => l.FieldBattleReportId)
@@ -702,17 +722,14 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             report.Property(r => r.Id).ValueGeneratedNever();
             report.Property(r => r.Family).HasMaxLength(32).IsRequired();
 
-            // The inbox reads by the player's settlement id — see CampReportService.GetForSettlementAsync.
-            report.HasIndex(r => r.SettlementId);
+            // The inbox reads by the player's owner id — see CampReportService.GetForOwnerAsync. SettlementId is a
+            // plain id, no foreign key: a report belongs to the player and outlives its settlement.
+            report.Property(r => r.OwnerId).HasMaxLength(200).IsRequired();
+            report.HasIndex(r => new { r.WorldId, r.OwnerId });
 
             report.HasOne<WorldEntity>()
                 .WithMany()
                 .HasForeignKey(r => r.WorldId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            report.HasOne<SettlementEntity>()
-                .WithMany()
-                .HasForeignKey(r => r.SettlementId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             report.HasMany(r => r.UnitLines)
@@ -1153,13 +1170,16 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             report.Property(r => r.OfferedResource).HasConversion<int>();
             report.Property(r => r.RequestedResource).HasConversion<int>();
 
-            report.HasOne<TradeOfferEntity>().WithMany()
-                .HasForeignKey(r => r.OfferId)
-                .OnDelete(DeleteBehavior.Cascade);
-
+            // OfferId is a plain id, no foreign key: a report belongs to the players and outlives its offer
+            // (offers are deleted with their settlement).
             report.HasIndex(r => r.OfferId).IsUnique();
             report.HasIndex(r => r.PosterSettlementId);
             report.HasIndex(r => r.AcceptorSettlementId);
+
+            report.Property(r => r.PosterOwnerId).HasMaxLength(200).IsRequired();
+            report.Property(r => r.AcceptorOwnerId).HasMaxLength(200).IsRequired();
+            report.HasIndex(r => new { r.WorldId, r.PosterOwnerId });
+            report.HasIndex(r => new { r.WorldId, r.AcceptorOwnerId });
         });
 
         modelBuilder.Entity<MessageEntity>(message =>

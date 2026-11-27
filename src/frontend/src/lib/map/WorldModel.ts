@@ -7,7 +7,8 @@
 import { coordKey, hexDistance, hexesInRadius, hexRing, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import {
   SHRINE_BUILDING_TYPES,
-  additionalStorageHouseRequirement,
+  GREAT_STOREHOUSE_STORAGE_HOUSE_LEVEL,
+  greatStorehouseStorageHousesNeeded,
   maxTowers,
   ravensRings,
   wisdomBuildTimeFactor,
@@ -379,11 +380,13 @@ export class WorldModel {
   /**
    * The standing towers the server delivered per rival settlement (`applyRivalBuildings`). Kept apart from `settlementTowers` on
    * purpose: those feed the chain rule, vision and exploring, none of which a rival's towers take part in for the player. A
-   * rival's claim is its Longhouse disc plus the full disc of every tower listed here (`claimDiscsFor`), no chain check.
+   * rival's claim is its Longhouse disc plus the full disc of every tower listed here (`claimDiscsFor`). Towers the server flags `outsideRealm` (cut off) are not listed.
    */
   private rivalTowers = new Map<string, { q: number; r: number; level: number }[]>();
   /** Bumped whenever something a rival's claim depends on changes; `rivalClaimOwners` is rebuilt lazily when it lags behind. */
   private rivalClaimRevision = 0;
+  /** Per own settlement: the hexes of its current claim, as `syncOwnClaim` last computed them (without buildings standing outside it). */
+  private ownClaimKeys = new Map<string, Set<string>>();
   private rivalClaimCache: { revision: number; owners: Map<string, string> } | null = null;
   /**
    * The settlements the chain rule resolves together locally (`realmChain.ts`): one player's settlements on one island, keyed
@@ -1304,8 +1307,9 @@ export class WorldModel {
     return settlement.labelAt ?? { q: settlement.q, r: settlement.r };
   }
 
-  getSettlement(id: string): Settlement | undefined {
-    return this.settlements.get(id);
+  /** Undefined for an unknown id, and for none (an army without a home has no settlement). */
+  getSettlement(id: string | null): Settlement | undefined {
+    return id === null ? undefined : this.settlements.get(id);
   }
 
   /**
@@ -1518,8 +1522,8 @@ export class WorldModel {
    * this settlement's full claimed territory. A cut-off tower claims nothing.
    */
   private claimDiscsFor(settlement: Settlement) {
-    // A rival's claim is its Longhouse plus every tower the server delivered, whether or not the chain connects it: the client
-    // cannot resolve another player's realm and draws what the server showed it.
+    // A rival's claim is its Longhouse plus every tower the server delivered that is not flagged `outsideRealm` (cut off): the
+    // client cannot resolve another player's realm and draws what the server showed it.
     if (this.isRivalSettlement(settlement)) {
       return claimDiscs({ q: settlement.q, r: settlement.r }, settlement.level, this.rivalTowers.get(settlement.id) ?? [], this.isBeachCamp(settlement.id));
     }
@@ -1683,6 +1687,7 @@ export class WorldModel {
       else tile.ownerId = undefined;
     }
     this.claimedKeys.set(id, owned);
+    this.ownClaimKeys.set(id, claimed);
     this.rivalClaimRevision++;
   }
 
@@ -1890,7 +1895,8 @@ export class WorldModel {
       'quarry',
       'storagehouse',
       'archeryrange',
-      'dockyard',
+      'harbour',
+      'shipyard',
       'greatstorehouse',
       'barracks',
       'sawmill',
@@ -1998,13 +2004,23 @@ export class WorldModel {
 
   /**
    * This settlement's standing storage houses (hex and level), for the
-   * additional-storage-house rule (`additionalStorageHouseRequirement`): a new
-   * one needs enough of these at a high enough level.
+   * Great Storehouse count rule: the n-th Great Storehouse needs n of them at level 25.
    */
   storageHouses(settlementId: string): { q: number; r: number; level: number }[] {
     const levels: { q: number; r: number; level: number }[] = [];
     for (const tile of this.tiles.values()) {
       if (tile.ownerId === settlementId && tile.buildingType === 'storagehouse') {
+        levels.push({ q: tile.q, r: tile.r, level: tile.buildingLevel ?? 1 });
+      }
+    }
+    return levels;
+  }
+
+  /** This settlement's standing Great Storehouses (hex and level). */
+  greatStorehouses(settlementId: string): { q: number; r: number; level: number }[] {
+    const levels: { q: number; r: number; level: number }[] = [];
+    for (const tile of this.tiles.values()) {
+      if (tile.ownerId === settlementId && tile.buildingType === 'greatstorehouse') {
         levels.push({ q: tile.q, r: tile.r, level: tile.buildingLevel ?? 1 });
       }
     }
@@ -2036,7 +2052,8 @@ export class WorldModel {
       const key = coordKey({ q: building.q, r: building.r });
       if (ownRendered.has(key)) continue;
       if (building.type === 'beachcamp' && building.level >= 1) rivalCamps.add(building.settlementId);
-      if (building.type === 'tower' && building.level >= 1) {
+      // A tower the server marks outside its realm is cut off (economy.md §5): it claims nothing, so it gets no disc here either.
+      if (building.type === 'tower' && building.level >= 1 && building.outsideRealm !== true) {
         const list = towers.get(building.settlementId) ?? [];
         list.push({ q: building.q, r: building.r, level: building.level });
         towers.set(building.settlementId, list);
@@ -2068,12 +2085,12 @@ export class WorldModel {
 
   /**
    * The settlement whose realm border is drawn on this hex, ignoring the fog: for the player's own settlements the tile's owner
-   * as `syncClaim` left it; for a rival the owner by claim only (`rivalClaimOwners`), so a rival building standing outside every
-   * claim disc of its realm gets no border of its own.
+   * as `syncClaim` left it, but only where the hex is inside that settlement's claim; for a rival the owner by claim only
+   * (`rivalClaimOwners`). A building standing outside every claim disc of its realm (a cut-off tower) gets no border of its own.
    */
   realmBorderOwnerAt(q: number, r: number): string | undefined {
     const ownerId = this.getTile(q, r).ownerId;
-    if (ownerId !== undefined && !this.isRivalRealm(ownerId)) return ownerId;
+    if (ownerId !== undefined && !this.isRivalRealm(ownerId)) return this.ownClaimKeys.get(ownerId)?.has(coordKey({ q, r })) ? ownerId : undefined;
     return this.rivalClaimOwners().get(coordKey({ q, r }));
   }
 
@@ -2249,7 +2266,7 @@ export class WorldModel {
     // an Utgard wall (rubble included) or a Jötunn watchtower holds the hex against every building — the same rule the ring's
     // Build lock reads (`hexOccupant`; matches BuildRejection.HexOccupiedByCamp / HexOccupiedByEndgameSite).
     if (hexOccupant(tile)) return false;
-    // Every other building needs dry land; the fishing hut, dockyard and
+    // Every other building needs dry land; the fishing hut, harbour and
     // Shrine of Njörd are the exceptions, and *only* stand on the coastal ring of
     // the sea, not open water and not land either (matches
     // BuildingDefinition.RequiresCoastalWater).
@@ -2297,13 +2314,12 @@ export class WorldModel {
     // A settlement raises one shrine in total, of any god (matches
     // BuildRejection.SettlementAlreadyHasShrine).
     if (type && SHRINE_BUILDING_TYPES.has(type) && this.shrineCoords(settlementId).length >= 1) return false;
-    // An additional storage house needs enough standing ones at a high enough
-    // level (matches BuildRejection.StorageHouseTooLow). Upgrades never go
-    // through here.
-    if (type === 'storagehouse') {
-      const held = this.storageHouses(settlementId);
-      const need = additionalStorageHouseRequirement(held.length);
-      if (held.length >= 1 && held.filter((h) => h.level >= need.level).length < need.count) return false;
+    // The n-th Great Storehouse needs n Storage Houses at level 25 (matches
+    // BuildRejection.GreatStorehouseNeedsStorageHouses). Upgrades never go through here.
+    if (type === 'greatstorehouse') {
+      const needed = greatStorehouseStorageHousesNeeded(this.greatStorehouses(settlementId).length);
+      const maxed = this.storageHouses(settlementId).filter((h) => h.level >= GREAT_STOREHOUSE_STORAGE_HOUSE_LEVEL).length;
+      if (maxed < needed) return false;
     }
     // A wall hex must keep every wall hex drawable (matches BuildRejection.PalisadeWouldBranch/GateNotOnStraight and the terrain
     // refusals): no branch, a gate only on a straight, no river, the sea end on exactly one land wall.

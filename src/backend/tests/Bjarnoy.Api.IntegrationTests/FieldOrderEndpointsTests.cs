@@ -242,7 +242,7 @@ public sealed class FieldOrderEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NotFound, read.StatusCode);
 
         var reports = await client.GetFromJsonAsync<List<CampReportResponse>>(
-            $"/api/v1/settlements/{setup.Settlement.Id}/camp-reports", SqliteApiFixture.StrictJson, Ct);
+            $"/api/v1/worlds/{setup.Settlement.WorldId}/camp-reports", SqliteApiFixture.StrictJson, Ct);
         var report = Assert.Single(reports!);
         Assert.Equal("hunt", report.Kind);
         Assert.Equal(army.Id, report.ArmyId);

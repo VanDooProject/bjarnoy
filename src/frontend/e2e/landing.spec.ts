@@ -2,7 +2,8 @@ import type { Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { RING_TIP_GAP_PX } from '../src/lib/map/guidanceArrowGeometry';
-import { bubbleNearestPointerTip, waitForMapReady } from './helpers';
+import { bubbleNearestPointerTip } from './helpers';
+import { waitForMapReady } from './support/render';
 import { SettlementPage } from './pages';
 
 test('landing page is the village view, not a marketing page in front of it', { tag: '@g3' }, async ({ page }) => {
@@ -202,7 +203,7 @@ test('onboarding completion leads with the profile nudge, then the completion ba
   // covered by the test above; this one is about what happens once they're
   // both actually down.
   await page.evaluate(() => {
-    const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void } }).__demoWorld();
+    const world = window.__demoWorld() as { model: any; selectedSettlementId: string; syncHud: () => void };
     const settlementModel = world.model.getSettlement(world.selectedSettlementId);
     const dirs: Array<[number, number]> = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
     const guidedTypes = ['reindeerherder', 'lumberjack'];
