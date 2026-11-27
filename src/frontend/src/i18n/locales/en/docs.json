@@ -355,6 +355,14 @@
       "boat": "Upturned boat",
       "sandCastle": "Sand castle"
     },
+    "lookLabel": "Look:",
+    "looks": {
+      "coastalWater": { "plain": "Plain", "boat": "Boat", "rock": "Rock" },
+      "grass": { "plain": "Plain", "rocks": "Rocks", "shrubs": "Shrubs", "birch": "Birch" }
+    },
+    "forestWoodLabel": "Wood:",
+    "forestWoods": { "taiga": "Taiga", "birch": "Birch", "mixed": "Mixed" },
+    "forestLooks": { "clearing": "Clearing", "dense": "Dense wood", "fairyRing": "Fairy ring", "tarn": "Tarn" },
     "riverShapes": {
       "spring": "Spring",
       "straight": "Straight",
