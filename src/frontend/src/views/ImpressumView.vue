@@ -1,69 +1,12 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router';
-import LocaleSwitcher from '../components/LocaleSwitcher.vue';
-
-const router = useRouter();
+import SimplePageShell from '../components/SimplePageShell.vue';
 </script>
 
 <template>
-  <div class="impressum">
-    <header class="topbar">
-      <span class="brand">{{ $t('common.brand.name') }}</span>
-      <LocaleSwitcher />
-    </header>
-    <main class="body">
-      <h1>{{ $t('docs.impressum.title') }}</h1>
-      <p>
-        {{ $t('docs.impressum.body') }}
-      </p>
-      <button class="back" @click="router.push('/')">{{ $t('docs.back') }}</button>
-    </main>
-  </div>
+  <SimplePageShell :back-label="$t('docs.back')">
+    <h1>{{ $t('docs.impressum.title') }}</h1>
+    <p>
+      {{ $t('docs.impressum.body') }}
+    </p>
+  </SimplePageShell>
 </template>
-
-<style scoped>
-.impressum {
-  width: 100vw;
-  height: 100vh;
-  /* Mobile-readiness audit: 100dvh tracks mobile Safari's real visible
-     viewport, as a progressive enhancement over the 100vh above. */
-  height: 100dvh;
-  overflow: auto;
-  background: var(--shell);
-}
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 28px;
-}
-.brand {
-  font-weight: 600;
-  font-size: 20px;
-  color: var(--text);
-}
-.body {
-  max-width: 60ch;
-  margin: 0 auto;
-  padding: 24px 28px 60px;
-  color: var(--text);
-}
-.body p {
-  color: var(--muted);
-  line-height: 1.6;
-}
-.back {
-  margin-top: 12px;
-  background: transparent;
-  border: 1px solid var(--panel-border);
-  color: var(--text);
-  padding: 8px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.back:hover {
-  border-color: var(--gold);
-  color: var(--gold);
-}
-</style>

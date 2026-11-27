@@ -8,5 +8,5 @@ test('an unknown URL shows the not-found page with a way back to the start', asy
 
   await notFound.getByRole('link').click();
   await expect(page.getByTestId('not-found')).toHaveCount(0);
-  expect(new URL(page.url()).pathname).not.toBe('/does-not-exist');
+  await expect(page).toHaveURL(/\/$/);
 });
