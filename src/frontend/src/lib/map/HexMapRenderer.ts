@@ -556,7 +556,12 @@ export interface HexMapRendererOptions {
    * A tap landed on an army's marker (while the send picker is open, only on its `pick` markers; otherwise on any own marker): the
    * army's id and the marker's canvas position, so the host can show a hint beside it. While the send picker is open the tap does not reach the tile below (`armyTapSwallowed`); otherwise it does.
    */
-  onArmyTap?: (armyId: string, screen: { x: number; y: number }) => boolean | void;
+  onArmyTap?: (armyId: string, screen: { x: number; y: number }) => void;
+  /**
+   * Asked right after `onArmyTap`: true means the marker tap is all there is, it does not also reach the tile below (no ring menu). A
+   * query rather than `onArmyTap`'s return value, because hosts forward `onArmyTap` through a component event, which cannot return one.
+   */
+  armyTapStopsAtMarker?: (armyId: string) => boolean;
   /**
    * docs/design/zoom-transition.md: fired when a wheel/pinch zoom step
    * crosses the enter-settlement or exit-to-world threshold
@@ -655,8 +660,8 @@ export function armyTapSwallowed(armies: readonly ArmyOverlayMarker[]): boolean 
   return armies.some((a) => a.pick);
 }
 
-/** Whether a tap on an army marker ends there instead of reaching the tile: the send picker is open, or the host returned `true` (handled). */
-export function armyTapStopsHere(armies: readonly ArmyOverlayMarker[], handled: boolean | void): boolean {
+/** Whether a tap on an army marker ends there instead of reaching the tile: the send picker is open, or the host's `armyTapStopsAtMarker` said so. */
+export function armyTapStopsHere(armies: readonly ArmyOverlayMarker[], handled: boolean | undefined): boolean {
   return handled === true || armyTapSwallowed(armies);
 }
 
@@ -4052,8 +4057,8 @@ export class HexMapRenderer {
     // unless the host reports the tap as fully handled (a moving army: selection only, no ring).
     const armyId = this.pickedArmyAt(screen);
     if (armyId) {
-      const handled = this.options.onArmyTap?.(armyId, screen);
-      if (armyTapStopsHere(this.armyOverlay?.armies ?? [], handled)) return;
+      this.options.onArmyTap?.(armyId, screen);
+      if (armyTapStopsHere(this.armyOverlay?.armies ?? [], this.options.armyTapStopsAtMarker?.(armyId))) return;
     }
     // A tap on an HTML marker (the building HUD's dial or box) means the hex it belongs to, not the one it is drawn over.
     const coord = this.tapTarget?.(screen) ?? isoPixelToAxial(screenToWorld(this.camera, screen, this.viewport), TILE_W, TILE_H);
