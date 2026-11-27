@@ -70,6 +70,7 @@ builder.Services.AddOptions<PlotReservationOptions>()
 // FogChunkService's per-chunk mask cache (map-fog-v2.md §3) shares the same one.
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<FogChunkService>();
+builder.Services.AddScoped<FogOverviewService>();
 // The fog-gated settlement/settlement-list reads (SettlementEndpoints.GetView/
 // ListForWorld) need the same explored-area computation FogChunkService bakes
 // its chunks from — see ExploredAreaService's own remarks for why it's a
