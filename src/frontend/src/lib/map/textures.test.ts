@@ -1950,6 +1950,18 @@ describe('bog buildings and lake decorations', () => {
     expect(textureKeyFor(tower({ terrain: 'bog', bog: bog('bog', [], null) }))).toBe('towerbog');
   });
 
+  it('draws a Reindeer Herder on forest with its forest art and keeps the grass one on grass', () => {
+    expect(KEY_FAMILY.reindeerherderforest).toBe('reindeerherder_mixed');
+    const herder = (terrain: 'forest' | 'grass'): Tile => ({ q: 0, r: 0, terrain, buildingType: 'reindeerherder', buildingLevel: 1 });
+
+    expect(textureKeyFor(herder('forest'))).toBe('reindeerherderforest');
+    expect(textureKeyFor(herder('grass'))).toBe('reindeerherder');
+  });
+
+  it('draws the Barracks with the ring barracks art', () => {
+    expect(KEY_FAMILY.barracks).toBe('barracksring');
+  });
+
   it('maps the Harbour to its own art family and the Shipyard to the dockyard one', () => {
     expect(KEY_FAMILY.harbour).toBe('harbour');
     expect(KEY_FAMILY.shipyard).toBe('dockyard');

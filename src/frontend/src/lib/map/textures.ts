@@ -156,6 +156,8 @@ export type TextureKey =
   | 'towerbog'
   // The Longhouse on sand (3D_assets hextile165): a texture-lookup key, the wire type is `longhouse`.
   | 'longhousesand'
+  // The Reindeer Herder on a forest hex (3D_assets hextile152): a texture-lookup key, the wire type is `reindeerherder`.
+  | 'reindeerherderforest'
   // The palisade's six pieces (`palisadeArtFor`): which one a wall hex draws is decided by its wall neighbours, so these are
   // texture-lookup keys, not wire building types (the wire types are `palisade` and `palisadegate`).
   | 'palisadestraight'
@@ -213,6 +215,8 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   // choice. Pumpkin Farm stays on the legacy `farm_pumpkin` family for now.
   // The Reindeer Herder is the starting food building (LH 1), also scripted art.
   reindeerherder: 'reindeerherder',
+  // The Reindeer Herder on a forest hex: the herd among the trees (3D_assets hextile152).
+  reindeerherderforest: 'reindeerherder_mixed',
   farm: 'farm',
   pumpkinfarm: 'farm_pumpkin',
   lumberjack: 'lumberjack',
@@ -221,7 +225,8 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   // The Siege Workshop (3D_assets hextile147): hall, mangonel and ram on the grass base.
   siegeworkshop: 'siegeworkshop',
   greatstorehouse: 'bigstoragehouse',
-  barracks: 'barracks',
+  // The Barracks draws the ring barracks (3D_assets hextile168), which replaced the old `barracks` art.
+  barracks: 'barracksring',
   // Uses the leveled `fisherhut` art family now — the legacy 'fishinghutbuilding'
   // composite (still in the pack, no longer referenced) had no per-level
   // art at all. See buildingArt.ts's matching docs-page choice.
@@ -1789,10 +1794,12 @@ export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
   }
   // A tower replaces the tile it stands on, so its art depends on the ground: sand, forest and plain bog moss have their own, grass is `tower`.
   // A Longhouse on sand has its own art too (the same hall, the beach kept round it); on grass it is `longhouse`.
+  // A Reindeer Herder on forest has its own art (the herd among the trees); on grass it is `reindeerherder`.
   if (tile.buildingType === 'tower' && tile.bog?.kind === 'bog') return 'towerbog';
   if (tile.buildingType === 'tower' && tile.terrain === 'forest') return 'towerforest';
   if (tile.buildingType === 'tower' && tile.terrain === 'sand') return 'towersand';
   if (tile.buildingType === 'longhouse' && tile.terrain === 'sand') return 'longhousesand';
+  if (tile.buildingType === 'reindeerherder' && tile.terrain === 'forest') return 'reindeerherderforest';
   if (tile.buildingType) return tile.buildingType;
   if (tile.wasted) return WASTED_TEXTURE_KEY[seaArt(tile.terrain)] ?? seaArt(tile.terrain);
   if (tile.bog) return bogTextureKey(tile.bog);
