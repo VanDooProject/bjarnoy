@@ -26,9 +26,9 @@
   yellow in its last minute. Switching the info on or off hands each hex over marker by marker, so a hex always shows exactly
   one dial. The map canvas draws no construction dial itself; the landing page's live settlement preview shows its dial-only
   markers too (no building markers there).
-- Markers never block the map's hover, wheel and drags. A click or tap on a marker's dial or box opens the ring menu (or
-  does the quick upgrade) of the marker's own building, not of the hex it is drawn over; while a route is plotted or the
-  send picker is open, the click stays on the hex under the pointer. A marker
+- Markers never block the map's wheel and drags. Hovering, clicking or tapping a marker's dial or box means the marker's own
+  building hex (its outline, its ring menu, its quick upgrade), not the hex it is drawn over; while a route is plotted or the
+  send picker is open, the pointer stays on the hex under it. A marker
   grows (at least 1.3x; at the smallest zoom to the size where its compact box with text shows) when the mouse is on its dial,
   its box or its hex, or when a touch taps it (on its dial or its box). The mouse directly on a marker's dial or box wins over the hex under it: only that marker
   grows, and where several overlap the one on top (the hovered one, else the right-most) takes it. The box text stands on its
