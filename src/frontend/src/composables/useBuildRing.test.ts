@@ -114,6 +114,41 @@ describe('useBuildRing', () => {
     expect(types).not.toContain('bridge');
   });
 
+  describe('soil-dependent prerequisites', () => {
+    function meaderyLocks(): string[] {
+      const { ring, select } = mountRing();
+      select(emptyHex(world, 'grass'));
+      const meadery = ring.categories.value.flatMap((c) => c.buildings).find((b) => b.id === 'meadery')!;
+      return meadery.locks ?? [];
+    }
+
+    function settleOn(soil: 'wheat' | 'pumpkin') {
+      const model = world.model;
+      for (let q = 0; q < 200; q++) {
+        if (model.soilAtIslandCentre({ q, r: 0 }) !== soil) continue;
+        model.getSettlement(world.selectedSettlementId!)!.islandId = 'isl';
+        model.setIslands([{ id: 'isl', name: 'Isle', q, r: 0 }]);
+        return;
+      }
+      throw new Error(`no ${soil} island centre found`);
+    }
+
+    it('lists neither soil\'s feeder when the island soil is unknown (only untagged prerequisites apply)', () => {
+      const locks = meaderyLocks().join('|');
+      expect(locks).not.toContain('Farm level');
+      expect(locks).not.toContain('Pumpkin Farm');
+    });
+
+    it('asks a wheat-soil island for a Farm and a pumpkin-soil island for a Pumpkin Farm', () => {
+      settleOn('wheat');
+      expect(meaderyLocks()).toContain('Requires Farm level 5');
+      expect(meaderyLocks().join('|')).not.toContain('Pumpkin Farm');
+      settleOn('pumpkin');
+      expect(meaderyLocks()).toContain('Requires Pumpkin Farm level 5');
+      expect(meaderyLocks().join('|')).not.toContain('Requires Farm level');
+    });
+  });
+
   it('places in demo mode through the shared path and refuses an occupied hex', () => {
     const { ring, select } = mountRing();
     const hex = emptyHex(world, 'grass');

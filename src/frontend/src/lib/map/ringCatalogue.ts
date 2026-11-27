@@ -3,7 +3,7 @@
 // (`GET /api/v1/buildings`, or its bundled snapshot in demo mode via
 // stores/buildingCatalogue.ts) — nothing here re-derives a game rule, it only
 // renders one.
-import type { ResourceLine } from '../../api/types';
+import type { IslandSoil, ResourceLine } from '../../api/types';
 import { resourceName } from '../../i18n/catalogueNames';
 import { i18n } from '../../i18n';
 import { GREAT_STOREHOUSE_STORAGE_HOUSE_LEVEL, greatStorehouseStorageHousesNeeded } from './buildingEconomy';
@@ -138,18 +138,25 @@ export function riverFitLock(type: string, riverShape: string | undefined, river
 }
 
 /**
- * Whether `type` can be placed given this settlement's island soil — each
- * island grows one crop: Farm on Wheat soil, PumpkinFarm on Pumpkin soil
- * (`WorldModel.placeBuilding`/the backend's `Settlement.PlanBuild` mirror
- * this). `soil` is `undefined` when the caller couldn't resolve
- * an island (e.g. a demo settlement founded with no island id) — permissive
- * by default, same as the backend's null islandSoil.
+ * Whether `type` can be newly placed given this settlement's island soil. The catalogue says which soil a building needs
+ * (`requiredSoil`: Farm and Crop Mill on wheat, Pumpkin Farm on pumpkin); `WorldModel.placeBuilding` and the build ring read this,
+ * mirroring the backend's `Settlement.PlanBuild`. `soil` is `undefined` when the caller couldn't resolve an island (e.g. a demo
+ * settlement founded with no island id) — permissive by default, same as the backend's null islandSoil.
  */
-export function cropAllowedHere(type: string, soil: 'wheat' | 'pumpkin' | undefined): boolean {
-  if (soil === undefined) return true;
-  if (type === 'pumpkinfarm') return soil === 'pumpkin';
-  if (type === 'farm') return soil === 'wheat';
-  return true;
+export function soilAllowsBuilding(type: string, soil: IslandSoil | undefined): boolean {
+  const required = placementRuleFor(type)?.requiredSoil;
+  return soil === undefined || !required || required === soil;
+}
+
+/**
+ * The prerequisites that apply on an island of `soil`: the untagged ones plus those tagged with that soil. With an unknown soil
+ * (`undefined`) only the untagged ones apply — mirrors the backend's prerequisite loop in `Settlement.PlanBuild`.
+ */
+export function prerequisitesForSoil<T extends { soil?: IslandSoil | null }>(
+  prerequisites: readonly T[] | undefined,
+  soil: IslandSoil | undefined,
+): T[] {
+  return (prerequisites ?? []).filter((p) => !p.soil || p.soil === soil);
 }
 
 /**
@@ -187,7 +194,7 @@ export function isLakeShoreHut(tile: { buildingType?: string; bog?: { kind: BogT
 /**
  * Whether `type` may stand on this one hex, from its terrain, coastal-water flag and bog kind — the client side of
  * `BuildingDefinition.AllowsHex`, read from the catalogue's placement rules (river shape and soil rules are separate, see
- * `riverBuildingAllowedHere`/`cropAllowedHere`). Nothing stands on a lake; a coastal-water building stands on coastal water, or on
+ * `riverBuildingAllowedHere`/`soilAllowsBuilding`). Nothing stands on a lake; a coastal-water building stands on coastal water, or on
  * the bog kinds its `lakeShoreKinds` name (the Fishing Hut on a lake's half shore), or on an inland-lake hex beside land
  * (`alsoOnInlandLakeShore`, the Fishing Hut only); a wall's sea end (`alsoOnCoastalWater`) also on
  * coastal water; bog ground takes only what names its kind, never anything a grass building would. Whether a hex then takes a wall is

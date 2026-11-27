@@ -13,7 +13,7 @@ import {
   ravensRings,
   wisdomBuildTimeFactor,
 } from './buildingEconomy';
-import { buildingAllowedOnHex, cropAllowedHere, hexOccupant, newPlacementDisabled, riverBuildingAllowedHere } from './ringCatalogue';
+import { buildingAllowedOnHex, hexOccupant, newPlacementDisabled, riverBuildingAllowedHere, soilAllowsBuilding } from './ringCatalogue';
 import { canPlacePalisade, type PalisadeRefusal, type WallSet } from './palisadeTiles';
 import type { PalisadeWalls } from './palisadeMovement';
 import type { StandingBridges } from './bridgeMovement';
@@ -22,7 +22,7 @@ import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './g
 import { campGuardRange, isStrongCampFamily, placeCamps, placeWhaleRoads, StartPositionMargin } from './campPlacement';
 import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
 import type { PalisadePiece } from './palisadeTiles';
-import type { CampStateResponse } from '../../api/types';
+import type { CampStateResponse, IslandSoil } from '../../api/types';
 import { centreClaimDiscs, centreVisionDiscs, claimDiscs, type ClaimDisc } from './shoreline';
 import type { FogCoverageLookup } from './fog/fogCoverage';
 import { claimsWithGiants } from './territory';
@@ -1031,7 +1031,7 @@ export class WorldModel {
    * only buildable on Wheat soil, PumpkinFarm only on Pumpkin soil (see
    * `Settlement.PlanBuild`'s islandSoil parameter on the backend).
    */
-  soilAtIslandCentre(centre: AxialCoord): 'wheat' | 'pumpkin' {
+  soilAtIslandCentre(centre: AxialCoord): IslandSoil {
     return soilAt(centre.q, centre.r, { seed: this.seed, generation: this.generation });
   }
 
@@ -1053,9 +1053,9 @@ export class WorldModel {
    * Which crop `settlementId`'s own island grows, resolved from its stored
    * `islandId` against `listIslands()` — or `undefined` if either is
    * unknown (a demo settlement founded with no island id; see
-   * `cropAllowedHere`'s own doc comment for how callers treat that).
+   * `soilAllowsBuilding`'s own doc comment for how callers treat that).
    */
-  soilForSettlement(settlementId: string): 'wheat' | 'pumpkin' | undefined {
+  soilForSettlement(settlementId: string): IslandSoil | undefined {
     const islandId = this.settlements.get(settlementId)?.islandId;
     const island = islandId ? this.islands.find((i) => i.id === islandId) : undefined;
     return island ? this.soilAtIslandCentre({ q: island.q, r: island.r }) : undefined;
@@ -2299,9 +2299,9 @@ export class WorldModel {
     }
     if (!type || !this.hexTakesBuilding(at, type)) return false;
     const tile = this.getTile(at.q, at.r);
-    // Farm only on a Wheat-soil island, PumpkinFarm only on a Pumpkin-soil one
+    // A soil-bound building (Farm, Crop Mill: wheat; PumpkinFarm: pumpkin) only on its island soil
     // (matches BuildRejection.WrongCropForIslandSoil).
-    if (type && !cropAllowedHere(type, this.soilForSettlement(settlementId))) {
+    if (type && !soilAllowsBuilding(type, this.soilForSettlement(settlementId))) {
       return false;
     }
     // A new tower is refused once the settlement holds as many as its

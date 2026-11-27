@@ -314,7 +314,7 @@ export function buildingStatsFor(
     // not a resource that concentrates nearby) — no terrain or water adjacency
     // changes their output. The herder is the starting food building; from LH 4
     // an island grows either Farm (Wheat soil) or PumpkinFarm (Pumpkin soil,
-    // see ringCatalogue.ts's cropAllowedHere), which yields more.
+    // see ringCatalogue.ts's soilAllowsBuilding), which yields more.
     case 'reindeerherder':
       return { output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(8, level) } };
     case 'farm':

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, hexOccupant, cropAllowedHere, formatBuildTime, formatMissingResources, scaledBuildSeconds, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, greatStorehouseLock, towerLimitLock } from './ringCatalogue';
+import type { BuildingPrerequisiteResponse } from '../../api/types';
+import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, hexOccupant, soilAllowsBuilding, prerequisitesForSoil, formatBuildTime, formatMissingResources, scaledBuildSeconds, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, greatStorehouseLock, towerLimitLock } from './ringCatalogue';
 
 describe('scaledBuildSeconds', () => {
   it('divides the catalogue time by the world speed factor and applies Odin\'s Wisdom', () => {
@@ -138,25 +139,54 @@ describe('riverBuildingAllowedHere', () => {
   });
 });
 
-describe('cropAllowedHere', () => {
+describe('soilAllowsBuilding', () => {
   it('only allows pumpkinfarm on pumpkin soil', () => {
-    expect(cropAllowedHere('pumpkinfarm', 'pumpkin')).toBe(true);
-    expect(cropAllowedHere('pumpkinfarm', 'wheat')).toBe(false);
+    expect(soilAllowsBuilding('pumpkinfarm', 'pumpkin')).toBe(true);
+    expect(soilAllowsBuilding('pumpkinfarm', 'wheat')).toBe(false);
   });
 
   it('is permissive when the soil is unresolvable (undefined)', () => {
-    expect(cropAllowedHere('pumpkinfarm', undefined)).toBe(true);
+    expect(soilAllowsBuilding('pumpkinfarm', undefined)).toBe(true);
   });
 
   it('only allows farm on wheat soil', () => {
-    expect(cropAllowedHere('farm', 'wheat')).toBe(true);
-    expect(cropAllowedHere('farm', 'pumpkin')).toBe(false);
-    expect(cropAllowedHere('farm', undefined)).toBe(true);
+    expect(soilAllowsBuilding('farm', 'wheat')).toBe(true);
+    expect(soilAllowsBuilding('farm', 'pumpkin')).toBe(false);
+    expect(soilAllowsBuilding('farm', undefined)).toBe(true);
+  });
+
+  it('only allows the crop mill on wheat soil', () => {
+    expect(soilAllowsBuilding('cropmill', 'wheat')).toBe(true);
+    expect(soilAllowsBuilding('cropmill', 'pumpkin')).toBe(false);
+    expect(soilAllowsBuilding('cropmill', undefined)).toBe(true);
   });
 
   it('is a no-op for every other buildable type', () => {
-    expect(cropAllowedHere('quarry', 'wheat')).toBe(true);
-    expect(cropAllowedHere('sawmill', 'wheat')).toBe(true);
+    expect(soilAllowsBuilding('quarry', 'wheat')).toBe(true);
+    expect(soilAllowsBuilding('sawmill', 'pumpkin')).toBe(true);
+    expect(soilAllowsBuilding('meadery', 'pumpkin')).toBe(true);
+  });
+});
+
+describe('prerequisitesForSoil', () => {
+  const freyja: BuildingPrerequisiteResponse[] = [
+    { type: 'cropmill', level: 5, soil: 'wheat' },
+    { type: 'pumpkinfarm', level: 15, soil: 'pumpkin' },
+  ];
+
+  it('keeps the untagged prerequisites and the ones tagged with the island soil', () => {
+    expect(prerequisitesForSoil(freyja, 'pumpkin')).toEqual([{ type: 'pumpkinfarm', level: 15, soil: 'pumpkin' }]);
+    expect(prerequisitesForSoil(freyja, 'wheat')).toEqual([{ type: 'cropmill', level: 5, soil: 'wheat' }]);
+    expect(prerequisitesForSoil([{ type: 'harbour', level: 10, soil: null }, ...freyja], 'pumpkin').map((p) => p.type)).toEqual([
+      'harbour',
+      'pumpkinfarm',
+    ]);
+  });
+
+  it('applies only the untagged ones when the soil is unknown', () => {
+    expect(prerequisitesForSoil(freyja, undefined)).toEqual([]);
+    expect(prerequisitesForSoil([{ type: 'farm', level: 3 }, ...freyja], undefined)).toEqual([{ type: 'farm', level: 3 }]);
+    expect(prerequisitesForSoil(undefined, 'wheat')).toEqual([]);
   });
 });
 
