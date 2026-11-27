@@ -37,6 +37,7 @@ import {
   markerBoxRect,
   markerScale,
   markerAt,
+  pointInRect,
   type MarkerHitArea,
   rowsFor,
   rowsSignature,
@@ -117,6 +118,8 @@ const motion = useBuildingHudMotion();
  * glyphs live on them. One switch for both, so the show / hide animation below is the same one.
  */
 const markersWanted = computed(() => prefs.buildingInfo || quick.applies);
+/** Levels only: the dials stand alone, a box shows only on the hovered (or tapped) marker. */
+const levelsOnly = computed(() => prefs.buildingHudMode === 'levels');
 
 /** The markers are in the DOM: from the moment they are switched on until their hide animation has ended. */
 const rendered = ref(props.buildingMarkers && markersWanted.value);
@@ -307,6 +310,10 @@ const rowsByKey = computed<Record<string, HudRow[]>>(() => {
   const premium = auth.isPremium;
   const shift = quick.shiftHeld;
   for (const m of markers.value) {
+    if (levelsOnly.value && hoveredKey.value !== m.key) {
+      out[m.key] = [];
+      continue;
+    }
     const tier = tierOf(m.key);
     const mode = quickModeOf(m.key);
     const hit = rowMemo.get(m.key);
@@ -406,14 +413,16 @@ let tapAtMs = 0;
 const hoverT = new Map<string, number>();
 /** Where each marker's dial is drawn right now (canvas px, radius), for the tap hit test; absent while it is faded out. */
 const dialDiscs = new Map<string, { key: string; cx: number; cy: number; r: number }>();
-/** Where each marker's box is drawn right now (canvas px); absent while it has none. */
+/** Where each marker's box is drawn right now (canvas px); absent while it has none. The box takes no pointer: the mouse on it makes it see-through. */
 const boxRects = new Map<string, { x: number; y: number; w: number; h: number }>();
+/** The markers whose box the mouse is on right now (drawn see-through, the map under it takes the hover). */
+const seeThrough = new Set<string>();
 
-/** The marker (dial disc or box) at canvas point `screen` as placed in the last frame, or null: the top-most of several. */
+/** The marker (its dial disc; the box takes no pointer) at canvas point `screen` as placed in the last frame, or null: the top-most of several. */
 function placedMarkerAt(screen: { x: number; y: number }): MarkerHitArea | null {
   if (hudHidden.value) return null;
   const areas: MarkerHitArea[] = [];
-  for (const [key, disc] of dialDiscs) areas.push({ key, hexKey: disc.key, disc, box: boxRects.get(key), z: lastZ.get(key) ?? 0 });
+  for (const [key, disc] of dialDiscs) areas.push({ key, hexKey: disc.key, disc, z: lastZ.get(key) ?? 0 });
   return markerAt(screen, areas);
 }
 
@@ -435,17 +444,22 @@ function pointerTargetAt(screen: { x: number; y: number }): AxialCoord | null {
 }
 
 /**
- * The marker the mouse is directly on (its dial disc or box), or null. Of several the one stacked on top wins (`stackOrder`:
+ * The marker the mouse is directly on (its dial disc; the box takes no pointer), or null. Of several the one stacked on top wins (`stackOrder`:
  * the hovered one, else the right-most). A direct hit beats the hex under the mouse, which is often a neighbour's.
  */
 function directHit(mouse: { x: number; y: number } | null, candidates: { key: string; x: number; y: number; zs: number }[]): string | null {
   if (!mouse) return null;
   const ranked = stackOrder(candidates.map((c) => ({ ...c, hovered: (hoverT.get(c.key) ?? 0) > 0 })));
-  const areas = ranked.map(({ key, x, y, zs }, z): MarkerHitArea => {
-    const size = boxSizes.get(key);
-    return { key, hexKey: key, disc: { cx: x, cy: y, r: dialRadiusPx(zs) }, box: size && markerBoxRect(x, y, size, zs), z };
-  });
+  const areas = ranked.map(({ key, x, y, zs }, z): MarkerHitArea => ({ key, hexKey: key, disc: { cx: x, cy: y, r: dialRadiusPx(zs) }, z }));
   return markerAt(mouse, areas)?.key ?? null;
+}
+
+/** Draws a marker's box see-through while the mouse is on it (`.hud-marker__box--see-through`), touching the class only on a change. */
+function setSeeThrough(key: string, on: boolean) {
+  if (seeThrough.has(key) === on) return;
+  if (on) seeThrough.add(key);
+  else seeThrough.delete(key);
+  observedBoxes.get(key)?.classList.toggle('hud-marker__box--see-through', on);
 }
 
 // ---- per-frame placement --------------------------------------------------------------------------------------------------
@@ -502,6 +516,7 @@ function setBox(key: string, el: unknown) {
     if (previous === el) return;
     if (previous) boxObserver?.unobserve(previous);
     observedBoxes.set(key, el);
+    el.classList.toggle('hud-marker__box--see-through', seeThrough.has(key));
     ensureBoxObserver().observe(el, { box: 'border-box' });
     return;
   }
@@ -520,6 +535,7 @@ function setElement(key: string, el: unknown) {
     lastVisibility.delete(key);
     dialDiscs.delete(key);
     boxRects.delete(key);
+    seeThrough.delete(key);
     hoverT.delete(key);
     visibility.delete(key);
     placedOnce.delete(key);
@@ -634,8 +650,11 @@ function tick() {
     // A marker faded under the ring menu takes no tap.
     if (occluded) dialDiscs.delete(marker.key);
     else dialDiscs.set(marker.key, { key: marker.hexKey, cx: x, cy: y, r: dialRadiusPx(zs) });
-    if (boxSize) boxRects.set(marker.key, markerBoxRect(x, y, boxSize, zs));
+    const boxRect = boxSize ? markerBoxRect(x, y, boxSize, zs) : undefined;
+    if (boxRect) boxRects.set(marker.key, boxRect);
     else boxRects.delete(marker.key);
+    // The box starts on the dial's centre line, under the dial: only the mouse on the box itself, off every dial, makes it see-through.
+    setSeeThrough(marker.key, !occluded && direct === null && mouse !== null && boxRect !== undefined && pointInRect(mouse, boxRect));
     const transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${zs.toFixed(3)})`;
     if (lastTransform.get(marker.key) !== transform) {
       lastTransform.set(marker.key, transform);
@@ -801,7 +820,7 @@ function onKeyDown(e: KeyboardEvent) {
   // The renderer's own guard: no Ctrl/Meta/Alt, not while typing, not while the map is locked or covered.
   if (!props.renderer?.keyDrivesMap(e)) return;
   e.preventDefault();
-  prefs.toggleBuildingInfo();
+  prefs.cycleBuildingHud();
 }
 
 onMounted(() => {
@@ -958,10 +977,30 @@ onUnmounted(() => {
   border-left: 0;
   border-radius: 0 8px 8px 0;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
-  /* The quick look's level hex slides in over 450 ms (BuildingHudDial); the content makes room alongside it. */
-  transition: padding-left 450ms cubic-bezier(0.3, 0, 0.2, 1);
 }
-html[data-hud-motion='reduced'] .hud-marker__box {
+/* The quick look's level hex slides in over 450 ms (BuildingHudDial); the content makes room alongside it. The mouse on a box:
+   it takes no pointer (the map under it takes the hover and the click), so it turns see-through. */
+.hud-marker__box {
+  transition:
+    padding-left 450ms cubic-bezier(0.3, 0, 0.2, 1),
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+.hud-marker__box > * {
+  transition: opacity 150ms ease;
+}
+.hud-marker__box--see-through {
+  background: rgba(10, 20, 27, 0.55);
+  border-color: rgba(255, 255, 255, 0.26);
+  box-shadow: none;
+}
+.hud-marker__box--see-through > * {
+  opacity: 0.92;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+html[data-hud-motion='reduced'] .hud-marker__box,
+html[data-hud-motion='reduced'] .hud-marker__box > * {
   transition: none;
 }
 /* Phone: the switch sits at the map's top left, below the settlement bubble that sits there (it ends about 44px under the bar). */

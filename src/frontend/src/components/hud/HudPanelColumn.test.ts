@@ -57,15 +57,15 @@ describe('HudPanelColumn', () => {
   });
 
   it('shows the five icons top to bottom: building info, construction, garrison, armies, quests', () => {
-    expect(labels(mountColumn())).toEqual(['Building info (H)', 'Construction', 'Garrison', 'Armies', 'Quests']);
+    expect(labels(mountColumn())).toEqual(['Building info: levels and details (H)', 'Construction', 'Garrison', 'Armies', 'Quests']);
   });
 
   it('leaves out the icon of a panel that has nothing to show, but never the building info switch or construction', () => {
     content().garrison.value = false;
     content().quests.value = false;
-    expect(labels(mountColumn())).toEqual(['Building info (H)', 'Construction', 'Armies']);
+    expect(labels(mountColumn())).toEqual(['Building info: levels and details (H)', 'Construction', 'Armies']);
     for (const flag of Object.values(content())) flag.value = false;
-    expect(labels(mountColumn())).toEqual(['Building info (H)', 'Construction']);
+    expect(labels(mountColumn())).toEqual(['Building info: levels and details (H)', 'Construction']);
   });
 
   it('keeps the construction icon with no build orders, dimmed and disabled, and a click changes nothing', async () => {
@@ -132,12 +132,15 @@ describe('HudPanelColumn', () => {
     expect(useHudPrefsStore().panels.armies.open).toBe(true);
   });
 
-  it('toggles the building info from its button', async () => {
+  it('steps the building info through its modes from its button', async () => {
     const wrapper = mountColumn();
     const button = wrapper.get('[data-testid="building-info-toggle"]');
+    expect(button.attributes('data-mode')).toBe('full');
+    await button.trigger('click');
+    expect(useHudPrefsStore().buildingHudMode).toBe('levels');
     expect(button.attributes('aria-pressed')).toBe('true');
     await button.trigger('click');
-    expect(useHudPrefsStore().buildingInfo).toBe(false);
+    expect(useHudPrefsStore().buildingHudMode).toBe('off');
     expect(button.attributes('aria-pressed')).toBe('false');
   });
 

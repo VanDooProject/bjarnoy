@@ -393,24 +393,27 @@ describe('BuildingHudLayer', () => {
       expect(scaleOf()).toContain('scale(1.950)');
     });
 
-    it('hovers a marker by its box, which starts on the dial centre line', async () => {
+    it('takes no pointer on the box: the mouse on it hovers no marker and draws the box see-through', async () => {
       const renderer = await mountAt(1.5);
-      expect(wrapper!.find('[data-coord="1,0"] .hud-marker__box').exists()).toBe(true);
+      const box = () => wrapper!.get('[data-coord="1,0"] .hud-marker__box');
       // The dial is at x 180, y 300; its disc is about 41 px. The box is 100 x 40 unscaled, i.e. 150 x 60 at 1.5: it spans
       // x 180..330, y 270..330. (225, 328) is on the box, off its disc and off the neighbour's dial.
       renderer.mousePoint = { x: 225, y: 328 };
       advance();
-      expect(scaleOf()).toContain('scale(1.950)');
-      // Beside the box (above it) nothing hovers.
-      renderer.mousePoint = null;
-      advance();
       expect(scaleOf()).toContain('scale(1.500)');
+      expect(box().classes()).toContain('hud-marker__box--see-through');
+      // Off the box it is drawn as usual again.
       renderer.mousePoint = { x: 300, y: 260 };
       advance();
-      expect(scaleOf()).toContain('scale(1.500)');
+      expect(box().classes()).not.toContain('hud-marker__box--see-through');
+      // The box starts under the dial: the mouse on the dial hovers the marker, and its box stays solid.
+      renderer.mousePoint = { x: 190, y: 300 };
+      advance();
+      expect(scaleOf()).toContain('scale(1.950)');
+      expect(box().classes()).not.toContain('hud-marker__box--see-through');
     });
 
-    it('a touch tap on a box reveals its marker and is its building\'s tap, like one on the dial', async () => {
+    it('a touch tap on a box reveals nothing and reaches the hex under it', async () => {
       // One building, so no neighbour's dial lies over the point.
       const world = seedBuildings();
       world.hud.buildings = [{ q: 1, r: 0, type: 'longhouse', level: 1 }];
@@ -420,54 +423,39 @@ describe('BuildingHudLayer', () => {
       await wrapper.vm.$nextTick();
       sizeBoxes();
       runFrame();
-      vi.useFakeTimers({ toFake: ['Date'] });
-      const frames5 = () => {
-        for (let i = 0; i < 5; i++) {
-          vi.advanceTimersByTime(60);
-          runFrame();
-        }
-      };
-      // On the box (x 180..330, y 270..330), off the dial disc: the marker grows, and the tap means the longhouse's hex.
-      expect(renderer.pointerTarget!({ x: 300, y: 320 })).toEqual({ q: 1, r: 0 });
+      // On the box (x 180..330, y 270..330), off the dial disc.
+      expect(renderer.pointerTarget!({ x: 300, y: 320 })).toBeNull();
       renderer.tapObserver!({ x: 300, y: 320 });
-      frames5();
-      expect(scaleOf()).toContain('scale(1.950)');
-      // A second tap on it closes it again.
-      renderer.tapObserver!({ x: 181, y: 301 });
-      frames5();
-      vi.useRealTimers();
+      advance();
       expect(scaleOf()).toContain('scale(1.500)');
+      // On the dial it reveals the marker.
+      renderer.tapObserver!({ x: 181, y: 301 });
+      advance();
+      expect(scaleOf()).toContain('scale(1.950)');
     });
 
-    it('the marker the mouse is directly on wins over the hex under it, and ends up on top', async () => {
+    it('the hex under a box decides the hover, and the box over it turns see-through', async () => {
       const renderer = await mountAt(1.5);
       const scaleAt = (key: string) => wrapper!.get<HTMLElement>(`[data-coord="${key}"]`).element.style.transform;
-      const z = (key: string) => Number(wrapper!.get<HTMLElement>(`[data-coord="${key}"]`).element.style.zIndex);
-      // On the box of 1,0 (x 180..330, y 270..330) and off the dial discs of 1,0 and 2,0, while the hex under the mouse is 2,0's.
+      // On the box of 1,0 and off every dial disc, while the hex under the mouse is 3,0's (whose dial, even grown, stays clear).
       renderer.mousePoint = { x: 225, y: 328 };
-      renderer.hoveredHexKey = '2,0';
-      advance();
-      expect(scaleAt('1,0')).toContain('scale(1.950)');
-      expect(scaleAt('2,0')).toContain('scale(1.500)');
-      expect(z('1,0')).toBeGreaterThan(z('2,0'));
-      // Without a direct hit the hex decides.
-      renderer.mousePoint = { x: 225, y: 360 };
+      renderer.hoveredHexKey = '3,0';
       advance();
       expect(scaleAt('1,0')).toContain('scale(1.500)');
-      expect(scaleAt('2,0')).toContain('scale(1.950)');
+      expect(scaleAt('3,0')).toContain('scale(1.950)');
+      expect(wrapper!.get('[data-coord="1,0"] .hud-marker__box').classes()).toContain('hud-marker__box--see-through');
     });
 
-    it('of two direct hits the one stacked on top wins: the hovered one, else the right-most', async () => {
+    it('of two dials under the mouse the one stacked on top wins: the hovered one, else the right-most', async () => {
       const renderer = await mountAt(1.5);
       const scaleAt = (key: string) => wrapper!.get<HTMLElement>(`[data-coord="${key}"]`).element.style.transform;
-      // On the boxes of both 1,0 and 2,0 (2,0's starts at x 260), off their dial discs: the right-most one.
-      renderer.mousePoint = { x: 300, y: 285 };
-      renderer.hoveredHexKey = '1,0';
+      // Between the dials of 1,0 (x 180) and 2,0 (x 260), on both discs: the right-most one.
+      renderer.mousePoint = { x: 220, y: 300 };
       advance();
       expect(scaleAt('2,0')).toContain('scale(1.950)');
       expect(scaleAt('1,0')).toContain('scale(1.500)');
-      // Still on both boxes: the one already hovered (2,0) stays on top.
-      renderer.mousePoint = { x: 300, y: 300 };
+      // Nearer 1,0, still on the grown disc of 2,0: the one already hovered stays on top.
+      renderer.mousePoint = { x: 215, y: 300 };
       advance();
       expect(scaleAt('2,0')).toContain('scale(1.950)');
     });
@@ -618,20 +606,55 @@ describe('BuildingHudLayer', () => {
     }
   });
 
-  it('hides every marker when the icon button is turned off, and the choice is remembered', async () => {
+  it('steps full, levels only, off and back to full from the icon button, and remembers the choice', async () => {
     seedBuildings();
-    wrapper = mountLayer(fakeRenderer());
+    const renderer = fakeRenderer();
+    wrapper = mountLayer(renderer);
+    runFrame();
+    await flushPromises();
     const toggle = wrapper.get('button.building-hud__toggle');
     expect(toggle.attributes('aria-pressed')).toBe('true');
-    expect(toggle.attributes('aria-label')).toBe('Building info (H)');
+    expect(toggle.attributes('aria-label')).toBe('Building info: levels and details (H)');
+    expect(wrapper.findAll('.hud-marker__box').length).toBeGreaterThan(0);
+    // Levels only: every dial stays, no box.
+    await toggle.trigger('click');
+    await flushPromises();
+    expect(toggle.attributes('aria-label')).toBe('Building info: levels only (H)');
+    expect(toggle.attributes('aria-pressed')).toBe('true');
+    expect(wrapper.findAll('.hud-marker')).toHaveLength(4);
+    expect(wrapper.findAll('.hud-marker__box')).toHaveLength(0);
+    expect(localStorage.getItem('bjarnoy.hudBuildingInfo')).toBe('levels');
+    // Off: no marker.
     await toggle.trigger('click');
     await flushPromises();
     expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
     expect(toggle.attributes('aria-pressed')).toBe('false');
-    expect(useHudPrefsStore().buildingInfo).toBe(false);
+    expect(useHudPrefsStore().buildingHudMode).toBe('off');
     expect(localStorage.getItem('bjarnoy.hudBuildingInfo')).toBe('off');
+    // And full again.
     await toggle.trigger('click');
+    await flushPromises();
     expect(wrapper.findAll('.hud-marker')).toHaveLength(4);
+    expect(useHudPrefsStore().buildingHudMode).toBe('full');
+  });
+
+  it('shows a box in levels-only mode only on the hovered marker', async () => {
+    seedBuildings();
+    useHudPrefsStore().setBuildingHudMode('levels');
+    const renderer = fakeRenderer();
+    wrapper = mountLayer(renderer);
+    runFrame();
+    await flushPromises();
+    expect(wrapper.findAll('.hud-marker__box')).toHaveLength(0);
+    renderer.mousePoint = { x: 180, y: 300 };
+    runFrame();
+    await flushPromises();
+    expect(wrapper.findAll('.hud-marker__box')).toHaveLength(1);
+    expect(wrapper.find('[data-coord="1,0"] .hud-marker__box').exists()).toBe(true);
+    renderer.mousePoint = null;
+    runFrame();
+    await flushPromises();
+    expect(wrapper.findAll('.hud-marker__box')).toHaveLength(0);
   });
 
   describe('the quick upgrade look', () => {
@@ -806,9 +829,13 @@ describe('BuildingHudLayer', () => {
     expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
   });
 
-  it('toggles on the H key', async () => {
+  it('steps through the modes on the H key', async () => {
     seedBuildings();
     wrapper = mountLayer(fakeRenderer());
+    keyDown('h');
+    await flushPromises();
+    expect(useHudPrefsStore().buildingHudMode).toBe('levels');
+    expect(wrapper.findAll('.hud-marker')).toHaveLength(4);
     keyDown('h');
     await flushPromises();
     expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
@@ -1062,7 +1089,7 @@ describe('BuildingHudLayer', () => {
       const now = Date.now();
       world.hud.queueFetchedAt = now;
       world.hud.queue = [waiting(9, { state: 'building', completesInSeconds: 300, totalSeconds: 600 })];
-      useHudPrefsStore().setBuildingInfo(false);
+      useHudPrefsStore().setBuildingHudMode('off');
       const renderer = fakeRenderer();
       wrapper = mountLayer(renderer);
       runFrame();
@@ -1073,7 +1100,7 @@ describe('BuildingHudLayer', () => {
       expect(wrapper.find('[data-dial-only="9,0"]').exists()).toBe(true);
       wrapper.unmount();
 
-      useHudPrefsStore().setBuildingInfo(true);
+      useHudPrefsStore().setBuildingHudMode('full');
       const landing = fakeRenderer();
       landing.constructionDialList = constructionDialsFromQueue(world.hud.queue, now);
       wrapper = mount(BuildingHudLayer, {
@@ -1149,7 +1176,7 @@ describe('BuildingHudLayer', () => {
       // Every marker's hex (walls have none): its own marker draws the dial; the new build on 9,0 is dial-only.
       expect(wrapper.findAll('[data-dial-only]').map((m) => m.attributes('data-dial-only'))).toEqual(['9,0']);
       // Switched off: every dial is a dial-only marker.
-      useHudPrefsStore().setBuildingInfo(false);
+      useHudPrefsStore().setBuildingHudMode('off');
       await flushPromises();
       expect(wrapper.findAll('[data-dial-only]').map((m) => m.attributes('data-dial-only')).sort()).toEqual(['2,0', '3,0', '9,0']);
     });
@@ -1170,7 +1197,7 @@ describe('BuildingHudLayer', () => {
       const dialOnlyAt = (key: string) => wrapper!.find(`[data-dial-only="${key}"]`).exists();
       expect(dialOnlyAt('1,0') || dialOnlyAt('3,0')).toBe(false);
       // Hide: the longhouse marker (q 1, the wave's origin) is gone first, the barracks (q 3, 160 px away) later.
-      prefs.setBuildingInfo(false);
+      prefs.setBuildingHudMode('off');
       await vi.advanceTimersByTimeAsync(0);
       expect(dialOnlyAt('1,0') || dialOnlyAt('3,0')).toBe(false);
       await vi.advanceTimersByTimeAsync(100 + 300);
@@ -1182,7 +1209,7 @@ describe('BuildingHudLayer', () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(wrapper.findAll('[data-coord]')).toHaveLength(0);
       // Show: every dial-only marker stays until its marker's dial starts to spin in (the wave delay).
-      prefs.setBuildingInfo(true);
+      prefs.setBuildingHudMode('full');
       await vi.advanceTimersByTimeAsync(0);
       // The longhouse marker (the wave's origin) starts at once; the barracks' dial 192 ms later.
       expect(dialOnlyAt('1,0')).toBe(false);
@@ -1199,7 +1226,7 @@ describe('BuildingHudLayer', () => {
       fake = installFakeAnimate();
       vi.useFakeTimers();
       const prefs = useHudPrefsStore();
-      prefs.setBuildingInfo(false);
+      prefs.setBuildingHudMode('off');
       const renderer = fakeRenderer();
       wrapper = mountLayer(renderer);
       const now = Date.now();
@@ -1211,7 +1238,7 @@ describe('BuildingHudLayer', () => {
       const removed: Node[] = [];
       const observer = new MutationObserver((records) => records.forEach((r) => removed.push(...r.removedNodes)));
       observer.observe(wrapper.element, { childList: true, subtree: true });
-      prefs.setBuildingInfo(true);
+      prefs.setBuildingHudMode('full');
       await vi.advanceTimersByTimeAsync(0);
       observer.takeRecords().forEach((r) => removed.push(...r.removedNodes));
       observer.disconnect();
@@ -1228,7 +1255,7 @@ describe('BuildingHudLayer', () => {
       const renderer = fakeRenderer();
       wrapper = mountLayer(renderer);
       runFrame();
-      useHudPrefsStore().setBuildingInfo(false);
+      useHudPrefsStore().setBuildingHudMode('off');
       await flushPromises();
       expect(wrapper.findAll('.hud-marker')).toHaveLength(4);
       expect(fake.running().length).toBeGreaterThan(0);
@@ -1243,11 +1270,11 @@ describe('BuildingHudLayer', () => {
       wrapper = mountLayer(fakeRenderer());
       runFrame();
       const prefs = useHudPrefsStore();
-      prefs.setBuildingInfo(false);
+      prefs.setBuildingHudMode('off');
       await flushPromises();
       const dials = wrapper.findAll('.hud-marker__dial').map((d) => d.element);
       const started = fake.animations.length;
-      prefs.setBuildingInfo(true);
+      prefs.setBuildingHudMode('full');
       await flushPromises();
       expect(fake.animations).toHaveLength(started);
       expect(fake.animations.every((a) => a.reversed)).toBe(true);
@@ -1262,7 +1289,7 @@ describe('BuildingHudLayer', () => {
       fake = installFakeAnimate();
       wrapper = mountLayer(fakeRenderer());
       runFrame();
-      useHudPrefsStore().setBuildingInfo(false);
+      useHudPrefsStore().setBuildingHudMode('off');
       await flushPromises();
       // The Longhouse is at q 1 (x 180); the tower at q 2 is 80 px away, the barracks at q 3 is 160 px away.
       const spinDelay = (key: string) =>

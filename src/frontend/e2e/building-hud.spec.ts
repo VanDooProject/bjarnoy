@@ -75,37 +75,43 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     await expect(hud.box(farm)).toContainText('/h');
   });
 
-  test('the toggle button and the H key hide and show every marker, and the choice is kept across a reload', async ({ page }) => {
+  test('the toggle button and the H key step full, levels only and off, and the choice is kept across a reload', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
     const { hud } = settlement;
     const total = (await hud.ownedBuildings()).length;
     await expect(hud.markers).toHaveCount(total);
+    await expect(hud.toggle).toHaveAttribute('data-mode', 'full');
+    await expect(hud.toggle).toHaveAccessibleName('Building info: levels and details (H)');
+
+    // Levels only: every dial stays.
+    await hud.toggle.click();
+    await expect(hud.toggle).toHaveAttribute('data-mode', 'levels');
     await expect(hud.toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(hud.markers).toHaveCount(total);
 
     await hud.toggle.click();
     await expect(hud.markers).toHaveCount(0);
     await expect(hud.toggle).toHaveAttribute('aria-pressed', 'false');
-
-    await hud.toggle.click();
-    await expect(hud.markers).toHaveCount(total);
-    await expect(hud.toggle).toHaveAttribute('aria-pressed', 'true');
 
     await page.keyboard.press('h');
-    await expect(hud.markers).toHaveCount(0);
-    await expect(hud.toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(hud.markers).toHaveCount(total);
+    await expect(hud.toggle).toHaveAttribute('data-mode', 'full');
+
+    await page.keyboard.press('h');
+    await expect(hud.toggle).toHaveAttribute('data-mode', 'levels');
 
     // Demo mode keeps the settlement in memory only, so a reload starts a new one: the preference is what must carry over.
     const reloaded = await SettlementPage.found(page);
-    await expect(reloaded.hud.toggle).toHaveAttribute('aria-pressed', 'false');
-    await expect(reloaded.hud.markers).toHaveCount(0);
+    await expect(reloaded.hud.toggle).toHaveAttribute('data-mode', 'levels');
+    await expect(reloaded.hud.markers).not.toHaveCount(0);
 
     await page.keyboard.press('h');
-    await expect(reloaded.hud.markers).not.toHaveCount(0);
-    await expect(reloaded.hud.toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(reloaded.hud.markers).toHaveCount(0);
+    await expect(reloaded.hud.toggle).toHaveAttribute('aria-pressed', 'false');
   });
 
-  test("a marker never takes the pointer, yet hovering or clicking it means its own building's hex, while the tile tooltip stays away", async ({ page }) => {
+  test("a marker never takes the pointer: its dial means its own building's hex, its box the hex under it", async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
     const { hud } = settlement;
@@ -128,16 +134,18 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     const hovered = () => page.evaluate(() => window.__settlementRenderer().hoveredHexKey);
     await expect.poll(hovered).toBe(`${hex.q},${hex.r}`);
 
-    // The box is drawn over the hexes right of the longhouse: hovering it is the longhouse's hex, and a click opens its ring.
+    // The box is drawn over the hexes right of the longhouse and takes no pointer: hovering it is the hex under it, the box
+    // turns see-through and the longhouse's marker no longer counts as hovered; a click opens the ring of the hex under it.
     const box = await hud.box(hex).boundingBox();
     expect(box).not.toBeNull();
-    const onBox = { x: box!.x + box!.width * 0.75, y: box!.y + box!.height / 2 };
+    const onBox = { x: box!.x + box!.width * 0.5, y: box!.y + box!.height / 2 };
     await page.mouse.move(onBox.x, onBox.y, { steps: 4 });
-    await expect.poll(hovered).toBe(`${hex.q},${hex.r}`);
+    await expect.poll(hovered).not.toBe(`${hex.q},${hex.r}`);
+    await expect(hud.box(hex)).toHaveClass(/hud-marker__box--see-through/);
+    const under = (await hovered())!;
     await page.mouse.click(onBox.x, onBox.y);
     await settlement.ring.waitForOpen();
-    await expect(settlement.ring.backdrop).toHaveCount(1);
-    await expect(page.locator('.hub-sub')).toContainText(`${hex.q}, ${hex.r}`);
+    await expect(page.locator('.hub-sub')).toContainText(under.replace(',', ', '));
   });
 
   test('while building info is on, the marker dial shows a running upgrade; off, the same dial is a dial-only marker', async ({ page }) => {
@@ -157,12 +165,12 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     await expect(hud.dialLabel(farm)).toHaveText(/^\d+:\d\d$/);
     expect(await hud.dialOnlyKeys()).not.toContain(key);
 
-    await hud.toggle.click();
+    await hud.switchTo('off');
     await expect(hud.markers).toHaveCount(0);
     await expect(hud.dialOnly(farm)).toHaveCount(1);
     await expect(hud.dialOnlyDial(farm).locator('text')).toHaveText(/^\d+:\d\d$/);
 
-    await hud.toggle.click();
+    await hud.switchTo('full');
     await expect(hud.dialLabel(farm)).toHaveText(/^\d+:\d\d$/);
     await expect(hud.dialOnly(farm)).toHaveCount(0);
   });
@@ -179,7 +187,7 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     await expect(hud.dialOnly(site)).toHaveCount(1);
     await expect(hud.dialOnlyDial(site).locator('text')).toHaveText(/^\d+:\d\d$/);
 
-    await hud.toggle.click();
+    await hud.switchTo('off');
     await expect(hud.markers).toHaveCount(0);
     await expect(hud.dialOnly(site)).toHaveCount(1);
   });

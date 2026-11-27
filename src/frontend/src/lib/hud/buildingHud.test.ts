@@ -347,18 +347,17 @@ describe('tierFor', () => {
 });
 
 describe('markerAt', () => {
-  const area = (hexKey: string, cx: number, z: number, box?: { x: number; y: number; w: number; h: number }) => ({ key: hexKey, hexKey, disc: { cx, cy: 100, r: 20 }, box, z });
-  it('gives the marker whose dial or box holds the point', () => {
-    const areas = [area('1,0', 100, 0, { x: 100, y: 85, w: 120, h: 30 }), area('2,0', 300, 1)];
+  const area = (hexKey: string, cx: number, z: number) => ({ key: hexKey, hexKey, disc: { cx, cy: 100, r: 20 }, z });
+  it('gives the marker whose dial disc holds the point', () => {
+    const areas = [area('1,0', 100, 0), area('2,0', 300, 1)];
     expect(markerAt({ x: 105, y: 110 }, areas)?.hexKey).toBe('1,0');
-    expect(markerAt({ x: 200, y: 100 }, areas)?.hexKey).toBe('1,0');
     expect(markerAt({ x: 290, y: 95 }, areas)?.hexKey).toBe('2,0');
-    expect(markerAt({ x: 100, y: 200 }, areas)).toBeNull();
+    expect(markerAt({ x: 200, y: 100 }, areas)).toBeNull();
   });
-  it('takes the top-most of overlapping markers', () => {
-    const areas = [area('1,0', 100, 2, { x: 100, y: 85, w: 120, h: 30 }), area('2,0', 180, 1)];
-    expect(markerAt({ x: 170, y: 100 }, areas)?.hexKey).toBe('1,0');
-    expect(markerAt({ x: 170, y: 100 }, [areas[0]!, { ...areas[1]!, z: 3 }])?.hexKey).toBe('2,0');
+  it('takes the top-most of overlapping dials', () => {
+    const areas = [area('1,0', 100, 2), area('2,0', 120, 1)];
+    expect(markerAt({ x: 110, y: 100 }, areas)?.hexKey).toBe('1,0');
+    expect(markerAt({ x: 110, y: 100 }, [areas[0]!, { ...areas[1]!, z: 3 }])?.hexKey).toBe('2,0');
   });
 });
 
