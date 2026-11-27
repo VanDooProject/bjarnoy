@@ -20,10 +20,12 @@ export const datetimeFormats: IntlDateTimeFormats = {
 export const numberFormats: IntlNumberFormats = {
   en: {
     integer: { maximumFractionDigits: 0 },
+    scale: { maximumFractionDigits: 2 },
     compact: { notation: 'compact', maximumFractionDigits: 1 },
   },
   de: {
     integer: { maximumFractionDigits: 0 },
+    scale: { maximumFractionDigits: 2 },
     compact: { notation: 'compact', maximumFractionDigits: 1 },
   },
 };

@@ -49,6 +49,16 @@
     "groupHud": "HUD",
     "buildings": "Gebäudeanimationen",
     "buildingsSub": "Lager, Werkstätten, Riesen",
+    "resolution": "Auflösung",
+    "resolutionSub": "Schärfe der Karte – niedriger läuft flüssiger",
+    "resolutionValue": "{value}×",
+    "resolutionStatus": {
+      "forced": "{value} (auf diesem Gerät)",
+      "deviceMax": "Automatisch – {value}, mehr bietet dein Bildschirm nicht",
+      "measuring": "Automatisch – {value}, es wird geprüft, ob die nächste Stufe hält",
+      "autoMax": "Automatisch – {value}, die höchste Stufe deines Bildschirms",
+      "autoDown": "Automatisch – {value}, die Bildrate fiel unter 30 fps"
+    },
     "water": "Wasserbewegung",
     "waterSub": "Wellen, Brandung, Lichtreflexe, fließende Flüsse",
     "lakes": "Bewegung auf Moorseen",
@@ -69,8 +79,17 @@
       "autoOffSlow": "Automatisch — aus, Bildrate unter 30 fps gefallen"
     },
     "measure": {
-      "fps": "Gemessen: {fps} fps · {good} von {required} s mit mindestens {threshold} fps",
-      "none": "Noch keine Messung. Sie läuft, solange du die Karte siehst."
+      "up": "Gemessen: {fps} fps · {good} von {required} s mit mindestens {threshold} fps",
+      "retry": "Gemessen: {fps} fps · {good} von {required} s mit mindestens {threshold} fps",
+      "down": "Gemessen: {fps} fps · {good} von {required} s unter {threshold} fps",
+      "current": "Gemessen: {fps} fps",
+      "none": "Noch keine Messung. Sie läuft, solange du die Karte siehst.",
+      "paused": {
+        "hidden": "Zählung pausiert: Der Tab ist im Hintergrund",
+        "unfocused": "Zählung pausiert: Das Fenster hat nicht den Fokus",
+        "throttled": "Zählung pausiert: Der Browser begrenzt die Bildrate (Energiesparmodus)",
+        "settling": "Die Zählung läuft gleich weiter"
+      }
     }
   },
   "bio": {
