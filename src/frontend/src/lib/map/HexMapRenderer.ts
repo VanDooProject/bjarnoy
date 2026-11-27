@@ -6466,7 +6466,7 @@ export class HexMapRenderer {
     return this.hoverPointer;
   }
 
-  /** `coordKey` of the hex under the mouse, null when none. */
+  /** `coordKey` of the hovered hex, null when none: the hex under the mouse, or over a HUD marker the marker's own (`setPointerTarget`). */
   get hoveredHexKey(): string | null {
     return this.hoveredKey;
   }

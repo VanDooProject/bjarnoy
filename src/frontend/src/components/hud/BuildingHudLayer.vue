@@ -72,7 +72,7 @@ export interface BuildingHudRenderer {
   readonly dialMapScale: number;
   /** The renderer's own "may this key drive the map" guard (no Ctrl/Meta/Alt, not typing, not covered or locked). */
   keyDrivesMap(e: KeyboardEvent): boolean;
-  /** The mouse over the map in canvas px (null: touch, or over a panel) and the hex under it: what a marker hovers by. */
+  /** The mouse over the map in canvas px (null: touch, or over a panel) and the hovered hex (over a marker: its own, see `setPointerTarget`): what a marker hovers by. */
   readonly mousePoint: { x: number; y: number } | null;
   readonly hoveredHexKey: string | null;
   /** Touch taps on the map, which still reach the map itself: a tap on a marker's dial reveals it. */
