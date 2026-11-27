@@ -48,6 +48,7 @@ import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import { atlasPageCount } from './atlasManifests';
 import { attachFramePacing } from './framePacing';
 import { clippedStrokePieces } from './convexPolygon';
+import { loweredHexOutline, seaTopFaceDrop, type HexOutline } from './loweredHexOutline';
 import { createWaterlineBorders, type BorderLinePiece } from './realmBorderWaterline';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
 import { drawsAsSea, type CartShipment, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
@@ -1928,9 +1929,10 @@ export type WorldLayerName =
  * **Settlement mode**: between `terrainBase` and `borderLayer` — above all the
  * ground art (the painted water tiles included; the shader composites over
  * them rather than replacing them), below the tall art in `terrainTop`, which
- * therefore draws over the water. No container split and no reordering of
- * anything that existed, so the coastline's sea/land occlusion is exactly what
- * it was.
+ * therefore draws over the water. No container split, so the coastline's
+ * sea/land occlusion is exactly what it was. The hover outline goes under the
+ * mesh (foam and crest lines cover it); the realm borders, pinned highlight and
+ * reach wash stay above it.
  *
  * `riverFlow` (the river flow's own mesh, water-shader.md §4.4e) follows `water` directly in both modes, so it draws over the
  * water mesh's beach foam. It only has anything to draw in settlement mode.
@@ -1946,6 +1948,9 @@ export type WorldLayerName =
  */
 export function worldLayerOrder(mode: 'world' | 'settlement'): WorldLayerName[] {
   const rest: WorldLayerName[] = ['borders', 'hover', 'terrainTop', 'range', 'highlight'];
+  // In the settlement view the hover outline sits on the ground art, under the water mesh: foam covers it at the shore and the
+  // crest lines run over it, like anything else lying in the water. The pinned highlight and the reach wash stay on top.
+  const settlementRest = rest.filter((name) => name !== 'hover');
   // Rivers only get their own vector-line layer in world mode — settlement
   // mode already draws them as sprite tile art baked into terrainBase/
   // terrainTop (see riverTexturesFor), so riverLayer is simply never added
@@ -1955,7 +1960,7 @@ export function worldLayerOrder(mode: 'world' | 'settlement'): WorldLayerName[] 
   // tile, and the lake mask (baked from the tile art alone) can't know that, so anything drawn later has to cover the gust, not take it.
   return mode === 'world'
     ? ['water', 'riverFlow', 'terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'rivers', ...rest]
-    : ['terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'water', 'riverFlow', ...rest];
+    : ['terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'hover', 'water', 'riverFlow', ...settlementRest];
 }
 
 /**
@@ -3160,12 +3165,8 @@ export class HexMapRenderer {
     const hexes = this.rangeOverlay;
     if (!hexes || hexes.length === 0) return;
 
-    const topPoints = isoTopPoints(TILE_W, TILE_H);
-
     for (const at of hexes) {
-      const grid = isoGridPosition(at, TILE_W, TILE_H);
-      const flat = topPoints.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
-      this.rangeLayer.poly(flat).fill({ color: RANGE_TINT_COLOR, alpha: RANGE_TINT_ALPHA });
+      for (const piece of this.hexOutline(at, 0).fill) this.rangeLayer.poly(piece.flatMap((p) => [p.x, p.y])).fill({ color: RANGE_TINT_COLOR, alpha: RANGE_TINT_ALPHA });
     }
   }
 
@@ -3199,19 +3200,24 @@ export class HexMapRenderer {
       const ripples = plotRippleFrames(now);
       for (const at of coords) {
         const grid = isoGridPosition(at, TILE_W, TILE_H);
-        const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
-        const flat = top.flatMap((p) => [p.x, p.y]);
+        const strokeWidth = 3 + pulse * 1.5 + attention * 3;
+        const outline = this.hexOutline(at, strokeWidth);
         const cx = grid.x + TILE_W / 2;
-        const cy = grid.y + TILE_CENTER_Y_OFFSET;
+        const cy = grid.y + outline.drop + TILE_CENTER_Y_OFFSET;
         // Chat1: "raise the plot-pulse floor so the glowing hexes never fade
         // to near-invisible" — the fill/stroke alpha ranges below no longer
         // touch 0 at the pulse's low point. `attention` layers L6a's
         // miss-click flash on top of that same floor rather than replacing
         // it — see `attentionPulseFrame`'s own comment.
-        this.highlightLayer
-          .poly(flat)
-          .fill({ color: GOLD, alpha: Math.min(1, 0.22 + pulse * 0.18 + attention * 0.4) })
-          .stroke({ width: 3 + pulse * 1.5 + attention * 3, color: GOLD, alpha: Math.min(1, 0.7 + pulse * 0.3 + attention * 0.3) });
+        drawHexOutline(
+          this.highlightLayer,
+          outline,
+          GOLD,
+          Math.min(1, 0.22 + pulse * 0.18 + attention * 0.4),
+          strokeWidth,
+          GOLD,
+          Math.min(1, 0.7 + pulse * 0.3 + attention * 0.3),
+        );
         for (const ring of ripples) {
           this.highlightLayer
             .ellipse(cx, cy, (TILE_W / 2) * ring.scale, (TILE_H / 2) * ring.scale)
@@ -3660,17 +3666,18 @@ export class HexMapRenderer {
     // (the object, not the one hex under the cursor), in the same `hover`
     // layer as any other tile - under terrainTop, so the art sits on top of
     // the highlight exactly the way every other tile's topping does.
-    const outline = tile.giant
-      ? giantFootprintOutline(tile.giant.anchor, TILE_W, TILE_H).flatMap((p) => [p.x, p.y])
-      : isoTopPoints(TILE_W, TILE_H).flatMap((p) => [grid.x + p.x, grid.y + p.y]);
-    this.hoverLayer
-      .poly(outline)
-      .fill({ color: HOVER_FILL, alpha: 0.28 })
-      .stroke({ width: 4, color: HOVER_STROKE, alpha: 1 });
+    if (tile.giant) {
+      this.hoverLayer
+        .poly(giantFootprintOutline(tile.giant.anchor, TILE_W, TILE_H).flatMap((p) => [p.x, p.y]))
+        .fill({ color: HOVER_FILL, alpha: 0.28 })
+        .stroke({ width: 4, color: HOVER_STROKE, alpha: 1 });
+    } else {
+      drawHexOutline(this.hoverLayer, this.hexOutline(coord, 4), HOVER_FILL, 0.28, 4, HOVER_STROKE, 1);
+    }
 
     if (mode === 'settlement') {
       const river = worldModel.getRiverTile(coord.q, coord.r);
-      this.options.onHoverChange?.(this.hoverInfoFor(tile, grid, river));
+      this.options.onHoverChange?.(this.hoverInfoFor(tile, { x: grid.x, y: grid.y + this.topFaceDrop(coord) }, river));
     }
   }
 
@@ -3699,6 +3706,20 @@ export class HexMapRenderer {
     // upper neighbour than to itself.
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
     return this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
+  }
+
+  /** Whether a hex's art is drawn lowered: sea in the settlement view (the world map draws every hex on one level). */
+  private isLoweredHex = (q: number, r: number): boolean =>
+    this.options.mode === 'settlement' && drawsAsSea(this.options.worldModel.terrainOf(q, r));
+
+  /** How far below the land-level grid a hex's top face is drawn. */
+  private topFaceDrop(c: AxialCoord): number {
+    return this.isLoweredHex(c.q, c.r) ? seaTopFaceDrop(TILE_W) : 0;
+  }
+
+  /** A single-hex overlay's outline on the hex's visible top face (see loweredHexOutline). */
+  private hexOutline(c: AxialCoord, strokeWidth: number): HexOutline {
+    return loweredHexOutline(c, TILE_W, TILE_H, this.isLoweredHex, strokeWidth);
   }
 
   private hoverInfoFor(tile: Tile, grid: { x: number; y: number }, river: RiverTile | undefined): HoverInfo {
@@ -4068,7 +4089,7 @@ export class HexMapRenderer {
     // to) rather than the raw pointer position, so it stays centred on the
     // tile regardless of exactly where within it the player clicked.
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
-    const anchor = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET });
+    const anchor = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + this.topFaceDrop(coord) + TILE_CENTER_Y_OFFSET });
     this.options.onHexClick?.(coord, tile, anchor);
   }
 
@@ -5688,9 +5709,8 @@ export class HexMapRenderer {
       return;
     }
 
-    // Sea art's top face sits lower than land's in the settlement view only; the world map draws every hex on the one level.
     const waterline = createWaterlineBorders(
-      { realmBorderOwnerAt: (q, r) => worldModel.realmBorderOwnerAt(q, r), isLowered: (q, r) => mode === 'settlement' && drawsAsSea(worldModel.terrainOf(q, r)) },
+      { realmBorderOwnerAt: (q, r) => worldModel.realmBorderOwnerAt(q, r), isLowered: this.isLoweredHex },
       TILE_W,
       TILE_H,
     );
@@ -7412,3 +7432,16 @@ const BORDER_STROKES: readonly (readonly [width: number, alpha: number])[] = [
   [7, 0.25],
   [2.5, 0.95],
 ];
+
+/** Fills and strokes a `loweredHexOutline`: the plain polygon path when nothing hides any of it, else the visible pieces. */
+function drawHexOutline(g: Graphics, o: HexOutline, fillColor: number, fillAlpha: number, width: number, strokeColor: number, strokeAlpha: number) {
+  for (const piece of o.fill) g.poly(piece.flatMap((p) => [p.x, p.y])).fill({ color: fillColor, alpha: fillAlpha });
+  if (o.edges.every((e) => e.pieces === null)) {
+    g.poly(o.edges.flatMap((e) => [e.a.x, e.a.y])).stroke({ width, color: strokeColor, alpha: strokeAlpha });
+    return;
+  }
+  for (const e of o.edges) {
+    if (!e.pieces) g.moveTo(e.a.x, e.a.y).lineTo(e.b.x, e.b.y).stroke({ width, color: strokeColor, alpha: strokeAlpha, cap: 'round' });
+    else for (const piece of e.pieces) g.poly(piece.flatMap((p) => [p.x, p.y])).fill({ color: strokeColor, alpha: strokeAlpha });
+  }
+}

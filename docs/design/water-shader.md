@@ -313,12 +313,18 @@ the ground art, below the tall art in `terrainTop`:
 ```
 world
  ├─ terrainBase     ground art (incl. water tiles)
+ ├─ hoverLayer      hover outline — under the water, so foam and crests cover it
  ├─ waterLayer.mesh ← NEW
  ├─ borderLayer
- ├─ hoverLayer
  ├─ terrainTop      tall art — draws over the water effects
  └─ ...
 ```
+
+The hover outline lies on the ground art like anything else in the water: the
+shore foam covers it and the crest lines run across it. On a sea hex it is drawn
+on the sea's lowered top face, and land in front hides the part of it that lies
+on that land's top face (the same rule the realm border follows on coasts). The
+pinned-hex highlight and the reach wash stay above the water.
 
 No container split, no reordering. That this works at all is a property of the
 art pack, so it is worth writing down what was measured rather than assumed.
