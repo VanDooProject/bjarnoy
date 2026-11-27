@@ -49,6 +49,8 @@ declare global {
     readonly cameraView: { coord: AxialCoord; zoom: number };
     readonly cameraAnimating: boolean;
     readonly previewCenter: AxialCoord | undefined;
+    /** `coordKey` of the hex the mouse hovers (over a HUD marker: the marker's own hex), null for none. */
+    readonly hoveredHexKey: string | null;
     /** `private` in HexMapRenderer; read at runtime only, as a test probe (zoom-transition.spec.ts). */
     readonly options: { mode: string };
   }

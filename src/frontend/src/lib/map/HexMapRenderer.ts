@@ -2586,8 +2586,8 @@ export class HexMapRenderer {
   private hoverPointer: { x: number; y: number } | null = null;
   /** Told of every touch/pen tap on the map (canvas px) without taking it over; see `setTapObserver`. */
   private tapObserver: ((screen: { x: number; y: number }) => void) | null = null;
-  /** The hex an HTML marker under a tap stands for (it covers another hex); see `setTapTarget`. */
-  private tapTarget: ((screen: { x: number; y: number }) => AxialCoord | null) | null = null;
+  /** The hex an HTML marker under the pointer stands for (it covers another hex), for hover and click; see `setPointerTarget`. */
+  private pointerTarget: ((screen: { x: number; y: number }) => AxialCoord | null) | null = null;
   private frameObserver: (() => void) | null = null;
   /** Screen-space circle (canvas px) of an open ring menu; markers beneath it fade out. See `setMarkerOcclusion`. */
   private markerOcclusion: OcclusionCircle | null = null;
@@ -3623,8 +3623,8 @@ export class HexMapRenderer {
     if (!screen) return;
     // Hover (and so the dial's grow-on-hover) is a mouse affordance only.
     this.hoverPointer = e.pointerType === 'mouse' ? screen : null;
-    const world = screenToWorld(this.camera, screen, this.viewport);
-    this.setHoveredCoord(isoPixelToAxial(world, TILE_W, TILE_H));
+    // Over an HTML marker (the building HUD's dial or box) the hover is the hex it belongs to, like its click.
+    this.setHoveredCoord(this.pointerTarget?.(screen) ?? isoPixelToAxial(screenToWorld(this.camera, screen, this.viewport), TILE_W, TILE_H));
   }
 
   private setHoveredCoord(coord: AxialCoord | null) {
@@ -4061,7 +4061,7 @@ export class HexMapRenderer {
       if (armyTapStopsHere(this.armyOverlay?.armies ?? [], this.options.armyTapStopsAtMarker?.(armyId))) return;
     }
     // A tap on an HTML marker (the building HUD's dial or box) means the hex it belongs to, not the one it is drawn over.
-    const coord = this.tapTarget?.(screen) ?? isoPixelToAxial(screenToWorld(this.camera, screen, this.viewport), TILE_W, TILE_H);
+    const coord = this.pointerTarget?.(screen) ?? isoPixelToAxial(screenToWorld(this.camera, screen, this.viewport), TILE_W, TILE_H);
     const tile = this.options.worldModel.getTile(coord.q, coord.r);
     // Issue #16 "ring menu on click of tile": the ring anchors on the
     // clicked hex's own screen centre (same point the hover tooltip anchors
@@ -6480,12 +6480,12 @@ export class HexMapRenderer {
   }
 
   /**
-   * The HTML markers take no pointer input, so a click on one lands on whatever hex it is drawn over (usually the one north of
-   * its building). `fn` returns the hex the marker under canvas point `screen` belongs to, or null for none: a click or tap
-   * there then reaches that hex (ring menu, quick upgrade) instead. `null` clears it.
+   * The HTML markers take no pointer input, so hover and clicks on one would land on whatever hex it is drawn over (usually the
+   * one north of its building). `fn` returns the hex the marker under canvas point `screen` belongs to, or null for none: the
+   * hover (outline, tooltip) and a click or tap there then mean that hex (ring menu, quick upgrade) instead. `null` clears it.
    */
-  setTapTarget(fn: ((screen: { x: number; y: number }) => AxialCoord | null) | null) {
-    this.tapTarget = fn;
+  setPointerTarget(fn: ((screen: { x: number; y: number }) => AxialCoord | null) | null) {
+    this.pointerTarget = fn;
   }
 
   /**

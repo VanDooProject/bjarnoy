@@ -78,7 +78,7 @@ export interface BuildingHudRenderer {
   /** Touch taps on the map, which still reach the map itself: a tap on a marker's dial reveals it. */
   setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null): void;
   /** A click or tap on a marker (dial or box) reaches the hex the marker belongs to, not the one it is drawn over. */
-  setTapTarget(fn: ((screen: { x: number; y: number }) => AxialCoord | null) | null): void;
+  setPointerTarget(fn: ((screen: { x: number; y: number }) => AxialCoord | null) | null): void;
   /** Called once per rendered map frame after the camera moved: the markers are placed from it, in the frame the canvas presents. */
   setFrameObserver(fn: (() => void) | null): void;
   /** The open ring menu's footprint (canvas px); markers beneath it fade out like the progress dials do. */
@@ -398,9 +398,9 @@ function labelOf(m: Marker): string {
 
 // ---- hover / tap (like the progress dial: grows to its default-zoom size, comes to the front) --------------------------------
 
-// The markers take no pointer input (like the canvas dials they never block the map's hover, wheel and drags): hover is the
-// mouse position the map tracks (dial disc, box or hex); a click or tap is the map's, which asks the layer which marker it is on
-// (`tapTargetAt`) and then reaches that marker's hex.
+// The markers take no pointer input (like the canvas dials they never block the map's wheel and drags). Hover, clicks and taps
+// are the map's, which asks the layer which marker the pointer is on (`pointerTargetAt`) and then means that marker's hex: its
+// outline and tooltip, its ring menu, its quick upgrade.
 let tapKey: string | null = null;
 let tapAtMs = 0;
 const hoverT = new Map<string, number>();
@@ -424,11 +424,11 @@ function onMapTap(screen: { x: number; y: number }) {
 }
 
 /**
- * The hex a click or tap at canvas point `screen` means (`setTapTarget`): on a marker, its building's hex, not the one it is
- * drawn over, for the ring menu and quick upgrade. A route being plotted (dispatch, field order) or the send picker's target
+ * The hex the pointer at canvas point `screen` means (`setPointerTarget`): on a marker, its building's hex, not the one it is
+ * drawn over, for the hover, the ring menu and quick upgrade. A route being plotted (dispatch, field order) or the send picker's target
  * keeps the hex under the pointer.
  */
-function tapTargetAt(screen: { x: number; y: number }): AxialCoord | null {
+function pointerTargetAt(screen: { x: number; y: number }): AxialCoord | null {
   if (world.dispatchDraft || world.fieldOrderDraft || world.sendPicker) return null;
   const hexKey = placedMarkerAt(screen)?.hexKey;
   return hexKey === undefined ? null : (placeables.value.find((p) => p.hexKey === hexKey)?.coord ?? null);
@@ -808,7 +808,7 @@ onMounted(() => {
   if (root.value) ensureBoxObserver().observe(root.value, { box: 'border-box' });
   window.addEventListener('keydown', onKeyDown);
   props.renderer?.setTapObserver(onMapTap);
-  props.renderer?.setTapTarget(tapTargetAt);
+  props.renderer?.setPointerTarget(pointerTargetAt);
   props.renderer?.setFrameObserver(tick);
 });
 watch(
@@ -816,10 +816,10 @@ watch(
   (next, previous) => {
     setMouseHovering(false);
     previous?.setTapObserver(null);
-    previous?.setTapTarget(null);
+    previous?.setPointerTarget(null);
     previous?.setFrameObserver(null);
     next?.setTapObserver(onMapTap);
-    next?.setTapTarget(tapTargetAt);
+    next?.setPointerTarget(pointerTargetAt);
     next?.setFrameObserver(tick);
   },
 );
@@ -834,7 +834,7 @@ onUnmounted(() => {
   boxSizes.clear();
   window.removeEventListener('keydown', onKeyDown);
   props.renderer?.setTapObserver(null);
-  props.renderer?.setTapTarget(null);
+  props.renderer?.setPointerTarget(null);
   props.renderer?.setFrameObserver(null);
 });
 </script>
