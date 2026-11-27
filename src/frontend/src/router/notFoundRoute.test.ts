@@ -9,7 +9,7 @@ describe('catch-all route', () => {
     (path) => {
       const resolved = router.resolve(path);
       expect(resolved.name).toBe('not-found');
-      expect(resolveAuthGuard(resolved as Parameters<typeof resolveAuthGuard>[0], { isAuthenticated: false, isAdmin: false })).toBe(true);
+      expect(resolveAuthGuard(resolved as Parameters<typeof resolveAuthGuard>[0], { isAuthenticated: false, isAdmin: false, sessionEnded: false })).toBe(true);
     },
   );
 
