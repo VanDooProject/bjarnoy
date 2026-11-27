@@ -21,12 +21,17 @@ export function rejectionCodeOf(err: unknown): string | undefined {
 /**
  * Translates a failed action's rejection code via `apiErrors.rejections.<code>`,
  * falling back to the caller-supplied (already-translated) fallback text when
- * there's no code or no translation for it — never the backend's raw English
+ * there's no code or no translation for it (a request that got no answer, or a 5xx, says that instead) — never the backend's raw English
  * `problem.detail`, which would leak English into a non-English UI.
  */
 export function apiErrorMessage(err: unknown, fallback: string): string {
   const code = rejectionCodeOf(err);
-  if (!code) return fallback;
+  if (!code) {
+    // No answer at all, or the server failed: say so instead of the action's own "failed" text, which reads as a refusal.
+    if (err instanceof ApiError && err.status === 0) return i18n.global.t('apiErrors.transport.network') as string;
+    if (err instanceof ApiError && err.status >= 500) return i18n.global.t('apiErrors.transport.server') as string;
+    return fallback;
+  }
   const path = `apiErrors.rejections.${code}`;
   return i18n.global.te(path) ? (i18n.global.t(path) as string) : fallback;
 }

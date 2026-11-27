@@ -103,6 +103,24 @@
     "HexOccupiedByEndgameSite": "An Utgard wall or a jötun watchtower stands on that hex.",
     "WrongCampBuilderCount": "A beach camp needs exactly two camp builders.",
     "CampSiteNotSandShore": "A beach camp can only go on a sand hex on the shore.",
-    "CampSiteNotFree": "That hex is taken: something already stands there."
+    "CampSiteNotFree": "That hex is taken: something already stands there.",
+    "NotAGarrisonSpot": "A garrison spot these units leave from is gone: its building was razed or lost. Wait a moment for the realm to update, then send again.",
+    "SupportSpotRequired": "Pick the garrison spot of the target your army should join.",
+    "SupportSpotCannotHold": "That garrison spot of the target can't take your army: it is gone, or it can't hold every unit. Pick another one.",
+    "NoPlotAvailable": "Every founding plot in this world is taken right now.",
+    "HexOccupiedByGiant": "That hex is part of a giant landmark. Nothing can ever be built there.",
+    "WrongCropForIslandSoil": "This building doesn't suit this island's soil.",
+    "TowerLimitReached": "You already have as many Watchtowers as your Longhouse level allows. Upgrade the Longhouse to build more.",
+    "NoBuildingOnHex": "There is no building on that hex to raze.",
+    "LonghouseCannotBeRazed": "The Longhouse can't be razed.",
+    "PlotReserved": "Another settler is about to found there. Pick one of the other highlighted plots.",
+    "NotFirstSettlement": "Quests are only available in your first settlement.",
+    "BuildingOutsideRealm": "The building that trains this unit stands outside your realm. It works again once your realm reaches it.",
+    "WrongBuilding": "There is no building on that hex that trains this unit.",
+    "BuildingLevelTooLow": "This building's level is too low to train that unit."
+  },
+  "transport": {
+    "network": "Couldn't reach the server. Check your connection and try again.",
+    "server": "The server ran into an error. Try again in a moment."
   }
 }
