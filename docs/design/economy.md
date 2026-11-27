@@ -755,7 +755,7 @@ The art for this is the **bog set** in `VanDooProject/3D_assets`
 - **Bog-ore works** on plain bog moss: the iron producer, from diggings to a
   bloomery over 7 art levels (a level past the last shows the last).
 - **Clay Brickworks** moves from grass onto plain bog moss.
-- A **lake Fishing Hut** on stilts on a lake's shore or half shore, the same building
+- A **lake Fishing Hut** on stilts on a lake's inlet, shore or half shore, the same building
   as the coastal one.
 - A **Hammer Forge** on a bog creek (straight or bend): boosts bog-ore works
   within range, with the mills' percent and range curve. It is drawn with the
@@ -1019,7 +1019,7 @@ Open work, in rough order. Each is its own PR.
 ## 12. Open questions
 
 - ~~Fishing Hut and Fisher Hut~~: merged into one coastal building (the
-  Fishing Hut). The lake version (on stilts on a bog-lake shore or half shore) is the
+  Fishing Hut). The lake version (on stilts on a bog-lake inlet, shore or half shore) is the
   same building, with its own art.
 - The profile parameters (online hours, share spent on troops) are
   assumptions; real telemetry should replace them once players exist.

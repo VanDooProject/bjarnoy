@@ -19,6 +19,7 @@ this sits among the open work, see §11 there.
 | `bogoreworks` | **Bog-ore works**, the iron producer (7 levels: diggings to bloomery) |
 | `fisherhut_lake` | the **Fishing Hut** on stilts on a half-shore: the same building as the coastal one, with lake art |
 | `fisherhut_lakeshore` | the **Fishing Hut** on stilts on a two-edge shore: the same building, with its own lake art |
+| `fisherhut_inlet` | the **Fishing Hut** on an inlet: on the bank, a plank trackway on stakes out to a landing in a swampy bay |
 | `claybrickworks` (existing, re-rendered) | **Clay Brickworks** now stands on bog ground; the grass version is dropped |
 
 The Hammer Forge isn't part of the bog set. It still needs its own art
@@ -270,14 +271,14 @@ both boats) are dropped. The variant is `tile.variant % variants.length`, over t
   **20/h**, tuned in the Economy lab (`economy.md` §8), growing 1.20 per level. Terrain boost:
   +10% per neighbouring bog, creek or lake hex (any bog kind), capped at +50%.
 - **Clay Brickworks**: allowed terrain is plain bog now (it was grass); art was already on the bog base.
-- **Fishing Hut**: also placeable on a lake **shore** (`BogTileKind.Shore`, two water edges) or **half shore** (`BogTileKind.Half`, three water edges), drawn with `fisherhut_lakeshore` or `fisherhut_lake`, turned by `bogShoreOrientationOf(waterEdges)`. Its boost counts neighbouring lake hexes the way the coastal hut counts sea. Coastal behaviour is unchanged.
+- **Fishing Hut**: also placeable on a lake **inlet** (`BogTileKind.Inlet`, one water edge), **shore** (`BogTileKind.Shore`, two) or **half shore** (`BogTileKind.Half`, three), drawn with `fisherhut_inlet`, `fisherhut_lakeshore` or `fisherhut_lake`, turned by `bogShoreOrientationOf(waterEdges)`. Its boost counts neighbouring lake hexes the way the coastal hut counts sea. Coastal behaviour is unchanged.
 - **Hammer Forge** (`hammerschmiede`): a radius-boost building like the Sawmill and Crop Mill,
   on a **bog creek** (`BogTileKind.Creek`, straight or bend; never a mouth, spring or lake).
   Unlocks at LH 20 behind bog-ore works level 10, max level 20. Boosts bog-ore works within
   range, with the mills' curve (5% to 100%, 1 to 5 rings). Placeholder art: the river
   hammer mill (TODO(art): bog-creek Hammer Forge).
 - Nothing is built on a lake. No building with an empty `AllowedTerrain` set (the coastal-water
-  buildings) can land on bog other than the Fishing Hut on a shore or half shore; no grass building can.
+  buildings) can land on bog other than the Fishing Hut on an inlet, shore or half shore; no grass building can.
 
 ### Lake props
 
