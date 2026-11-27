@@ -505,7 +505,7 @@ public sealed record BuildingPrerequisiteResponse(string Type, int Level);
 /// <param name="NewPlacementDisabled">The building can no longer be placed anew (the Quarry); standing ones keep working.</param>
 /// <param name="RequiresBogKinds">Bog tile kinds the building must stand on (empty: no such requirement): plain moss, a creek.</param>
 /// <param name="AlsoOnBogKinds">Bog tile kinds a land building may also stand on (the tower and the walls: plain moss).</param>
-/// <param name="LakeShoreKinds">Bog tile kinds a coastal-water building may stand on instead of coastal water (the Fishing Hut: shore and half shore).</param>
+/// <param name="LakeShoreKinds">Bog tile kinds a coastal-water building may stand on instead of coastal water (the Fishing Hut: inlet, shore and half shore).</param>
 /// <param name="RequiresRiverShapes">River tile shapes a river building's own hex must have (empty: no river building; the bridge's shapes too).</param>
 /// <param name="ExcludedRiverVariants">River art variants that disqualify an otherwise matching shape (the Sawmill: the hairpin loop).</param>
 /// <param name="Prerequisites">

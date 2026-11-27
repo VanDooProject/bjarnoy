@@ -6,7 +6,7 @@ namespace Bjarnoy.Domain.Tests;
 
 /// <summary>
 /// The bog buildings (<c>docs/design/bog.md</c> "Buildings"): the bog-ore works, the Clay Brickworks on plain bog, the Fishing
-/// Hut on a lake's shore or half shore and the Hammerschmiede on a bog creek. Where each may stand, what it produces, what boosts it.
+/// Hut on a lake's inlet, shore or half shore and the Hammerschmiede on a bog creek. Where each may stand, what it produces, what boosts it.
 /// </summary>
 public class BogBuildingTests
 {
@@ -136,11 +136,11 @@ public class BogBuildingTests
     [Theory]
     [InlineData(BogTileKind.Half, true)]
     [InlineData(BogTileKind.Shore, true)]
-    [InlineData(BogTileKind.Inlet, false)]
+    [InlineData(BogTileKind.Inlet, true)]
     [InlineData(BogTileKind.Mouth, false)]
     [InlineData(BogTileKind.Bog, false)]
     [InlineData(BogTileKind.Creek, false)]
-    public void The_fishing_hut_also_stands_on_a_lake_shore_and_half_shore_but_on_no_other_bog_hex(BogTileKind kind, bool allowed)
+    public void The_fishing_hut_also_stands_on_a_lake_inlet_shore_and_half_shore_but_on_no_other_bog_hex(BogTileKind kind, bool allowed)
     {
         var definition = BuildingCatalogue.Get(BuildingType.FishingHut, 1);
 
@@ -226,7 +226,7 @@ public class BogBuildingTests
                 Assert.False(definition.AllowsHex(terrain, false, null), $"{type} on {terrain}");
             }
 
-            foreach (var kind in AllBogKinds.Where(k => k is not (BogTileKind.Half or BogTileKind.Shore)))
+            foreach (var kind in AllBogKinds.Where(k => k is not (BogTileKind.Half or BogTileKind.Shore or BogTileKind.Inlet)))
             {
                 Assert.False(definition.AllowsHex(Terrain.Bog, false, kind), $"{type} on bog {kind}");
             }
@@ -317,11 +317,12 @@ public class BogBuildingTests
     }
 
     [Fact]
-    public void The_fishing_hut_is_placed_on_a_shore_or_half_shore_from_longhouse_2()
+    public void The_fishing_hut_is_placed_on_an_inlet_shore_or_half_shore_from_longhouse_2()
     {
         Assert.Null(Try(Rich(2), BuildingType.FishingHut, Terrain.Bog, BogTileKind.Half));
         Assert.Null(Try(Rich(2), BuildingType.FishingHut, Terrain.Bog, BogTileKind.Shore));
-        Assert.Equal(BuildRejection.TerrainNotAllowed, Try(Rich(2), BuildingType.FishingHut, Terrain.Bog, BogTileKind.Inlet));
+        Assert.Null(Try(Rich(2), BuildingType.FishingHut, Terrain.Bog, BogTileKind.Inlet));
+        Assert.Equal(BuildRejection.TerrainNotAllowed, Try(Rich(2), BuildingType.FishingHut, Terrain.Bog, BogTileKind.Mouth));
         Assert.Null(Try(Rich(2), BuildingType.FishingHut, Terrain.Sea, null, coastal: true));
         Assert.Equal(BuildRejection.LonghouseTooLow, Try(Rich(1), BuildingType.FishingHut, Terrain.Bog, BogTileKind.Half));
     }

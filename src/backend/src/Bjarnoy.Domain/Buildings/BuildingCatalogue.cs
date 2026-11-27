@@ -670,7 +670,7 @@ public static class BuildingCatalogue
 
     private static readonly IReadOnlySet<BogTileKind> PlainBogOnly = new HashSet<BogTileKind> { BogTileKind.Bog };
     private static readonly IReadOnlySet<BogTileKind> CreekOnly = new HashSet<BogTileKind> { BogTileKind.Creek };
-    private static readonly IReadOnlySet<BogTileKind> LakeShoreAndHalfShore = new HashSet<BogTileKind> { BogTileKind.Shore, BogTileKind.Half };
+    private static readonly IReadOnlySet<BogTileKind> LakeInletShoreAndHalfShore = new HashSet<BogTileKind> { BogTileKind.Inlet, BogTileKind.Shore, BogTileKind.Half };
 
     /// <summary>Iron per hour a level-1 bog-ore works adds (its increment I1, the level total follows <see cref="ProductionFor"/>) (<c>docs/design/economy.md</c> section 8); the Economy lab numbers are in that page.</summary>
     public const double BogOreWorksIronAtLevelOne = 4;
@@ -689,7 +689,7 @@ public static class BuildingCatalogue
             // The hut itself already stands on coastal water; more open sea
             // around it (rather than the land it backs onto) is what makes a
             // fishing spot better.
-            // A lake Fishing Hut (on a shore or half shore) counts the lake hexes around it the way the coastal one counts sea.
+            // A lake Fishing Hut (on an inlet, shore or half shore) counts the lake hexes around it the way the coastal one counts sea.
             [BuildingType.FishingHut] = new(FishingWater, PerTilePercent: 0.10, CapPercent: 0.50),
             // The bog around a bog-ore works: any bog hex (moss, shore, creek, spring, mouth) or lake water.
             [BuildingType.BogOreWorks] = new(BogOrLake, PerTilePercent: 0.10, CapPercent: 0.50),
@@ -1052,8 +1052,8 @@ public static class BuildingCatalogue
         BuildDuration = BuildTime(BuildingType.FishingHut, level),
         ProductionPerHour = ProductionFor(new ResourceAmounts(0, 0, Food: 16, 0), level),
         RequiresCoastalWater = true,
-        // Also on a lake's shore (two water edges) or half shore (three), drawn with the lake art.
-        LakeShoreKinds = LakeShoreAndHalfShore,
+        // Also on a lake's inlet (one water edge), shore (two) or half shore (three), drawn with the lake art.
+        LakeShoreKinds = LakeInletShoreAndHalfShore,
         // And on an inland lake that borders land.
         AlsoOnInlandLakeShore = true,
     };
