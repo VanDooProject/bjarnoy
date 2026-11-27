@@ -49,4 +49,13 @@ describe('apiErrors', () => {
   it('falls back to the caller-supplied text for an unrecognized rejection code', () => {
     expect(apiErrorMessage(apiError('NotARealRejection'), 'fallback text')).toBe('fallback text');
   });
+
+  it('says the server was unreachable when the request got no answer', () => {
+    expect(apiErrorMessage(new ApiError(0, undefined), 'fallback text')).toBe(apiErrorsEn.transport.network);
+  });
+
+  it('says the server failed on a 5xx without a rejection code', () => {
+    expect(apiErrorMessage(new ApiError(500, undefined), 'fallback text')).toBe(apiErrorsEn.transport.server);
+    expect(apiErrorMessage(new ApiError(503, { detail: 'down' }), 'fallback text')).toBe(apiErrorsEn.transport.server);
+  });
 });
