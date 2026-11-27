@@ -123,6 +123,7 @@ describe('auth store tryRefresh', () => {
     expect(sent).toEqual(['rt-1', 'rt-2']);
     expect(auth.isAuthenticated).toBe(true);
     expect(storage.get('bjarnoy.refreshToken')).toBe('rt-3');
+    expect(assign).not.toHaveBeenCalled();
   });
 
   it('gives up after one retry when the replacement token is rejected too', async () => {
@@ -139,6 +140,7 @@ describe('auth store tryRefresh', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(auth.user).toBeNull();
     expect(storage.has('bjarnoy.refreshToken')).toBe(false);
+    expect(assign).toHaveBeenCalledExactlyOnceWith('/');
   });
 
   it('does not retry a rejection when the stored token is unchanged', async () => {
@@ -159,6 +161,7 @@ describe('auth store tryRefresh', () => {
 
     expect(await auth.tryRefresh()).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
   });
 });
 
@@ -235,5 +238,59 @@ describe('auth store: a rejected refresh token ends the session', () => {
     auth.clearSession();
     expect(storage.has('bjarnoy.accountName')).toBe(false);
     expect(storage.has('bjarnoy.refreshToken')).toBe(false);
+  });
+
+  it('mid-session, after another tab removed the shared token: leaves the page too', async () => {
+    const auth = await loadStore();
+    auth.user = { ...user, userName: 'astrid' } as never;
+    auth.accessToken = 'expired';
+    storage.delete('bjarnoy.refreshToken');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(await auth.tryRefresh()).toBe(false);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(assign).toHaveBeenCalledExactlyOnceWith('/');
+    expect(storage.get('bjarnoy.lastAccount')).toBe('astrid');
+  });
+
+  it('two tabs refreshing at once take turns, so neither is rejected and the identity stays', async () => {
+    // Rotating tokens as the server does: each token works once.
+    let live = 'rt-1';
+    let n = 1;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: RequestInit) => {
+        const { refreshToken } = JSON.parse(init.body as string) as { refreshToken: string };
+        // The server spends the token at once, but the winner's answer is slower to arrive than the loser's 401: the
+        // loser sees the old token still stored, so its retry-with-the-stored-token cannot help.
+        if (refreshToken !== live) return jsonResponse(401, { error: 'invalid_refresh_token' });
+        live = `rt-${++n}`;
+        const issued = live;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return jsonResponse(200, authResponse(issued));
+      }),
+    );
+    // A minimal exclusive Web Lock shared by both "tabs".
+    let queue: Promise<unknown> = Promise.resolve();
+    const locks = {
+      request: (_name: string, run: () => Promise<boolean>) => {
+        const result = queue.then(run);
+        queue = result.catch(() => {});
+        return result;
+      },
+    };
+    vi.stubGlobal('navigator', { locks });
+    const tabA = await loadStore();
+    const tabB = await loadStore();
+
+    const results = await Promise.all([tabA.tryRefresh(), tabB.tryRefresh()]);
+    vi.stubGlobal('navigator', undefined);
+
+    expect(results).toEqual([true, true]);
+    expect(assign).not.toHaveBeenCalled();
+    expect(storage.get('bjarnoy.settlementId')).toBe('settlement-1');
+    expect(storage.get('bjarnoy.refreshToken')).toBe(live);
   });
 });

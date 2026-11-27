@@ -58,6 +58,17 @@ async function getMe(accessToken: string): Promise<UserResponse> {
 // Module-level, not store state: it is a promise, not something to serialise or devtools-inspect.
 let refreshInFlight: Promise<boolean> | null = null;
 
+/**
+ * Tabs share the stored refresh token, and the server spends it on first use. Two tabs refreshing at once (a browser
+ * restart restoring both) would get one of them rejected, and a rejection ends the session and forgets the local
+ * identity that the other tab just renewed. The Web Lock makes the tabs take turns, so the second one reads the token
+ * the first one stored. Browsers only offer `navigator.locks` in a secure context; without it the refresh runs as is.
+ */
+function withRefreshLock(run: () => Promise<boolean>): Promise<boolean> {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  return locks ? locks.request('bjarnoy.auth.refresh', run) : run();
+}
+
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null as UserResponse | null,
@@ -149,11 +160,12 @@ export const useAuthStore = defineStore('auth', {
      * session. A network error or 5xx leaves the stored token alone so the next
      * call can retry it. A rejection while another tab has meanwhile replaced
      * the stored token is retried once with that token (the single-flight
-     * promise is per tab; the token in localStorage is shared across tabs).
+     * promise is per tab; the token in localStorage is shared across tabs, and
+     * `withRefreshLock` serialises the tabs where the browser allows it).
      */
     tryRefresh(): Promise<boolean> {
       if (!refreshInFlight) {
-        refreshInFlight = this.performRefresh().finally(() => {
+        refreshInFlight = withRefreshLock(() => this.performRefresh()).finally(() => {
           refreshInFlight = null;
         });
       }
@@ -161,7 +173,12 @@ export const useAuthStore = defineStore('auth', {
     },
     async performRefresh(): Promise<boolean> {
       let refreshToken = readStoredRefreshToken();
-      if (!refreshToken) return false;
+      if (!refreshToken) {
+        // Another tab logged out or had its refresh rejected, which removed the shared token: this tab's session is
+        // over too. (On a reload no user is loaded yet, so a visitor without a token just stays anonymous.)
+        if (this.user !== null) this.endRejectedSession();
+        return false;
+      }
 
       // At most one retry: see the comment on `tryRefresh` for why.
       for (let attempt = 0; ; attempt++) {
