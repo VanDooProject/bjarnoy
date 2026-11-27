@@ -1031,7 +1031,9 @@
     "intro": "Which building trains which units, how the queues work, and how to spread an order over several buildings.",
     "buildings": {
       "heading": "What each building trains",
-      "body": "Every unit is trained in one kind of building, and most need that building at a minimum level. The level counts in the building you order from: a second Barracks that is still level 2 cannot train a Spearman, even when your first one is level 8. The Longhouse trains nothing."
+      "body": "Every unit is trained in one kind of building, and most need that building at a minimum level. The level counts in the building you order from: a second Barracks that is still level 2 cannot train a Spearman, even when your first one is level 8. The Longhouse trains nothing.",
+      "land": "Units that walk. Click a unit for its figures.",
+      "water": "Ships are trained in the harbour and the shipyard. Click a ship for its figures."
     },
     "graph": {
       "label": "Which unit opens at which level of which building",
@@ -1039,7 +1041,9 @@
       "opensAt": "Longhouse {level}",
       "longhouseShort": "LH {level}",
       "longhouse": "needs Longhouse {level}",
-      "level": "Level {level}"
+      "level": "Level {level}",
+      "landHeading": "Land units",
+      "waterHeading": "Ships"
     },
     "queue": {
       "heading": "Queues and speed",
@@ -1403,7 +1407,8 @@
         "food": "Food capacity",
         "upkeep": "Upkeep per hour",
         "cost": "Cost",
-        "time": "Training time"
+        "time": "Training time",
+        "vision": "Vision range"
       },
       "training": "Where and at which level each ship is trained: {training}.",
       "trainingLink": "Training troops",
@@ -1452,6 +1457,10 @@
       "longship": "\"Longship\" (langskip) is the umbrella word for every long, narrow, oared warship. The Norse sorted them by size in rooms (rúm), the spaces between the rowing benches. The game's Snekkja is the common mid-size raider and levy ship of about 17 m and up, with 13 to 20 pairs of oars. Skuldelev 5 (Danish, about 1030, 13 pairs of oars, repaired with reused timber) is counted as one, and the Viking Ship Museum in Roskilde sails a replica, Helge Ask. The larger skeid and the dragon ship were longships too.",
       "skeid": "The skeid (skeið) was the largest class of longship, with 30 or more pairs of oars: the ship of kings and great lords, crewed by their household warriors and the levy (leiðangr). Skuldelev 2 (built near Dublin, about 1042, about 30 m) is one, and its replica Havhingsten fra Glendalough sailed from Roskilde to Dublin and back in 2007 and 2008. Roskilde 6 (about 1025, about 37 m) is the longest Viking ship found.",
       "fireShip": "The Norse did not use fire ships as a regular weapon. Fire at sea belongs to the Byzantines, whose Greek fire burned the fleet of the Rus' under Prince Igor off Constantinople in 941. There may be one Viking-age case: Hedeby 1, a warship of about 30 m, was found burned in Hedeby harbour and dated to about 985. One reading, by the Roskilde archaeologists, is that it was filled with fuel, set alight and sent against the harbour's defences during an attack. That rests on a single find and is an interpretation, not a certainty."
+    },
+    "graph": {
+      "heading": "Where the ships are trained",
+      "body": "Which ship opens at which level of the harbour or the shipyard. Click a ship for its figures."
     }
   },
   "shrines": {
@@ -1527,5 +1536,38 @@
   "historyNotes": {
     "toggle": "Show history",
     "label": "History"
+  },
+  "unit": {
+    "unknown": "There is no such unit.",
+    "classes": {
+      "civilian": "Civilian",
+      "infantry": "Infantry",
+      "siege": "Siege engine",
+      "ship": "Ship"
+    },
+    "training": {
+      "heading": "Where it is trained",
+      "body": "Trained in the {building}, from level {level}.",
+      "longhouse": "Needs a {longhouse} of level {level}.",
+      "more": "All units and their buildings are on {page}.",
+      "shipsPage": "the ships page",
+      "trainingPage": "the training page"
+    },
+    "figures": {
+      "heading": "Figures",
+      "attack": "Attack",
+      "defense": "Defence",
+      "speed": "Speed",
+      "vision": "Vision range",
+      "loot": "Loot capacity",
+      "food": "Food capacity",
+      "shipSlots": "Troop slots (room aboard)",
+      "cargoSlots": "Troop slots (space taken aboard)",
+      "upkeep": "Upkeep per hour",
+      "cost": "Cost",
+      "time": "Training time",
+      "minutes": "{n} min"
+    },
+    "ranged": "This unit attacks from range."
   }
 }
