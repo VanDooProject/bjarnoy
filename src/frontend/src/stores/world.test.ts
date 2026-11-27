@@ -27,6 +27,8 @@ const claimQuest = vi.fn();
 const renameSettlement = vi.fn();
 const getSettlementView = vi.fn();
 const getFogChunks = vi.fn();
+const getFogOverview = vi.fn();
+const decodeMaskPng = vi.fn();
 const decodeChunkPng = vi.fn();
 const pixelsToBitmap = vi.fn();
 const getPlotSuggestion = vi.fn();
@@ -95,6 +97,7 @@ async function loadStoreModule(demoMode: boolean) {
       renameSettlement: (...args: unknown[]) => renameSettlement(...args),
       getSettlementView: (...args: unknown[]) => getSettlementView(...args),
       getFogChunks: (...args: unknown[]) => getFogChunks(...args),
+      getFogOverview: (...args: unknown[]) => getFogOverview(...args),
       getPlotSuggestion: (...args: unknown[]) => getPlotSuggestion(...args),
       releasePlotSuggestion: (...args: unknown[]) => releasePlotSuggestion(...args),
       getWorld: (...args: unknown[]) => getWorld(...args),
@@ -142,6 +145,7 @@ async function loadStoreModule(demoMode: boolean) {
   // has its own suite (fogChunks.test.ts).
   vi.doMock('../lib/map/fog/fogChunkCodec', () => ({
     decodeChunkPng: (...args: unknown[]) => decodeChunkPng(...args),
+    decodeMaskPng: (...args: unknown[]) => decodeMaskPng(...args),
     pixelsToBitmap: (...args: unknown[]) => pixelsToBitmap(...args),
   }));
   const { useWorldStore } = await import('./world');
@@ -1923,6 +1927,94 @@ function resetFogMocks() {
     .mockReset()
     .mockImplementation(async (_pixels: unknown, width: number, height: number) => ({ width, height, close: vi.fn() }));
 }
+
+describe('useWorldStore fetchFogOverview', () => {
+  const OVERVIEW = { factor: 8, minU: -64, minV: -128, width: 4, height: 6, version: 'v1', png: 'PNG-O' };
+
+  function resetOverviewMocks() {
+    resetFogMocks();
+    getFogOverview.mockReset();
+    decodeMaskPng.mockReset().mockImplementation(async (_png: unknown, w: number, h: number) => new Uint8ClampedArray(w * h * 4));
+  }
+
+  it('is a no-op in demo mode', async () => {
+    resetOverviewMocks();
+    const store = await loadStoreModule(true);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    await store.fetchFogOverview();
+
+    expect(getFogOverview).not.toHaveBeenCalled();
+    expect(store.fogOverviewBitmap).toBeNull();
+  });
+
+  it('is a no-op before a world/owner is known', async () => {
+    resetOverviewMocks();
+    const store = await loadStoreModule(false);
+
+    await store.fetchFogOverview();
+
+    expect(getFogOverview).not.toHaveBeenCalled();
+  });
+
+  it('stores the decoded overview and its bounds in detailed-texel units', async () => {
+    resetOverviewMocks();
+    getFogOverview.mockResolvedValueOnce({ notModified: false, etag: '"o1"', data: OVERVIEW });
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    await store.fetchFogOverview();
+
+    expect(getFogOverview).toHaveBeenCalledWith('world-1', 'player-1', null);
+    expect(decodeMaskPng).toHaveBeenCalledWith('PNG-O', 4, 6);
+    expect(pixelsToBitmap).toHaveBeenCalledWith(expect.any(Uint8ClampedArray), 4, 6);
+    expect(store.fogOverviewBitmap).not.toBeNull();
+    expect(store.fogOverviewBounds).toEqual({ minU: -64, minV: -128, maxU: -32, maxV: -80, width: 32, height: 48 });
+  });
+
+  it('keeps the held overview on a 304 and sends the ETag it got', async () => {
+    resetOverviewMocks();
+    getFogOverview
+      .mockResolvedValueOnce({ notModified: false, etag: '"o1"', data: OVERVIEW })
+      .mockResolvedValueOnce({ notModified: true });
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    await store.fetchFogOverview();
+    const held = store.fogOverviewBitmap;
+    await store.fetchFogOverview();
+
+    expect(getFogOverview).toHaveBeenLastCalledWith('world-1', 'player-1', '"o1"');
+    expect(store.fogOverviewBitmap).toBe(held);
+    expect(pixelsToBitmap).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the replaced bitmap and keeps the old one when a refetch fails', async () => {
+    resetOverviewMocks();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    getFogOverview
+      .mockResolvedValueOnce({ notModified: false, etag: '"o1"', data: OVERVIEW })
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ notModified: false, etag: '"o2"', data: { ...OVERVIEW, version: 'v2' } });
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    await store.fetchFogOverview();
+    const first = store.fogOverviewBitmap!;
+    await store.fetchFogOverview();
+    expect(store.fogOverviewBitmap).toBe(first);
+    expect(first.close).not.toHaveBeenCalled();
+
+    await store.fetchFogOverview();
+    expect(first.close).toHaveBeenCalledTimes(1);
+    expect(store.fogOverviewBitmap).not.toBe(first);
+    warn.mockRestore();
+  });
+});
 
 describe('useWorldStore fetchFogMask', () => {
   it('is a no-op in demo mode', async () => {

@@ -89,6 +89,43 @@ describe('FogField army vision sources', () => {
   });
 });
 
+describe('FogField overview and window texels', () => {
+  const PLACEMENT = { scale: [0.5, 0.25] as [number, number], offset: [0.1, 0.2] as [number, number], texels: [32, 48] as [number, number] };
+  const texture = () =>
+    new Texture({ source: new BufferImageSource({ resource: new Uint8Array([0, 0, 0, 255]), width: 1, height: 1 }) });
+
+  it('has no overview until one is set', () => {
+    expect(fogUniformsOf(new FogField()).uniforms.uHasOverview).toBe(0);
+  });
+
+  it('setOverviewTexture enables the overview and uploads its placement', () => {
+    const layer = new FogField();
+    const overview = texture();
+
+    layer.setOverviewTexture(overview, PLACEMENT);
+
+    const uniforms = fogUniformsOf(layer).uniforms;
+    expect(uniforms.uHasOverview).toBe(1);
+    expect(Array.from(uniforms.uWorldToOverviewScale as Float32Array)).toEqual([0.5, 0.25]);
+    expect(Array.from(uniforms.uWorldToOverviewOffset as Float32Array)).toEqual([0.10000000149011612, 0.20000000298023224]);
+    // The window's own placement is untouched.
+    expect(Array.from(uniforms.uWorldToMaskScale as Float32Array)).toEqual([0, 0]);
+  });
+
+  it('setPlacement uploads the window texel size, and setMaskTexture keeps the previous one for the cross-fade', () => {
+    const layer = new FogField();
+    layer.setMaskTexture(texture(), PLACEMENT);
+    const uniforms = fogUniformsOf(layer).uniforms;
+    expect(Array.from(uniforms.uMaskTexels as Float32Array)).toEqual([32, 48]);
+    expect(Array.from(uniforms.uMaskTexelsPrev as Float32Array)).toEqual([0, 0]);
+
+    layer.setMaskTexture(texture(), { ...PLACEMENT, texels: [64, 64] });
+
+    expect(Array.from(uniforms.uMaskTexels as Float32Array)).toEqual([64, 64]);
+    expect(Array.from(uniforms.uMaskTexelsPrev as Float32Array)).toEqual([32, 48]);
+  });
+});
+
 describe('FogField update rules', () => {
   const CAMERA = { x: 100, y: 50, zoom: 1 };
   const VIEWPORT = { width: 800, height: 600 };

@@ -2075,6 +2075,21 @@ export interface FogChunksResponse {
   chunks: FogChunkResponse[];
 }
 
+/**
+ * Mirrors `FogOverviewResponse` — `GET /worlds/{worldId}/fog-overview`: the whole world as one coarse mask. Overview
+ * texel (i, j) covers detailed mask texels `u in [minU + i * factor, minU + (i + 1) * factor)`, `v` likewise. `png` is a
+ * base64 RGBA8 PNG of `width` x `height` texels, channels like a chunk's (R unknown, G out-of-sight, B lump = 0).
+ */
+export interface FogOverviewResponse {
+  factor: number;
+  minU: number;
+  minV: number;
+  width: number;
+  height: number;
+  version: string;
+  png: string;
+}
+
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/ApiKeyContracts.cs (debug API
 // keys, docs/tech/api-keys.md). Only the admin-facing parts are used here.
 

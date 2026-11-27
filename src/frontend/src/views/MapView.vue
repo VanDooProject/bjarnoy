@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import { buildingName, terrainName } from '../i18n/catalogueNames';
 import { useRouter } from 'vue-router';
+import { useFogMaskSync } from '../composables/useFogMaskSync';
 import { useDisplayedRoute } from '../composables/useDisplayedRoute';
 import { useMapFocus } from '../composables/useMapFocus';
 import { isModalRouteName } from '../lib/modalRoute';
@@ -418,16 +419,8 @@ watch(
   { immediate: true, flush: 'post' },
 );
 
-// Fog v2 (map-fog-v2.md §3): pushes a freshly fetched mask bitmap into the
-// renderer — same "watch both together" reasoning the army-overlay watcher
-// below uses, since the renderer may not exist yet on the tick a fetch
-// resolves.
-watch(
-  [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.fogMaskBounds, () => world.fogCoverage],
-  ([renderer, bitmap, bounds, coverage]) => {
-    if (renderer && bitmap && bounds && coverage) renderer.setFogMask(bounds, bitmap, coverage);
-  },
-);
+// Fog v2 (map-fog-v2.md §3): the fetched fog mask and overview go into the renderer (see the composable).
+useFogMaskSync(() => canvasRef.value?.renderer);
 
 // Premium players see every standing camp as a paw symbol on the world map; the renderer never reads the auth store
 // itself, so the host hands it the flag (and updates it when the player's premium status changes).

@@ -2381,6 +2381,8 @@ export class HexMapRenderer {
   // uMaskPrev never gets destroyed out from under an in-progress reveal
   // cross-fade (see setFogMask's own comment).
   private previousFogMaskTexture: Texture | null = null;
+  // The whole-world coarse mask the field shader falls back to past the chunk window (setFogOverview).
+  private fogOverviewTexture: Texture | null = null;
   // Eases `camera` from one position/zoom to another over time (see
   // animateCameraTo) instead of snapping — used for the founding transition
   // so the view doesn't jump.
@@ -6593,6 +6595,19 @@ export class HexMapRenderer {
   }
 
   /**
+   * Hands the field shader the whole-world coarse mask (the store's `fogOverviewBitmap`), which it samples wherever
+   * the chunk window has no data and blends over the window's outer edge (fogShader.ts's sampleMask). `bounds` is the
+   * overview's extent in detailed-texel units; the placement comes from the same `fogMaskPlacement` as the window's.
+   * No cross-fade: the previous overview texture is destroyed as soon as the new one is set.
+   */
+  setFogOverview(bounds: MaskBounds, bitmap: ImageBitmap) {
+    const texture = Texture.from(bitmap);
+    this.fogField.setOverviewTexture(texture, fogMaskPlacement(bounds, TILE_W, TILE_H));
+    this.fogOverviewTexture?.destroy(true);
+    this.fogOverviewTexture = texture;
+  }
+
+  /**
    * Registers who wants to know which fog chunks the camera sees (the world
    * store's `requestFogViewport`). Called with the current rectangle at once
    * and again whenever it changes — chunk-granular, so a pan inside one
@@ -7227,6 +7242,8 @@ export class HexMapRenderer {
     this.fogMaskTexture = null;
     this.previousFogMaskTexture?.destroy(true);
     this.previousFogMaskTexture = null;
+    this.fogOverviewTexture?.destroy(true);
+    this.fogOverviewTexture = null;
     this.underFogLayer.filters = [];
     this.fogDesaturateFilter.destroy();
     this.whiteMistLayer.destroy();

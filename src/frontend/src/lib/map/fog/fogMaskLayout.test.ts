@@ -4,6 +4,7 @@ import {
   diagonalNeighboursForInterpolation,
   fogMaskPlacement,
   isHexTexel,
+  maskBounds,
   toHex,
   toTexel,
   worldMaskBounds,
@@ -199,6 +200,43 @@ describe('fogMaskPlacement', () => {
 
     expect(uv.u * window.width).toBeCloseTo(texel.u - window.minU + 0.5, 10);
     expect(uv.v * window.height).toBeCloseTo(texel.v - window.minV + 0.5, 10);
+  });
+
+  it('reports the placed rectangle size in texels', () => {
+    const window = { minU: 64, minV: -128, maxU: 192, maxV: 0, width: 128, height: 128 };
+
+    expect(fogMaskPlacement(window, TILE_W, TILE_H).texels).toEqual([128, 128]);
+    const bounds = worldMaskBounds(RADIUS);
+    expect(fogMaskPlacement(RADIUS, TILE_W, TILE_H).texels).toEqual([bounds.width, bounds.height]);
+  });
+
+  it('places an overview so each block centre samples the middle of its own overview texel', () => {
+    // The overview covers `factor` detailed texels per texel (fog-overview endpoint); its bounds are given in detailed
+    // texels, and the same placement must put the centre of block (i, j) at uv ((i + 0.5) / W, (j + 0.5) / H).
+    const factor = 4;
+    const minU = -16;
+    const minV = -32;
+    const width = 8;
+    const height = 16;
+    const overview = maskBounds(minU, minV, minU + width * factor, minV + height * factor);
+    const placement = fogMaskPlacement(overview, TILE_W, TILE_H);
+    expect(placement.texels).toEqual([width * factor, height * factor]);
+
+    for (const [i, j] of [[0, 0], [3, 5], [7, 15]]) {
+      // The block's centre texel pair in detailed units, as a continuous texel coordinate, mapped back to world space
+      // with the inverse of the detailed-texel placement a window of the same bounds would use.
+      const centreU = minU + (i + 0.5) * factor - 0.5;
+      const centreV = minV + (j + 0.5) * factor - 0.5;
+      // Texel (u, v)'s centre is where a hex at that texel sits: x = (u + 1/6 ... ) inverted from the placement.
+      const world = {
+        x: ((centreU + 0.5 - overview.minU) / overview.width - placement.offset[0]) / placement.scale[0],
+        y: ((centreV + 0.5 - overview.minV) / overview.height - placement.offset[1]) / placement.scale[1],
+      };
+      // Sanity: that world point is the centre of the detailed texel (centreU, centreV).
+      const uv = toMaskUV(world, placement);
+      expect(uv.u).toBeCloseTo((i + 0.5) / width, 10);
+      expect(uv.v).toBeCloseTo((j + 0.5) / height, 10);
+    }
   });
 
   it('keeps every hex in the radius inside the 0..1 UV box', () => {

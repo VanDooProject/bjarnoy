@@ -155,6 +155,8 @@ function placeholderTexture(): Texture {
 export interface FogMaskPlacement {
   scale: [number, number];
   offset: [number, number];
+  /** The placed rectangle's size in mask texels (`MaskBounds.width/height`), for the shader's distance-to-edge. */
+  texels: [number, number];
 }
 
 
@@ -198,6 +200,11 @@ export class FogField {
       uWorldToMaskOffset: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
       uWorldToMaskScalePrev: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
       uWorldToMaskOffsetPrev: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
+      uWorldToOverviewScale: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
+      uWorldToOverviewOffset: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
+      uHasOverview: { value: 0, type: 'f32' },
+      uMaskTexels: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
+      uMaskTexelsPrev: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
       uUnknownEdge: { value: new Float32Array(UNKNOWN_EDGE), type: 'vec2<f32>' },
       uOutOfSightEdge: { value: new Float32Array(OUT_OF_SIGHT_EDGE), type: 'vec2<f32>' },
       uNoiseReach: { value: new Float32Array(NOISE_REACH), type: 'vec2<f32>' },
@@ -259,6 +266,7 @@ export class FogField {
         fogUniforms: this.uniforms,
         uMask: placeholderTexture().source,
         uMaskPrev: placeholderTexture().source,
+        uMaskOverview: placeholderTexture().source,
         uNoiseLattice: noiseLatticeTexture().source,
       },
     });
@@ -289,6 +297,26 @@ export class FogField {
     const offset = this.uniforms.uniforms.uWorldToMaskOffset as Float32Array;
     offset[0] = placement.offset[0];
     offset[1] = placement.offset[1];
+    const texels = this.uniforms.uniforms.uMaskTexels as Float32Array;
+    texels[0] = placement.texels[0];
+    texels[1] = placement.texels[1];
+    this.dirty = true;
+  }
+
+  /**
+   * Sets the whole-world coarse mask (fog-overview endpoint) the field shader
+   * samples wherever the chunk window has no data. No cross-fade: the
+   * overview only changes slowly and the window blends over it anyway.
+   */
+  setOverviewTexture(texture: Texture, placement: FogMaskPlacement): void {
+    const scale = this.uniforms.uniforms.uWorldToOverviewScale as Float32Array;
+    scale[0] = placement.scale[0];
+    scale[1] = placement.scale[1];
+    const offset = this.uniforms.uniforms.uWorldToOverviewOffset as Float32Array;
+    offset[0] = placement.offset[0];
+    offset[1] = placement.offset[1];
+    this.uniforms.uniforms.uHasOverview = 1;
+    this.mesh.shader!.resources.uMaskOverview = texture.source;
     this.dirty = true;
   }
 
@@ -346,6 +374,10 @@ export class FogField {
     scalePrev[1] = scale[1];
     offsetPrev[0] = offset[0];
     offsetPrev[1] = offset[1];
+    const texels = this.uniforms.uniforms.uMaskTexels as Float32Array;
+    const texelsPrev = this.uniforms.uniforms.uMaskTexelsPrev as Float32Array;
+    texelsPrev[0] = texels[0];
+    texelsPrev[1] = texels[1];
     if (placement) this.setPlacement(placement);
 
     shader.resources.uMaskPrev = shader.resources.uMask;
