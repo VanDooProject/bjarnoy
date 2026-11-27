@@ -1051,7 +1051,7 @@ describe('WorldModel.soilForSettlement / soilAtIslandCentre', () => {
   });
 });
 
-describe('WorldModel.placeBuilding — PumpkinFarm soil gate', () => {
+describe('WorldModel.placeBuilding — farm soil gate', () => {
   it('refuses a new PumpkinFarm on a Wheat-soil island', () => {
     const model = new WorldModel(11);
     const { settlement, at } = foundLandedSettlement(model);
@@ -1082,7 +1082,7 @@ describe('WorldModel.placeBuilding — PumpkinFarm soil gate', () => {
     expect(model.placeBuilding(settlement.id, spot, 'pumpkinfarm')).toBe(true);
   });
 
-  it('never refuses Farm, on either soil', () => {
+  it('accepts a new Farm on a Wheat-soil island', () => {
     const model = new WorldModel(11);
     const { settlement, at } = foundLandedSettlement(model);
     const centre = findIslandCentreWithSoil(model.seed, 'wheat');
@@ -1095,6 +1095,21 @@ describe('WorldModel.placeBuilding — PumpkinFarm soil gate', () => {
     if (!spot) throw new Error('no empty land near founding — pick a different test seed');
 
     expect(model.placeBuilding(settlement.id, spot, 'farm')).toBe(true);
+  });
+
+  it('refuses a new Farm on a Pumpkin-soil island', () => {
+    const model = new WorldModel(11);
+    const { settlement, at } = foundLandedSettlement(model);
+    const centre = findIslandCentreWithSoil(model.seed, 'pumpkin');
+    settlement.islandId = 'isl-pumpkin';
+    model.setIslands([{ id: 'isl-pumpkin', name: 'Pumpkinisle', q: centre.q, r: centre.r }]);
+
+    const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
+      (c) => isEmptyGrass(model, c),
+    );
+    if (!spot) throw new Error('no empty land near founding — pick a different test seed');
+
+    expect(model.placeBuilding(settlement.id, spot, 'farm')).toBe(false);
   });
 
   it('allows PumpkinFarm when the settlement has no resolvable island (permissive default)', () => {
@@ -2812,6 +2827,30 @@ describe('WorldModel.applyRivalBuildings', () => {
     expect(model.getTile(5, 7).buildingType).toBe('longhouse');
   });
 
+  it("a rival's cut-off tower (outsideRealm) claims no disc of its own, a connected one does", () => {
+    const model = new WorldModel(20260825);
+    const rival = model.registerSettlement({
+      id: 'rival-1',
+      ownerId: 'rival-1',
+      ownerName: 'Rival',
+      name: 'Rivalhold',
+      q: 5,
+      r: 5,
+      level: 2,
+      resources: { wood: 0, stone: 0, food: 0, brick: 0, iron: 0 } as never,
+      rates: {} as never,
+      foundedAt: 0,
+    });
+    model.applyRivalBuildings([
+      rivalBuilding(9, 5, { type: 'tower', level: 1 }),
+      { ...rivalBuilding(14, 5, { type: 'tower', level: 1 }), outsideRealm: true },
+    ]);
+
+    const centres = model.claimDiscsOf(rival.id).map((d) => `${d.q},${d.r}`);
+    expect(centres).toContain('9,5');
+    expect(centres).not.toContain('14,5');
+  });
+
   it('replaces the previous set: moved walls follow and walls gone server-side disappear', () => {
     const model = new WorldModel(20260825);
     model.applyRivalBuildings([rivalBuilding(5, 5), rivalBuilding(5, 6)]);
@@ -2961,6 +3000,17 @@ describe('WorldModel chained towers', () => {
     expect(owner(along(5))).toBe(settlement.id);
     expect(model.visionDiscsFor(settlement)).toHaveLength(2);
     expect(model.claimDiscsOf(settlement.id).some((d) => d.q === along(7).q)).toBe(false);
+  });
+
+  it('a tower cut off by a dropped link gets no border of its own, not even on its own hex', () => {
+    const { model, settlement, along, snap } = setup();
+    snap(settlement, [along(3), along(5), along(7)]);
+    expect(model.realmBorderOwnerAt(along(7).q, along(7).r)).toBe(settlement.id);
+
+    snap(settlement, [along(3), along(7)]); // the middle tower is gone: the far one is out of reach
+
+    expect(model.realmBorderOwnerAt(along(7).q, along(7).r)).toBeUndefined();
+    expect(model.realmBorderOwnerAt(along(5).q, along(5).r)).toBe(settlement.id);
   });
 
   it('reconnecting the chain claims the far side again', () => {

@@ -13,9 +13,8 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
-import { unitName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
-import GuestList from './GuestList.vue';
+import GarrisonList from './GarrisonList.vue';
 import { hudRailHeightPx } from '../../composables/hudBarHeight';
 import {
   formatCountdownShort,
@@ -128,15 +127,9 @@ const handleRows = computed<HandleRow[]>(() =>
   [buildHandleRow.value, trainingHandleRow.value, armyHandleRow.value].filter((r): r is HandleRow => r !== null),
 );
 
-const garrison = computed(() =>
-  world.hud.garrison
-    .filter((g) => g.count > 0)
-    .map((g) => ({ key: g.unit, label: unitName(g.unit), count: g.count })),
-);
-
-// Issue #40 phase 4 — the guest rows themselves (and their "Send home") are
-// GuestList.vue, shared with TrainingQueuePanel.vue; see its comment for why
-// guests are folded in here rather than getting a separate HUD element.
+// The garrison and guest rows themselves are GarrisonList.vue (shared with TrainingQueuePanel.vue); here
+// only their presence matters, for hasAnything.
+const hasGarrison = computed(() => world.hud.garrison.some((g) => g.count > 0));
 const guestCount = computed(() => world.guestArmies.length);
 
 const reservedTotal = computed(() => {
@@ -175,7 +168,7 @@ const hasAnything = computed(
   () =>
     buildOrders.value.length > 0
     || trainingOrders.value.length > 0
-    || garrison.value.length > 0
+    || hasGarrison.value
     || guestCount.value > 0
     || armyRows.value.length > 0,
 );
@@ -482,21 +475,7 @@ function onDrawerLeave(el: Element, done: () => void) {
           <div class="status-card-header" :class="{ 'has-section-above': buildOrders.length || trainingOrders.length || sortedArmyRows.length }">
             <span class="status-card-title">{{ t('hud.trainingQueue.garrison') }}</span>
           </div>
-          <div v-if="garrison.length" class="garrison-grid">
-            <div v-for="g in garrison" :key="g.key" class="garrison-row">
-              <span class="garrison-name">{{ g.label }}</span>
-              <span class="garrison-count">{{ g.count }}</span>
-            </div>
-          </div>
-          <div v-else class="status-subtext">{{ t('hud.trainingQueue.garrisonEmpty') }}</div>
-
-          <template v-if="guestCount">
-            <div class="status-card-header has-section-above">
-              <span class="status-card-title">{{ t('hud.trainingQueue.guests') }}</span>
-              <span class="status-card-count">{{ guestCount }}</span>
-            </div>
-            <GuestList />
-          </template>
+          <GarrisonList />
         </div>
         </template>
       </div>
@@ -644,23 +623,6 @@ function onDrawerLeave(el: Element, done: () => void) {
 }
 .army-item.is-selected {
   background: rgba(255, 197, 92, 0.08);
-}
-.garrison-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.garrison-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-}
-.garrison-name {
-  color: var(--text);
-}
-.garrison-count {
-  color: var(--gold);
-  font-weight: 600;
 }
 
 /* Drawer chrome

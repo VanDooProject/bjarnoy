@@ -47,7 +47,8 @@ import { DIAL_FINISH_MS, DIAL_REJECT_MS, retainFinishingDials, rejectDialAt, fla
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import { atlasPageCount } from './atlasManifests';
 import { attachFramePacing } from './framePacing';
-import { insetBorderCorners, splitBorderEdges } from './realmBorderEdges';
+import { clippedStrokePieces } from './convexPolygon';
+import { createWaterlineBorders, type BorderLinePiece } from './realmBorderWaterline';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
 import { drawsAsSea, type CartShipment, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
@@ -57,6 +58,7 @@ import { settlementBadgeSuffix } from './settlementBadge';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import { FogField } from './fog/FogField';
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP, armyFogClearReachHexes, type ArmyVisionSource } from './fog/FogMaskLayer';
+import { FOG_DESATURATE_DEFAULTS, FogDesaturateFilter, fogFilterArea } from './fog/FogDesaturateFilter';
 import type { FogCoverageLookup } from './fog/fogCoverage';
 import { UNKNOWN_RAMP_MARGIN_HEXES } from './fog/fogRamp';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
@@ -71,7 +73,7 @@ import type { TerrainLookup, WaterMask } from './water/waterMask';
 import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
 import { fogMaskPlacement, type MaskBounds } from './fog/fogMaskLayout';
-import { outerEdgesOf, ownedAcrossEdges, shownBorderOwner } from './realmBorders';
+import { shownBorderOwner } from './realmBorders';
 import { chunkRangeOfTexels, rangesEqual, type ChunkRange } from './fog/fogChunks';
 import { bogCreekPathFor, riverPathFor, type RiverDrawing } from './riverPath';
 import {
@@ -140,7 +142,6 @@ const CART_MARKER_SIZE = 36;
 // owner colour or CART.
 const RANGE_TINT_COLOR = 0xffffff;
 const RANGE_TINT_ALPHA = 0.16;
-const FOG_SCOUTED = 0x0b1116;
 const HOVER_FILL = 0xffffff;
 const HOVER_STROKE = 0xffe9c2;
 
@@ -301,7 +302,7 @@ function hash01(x: number, y: number, salt: number): number {
 export interface FogDebugFlags {
   /** Isolates the unexplored (white mist) tier — off hides whiteMistLayer entirely. */
   maskUnknown: boolean;
-  /** Isolates the out-of-sight (dark) tier — off hides blackFogLayer entirely. */
+  /** Isolates the out-of-sight (dark) tier — off removes the desaturation filter (FogDesaturateFilter) entirely. */
   maskOutOfSight: boolean;
   /** The §2.4 UV warp on/off — direct successor to v1's distJitter, but now a continuous per-pixel wobble instead of a per-hex jitter. */
   warp: boolean;
@@ -334,9 +335,16 @@ export interface FogDebugTuning {
    * guesses. Not persisted — a reload is back to 1.
    */
   driftSpeed: number;
+  /** FogDesaturateFilter: how much colour the dark tier removes, 0..1. */
+  desaturate: number;
+  /** FogDesaturateFilter: how far bright tones (sand, foam, snow) are pulled toward mid grey, 0..1. */
+  brightPull: number;
+  /** FogDesaturateFilter: how much the dark tier dims the picture, 0..0.8. */
+  darken: number;
 }
 export const fogDebugTuning: FogDebugTuning = {
   driftSpeed: 1,
+  ...FOG_DESATURATE_DEFAULTS,
 };
 
 export const fogDebugFlags: FogDebugFlags = {
@@ -550,6 +558,11 @@ export interface HexMapRendererOptions {
    */
   onArmyTap?: (armyId: string, screen: { x: number; y: number }) => void;
   /**
+   * Asked right after `onArmyTap`: true means the marker tap is all there is, it does not also reach the tile below (no ring menu). A
+   * query rather than `onArmyTap`'s return value, because hosts forward `onArmyTap` through a component event, which cannot return one.
+   */
+  armyTapStopsAtMarker?: (armyId: string) => boolean;
+  /**
    * docs/design/zoom-transition.md: fired when a wheel/pinch zoom step
    * crosses the enter-settlement or exit-to-world threshold
    * (zoomTransition.ts's transitionForZoom). The renderer has already
@@ -645,6 +658,11 @@ export interface ArmyOverlayMarker {
 /** True while the send picker marks armies: a tap on a marker then only picks it and never reaches the tile below. */
 export function armyTapSwallowed(armies: readonly ArmyOverlayMarker[]): boolean {
   return armies.some((a) => a.pick);
+}
+
+/** Whether a tap on an army marker ends there instead of reaching the tile: the send picker is open, or the host's `armyTapStopsAtMarker` said so. */
+export function armyTapStopsHere(armies: readonly ArmyOverlayMarker[], handled: boolean | undefined): boolean {
+  return handled === true || armyTapSwallowed(armies);
 }
 
 /**
@@ -1615,11 +1633,6 @@ function distanceBeyondSources(q: number, r: number, sources: FogSource[]): numb
   return min === Infinity ? Infinity : Math.max(0, min);
 }
 
-// The scouted (out-of-sight) tier's tint alpha at full ramp saturation — the
-// fog v2 shader's uScoutedAlpha uniform (fogShader.ts) reads this directly,
-// same constant both tiers' colours ultimately come from (see
-// FogMaskLayerColors in FogMaskLayer.ts).
-const FOG_SCOUTED_ALPHA = 0.6;
 // See scheduleCull's own comment for why this exists: throttles how often a
 // drag can trigger a full terrain/border/fog rebuild.
 const DRAG_REBUILD_THROTTLE_MS = 150;
@@ -2345,26 +2358,20 @@ export class HexMapRenderer {
   // `highlightLayer` (above the buildings) in settlement mode only.
   private constructionDials: ConstructionDial[] | null = null;
   private blockedMarkers: readonly BlockedMarker[] = NO_BLOCKED;
-  // Fog v2 (docs/design/map-fog-v2.md §2.4/§4): two screen-space Pixi Mesh
-  // layers sampling the fetched mask texture through a shared GLSL shader —
-  // see fog/FogMaskLayer.ts. blackFogLayer (out-of-sight tint) sits between
-  // `world` and `markerLayer` in the stage; whiteMistLayer (never-scouted
-  // mist) sits after `markerLayer` — see mount()'s addChild order. Both are
-  // genuinely screen-space (no `world`-transform syncing needed, unlike v1's
-  // `fogWorld`), and both stay in sync via setCamera on every camera change.
-  // Both quads sample one shared, world-anchored field texture (fog/FogField.ts) that is rendered once, not per quad,
-  // and only when its inputs changed (fogFieldPlan.ts) — the mask/noise shader no longer runs over the screen twice a frame.
+  // Fog v2 (docs/design/map-fog-v2.md §2.4/§4): the mist is a screen-space Pixi Mesh layer sampling the fetched mask
+  // texture through a shared GLSL shader — see fog/FogMaskLayer.ts. whiteMistLayer (never-scouted mist) sits after
+  // `markerLayer` — see mount()'s addChild order. It is genuinely screen-space (no `world`-transform syncing needed,
+  // unlike v1's `fogWorld`), and stays in sync via setCamera on every camera change. The dark tier (out-of-sight) is a
+  // filter, fog/FogDesaturateFilter.ts, on `underFogLayer` (the world and the camp paws, everything under the markers):
+  // it greys the picture where the field says so. Both read one shared, world-anchored field texture (fog/FogField.ts)
+  // that is rendered once, not per consumer, and only when its inputs changed (fogFieldPlan.ts).
   private fogField = new FogField();
-  private blackFogLayer = new FogMaskLayer('outOfSight', {
-    scoutedColor: FOG_SCOUTED,
-    unexploredColor: FOG_UNEXPLORED,
-    scoutedAlpha: FOG_SCOUTED_ALPHA,
-  }, this.fogField);
-  private whiteMistLayer = new FogMaskLayer('unknown', {
-    scoutedColor: FOG_SCOUTED,
-    unexploredColor: FOG_UNEXPLORED,
-    scoutedAlpha: FOG_SCOUTED_ALPHA,
-  }, this.fogField);
+  private whiteMistLayer = new FogMaskLayer(FOG_UNEXPLORED, this.fogField);
+  private fogDesaturateFilter = new FogDesaturateFilter(this.fogField);
+  // The world and the camp paws, the content the dark tier's filter greys. Unfiltered (no filter pass at all) while the
+  // dark tier is off, hidden or a debug view shows the field's channels.
+  private underFogLayer = new Container();
+  private darkTierFiltered = false;
   // The fetched (or, before the first fetch resolves, not-yet-fetched) mask
   // texture and the world-to-mask-UV placement it was decoded with — see
   // setFogMask. Null until fetchFogMask's first call resolves (or forever in
@@ -2581,6 +2588,8 @@ export class HexMapRenderer {
   private hoverPointer: { x: number; y: number } | null = null;
   /** Told of every touch/pen tap on the map (canvas px) without taking it over; see `setTapObserver`. */
   private tapObserver: ((screen: { x: number; y: number }) => void) | null = null;
+  /** The hex an HTML marker under a tap stands for (it covers another hex); see `setTapTarget`. */
+  private tapTarget: ((screen: { x: number; y: number }) => AxialCoord | null) | null = null;
   private frameObserver: (() => void) | null = null;
   /** Screen-space circle (canvas px) of an open ring menu; markers beneath it fade out. See `setMarkerOcclusion`. */
   private markerOcclusion: OcclusionCircle | null = null;
@@ -2962,14 +2971,17 @@ export class HexMapRenderer {
     // silent.
     this.world.addChild(...worldLayerOrder(this.options.mode).map((name) => this.layersByName()[name]));
 
-    // §4's layer stack: the two fog quads are the only genuinely
-    // screen-space `app.stage` children — everything else (terrain,
-    // borders, buildings) stays nested inside `world`, camera-transformed
-    // as one. blackFogLayer (out-of-sight tint) sits under markerLayer so
-    // troop/settlement labels read as veiled by it rather than floating in
-    // front; whiteMistLayer (never-scouted) sits over everything, since
-    // nothing should show through ground that's never been seen at all.
-    app.stage.addChild(this.world, this.campPawLayer, this.blackFogLayer.mesh, this.markerLayer, this.whiteMistLayer.mesh);
+    // §4's layer stack: the mist quad is the only genuinely screen-space
+    // `app.stage` child — everything else (terrain, borders, buildings)
+    // stays nested inside `world`, camera-transformed as one. The dark tier
+    // is the desaturation filter on underFogLayer (world + camp paws), which
+    // sits under markerLayer so troop/settlement labels read as veiled by it
+    // rather than floating in front; whiteMistLayer (never-scouted) sits
+    // over everything, since nothing should show through ground that's never
+    // been seen at all.
+    this.underFogLayer.addChild(this.world, this.campPawLayer);
+    this.underFogLayer.filterArea = fogFilterArea(this.viewport.width, this.viewport.height);
+    app.stage.addChild(this.underFogLayer, this.markerLayer, this.whiteMistLayer.mesh);
     this.armyStatic.addChild(this.armyStaticGraphics);
     this.markerLayer.addChildAt(this.armyStatic, 0);
     this.markerLayer.addChildAt(this.armyFrameGraphics, 1);
@@ -2986,6 +2998,8 @@ export class HexMapRenderer {
     if (!this.app) return;
     this.viewport = { width, height };
     this.app.renderer.resize(width, height);
+    // The filter's area is the screen rectangle (see FogDesaturateFilter): pinned so Pixi never measures the world.
+    this.underFogLayer.filterArea = fogFilterArea(width, height);
     // A locked preview must stay fit to the island on every resize/rotation —
     // unlike the normal camera, which just keeps whatever position/zoom it
     // had (re-projected onto the new viewport), a locked one has no other
@@ -3015,8 +3029,8 @@ export class HexMapRenderer {
       this.viewport.width / 2 - this.camera.x * this.camera.zoom,
       this.viewport.height / 2 - this.camera.y * this.camera.zoom,
     );
-    // The fog quads are genuinely screen-space (see the class-level comment
-    // on blackFogLayer/whiteMistLayer) — no transform to sync, just the raw
+    // The fog mist quad and the desaturation filter are genuinely screen-space (see the class-level comment
+    // on whiteMistLayer/fogDesaturateFilter) — no transform to sync, just the raw
     // camera/viewport values their shader uses to invert screen -> world
     // itself (fogShader.ts's own screenToWorld-equivalent).
     this.fogField.setCamera(this.camera, this.viewport);
@@ -3088,8 +3102,15 @@ export class HexMapRenderer {
     // both quads' placeholder (fully-unknown) texture would blanket a view
     // the rest of the renderer deliberately leaves unfogged.
     const fogActive = this.isFogActive();
-    this.blackFogLayer.mesh.visible = fogActive && fogDebugFlags.maskOutOfSight;
-    this.whiteMistLayer.mesh.visible = fogActive && fogDebugFlags.maskUnknown;
+    // The dark tier is off (no filter pass at all) while a debug view shows the field's channels: the filter would grade them.
+    const darkTierVisible = fogActive && fogDebugFlags.maskOutOfSight && !fogDebugFlags.showRawMask && !fogDebugFlags.showEffectiveMask;
+    const mistVisible = fogActive && fogDebugFlags.maskUnknown;
+    this.whiteMistLayer.mesh.visible = mistVisible;
+    if (darkTierVisible !== this.darkTierFiltered) {
+      this.darkTierFiltered = darkTierVisible;
+      this.underFogLayer.filters = darkTierVisible ? [this.fogDesaturateFilter] : [];
+    }
+    if (darkTierVisible) this.fogDesaturateFilter.setTuning(fogDebugTuning);
     const debug = {
       warpEnabled: fogDebugFlags.warp,
       showRawMask: fogDebugFlags.showRawMask,
@@ -3097,7 +3118,7 @@ export class HexMapRenderer {
     };
     this.fogField.setDebug(debug);
     this.fogField.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed * waterDebugTuning.mapAnimationSpeed);
-    if (this.blackFogLayer.mesh.visible || this.whiteMistLayer.mesh.visible) this.fogField.update(this.app!.renderer);
+    if (darkTierVisible || mistVisible) this.fogField.update(this.app!.renderer);
     this.drawHighlight();
   };
 
@@ -4034,14 +4055,15 @@ export class HexMapRenderer {
     // Touch/pen has no hover: the HTML markers (construction dials included) reveal themselves from this tap, which still reaches the tile.
     if (e.pointerType !== 'mouse') this.tapObserver?.(screen);
     // An army's marker is a button while the send picker is open: the tap picks it instead of reaching the tile below. Otherwise the
-    // tap also selects the army but still reaches the tile (ring menu, waypoint drafts), so a hex holding an army stays tappable.
+    // tap also selects the army but still reaches the tile (ring menu, waypoint drafts), so a hex holding an army stays tappable,
+    // unless the host reports the tap as fully handled (a moving army: selection only, no ring).
     const armyId = this.pickedArmyAt(screen);
     if (armyId) {
       this.options.onArmyTap?.(armyId, screen);
-      if (armyTapSwallowed(this.armyOverlay?.armies ?? [])) return;
+      if (armyTapStopsHere(this.armyOverlay?.armies ?? [], this.options.armyTapStopsAtMarker?.(armyId))) return;
     }
-    const world = screenToWorld(this.camera, screen, this.viewport);
-    const coord = isoPixelToAxial(world, TILE_W, TILE_H);
+    // A tap on an HTML marker (the building HUD's dial or box) means the hex it belongs to, not the one it is drawn over.
+    const coord = this.tapTarget?.(screen) ?? isoPixelToAxial(screenToWorld(this.camera, screen, this.viewport), TILE_W, TILE_H);
     const tile = this.options.worldModel.getTile(coord.q, coord.r);
     // Issue #16 "ring menu on click of tile": the ring anchors on the
     // clicked hex's own screen centre (same point the hover tooltip anchors
@@ -5671,6 +5693,12 @@ export class HexMapRenderer {
       return;
     }
 
+    // Sea art's top face sits lower than land's in the settlement view only; the world map draws every hex on the one level.
+    const waterline = createWaterlineBorders(
+      { realmBorderOwnerAt: (q, r) => worldModel.realmBorderOwnerAt(q, r), isLowered: (q, r) => mode === 'settlement' && drawsAsSea(worldModel.terrainOf(q, r)) },
+      TILE_W,
+      TILE_H,
+    );
     for (const c of coords) {
       // Own realm on explored ground, a rival's wherever the mist is not fully opaque; ground outside every claim has no owner.
       const ownerId = shownBorderOwner(worldModel, c.q, c.r, fogActive);
@@ -5683,10 +5711,6 @@ export class HexMapRenderer {
       const owner = worldModel.getSettlement(ownerId);
       const color = realmColor(owner, playerId);
 
-      const grid = isoGridPosition(c, TILE_W, TILE_H);
-      const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
-      const flat = top.flatMap((p) => [p.x, p.y]);
-
       // "Glow+wash" (docs/design/zip-brainstorms.md, zip 9): a soft
       // translucent fill across every owned hex ("wash"), with a brighter,
       // thicker stroke reserved for the realm's *outer* edges only
@@ -5695,16 +5719,16 @@ export class HexMapRenderer {
       // blur filter. Previously this stroked the *entire* outline of every
       // claimed hex, including edges shared with another owned hex, which
       // drew a solid mesh over the whole realm instead of a border around it.
-      this.borderLayer.poly(flat).fill({ color, alpha: 0.12 });
+      // On a coast the line sits on the waterline the player sees (sea art's top face is lower than land's), see realmBorderWaterline.
+      const { wash, lines } = waterline.hexGeometry(c, ownerId);
+      this.borderLayer.poly(wash.flatMap((p) => [p.x, p.y])).fill({ color, alpha: 0.12 });
 
       // Back edges (and in world mode, which has no tall art, all edges) stay in the layer under the toppings; in
       // settlement mode the front edges go to their own graphic in terrainTop so the hex's own art can't hide them.
       // Each realm draws its outline inside its own hexes (see insetBorderCorners), so touching realms show two lines side by side.
-      const owned = ownedAcrossEdges(worldModel, c, ownerId);
-      const corners = insetBorderCorners(top, owned);
-      const { back, front } = splitBorderEdges(outerEdgesOf(owned));
       if (mode === 'settlement') {
-        strokeBorderEdges(this.borderLayer, corners, back, color);
+        strokeBorderPieces(this.borderLayer, lines.filter((l) => l.layer === 'back'), color);
+        const front = lines.filter((l) => l.layer === 'front');
         if (front.length > 0) {
           let g = this.borderFrontPool[frontUsed];
           if (!g) {
@@ -5716,10 +5740,10 @@ export class HexMapRenderer {
           g.clear();
           g.visible = true;
           g.zIndex = isoDepthKey(c) + BORDER_FRONT_Z;
-          strokeBorderEdges(g, corners, front, color);
+          strokeBorderPieces(g, front, color);
         }
       } else {
-        strokeBorderEdges(this.borderLayer, corners, [...back, ...front], color);
+        strokeBorderPieces(this.borderLayer, lines, color);
       }
     }
     hideUnusedFront();
@@ -6461,6 +6485,15 @@ export class HexMapRenderer {
   }
 
   /**
+   * The HTML markers take no pointer input, so a click on one lands on whatever hex it is drawn over (usually the one north of
+   * its building). `fn` returns the hex the marker under canvas point `screen` belongs to, or null for none: a click or tap
+   * there then reaches that hex (ring menu, quick upgrade) instead. `null` clears it.
+   */
+  setTapTarget(fn: ((screen: { x: number; y: number }) => AxialCoord | null) | null) {
+    this.tapTarget = fn;
+  }
+
+  /**
    * Called once per rendered map frame, right after the camera moved for that frame (before the canvas markers are drawn):
    * HTML overlays that follow the camera (the building HUD) place themselves from it, so they never run ahead of or behind
    * the canvas, however `framePacing` thins the ticks out. `null` clears it.
@@ -7192,14 +7225,15 @@ export class HexMapRenderer {
     this.detachFramePacing?.();
     this.detachFramePacing = undefined;
     // app.destroy({ children: true }) destroys everything still attached to
-    // the stage, but the fog layers' meshes are — see mount()'s addChild —
+    // the stage, but the fog mist mesh is — see mount()'s addChild —
     // so this covers them too; only the mask textures they hold are
     // generated/fetched independently and need their own explicit destroy.
     this.fogMaskTexture?.destroy(true);
     this.fogMaskTexture = null;
     this.previousFogMaskTexture?.destroy(true);
     this.previousFogMaskTexture = null;
-    this.blackFogLayer.destroy();
+    this.underFogLayer.filters = [];
+    this.fogDesaturateFilter.destroy();
     this.whiteMistLayer.destroy();
     this.fogField.destroy();
     this.waterLayer.destroy();
@@ -7366,13 +7400,20 @@ const NEIGHBOR_DIRS: AxialCoord[] = [
 /** Sort offset of a hex's front border edges in `terrainTop`: above its topping (+0 sprite, +0.5 overlay), below the next hex's. */
 const BORDER_FRONT_Z = 0.6;
 
-/** The two overlapping strokes (wide faint under thin solid) that fake the border glow, for the given corner-index edges. `corners` are the inset border corners (`insetBorderCorners`). */
-function strokeBorderEdges(g: Graphics, corners: readonly ({ x: number; y: number } | null)[], edges: readonly [number, number][], color: number) {
-  for (const edge of edges) {
-    const a = corners[edge[0]];
-    const b = corners[edge[1]];
-    if (!a || !b) continue;
-    g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
-    g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
+/** The two strokes (wide faint under thin solid) that fake the border glow, for each line piece. A piece with `clip` polygons is drawn as filled polygons around them (no mask), same colours and widths. */
+function strokeBorderPieces(g: Graphics, pieces: readonly BorderLinePiece[], color: number) {
+  for (const { a, b, clip } of pieces) {
+    for (const [width, alpha] of BORDER_STROKES) {
+      if (!clip) {
+        g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width, color, alpha, cap: 'round' });
+        continue;
+      }
+      for (const piece of clippedStrokePieces(a, b, width, clip)) g.poly(piece.flatMap((p) => [p.x, p.y])).fill({ color, alpha });
+    }
   }
 }
+
+const BORDER_STROKES: readonly (readonly [width: number, alpha: number])[] = [
+  [7, 0.25],
+  [2.5, 0.95],
+];

@@ -30,6 +30,8 @@ import ResourceCost from '../ResourceCost.vue';
 import { computed, nextTick, onMounted, onUnmounted, onUpdated, ref, shallowRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AtlasSprite from '../AtlasSprite.vue';
+import BuildingOutputText from './BuildingOutputText.vue';
+import type { BuildingOutput } from '../../lib/map/buildingEconomy';
 import HoldProgress from './HoldProgress.vue';
 import type { ArtRef } from '../../lib/map/buildingArt';
 import type { MessageSchema } from '../../i18n/schema';
@@ -99,10 +101,12 @@ export interface RingCard {
   refund?: { wood?: number; stone?: number; food?: number; iron?: number };
   /** Touch: what a second tap on this root action does ("Tap Raze again to raze"); defaults to the upgrade wording. */
   tapHint?: string;
-  /** The badge shown while nothing blocks the action; defaults to "buildable here" (a raze: "can be razed"). */
-  okBadge?: string;
+  /** The badge shown while nothing blocks the action; defaults to "buildable here" (a raze: "can be razed"). `null`: no badge (an upgrade: the building is already there). */
+  okBadge?: string | null;
   /** One-line summary of what it produces. */
   gives?: string;
+  /** The structured output behind `gives`, when it is one: the card draws a resource rate with the resource icon. */
+  givesOutput?: BuildingOutput;
   /** For an upgrade, the building's new total next to the gain in `gives` ("90 total"); shown on wide screens only. */
   givesTotal?: string;
   /** Progression blockers (longhouse level, prerequisites, limits), each as a sentence. */
@@ -112,8 +116,8 @@ export interface RingCard {
   /** Art for the card thumbnail. */
   art?: ArtRef;
   availability?: RingAvailability;
-  /** The card's last line: what holding the bubble does (gold arrows), or, locked, that it needs premium (lock, muted). */
-  holdHint?: { text: string; locked: boolean };
+  /** The card's last line: what holding the bubble does (gold arrows). Only set when the player can use it. */
+  holdHint?: string;
 }
 
 export interface RingBuilding extends RingAction, Omit<RingCard, 'title'> {
@@ -320,8 +324,36 @@ const cardArea = computed<Rect>(
 
 const activeCategory = computed(() => props.categories.find((c) => c.id === path.value[1]) ?? null);
 const atRoot = computed(() => path.value.length === 0);
-/** Inner-lane entries: root actions, or the categories once `build` is open. */
-const laneItems = computed<RingAction[]>(() => (atRoot.value ? props.actions : props.categories));
+/**
+ * A category that holds exactly one building has nothing to open into: its building takes the category's place on the inner
+ * lane (by the building's id), so e.g. a forest's Lumberjack is one tap away instead of two.
+ */
+const promotedBuildings = computed(() => {
+  const promoted = new Map<string, RingBuilding>();
+  for (const c of props.categories) if (c.buildings.length === 1) promoted.set(c.id, c.buildings[0]);
+  return promoted;
+});
+/** Inner-lane entries: root actions, or the categories (a lone building in place of its category) once `build` is open. */
+const laneItems = computed<RingAction[]>(() => {
+  if (atRoot.value) return props.actions;
+  return props.categories.map((c): RingAction => {
+    const only = promotedBuildings.value.get(c.id);
+    if (!only) return c;
+    const state = stateOf(only);
+    return {
+      id: only.id,
+      label: only.label,
+      color: c.color,
+      disabled: only.disabled,
+      state: state === 'locked' || state === 'waiting' ? state : undefined,
+      card: cardOf(only),
+    };
+  });
+});
+/** The building a lane entry stands for, when it is a promoted one. */
+function promotedBuildingOf(itemId: string): RingBuilding | undefined {
+  return [...promotedBuildings.value.values()].find((b) => b.id === itemId);
+}
 /**
  * Past the root, the inner lane permanently reserves one extra slot for
  * ‹ BACK — so the categories keep identical positions whether or not a
@@ -340,7 +372,7 @@ const hovered = computed(() => (hoveredIndex.value === null ? null : buildings.v
 /** Index (on the inner lane) of the hovered root bubble that has a card to show. */
 const hoveredLane1Index = computed(() => {
   const i = laneItems.value.findIndex((item) => item.id === hoverLane1.value);
-  if (i < 0 || !atRoot.value) return null;
+  if (i < 0) return null;
   const item = laneItems.value[i];
   return item.card ? i : null;
 });
@@ -383,7 +415,7 @@ const lane1 = computed(() =>
       active,
       dim: !!activeCategory.value && !active,
       category: !atRoot.value,
-      state: item.state ?? (atRoot.value ? undefined : categoryState(item.id)),
+      state: item.state ?? (atRoot.value || promotedBuildingOf(item.id) ? undefined : categoryState(item.id)),
       // A disabled bubble with no availability state is the plain "can't do
       // that here" look; one with a state explains itself with a badge instead.
       ban: !!item.disabled && !item.state,
@@ -456,6 +488,7 @@ function cardOf(b: RingBuilding): RingCard {
     cost: b.cost,
     time: b.time,
     gives: b.gives,
+    givesOutput: b.givesOutput,
     givesTotal: b.givesTotal,
     locks: b.locks?.length ? b.locks : b.lock ? [b.lock] : [],
     warning: b.warning,
@@ -496,12 +529,13 @@ interface CardView {
   refundChips: { key: ResourceKey; amount: number }[];
   refundCost: Partial<Record<ResourceKey, number>>;
   gives?: string;
+  givesOutput?: BuildingOutput;
   givesTotal?: string;
   warning?: string;
   statuses: { text: string; tone: Tone }[];
   /** Touch: "Tap X again to build" — only while the shown item is armed and committable. */
   tapHint?: string;
-  holdHint?: { text: string; locked: boolean };
+  holdHint?: string;
 }
 
 function resourceList(shortfall: Partial<Record<(typeof RESOURCE_KEYS)[number], number>>): string {
@@ -540,6 +574,8 @@ const cardView = computed<CardView | null>(() => {
         text: t('hud.ringMenu.card.willQueue', { waiting: a.queue.waiting, max: a.queue.max }),
         tone: 'queue',
       });
+    } else if (a.queue.locked) {
+      statuses.push({ text: t('hud.ringMenu.card.queueLocked'), tone: 'wait' });
     } else {
       const params = { needed: a.slots.needed, free: a.slots.free, total: a.slots.total };
       statuses.push({
@@ -558,8 +594,9 @@ const cardView = computed<CardView | null>(() => {
   let badge: CardView['badge'];
   if (locks.length) badge = { text: locks[0].toUpperCase(), tone: 'lock' };
   else if (resourcesShort) badge = { text: t('hud.ringMenu.card.badgeNoResources').toUpperCase(), tone: 'wait' };
+  else if (a?.queue.locked) badge = { text: t('hud.ringMenu.card.badgeQueueLocked').toUpperCase(), tone: 'wait' };
   else if (a?.state === 'waiting') badge = { text: t('hud.ringMenu.card.badgeNoSlot').toUpperCase(), tone: 'wait' };
-  else badge = { text: card.okBadge ?? t('hud.ringMenu.buildableHere'), tone: 'ok' };
+  else if (card.okBadge !== null) badge = { text: card.okBadge ?? t('hud.ringMenu.buildableHere'), tone: 'ok' };
 
   return {
     title: card.title,
@@ -574,6 +611,7 @@ const cardView = computed<CardView | null>(() => {
     refundCost: card.refund ?? {},
     refundChips: RESOURCE_KEYS.filter((key) => !!card.refund?.[key]).map((key) => ({ key, amount: Math.floor(card.refund![key]!) })),
     gives: card.gives,
+    givesOutput: card.givesOutput,
     givesTotal: card.givesTotal,
     warning: card.warning,
     statuses,
@@ -822,6 +860,12 @@ function onLaneClick(e: MouseEvent, item: RingAction) {
     swallowClick = false;
     return;
   }
+  // A lone building standing in for its category is committed exactly like one from the buildings lane.
+  const only = atRoot.value ? undefined : promotedBuildingOf(item.id);
+  if (only) {
+    onBuildingClick(e, only);
+    return;
+  }
   if (item.disabled) {
     // A blocked root action (Raze on the longhouse, Send army without units ...) shakes and flashes its reason.
     blockedFeedback(e.currentTarget as HTMLElement);
@@ -833,9 +877,7 @@ function onLaneClick(e: MouseEvent, item: RingAction) {
       else emit('select', item.id);
       return;
     }
-    if (props.categories.some((c) => c.id === item.id)) {
-      void go(['build', item.id]);
-    }
+    if (props.categories.some((c) => c.id === item.id)) void go(['build', item.id]);
   };
   if (!deferDuringSwap(act)) act();
 }
@@ -883,7 +925,7 @@ function onBuildingTouchStart(e: TouchEvent, building: RingBuilding) {
 // Every other root bubble (Build, a category, Send army …) acts on the first
 // tap as before — navigating or opening a sheet spends nothing.
 function onLaneTouchStart(e: TouchEvent, item: RingAction) {
-  if (!atRoot.value || !item.card) return;
+  if (!item.card || (!atRoot.value && !promotedBuildingOf(item.id))) return;
   const tap = tapArm(armed.value, item.id);
   if (tap.commit) return;
   e.preventDefault();
@@ -893,8 +935,8 @@ function onLaneTouchStart(e: TouchEvent, item: RingAction) {
 }
 // Holding a holdable root bubble (Upgrade, for the quick upgrade mode): the press fills a ring around the bubble over
 // LONG_PRESS_MS, then `hold` fires and the click the release would bring is swallowed. A release (or leaving the bubble, or
-// drifting off it) before that cancels the hold and leaves the ordinary click alone. A disabled bubble is holdable too: it
-// reads its refusal in the caller. The same tracker the map's long press uses (lib/map/longPress.ts).
+// drifting off it) before that cancels the hold and leaves the ordinary click alone. A disabled bubble is holdable too: the
+// hold only switches the mode on, whatever the bubble's state. The same tracker the map's long press uses (lib/map/longPress.ts).
 const HOLD_SLOP_PX = 10;
 /** The bubble whose hold ring is filling. */
 const holdingId = ref<string | null>(null);
@@ -1026,6 +1068,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         'is-locked': entry.state === 'locked',
         'is-waiting': entry.state === 'waiting',
         category: entry.category,
+        lone: !atRoot && !!promotedBuildingOf(entry.item.id),
         armed: armed === entry.item.id,
         'no-commit': entry.item.disabled,
         holdable: entry.item.holdable,
@@ -1145,7 +1188,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         <template v-if="cardView.gives">
           <dt>{{ t('hud.ringMenu.gives') }}</dt>
           <dd>
-            {{ cardView.gives }}<span v-if="cardView.givesTotal" class="gives-total" data-testid="ring-card-total"> · {{ cardView.givesTotal }}</span>
+            <BuildingOutputText v-if="cardView.givesOutput" :output="cardView.givesOutput" /><template v-else>{{ cardView.gives }}</template><span v-if="cardView.givesTotal" class="gives-total" data-testid="ring-card-total"> · {{ cardView.givesTotal }}</span>
           </dd>
         </template>
       </dl>
@@ -1158,10 +1201,9 @@ function onBackdropPointerDown(e: PointerEvent) {
         <i class="tap-bubble" aria-hidden="true" />{{ cardView.tapHint }}
       </p>
       <div v-else-if="!(cardView.statuses.length || error || cardView.holdHint)" class="card-foot" />
-      <p v-if="cardView.holdHint" class="card-hold-hint" :class="{ locked: cardView.holdHint.locked }" data-testid="ring-hold-hint">
-        <svg v-if="cardView.holdHint.locked" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
-        <svg v-else viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.5 6 3l3.5 3.5M2.5 10 6 6.5 9.5 10" /></svg>
-        {{ cardView.holdHint.text }}
+      <p v-if="cardView.holdHint" class="card-hold-hint" data-testid="ring-hold-hint">
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.5 6 3l3.5 3.5M2.5 10 6 6.5 9.5 10" /></svg>
+        {{ cardView.holdHint }}
       </p>
     </div>
 
@@ -1536,9 +1578,6 @@ function onBackdropPointerDown(e: PointerEvent) {
   stroke-width: 1.4;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-.card-hold-hint.locked {
-  color: var(--muted);
 }
 /* The hold ring sits around the bubble, outside its border; the press itself stays on the bubble. */
 .ring-bubble.holdable {

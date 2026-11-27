@@ -81,7 +81,8 @@ describe('ResourceProductionView', () => {
     const wrapper = await mountPage();
 
     const cells = (type: string) => wrapper.get(`[data-producer=${type}]`).findAll('td').map((td) => td.text());
-    expect(cells('farm')[3]).toBe('Grassland');
+    expect(cells('farm')[3]).toContain('Grassland');
+    expect(cells('farm')[3]).toContain('wheat soil');
     expect(cells('farm')[4]).toContain('Longhouse 4');
     expect(cells('farm')[4]).toContain('Reindeer Herder 3');
     expect(cells('fishinghut')[3]).toContain('Shallow (coastal) water');
@@ -111,7 +112,9 @@ describe('ResourceProductionView', () => {
     expect(cells('sawmill').slice(3)).toEqual(['5% · 1 ring', '25% · 2 rings', '50% · 3 rings', '100% · 5 rings']);
     expect(cells('cropmill')[0]).toBe('Farm');
     expect(cells('hammerschmiede')[0]).toBe('Bog-Ore Works');
-    expect(cells('cropmill')[1]).toBe('Straight river');
+    expect(cells('cropmill')[1]).toContain('Straight river');
+    expect(cells('cropmill')[1]).toContain('wheat soil');
+    expect(cells('sawmill')[1]).not.toContain('soil');
     wrapper.unmount();
   });
 

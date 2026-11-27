@@ -66,6 +66,7 @@
     "output": "Output",
     "modifier": "Modifier",
     "outputResourceRate": "+{amount} {resource}/h",
+    "outputResourceRateIcon": "+{amount} {icon}/h",
     "outputPopulationCapacity": "+{amount} population capacity",
     "outputStorageCapacity": "+{amount} storage capacity",
     "outputVisionRing": "Vision radius {amount} (explored {explored})",
@@ -184,9 +185,11 @@
       "needSlots": "Needs {needed} build slot · {free} of {total} free | Needs {needed} build slots · {free} of {total} free",
       "needSlotsNext": "Needs {needed} build slot · {free} of {total} free · next free in {time} | Needs {needed} build slots · {free} of {total} free · next free in {time}",
       "willQueue": "Will queue behind current builds ({waiting} of {max} waiting)",
+      "queueLocked": "Builds are still waiting. Without Premium you can add more once they have started.",
       "queueFull": "The waiting queue is full ({waiting} of {max})",
       "badgeNoResources": "Not enough resources",
       "badgeNoSlot": "No free build slot",
+      "badgeQueueLocked": "Queue locked",
       "requiresBuilding": "Requires {building} level {level}",
       "razeTitle": "Raze to level {level}",
       "razeTitleRemove": "Tear down",
@@ -237,7 +240,13 @@
     "sendHome": "Send home",
     "sendingHome": "Sending home…",
     "sendHomeError": "Couldn't send the army home.",
-    "unknownSettlement": "Unknown settlement"
+    "unknownSettlement": "Unknown settlement",
+    "upkeep": "Upkeep",
+    "upkeepPerHour": "−{amount}/h",
+    "foodPerHour": "{amount}/h",
+    "foodRunsOut": "Food runs out in {time}",
+    "showRates": "Tap for food per unit type",
+    "hideRates": "Tap to hide food per unit type"
   },
   "queueDrawer": {
     "title": "Queues",
@@ -321,6 +330,7 @@
     "minus": "−",
     "plus": "+",
     "max": "Max",
+    "countOfMax": "/ {max}",
     "trainOrders": "Train {count} order | Train {count} orders",
     "pickUnits": "Pick units to train",
     "footerOrders": "{count} order · {free} of {max} slots free | {count} orders · {free} of {max} slots free",
@@ -692,8 +702,7 @@
     "chipHintTouch": "Tap a building · hold the map to stop",
     "chipHintMouse": "Click a building · Esc to stop",
     "stop": "Stop quick upgrade",
-    "holdHint": "Hold to keep upgrading: one tap per building",
-    "premiumHold": "Premium: hold to upgrade with one tap per building",
+    "holdHint": "Hold to enable quick upgrade",
     "shiftHint": "Shift+click: upgrade to level {level}",
     "premiumShift": "Premium: Shift+click upgrades"
   }

@@ -4,6 +4,7 @@
 import { computed, type Ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
+import type { IslandSoil } from '../api/types';
 import { buildingName } from '../i18n/catalogueNames';
 import { useWorldStore } from '../stores/world';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
@@ -23,7 +24,8 @@ import {
 import { allPlacementRules } from '../lib/map/placementRules';
 import {
   buildingAllowedOnHex,
-  cropAllowedHere,
+  prerequisitesForSoil,
+  soilAllowsBuilding,
   formatBuildTime,
   hexOccupantLock,
   scaledBuildSeconds,
@@ -154,11 +156,12 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
     return river ? world.model.riverVariantAt(coord, river.shape) : undefined;
   }
 
-  // PumpkinFarm is only offered on a Pumpkin-soil island — mirrors
+  // A soil-bound building (Farm, Crop Mill: wheat; PumpkinFarm: pumpkin) is only offered on its island soil — mirrors
   // WorldModel.placeBuilding's own check, same "filter out of the category
   // rather than render locked" reasoning riverShapeAt above uses, since this
   // too is a fixed property of the settlement rather than a progression gate.
-  function currentIslandSoil(): 'wheat' | 'pumpkin' | undefined {
+  // The soil also decides which prerequisites apply (`prerequisiteLocks`).
+  function currentIslandSoil(): IslandSoil | undefined {
     return world.selectedSettlementId ? world.model.soilForSettlement(world.selectedSettlementId) : undefined;
   }
 
@@ -244,12 +247,15 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
     return builtBuildingLevels(world);
   }
 
-  /** One sentence per prerequisite building still missing (all of them are required). */
+  /**
+   * One sentence per prerequisite building still missing (all of them are required) — only the prerequisites that apply on the
+   * selected settlement's island soil (`prerequisitesForSoil`).
+   */
   function prerequisiteLocks(
-    prerequisites: readonly { type: string; level: number }[] | undefined,
+    prerequisites: readonly { type: string; level: number; soil?: IslandSoil | null }[] | undefined,
     levels: Record<string, number>,
   ): string[] {
-    return missingPrerequisites(prerequisites, levels).map((p) =>
+    return missingPrerequisites(prerequisitesForSoil(prerequisites, currentIslandSoil()), levels).map((p) =>
       t('hud.ringMenu.card.requiresBuilding', { building: buildingName(p.type), level: p.level }),
     );
   }
@@ -296,6 +302,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
       cost,
       time: definition ? formatBuildTime(buildSeconds(definition.buildSeconds)) : undefined,
       gives: stats.output ? formatOutput(scaleOutput(stats.output, world.worldSpeedFactor)) : stats.modifier ? formatModifier(stats.modifier) : undefined,
+      givesOutput: stats.output ? scaleOutput(stats.output, world.worldSpeedFactor) : undefined,
       locks,
       warning: type === 'tower' ? towerCampWarning(coord) : undefined,
       art: buildingArt(type, 1),
@@ -341,7 +348,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
               riverBuildingAllowedHere(b.type, riverShapeAt(hex), riverVariantAt(hex), riverWidthAt(hex)) ||
               riverFitLock(b.type, riverShapeAt(hex), riverVariantAt(hex), riverWidthAt(hex)) !== undefined,
           )
-          .filter((b) => cropAllowedHere(b.type, currentIslandSoil()))
+          .filter((b) => soilAllowsBuilding(b.type, currentIslandSoil()))
           .map((b) => ringBuildingFor(b.type, hex, levels)),
       }))
       // A category the hex's river or soil filtered empty is not offered (a stream hex has nothing to build at all).

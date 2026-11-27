@@ -9,6 +9,7 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AtlasSprite from '../AtlasSprite.vue';
+import BuildingOutputText from '../hud/BuildingOutputText.vue';
 import type { AtlasFrameRect } from '../../lib/map/atlas';
 import type { BuildingDefinitionResponse } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
@@ -31,7 +32,7 @@ import {
   GUTTER,
   TECH_TREE_LAYOUT,
 } from '../../lib/techtree/layout';
-import { buildTechTreeNodes, prerequisitesOf } from '../../lib/techtree/nodes';
+import { buildTechTreeNodes, prerequisiteGroups, prerequisitesOf } from '../../lib/techtree/nodes';
 import { pathD, routeEdges } from '../../lib/techtree/routing';
 
 const props = defineProps<{ byType: Record<string, BuildingDefinitionResponse[] | undefined> }>();
@@ -46,7 +47,8 @@ const nodes = computed(() => buildTechTreeNodes(props.byType));
 const graph = computed(() =>
   buildGraph(
     nodes.value.map((n) => n.type),
-    (type) => prerequisitesOf(props.byType, type),
+    // Only the plain prerequisites draw edges; another soil's variant is shown as a chip on the card, never as a link.
+    (type) => prerequisiteGroups(prerequisitesOf(props.byType, type)).main,
   ),
 );
 // Only the buildings actually drawn, so a link never runs to a missing card.
@@ -221,11 +223,13 @@ function clear() {
             </span>
             <span class="naming">
               <span class="label">{{ card.label }}</span>
-              <span v-if="card.gives" class="gives">{{ card.gives }}</span>
+              <span v-if="card.gives" class="gives">
+                <BuildingOutputText v-if="card.output" :output="card.output" locale="en" :icon-size="11" /><template v-else>{{ card.gives }}</template>
+              </span>
             </span>
           </span>
           <span class="chips">
-            <span v-for="chip in card.chips" :key="chip.text" :class="['chip', `chip--${chip.kind}`]">
+            <span v-for="chip in card.chips" :key="chip.text" :class="['chip', `chip--${chip.kind}`]" :title="chip.title">
               {{ chip.text }}
             </span>
           </span>
@@ -433,6 +437,11 @@ function clear() {
   color: var(--gold);
   background: rgba(255, 197, 92, 0.12);
   border-color: rgba(255, 197, 92, 0.4);
+}
+.chip--soil {
+  border-style: dashed;
+  /* A hair tighter so "Crop mill 5" and "Pumpkin 15" still share a row with the longhouse chip. */
+  padding-inline: 4px;
 }
 .chip--anchor {
   color: #20160a;

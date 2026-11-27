@@ -936,6 +936,14 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             [new BuildingPrerequisiteResponse("storagehouse", 25)],
             levelOne.Single(d => d.Type == "greatstorehouse").Prerequisites);
 
+        // A soil-tagged prerequisite applies only on islands of that soil, and a soil-bound building names its soil.
+        Assert.Equal(
+            [new BuildingPrerequisiteResponse("cropmill", 5, "wheat"), new BuildingPrerequisiteResponse("pumpkinfarm", 15, "pumpkin")],
+            levelOne.Single(d => d.Type == "shrineoffreyja").Prerequisites);
+        Assert.Equal("wheat", levelOne.Single(d => d.Type == "cropmill").RequiredSoil);
+        Assert.Equal("pumpkin", levelOne.Single(d => d.Type == "pumpkinfarm").RequiredSoil);
+        Assert.Null(levelOne.Single(d => d.Type == "meadery").RequiredSoil);
+
         // Prerequisites gate placement, so they sit on level 1 only — the
         // Great Storehouse no longer carries its own on every level.
         var levelTwo = await client.GetFromJsonAsync<List<BuildingDefinitionResponse>>(

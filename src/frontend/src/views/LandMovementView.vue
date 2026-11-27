@@ -232,6 +232,7 @@ const tocLinks = computed(() =>
         <li>{{ $t('docs.landMovement.road.fleeing') }}</li>
         <li>{{ $t('docs.landMovement.road.newWalls') }}</li>
         <li>{{ $t('docs.landMovement.road.orders') }}</li>
+        <li>{{ $t('docs.landMovement.road.fogStops') }}</li>
       </ul>
     </section>
 

@@ -126,7 +126,11 @@ export function useAnchoredMenu(options: AnchoredMenuOptions): AnchoredMenu {
     if (isOpen) {
       document.addEventListener('pointerdown', onOutsidePointerDown, true);
       document.addEventListener('keydown', onKeydown);
-      void nextTick(() => items()[0]?.focus({ preventScroll: true }));
+      // Focus lands on the current item (`aria-current`) when the menu has one, otherwise on the first.
+      void nextTick(() => {
+        const list = items();
+        (list.find((el) => el.getAttribute('aria-current') === 'true') ?? list[0])?.focus({ preventScroll: true });
+      });
     } else {
       removeListeners();
     }

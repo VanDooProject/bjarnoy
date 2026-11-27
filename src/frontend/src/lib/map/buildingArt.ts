@@ -42,8 +42,8 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   storagehouse: 'storagebuilding',
   archeryrange: 'archeryrange',
   siegeworkshop: 'siegeworkshop',
-  harbour: 'dockyard',
-  shipyard: 'shipyard',
+  harbour: 'harbour',
+  shipyard: 'dockyard',
   greatstorehouse: 'bigstoragehouse',
   barracks: 'barracks',
   // Fishing Hut used to fall back to a legacy single-level composite
@@ -79,7 +79,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,stavetower,farm_pumpkin,freyjashrine,storagebuilding,archeryrange,dockyard,shipyard,bigstoragehouse,barracks,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,stavetower,farm_pumpkin,freyjashrine,storagebuilding,archeryrange,dockyard,bigstoragehouse,barracks,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
   { eager: true, import: 'default' },
 ) as Record<string, string>;
 
@@ -317,6 +317,42 @@ export function terrainVariantArt(family: string, variant: number): ArtRef {
   const pngUrl = terrainPngByName[name];
   if (!pngUrl) throw new Error(`buildingArt.ts: no terrain art for "${name}"`);
   return { kind: 'png', url: pngUrl };
+}
+
+/**
+ * The layers, bottom first, of one look of a terrain family: the flattened showcase frame when the pack has one, else the
+ * family's base slab with the look's top on it (coastal water ships its looks as tops only). `variant` is `null` for the plain
+ * look, N for `variantNNN`. `undefined` when the pack has no such look.
+ */
+export function terrainLookLayers(family: string, variant: number | null): AtlasFrameRect[] | undefined {
+  const name = `${family}_SE${variant === null ? '' : `_variant${String(variant).padStart(3, '0')}`}`;
+  const flat = findAtlasFrame('showcase', name);
+  if (flat) return [flat];
+  const base = findAtlasFrame('terrain', `${family}_SE_base`);
+  const top = findAtlasFrame('terrain', name);
+  return base && top ? [base, top] : undefined;
+}
+
+/** Every look the pack has for a terrain family, in slot order: `null` (plain) first, then each `variantNNN` that exists. */
+export function terrainLooksOf(family: string): (number | null)[] {
+  const looks: (number | null)[] = [];
+  for (const variant of [null, ...Array.from({ length: 20 }, (_, i) => i)]) {
+    if (terrainLookLayers(family, variant)) looks.push(variant);
+  }
+  return looks;
+}
+
+/**
+ * One look of a living forest family (`forest_taiga` / `forest_birch` / `forest_mixed`) as the layers `AnimatedBuildingSprite`
+ * plays: the family's base slab under its swaying-trees clip (the clip's rest frame is the ground decoration, its frames the
+ * trees). `variant` is `null` for the plain look, N for `variantNNN`. `undefined` when the pack has no such look.
+ */
+export function forestLookLayers(family: string, variant: number | null): BuildingLayers | undefined {
+  const name = `${family}_SE${variant === null ? '' : `_variant${String(variant).padStart(3, '0')}`}`;
+  const clip = findAtlasClip('buildings-anim', name);
+  const base = findAtlasFrame('terrain', `${family}_SE_base`);
+  if (!clip || !base) return undefined;
+  return { base, top: clip.restRect, clip };
 }
 
 /** Art for coastal (shallow) water — a rendering variant of `sea`, not a `Terrain` of its own (see `Tile.isCoastalWater`), so it isn't reachable through `terrainArt`. */

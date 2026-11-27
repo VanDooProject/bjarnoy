@@ -871,16 +871,7 @@ test('bottom docking clears the QueueDrawer handle', async ({ page }) => {
   // at all when there's no queue/garrison/guest to show, per its own
   // `hasAnything` guard).
   await page.evaluate(() => {
-    const world = (
-      window as unknown as {
-        __demoWorld: () => {
-          hud: { queueFetchedAt: number; queue: unknown[]; construction: { slots: number; slotsUsed: number; maxWaitingOrders: number; waitingOrders: number; maxOrdersPerHex: number; towerLimit: number; towersHeld: number }; tick: number };
-          selectedSettlementId: string;
-          model: { getSettlement: (id: string) => { q: number; r: number } };
-          syncHud: () => void;
-        };
-      }
-    ).__demoWorld();
+    const world = window.__demoWorld() as { hud: { queueFetchedAt: number; queue: unknown[]; construction: { slots: number; slotsUsed: number; maxWaitingOrders: number; waitingOrders: number; maxOrdersPerHex: number; towerLimit: number; towersHeld: number }; tick: number }; selectedSettlementId: string; model: { getSettlement: (id: string) => { q: number; r: number } }; syncHud: () => void; };
     const settlement = world.model.getSettlement(world.selectedSettlementId);
     world.hud.queueFetchedAt = Date.now();
     world.hud.queue = [

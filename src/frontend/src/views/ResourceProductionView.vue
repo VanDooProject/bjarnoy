@@ -7,6 +7,7 @@ import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
 import DocsPageLink from '../components/docs/DocsPageLink.vue';
 import DocsToc from '../components/docs/DocsToc.vue';
 import BuildingLink from '../components/docs/BuildingLink.vue';
+import DocsNeeds from '../components/docs/DocsNeeds.vue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { resourceName, terrainName } from '../i18n/catalogueNames';
 import { buildingStatsFor, maxLevelFor, type BuildingKind } from '../lib/map/buildingEconomy';
@@ -50,7 +51,7 @@ function standsOn(type: string): string {
   return first.allowedTerrain.map(terrainName).join(', ');
 }
 
-const NOTED = new Set(['pumpkinfarm', 'fishinghut', 'claybrickworks', 'bogoreworks']);
+const NOTED = new Set(['farm', 'pumpkinfarm', 'fishinghut', 'claybrickworks', 'bogoreworks']);
 
 function unlockOf(type: string) {
   return {
@@ -109,6 +110,7 @@ const millRows = computed(() =>
   MILLS.map((mill) => ({
     ...mill,
     unlock: unlockOf(mill.type),
+    requiredSoil: catalogue.byType[mill.type]?.[0]?.requiredSoil ?? null,
     cells: MILL_LEVELS.map((level) => ({ level, ...millBoostAt(level) })),
   })),
 );
@@ -170,9 +172,7 @@ const tocLinks = computed(() =>
               </td>
               <td class="unlock">
                 <BuildingLink type="longhouse" /> {{ row.unlock.longhouse }}
-                <template v-for="need in row.unlock.needs" :key="need.type">
-                  · <BuildingLink :type="need.type" /> {{ need.level }}
-                </template>
+                <DocsNeeds :needs="row.unlock.needs" bullet />
               </td>
             </tr>
             <tr data-producer="longhouse">
@@ -242,12 +242,13 @@ const tocLinks = computed(() =>
               <td>
                 <template v-for="(target, i) in row.boosts" :key="target"><template v-if="i > 0">, </template><BuildingLink :type="target" /></template>
               </td>
-              <td>{{ $t(`docs.production.mills.stands.${row.stands}`) }}</td>
+              <td>
+                {{ $t(`docs.production.mills.stands.${row.stands}`) }}
+                <span v-if="row.requiredSoil" class="line muted">{{ $t(`docs.production.mills.onlySoil.${row.requiredSoil}`) }}</span>
+              </td>
               <td class="unlock">
                 <BuildingLink type="longhouse" /> {{ row.unlock.longhouse }}
-                <template v-for="need in row.unlock.needs" :key="need.type">
-                  · <BuildingLink :type="need.type" /> {{ need.level }}
-                </template>
+                <DocsNeeds :needs="row.unlock.needs" bullet />
               </td>
               <td v-for="cell in row.cells" :key="cell.level" class="cell">
                 {{ $t('docs.production.mills.cell', { percent: cell.percent }, cell.rings) }}
@@ -284,9 +285,7 @@ const tocLinks = computed(() =>
               </td>
               <td class="unlock">
                 <BuildingLink type="longhouse" /> {{ row.unlock.longhouse }}
-                <template v-for="need in row.unlock.needs" :key="need.type">
-                  · <BuildingLink :type="need.type" /> {{ need.level }}
-                </template>
+                <DocsNeeds :needs="row.unlock.needs" bullet />
               </td>
             </tr>
           </tbody>
@@ -310,6 +309,7 @@ const tocLinks = computed(() =>
           <DocsPageLink to="/docs/land-movement">{{ $t('docs.production.upkeep.movementLink') }}</DocsPageLink>
         </template>
       </i18n-t>
+      <p class="text">{{ $t('docs.production.upkeep.panel') }}</p>
       <i18n-t keypath="docs.production.upkeep.shrines" tag="p" class="text" scope="global">
         <template #freyja><BuildingLink type="shrineoffreyja" /></template>
         <template #ullr><BuildingLink type="shrineofullr" /></template>

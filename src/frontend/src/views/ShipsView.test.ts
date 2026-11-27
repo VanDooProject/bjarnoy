@@ -42,35 +42,47 @@ beforeEach(() => {
 });
 
 describe('ShipsView', () => {
-  it('compares the eight ships by group from the unit catalogue', async () => {
+  it('lists the eight ships one per row, by group, from the unit catalogue', async () => {
     const wrapper = await mountPage();
 
-    expect(wrapper.findAll('[data-testid=ships-table] thead th[data-ship]').map((th) => th.text())).toEqual([
+    const table = wrapper.get('[data-testid=ships-table]');
+    expect(table.findAll('tbody[data-group]').map((g) => [g.attributes('data-group'), g.findAll('tr[data-ship]').length])).toEqual([
+      ['scouts', 1], ['cargo', 2], ['transport', 1], ['warships', 2], ['fireCraft', 2],
+    ]);
+    expect(table.findAll('tr.group-row').map((tr) => tr.text())).toEqual(['Scouts', 'Cargo', 'Transport', 'Warships', 'Fire craft']);
+    expect(table.findAll('thead th').map((th) => th.text())).toEqual([
+      'Ship', 'Attack', 'Defence', 'Speed', 'Loot capacity', 'Troop slots', 'Food capacity', 'Upkeep per hour', 'Cost', 'Training time',
+    ]);
+    expect(table.findAll('tr[data-ship]').map((tr) => tr.get('th').text())).toEqual([
       'Færing', 'Byrding', 'Knarr', 'Karve', 'Snekkja', 'Skeid', 'Fire Raft', 'Fire Hulk',
     ]);
-    const groups = wrapper.findAll('[data-testid=ships-table] thead th[data-group]');
-    expect(groups.map((th) => [th.attributes('data-group'), th.attributes('colspan')])).toEqual([
-      ['scouts', '1'], ['cargo', '2'], ['transport', '1'], ['warships', '2'], ['fireCraft', '2'],
+    const col = (id: string) => table.findAll(`td[data-col=${id}]`).map((td) => td.text());
+    expect(col('attack')).toEqual(['0', '0', '0', '5', '60', '90', '0', '0']);
+    expect(col('defense')).toEqual(['3', '10', '20', '30', '40', '60', '3', '25']);
+    expect(col('speed')).toEqual(['8', '6', '4', '8', '10', '11', '5', '8']);
+    expect(col('loot')).toEqual(['0', '160', '600', '200', '80', '120', '0', '0']);
+    expect(col('slots')).toEqual(['0', '0', '0', '10', '20', '30', '0', '0']);
+    expect(col('food')).toEqual(['40', '150', '1,200', '600', '320', '480', '30', '200']);
+    expect(col('upkeep')).toEqual(['0.25', '0.5', '1', '1.5', '2', '3', '1', '5']);
+    expect(col('time')).toEqual(['6 min', '20 min', '50 min', '45 min', '90 min', '120 min', '10 min', '40 min']);
+    // The cost is the shared icon-and-number component, without resource names; a resource that costs 0 is left out.
+    const costs = table.findAll('td[data-col=cost]').map((td) => td.findAll('.cost-item b').map((b) => b.text()));
+    expect(costs).toEqual([
+      ['40', '10', '10'], ['120', '50', '20', '20'], ['300', '120', '40', '135'], ['250', '100', '40', '100'],
+      ['400', '200', '60', '220'], ['550', '250', '80', '300'], ['50', '10', '10', '10'], ['300', '60', '40', '80'],
     ]);
-    expect(groups.map((th) => th.text())).toEqual(['Scouts', 'Cargo', 'Transport', 'Warships', 'Fire craft']);
-    const row = (id: string) => wrapper.get(`[data-row=${id}]`).findAll('td').map((td) => td.text());
-    expect(row('attack')).toEqual(['0', '0', '0', '5', '60', '90', '0', '0']);
-    expect(row('defense')).toEqual(['3', '10', '20', '30', '40', '60', '3', '25']);
-    expect(row('speed')).toEqual(['8', '6', '4', '8', '10', '11', '5', '8']);
-    expect(row('loot')).toEqual(['0', '160', '600', '200', '80', '120', '0', '0']);
-    expect(row('slots')).toEqual(['0', '0', '0', '10', '20', '30', '0', '0']);
-    expect(row('food')).toEqual(['40', '150', '1,200', '600', '320', '480', '30', '200']);
-    expect(row('upkeep')).toEqual(['0.25', '0.5', '1', '1.5', '2', '3', '1', '5']);
-    expect(row('cost')).toEqual([
-      '40 / 10 / 10 / 0', '120 / 50 / 20 / 20', '300 / 120 / 40 / 135', '250 / 100 / 40 / 100',
-      '400 / 200 / 60 / 220', '550 / 250 / 80 / 300', '50 / 10 / 10 / 10', '300 / 60 / 40 / 80',
-    ]);
-    expect(row('time')).toEqual(['6 min', '20 min', '50 min', '45 min', '90 min', '120 min', '10 min', '40 min']);
-    expect(row('fire')).toEqual(['–', '–', '–', '–', '–', '–', '50', '10']);
-    expect(row('needs')).toEqual([
-      'Harbour 1', 'Harbour 1', 'Harbour 3', 'Harbour 5',
-      'Shipyard 1', 'Shipyard 10 · Longhouse 20', 'Shipyard 1', 'Shipyard 5 · Longhouse 12',
-    ]);
+    expect(table.findAll('td[data-col=cost] .resource-cost')).toHaveLength(8);
+    expect(table.text()).not.toContain('Wood');
+    wrapper.unmount();
+  });
+
+  it('has no hex-time, fire-craft or needs columns and links to the Training page', async () => {
+    const wrapper = await mountPage();
+
+    const table = wrapper.get('[data-testid=ships-table]');
+    for (const gone of ['perHex', 'fire', 'needs']) expect(table.find(`[data-col=${gone}]`).exists()).toBe(false);
+    expect(table.text()).not.toContain('per hour)');
+    expect(wrapper.get('#ships').find('a[href="/docs/training"]').text()).toBe('Training troops');
     wrapper.unmount();
   });
 

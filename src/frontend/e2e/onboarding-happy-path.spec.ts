@@ -96,7 +96,7 @@ async function foundAndFinishGuidedBuilds(page: Page) {
   const forestHex = await settlement.findHex({ terrain: 'forest' });
   await settlement.clickHex(forestHex);
   const buildingsBeforeLumberjack = await settlement.countBuildings();
-  await buildThroughOpenRing(settlement, 'Resource', 'Lumberjack');
+  await buildThroughOpenRing(settlement, null, 'Lumberjack');
   // Synchronous placement, as for the farm above.
   expect(await settlement.countBuildings()).toBe(buildingsBeforeLumberjack + 1);
 

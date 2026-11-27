@@ -97,15 +97,15 @@ describe('TrainingModal', () => {
   });
 
   it('lists the Harbour\'s ships under white job headings and names the missing building level', () => {
-    setup([placed('harbour', 3, -2, 3)]);
-    const wrapper = mountModal(placed('harbour', 3, -2, 3));
+    setup([placed('harbour', 3, -2, 5)]);
+    const wrapper = mountModal(placed('harbour', 3, -2, 5));
     expect(wrapper.findAll('.group-heading').map((h) => [h.attributes('data-group'), h.text()])).toEqual([
       ['scouts', 'Scouts'], ['cargo', 'Cargo'], ['transport', 'Transport'],
     ]);
     expect(wrapper.findAll('.unit-name').map((n) => n.text())).toEqual(['Færing', 'Byrding', 'Knarr', 'Karve']);
     const rows = wrapper.findAll('.unit-row');
-    expect(rows.map((r) => r.classes().includes('locked'))).toEqual([false, false, false, true]);
-    expect(rows[3]!.text()).toContain('Harbour 5 (now 3)');
+    expect(rows.map((r) => r.classes().includes('locked'))).toEqual([false, false, true, false]);
+    expect(rows[2]!.text()).toContain('Harbour 8 (now 5)');
   });
 
   it('lists the Shipyard\'s warships and fire craft in their groups', () => {
@@ -215,6 +215,19 @@ describe('TrainingModal', () => {
     expect((row.get('.qty').element as HTMLInputElement).value).toBe('1');
     await row.get('.max').trigger('click');
     expect((row.get('.qty').element as HTMLInputElement).value).toBe('2');
+  });
+
+  it('shows the count next to the largest affordable count and lowers it when another row claims stock', async () => {
+    const world = setup(twoBarracks);
+    world.hud.available = { wood: 130, stone: 99999, food: 99999, iron: 99999 };
+    const wrapper = mountModal();
+    const rows = wrapper.findAll('.unit-row');
+    const first = rows[0]!;
+    expect((first.get('.qty').element as HTMLInputElement).value).toBe('0');
+    expect(first.get('[data-testid="qty-max"]').text()).toBe('/ 2');
+    // Spearman costs 80 wood: one pick leaves 50, too little for a Thrall (60).
+    await rows[1]!.findAll('.step-btn')[1]!.trigger('click');
+    expect(first.get('[data-testid="qty-max"]').text()).toBe('/ 0');
   });
 
   it('places one order per picked type with one button and stays open', async () => {

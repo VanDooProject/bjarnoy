@@ -14,19 +14,20 @@ turns to fogged), it says **fog boundary** or **vision edge**, never
 
 ## 1. Layer semantics — confirmed
 
-- **Black fog** (`FOG_SCOUTED`, dark, near-black) = explored, but no realm
-  presence / troops there *right now* — "you've been here, can't see it now."
+- **Dark tier** (out-of-sight; a *desaturation*, not a near-black overlay —
+  §2.10) = explored, but no realm presence / troops there *right now* —
+  "you've been here, can't see it now." The ground is still readable, drained
+  of colour and a little dimmer.
 - **White mist** (`FOG_UNEXPLORED`, near-white) = never scouted at all.
 
-This matches the current code (`FOG_SCOUTED` / `FOG_UNEXPLORED`) — no
-inversion needed. Confirmed before baking ramp/color logic into the backend
+The roles match the original design — no inversion needed. Confirmed before baking ramp/color logic into the backend
 generator, since flipping it later means redoing both the C# and TS ramp
 implementations.
 
 **The two tiers are nested, not adjacent.** Ground that was never scouted is
 also, necessarily, not in sight right now — "never been there" implies "can't
 see it now." So `unknown ⊆ outOfSight` as sets: **wherever white mist
-applies, black fog applies too.** The mask's own two channels already encode
+applies, the dark tier applies too.** The mask's own two channels already encode
 it that way — R (unknown) is measured past the *explored* ring, G
 (out-of-sight) past the *line-of-sight* ring, and the explored ring is
 always the outer of the two (`WorldModel.exploredRadius` is
@@ -40,8 +41,8 @@ Chained towers and armies still add their own sources; ground explored before st
 That invariant is what makes the layer stack in §4 correct as a plain stack:
 
 - **The dark tier is a full underlay.** Everything outside current line of
-  sight is tinted, all the way out to the edge of the world. Its ramp
-  saturating a couple of hexes past the visible ring and then staying
+  sight is desaturated, all the way out to the edge of the world. Its ramp
+  saturating four hexes past the visible ring and then staying
   saturated forever is the intended behaviour, not an unbounded-tint bug —
   it is exactly "the whole world except what I can see".
 - **The mist quad simply covers it up** wherever the mist is opaque. The
@@ -62,7 +63,8 @@ reading only one tier's code:
   `alpha = max(unknown, outOfSight * SCOUTED_ALPHA)`), which is a *different*
   result from stacking two premultiplied quads: the mix keeps more terrain
   readable through the transition band, the stack is darker there. §4's
-  two-quad split (needed so troop markers can sit between the tiers) means
+  split (needed so troop markers can sit between the tiers: the dark tier is
+  a filter on everything under `markerLayer`, the mist a quad over it) means
   the shipped renderer is the stack. Deliberate — noted here because the
   two are easy to mistake for each other.
 
@@ -136,13 +138,15 @@ softness and wisps act on it exactly as on the village's edge. Distance is
 hex-euclidean (world offset divided by a per-axis hex size, matching
 `demoFogMask.ts`'s `ringDistance`/`hexEuclideanDistance`), so the clearing is
 a flat ellipse on screen like the village's, not a world-unit circle. The
-ramps are narrower than the village's 14/2 margins, so the edge is the
+ramps are narrower than the village's 14/4 margins, so the edge is the
 village look at a smaller scale: with R the army vision radius, the black
-(out-of-sight) ramp starts at R−0.25 and fades over 2 hexes, the white
+(out-of-sight) ramp starts at R−0.25 and fades over 4 hexes, the white
 (unknown) ramp starts at R+0.75 and fades over 6 hexes
-(`ARMY_FOG_*_OFFSET`/`_MARGIN` in `FogMaskLayer.ts`). With R=2 the black
-fades in over 1.95–3.45 hexes, the white over 2.99–5.27, and wisps reach
-about 7.55.
+(`ARMY_FOG_*_OFFSET`/`_MARGIN` in `FogMaskLayer.ts`). The black margin is the
+mask's dark margin (`OUT_OF_SIGHT_RAMP_MARGIN_HEXES`, `fogRamp.ts`): the shader's
+dark edge window is in ramp units of it, so the two must match. With R=2 the
+dark tier fades in over 2.05–3.45 hexes, the white over 2.99–4.10, and wisps
+reach about 7.55 at most (the outer reach only ever shrinks, §2.10).
 
 Live army-granted vision — the rest of this section is the original design.
 
@@ -439,12 +443,14 @@ RGBA8, one texel = one doubled-row cell:
 |---|---|
 | R | `unknown` ramp — `0` fully explored → `255` fully unknown |
 | G | `outOfSight` ramp — `0` currently visible → `255` fully out of sight |
-| B | per-hex stable noise seed (deterministic per-hex warp variation without a second lookup) |
+| B | baked smooth "lump": deterministic value noise of the texel's own position (about 2 hexes at 60% plus about 1 hex at 40%), `0..255`. Hex and interpolation texels alike, computed from `(u, v)` and never averaged. The shader pushes the edge in or out by it (§2.10). Not a per-hex hash: `FogMaskGenerator.TexelLump` (C#) and `fogLump.ts` (TS) are the same maths, pinned by one golden table of texels in both test suites |
 | A | reserved (future third vision tier, e.g. ally-shared) |
 
 Both R and G are baked as continuous *ramps* (not booleans) in the
-generator, using the margin constants already in `map-fog-rendering.md`
-(`FOG_MARGIN_HEXES`, `FOG_VISIBLE_MARGIN_HEXES`). Baking the ramp, not a
+generator: R over `UnknownMarginHexes` (14), G over `OutOfSightMarginHexes`
+(4; it was 2 before the Desaturate look, which needs room for the edge
+displacement). The mask version (`FogMaskGenerator.Version`, 3) is part of the chunk ETag, so
+cached masks re-bake whenever the output changes. Baking the ramp, not a
 boolean, is what keeps the shader free of distance math or jitter
 constants — see §2.4.
 
@@ -656,9 +662,10 @@ cross-fade, army vision, edge noise, drift) over every screen pixel, every frame
 world-anchored render texture, and the quads only sample it.
 
 - **`FogField`** (`lib/map/fog/FogField.ts`, shader `FOG_FIELD_FRAGMENT`) writes `R` = out-of-sight tier alpha and
-  `G` = unknown tier alpha (both tiers' colours are constants, so alpha is all that varies). It is the only place with the
-  mask/noise/army math. `FogMaskLayer` is the composite quad (`FOG_COMPOSITE_FRAGMENT`): it maps its pixel to world space,
-  samples the field with linear filtering and outputs `tierColour * alpha`, premultiplied. Stage slots are unchanged.
+  `G` = unknown tier alpha. It is the only place with the mask/noise/army math. Two things read it, through one shared
+  GLSL snippet (`FOG_FIELD_SAMPLE_GLSL`: world mapping, snapshot blend): `FogMaskLayer`, the mist composite quad
+  (`FOG_COMPOSITE_FRAGMENT`), samples the field with linear filtering and outputs `mistColour * G`, premultiplied; and
+  `FogDesaturateFilter` (§2.10) reads `R`.
 - **Anchoring and resolution** (`fogFieldPlan.ts`): the field covers the visible world rect plus a quarter viewport on each
   side, at 2 CSS pixels per texel at the zoom it was rendered at, capped at 2048 texels per side (so the texels get
   coarser than 2 CSS px once the viewport is wider than ~2730 CSS px). The world rect is snapped outwards to a grid of
@@ -678,13 +685,51 @@ world-anchored render texture, and the quads only sample it.
   shown alone (weight 1 on the newest snapshot), so it neither lags nor ghosts; the first drift render after such a
   render covers two intervals of drift over one interval, i.e. the clouds move at up to twice their speed for 125 ms.
 - **Debug views**: `showRawMask` / `showEffectiveMask` are written into the field's RGB by the field pass and shown as-is by
-  the visible tier quads (field resolution, linear filtered); `warp` zeroes the noise amplitudes in the field pass.
+  the mist quad (field resolution, linear filtered; the desaturation filter is off while one is on); `warp` zeroes the noise amplitudes in the field pass.
 - **Unchanged**: the CPU-side lookups (`fogCoverage`, `pickerFogShare`, `fogPerfStats`) do not touch the field.
 
 Measured in a software renderer at 1280x800 (settlement view, fog quads hidden vs shown, median frame; the machine was
 shared, so numbers are +-100 ms): fog cost was ~190 ms/frame with drift on and ~320 ms with drift off on `main` (two
 full-screen shader quads); with the field it is ~60 ms with drift on (field re-rendered at ~8 fps plus two sampling quads)
 and ~40 ms at rest (sampling quads only).
+
+### 2.10 Edge shaping (A+B) and the Desaturate filter
+
+**Why the edge used to read as an ellipse.** The ramps are euclidean distance in hex units on a map drawn squashed, so every
+contour is a flat ellipse on screen. Three things kept it from reading as anything else: the dark ramp was only 2 hexes wide
+(a displacement of a hex or so swallowed it), the mist's outer noise reach was one fixed ramp value everywhere (its outermost
+contour stayed a clean ellipse however ragged the inside was), and the only per-hex variation was a hash (grain, not shape).
+
+**A+B shaping** (`FOG_FIELD_FRAGMENT`, constants in `FogField.ts`, all in ramp units derived from hexes):
+
+- **A, baked lumps.** The mask's B channel (§2.2) is a smooth lump value. The tier's edge is displaced by
+  `(lump - 0.5) * EDGE_NOISE`: whole lumps of a hex or two are pushed in or out, identically in every frame.
+- **B, warped clouds.** The drifting cloud field is domain-warped (fbm sampled at a coordinate displaced by a coarse fbm),
+  so the displacement has swirls and pinches instead of round blobs. It displaces by `(cloud - 0.5) * EDGE_NOISE`, summed with
+  the lump. `EDGE_NOISE` is 3.0 hexes of mist edge (of 14) and 1.8 hexes of dark edge (of 4), each at the 0.65 A+B weight.
+  The `warp` debug flag zeroes both displacements and the pull-in below.
+- **Narrow mist fade.** The mist goes 0 to opaque over 2.6 hexes (`UNKNOWN_EDGE`) after a half-hex start, so the displaced edge
+  reads as ragged, not as a gradient. The dark edge runs 0.3 to 1.7 hexes past the visible ring (`OUT_OF_SIGHT_EDGE`), its
+  noise window closing at `NOISE_REACH[1]` = 0.6 of the 4-hex ramp.
+- **Outer reach pull-in.** Where `mix(lump, cloud layer 2, 0.5)` is high, the mist's noise window closes up to 4 hexes
+  earlier than `NOISE_REACH[0]` (never closer than the mist's own fade end), so the outermost contour is not one ellipse.
+  The reach only ever shrinks, so `FOG_MIST_OPAQUE_AT_RAMP` (terrain culling and the backend's `MistOpaqueAtRamp`,
+  derived from `NOISE_REACH[0]`) stays a valid bound: the ground past it is still provably under opaque mist.
+- The noise is read from the lattice texture, never a float ALU hash (`shaderNoise.test.ts` enforces it).
+
+**Desaturate filter** (`FogDesaturateFilter.ts`, shader `FOG_DESATURATE_FRAGMENT`). The dark tier is no longer a
+near-black overlay but a Pixi filter on `underFogLayer`, a container holding `world` and the camp paws (everything under
+`markerLayer`). Where the field's `R` is set it pulls bright tones (sand, foam, snow) toward mid grey, desaturates, dims and
+gives a slight cool tint. Defaults: desaturate 0.88, bright pull 0.6, darken 0.40 (`fogDebugTuning`, live sliders in the fog
+debug panel). Where the canvas is transparent (a CSS backdrop shows through) the old dark tint (`0x0b1116` at alpha 0.6 times
+`R`) is added so the tier stays visible there. The filter exists only while the dark tier is shown (otherwise no pass at
+all) and not during a debug view.
+
+- *Cost*: one offscreen render target per frame holding the whole of `underFogLayer`, drawn back through the shader. The
+  filter's `filterArea` is pinned to the renderer's screen rectangle (updated on resize), so Pixi does not measure the world's
+  bounds every frame; `resolution` and `antialias` inherit the canvas's.
+- *Alignment*: the filter takes its screen position from its own uniforms (`uOutputFrame.xy + vTextureCoord * uInputSize.xy`),
+  which is the screen space the field is sampled in, so the greyed edge sits exactly where the mask puts it.
 
 ## 3. Chunked mask delivery — adopted, not deferred
 
@@ -924,6 +969,10 @@ is no separate "big world" mode to forget to test. World-radius growth
 later just changes how many chunks exist, not which code path runs.
 
 ## 4. Layer stack — resolves the `fogWorld` hack
+
+> **As shipped:** the dark tier is no longer a quad. `world` and the camp paws sit in `underFogLayer`, which carries
+> `FogDesaturateFilter` (§2.10), so the stack is `underFogLayer`, `markerLayer`, `whiteMistLayer`. The diagrams below are the
+> original design and still show `blackFogLayer`.
 
 Current stage order (`HexMapRenderer.mount()`):
 

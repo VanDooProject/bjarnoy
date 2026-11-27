@@ -15,10 +15,12 @@ namespace Bjarnoy.Domain.Units;
 /// <remarks>
 /// Iron and the unlock ladder (<c>docs/design/economy.md</c> section 8): every unit except the
 /// <see cref="UnitType.Thrall"/> costs iron, so raising troops is gated by iron income. Each unit's
-/// Longhouse gate follows the building that trains it: Spearman with the Barracks (LH 5; the Thrall has no gate of its own, its Barracks is the gate), Axeman
-/// at LH 6, three levels after the bog-ore works open (LH 3), Karve with the Harbour (LH 8), Bowman with the Archery Range (LH 9),
-/// Provisioner and Settler with the Cart Workshop (LH 10), and the elite units (Berserker, Catapult,
-/// Snekkja) at LH 20, where the Hammerschmiede boosts the bog-ore works.
+/// Longhouse gate follows the building that trains it: Spearman and Axeman with the Barracks (LH 5; the Thrall has no gate of
+/// its own, its Barracks is the gate; the Axeman's own gate is the Barracks one, its Barracks level 6 orders it after the
+/// Spearman), Bowman and Skirmisher with the Archery Range (LH 9), Provisioner and Settler with the Cart Workshop (LH 10),
+/// and the elite units (Berserker, Skeid) at LH 20, where the Hammerschmiede boosts the bog-ore works. The siege engines and
+/// the ships have no Longhouse gate of their own: the level of their Siege Workshop, Harbour or Shipyard orders them. No unit
+/// needs another unit (<see cref="UnitDefinition.RequiredUnitType"/> stays unset); the building levels order the roster.
 /// </remarks>
 /// <remarks>
 /// <see cref="BuildingType.Barracks"/> and <see cref="BuildingType.ArcheryRange"/>
@@ -83,7 +85,7 @@ public static class UnitCatalogue
             UpkeepPerHour = 0.5,
             TrainingCost = new ResourceAmounts(Wood: 100, Stone: 30, Food: 20, Iron: 60),
             TrainingDuration = TimeSpan.FromMinutes(20),
-            RequiredLonghouseLevel = 6,
+            RequiredLonghouseLevel = 5,
             RequiredBuildingLevel = 6,
             RequiredBuildingType = BuildingType.Barracks,
         },
@@ -226,8 +228,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 300, Stone: 200, Food: 40, Iron: 250),
             TrainingDuration = TimeSpan.FromHours(1),
             RequiredLonghouseLevel = 1,
-            RequiredUnitType = UnitType.Berserker,
-            RequiredBuildingLevel = 10,
+            RequiredBuildingLevel = 5,
             RequiredBuildingType = BuildingType.SiegeWorkshop,
         },
         [UnitType.Ram] = new UnitDefinition
@@ -249,7 +250,6 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 400, Stone: 100, Food: 40, Iron: 150),
             TrainingDuration = TimeSpan.FromHours(1),
             RequiredLonghouseLevel = 1,
-            RequiredUnitType = UnitType.Berserker,
             RequiredBuildingLevel = 10,
             RequiredBuildingType = BuildingType.SiegeWorkshop,
         },
@@ -286,7 +286,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 120, Stone: 50, Food: 20, Iron: 20),
             TrainingDuration = TimeSpan.FromMinutes(20),
             RequiredLonghouseLevel = 1,
-            RequiredBuildingLevel = 1,
+            RequiredBuildingLevel = 3,
             RequiredBuildingType = BuildingType.Harbour,
         },
         [UnitType.Knarr] = new UnitDefinition
@@ -304,7 +304,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 300, Stone: 120, Food: 40, Iron: 135),
             TrainingDuration = TimeSpan.FromMinutes(50),
             RequiredLonghouseLevel = 1,
-            RequiredBuildingLevel = 3,
+            RequiredBuildingLevel = 8,
             RequiredBuildingType = BuildingType.Harbour,
         },
         [UnitType.Karve] = new UnitDefinition
@@ -376,7 +376,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 50, Stone: 10, Food: 10, Iron: 10),
             TrainingDuration = TimeSpan.FromMinutes(10),
             RequiredLonghouseLevel = 1,
-            RequiredBuildingLevel = 1,
+            RequiredBuildingLevel = 3,
             RequiredBuildingType = BuildingType.Shipyard,
             FireCraftPerLevel = 50,
         },

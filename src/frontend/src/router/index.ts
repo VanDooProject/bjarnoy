@@ -331,6 +331,12 @@ export const router = createRouter({
         },
       ],
     },
+    {
+      // Last: any URL no route above matches gets a message and a way back.
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('../views/NotFoundView.vue'),
+    },
   ],
 });
 

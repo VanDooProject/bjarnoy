@@ -76,6 +76,14 @@ export const useHudPrefsStore = defineStore('hudPrefs', {
       this.panels[id].open = !this.panels[id].open;
       this.savePanels();
     },
+    /** Opens a panel and expands it if it was collapsed to its header (e.g. a tap on an army's marker brings up the Armies panel). */
+    showPanel(id: HudPanelId) {
+      const pref = this.panels[id];
+      if (pref.open && !pref.collapsed) return;
+      pref.open = true;
+      pref.collapsed = false;
+      this.savePanels();
+    },
     toggleCollapsed(id: HudPanelId) {
       this.panels[id].collapsed = !this.panels[id].collapsed;
       this.savePanels();

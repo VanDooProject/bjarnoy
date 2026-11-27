@@ -183,9 +183,10 @@ test('onboarding ring on a forest hex offers the lumberjack, and the map pointer
 
   await settlement.clickHex(await settlement.findHex({ terrain: 'forest' }));
   await settlement.ring.openBuildCategories();
-  await settlement.ring.openCategory('Resource');
-  await expect(settlement.ring.child('Lumberjack').first()).toBeVisible();
-  await expect(settlement.ring.child('Reindeer Herder')).toHaveCount(0);
+  // The forest takes only the Lumberjack, so it stands on the Build lane in place of a one-building Resource category.
+  await expect(settlement.ring.category('Lumberjack').first()).toBeVisible();
+  await expect(settlement.ring.category('Resource')).toHaveCount(0);
+  await expect(settlement.ring.action('Reindeer Herder')).toHaveCount(0);
   // The herder is next but not offered here: no pointer at a ring bubble, the map pointer says where to go.
   await expect(settlement.guidancePointer).toContainText('Now build here');
 });
@@ -203,7 +204,7 @@ test('onboarding completion leads with the profile nudge, then the completion ba
   // covered by the test above; this one is about what happens once they're
   // both actually down.
   await page.evaluate(() => {
-    const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void } }).__demoWorld();
+    const world = window.__demoWorld() as { model: any; selectedSettlementId: string; syncHud: () => void };
     const settlementModel = world.model.getSettlement(world.selectedSettlementId);
     const dirs: Array<[number, number]> = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
     const guidedTypes = ['reindeerherder', 'lumberjack'];
@@ -389,6 +390,6 @@ test('desktop keeps the header and the onboarding checklist visible throughout, 
 test('impressum page is reachable and links back', { tag: '@g3' }, async ({ page }) => {
   await page.goto('/impressum');
   await expect(page.getByRole('heading', { name: 'Impressum' })).toBeVisible();
-  await page.getByRole('button', { name: /back/i }).click();
+  await page.getByRole('link', { name: /back/i }).click();
   await page.waitForURL('**/');
 });

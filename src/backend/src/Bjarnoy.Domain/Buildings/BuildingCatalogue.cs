@@ -165,8 +165,8 @@ public static class BuildingCatalogue
     /// </para>
     /// <para>
     /// The Reindeer Herder is the starting food building (LH 1). Farm and Pumpkin
-    /// Farm both unlock at LH 4 behind a level-3 Herder; Pumpkin Farm stays
-    /// soil-gated (see <see cref="Settlement.PlanBuild"/>'s islandSoil parameter).
+    /// Farm both unlock at LH 4 behind a level-3 Herder; each island takes
+    /// only the one its soil grows (see <see cref="Settlement.PlanBuild"/>'s islandSoil parameter).
     /// </para>
     /// </remarks>
     private static readonly IReadOnlyDictionary<BuildingType, int> UnlockLevels =
@@ -318,7 +318,7 @@ public static class BuildingCatalogue
             [BuildingType.SiegeWorkshop] = [new(BuildingType.ArcheryRange, 3)],
             [BuildingType.CartWorkshop] = [new(BuildingType.TownSquare, 3)],
             [BuildingType.BogOreWorks] = [new(BuildingType.ClayBrickworks, 3)],
-            [BuildingType.Meadery] = [new(BuildingType.Farm, 5)],
+            [BuildingType.Meadery] = [new(BuildingType.Farm, 5, SoilType.Wheat), new(BuildingType.PumpkinFarm, 5, SoilType.Pumpkin)],
             [BuildingType.DruidHut] = [new(BuildingType.TownSquare, 5)],
             [BuildingType.Smithy] = [new(BuildingType.Barracks, 10)],
             [BuildingType.GreatStorehouse] = [new(BuildingType.StorageHouse, 25)],
@@ -326,13 +326,24 @@ public static class BuildingCatalogue
             [BuildingType.CropMill] = [new(BuildingType.Farm, 10)],
             [BuildingType.Hammerschmiede] = [new(BuildingType.BogOreWorks, 10)],
             [BuildingType.ShrineOfUllr] = [new(BuildingType.Sawmill, 5)],
-            [BuildingType.ShrineOfFreyja] = [new(BuildingType.CropMill, 5)],
+            [BuildingType.ShrineOfFreyja] = [new(BuildingType.CropMill, 5, SoilType.Wheat), new(BuildingType.PumpkinFarm, 15, SoilType.Pumpkin)],
             [BuildingType.ShrineOfNjord] = [new(BuildingType.Harbour, 10)],
             [BuildingType.ShrineOfThor] = [new(BuildingType.Smithy, 5)],
             // A settlement holds only one shrine, so Odin cannot ask for
             // another one as a feeder; the Druid Hut is the civic line's end.
             [BuildingType.OdinStatue] = [new(BuildingType.DruidHut, 10)],
         };
+
+    /// <summary>
+    /// The island soil a building can be newly placed on (<see cref="BuildingDefinition.RequiredSoil"/>), or
+    /// <see langword="null"/> for any island. The Crop Mill grinds wheat, so it follows Farm.
+    /// </summary>
+    private static SoilType? RequiredSoilFor(BuildingType type) => type switch
+    {
+        BuildingType.Farm or BuildingType.CropMill => SoilType.Wheat,
+        BuildingType.PumpkinFarm => SoilType.Pumpkin,
+        _ => null,
+    };
 
     /// <summary>
     /// The prerequisites attached to one level's definition. Prerequisites gate
@@ -367,17 +378,16 @@ public static class BuildingCatalogue
             // The starting food building: any grass, any island, LH 1. No
             // terrain boost, like Farm (a herd is not a concentrating resource).
             BuildingType.ReindeerHerder => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 8, 0), new ResourceAmounts(Wood: 52, Stone: 36, Food: 7, Iron: 0), brickFreeLevels: StartBrickFreeLevels),
-            // Buildable on any island regardless of soil, from LH 4 behind a
+            // Only buildable on a Wheat-soil island, from LH 4 behind a
             // level-3 Reindeer Herder (it and PumpkinFarm are one tech-tree
             // card, split into two types only by their soil rule).
             BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 12, 0), new ResourceAmounts(Wood: 57, Stone: 29, Food: 9, Iron: 0)),
             BuildingType.StorageHouse => StorageHouse(level),
             BuildingType.Tower => Tower(level),
             BuildingType.FishingHut => FishingHut(level),
-            // The bonus crop: only buildable on a Pumpkin-soil island
+            // Only buildable on a Pumpkin-soil island, where it replaces Farm
             // (Settlement.PlanBuild's islandSoil parameter, from
-            // World.TerrainSampler.SoilAt) — not a free player choice, and
-            // not gated the other way (Farm stays buildable everywhere).
+            // World.TerrainSampler.SoilAt) — not a free player choice.
             // Yields more than Farm: an indirect fertility signal via the
             // production curve rather than a separate bonus multiplier —
             // that's what makes a Pumpkin-soil island "more fertile".
@@ -436,7 +446,7 @@ public static class BuildingCatalogue
             BuildingType.CartWorkshop => CartWorkshop(level),
             // The start's stone source: on plain bog moss (the landing spots guarantee bog in reach), not on grass.
             BuildingType.ClayBrickworks =>
-                Producer(type, level, Bog, new ResourceAmounts(0, Stone: 8, 0, 0), new ResourceAmounts(Wood: 52, Stone: 10, Food: 33, Iron: 0), brickFreeLevels: 1)
+                Producer(type, level, Bog, new ResourceAmounts(0, Stone: 8, 0, 0), new ResourceAmounts(Wood: 52, Stone: 10, Food: 33, Iron: 0), brickFreeLevels: 1, brickPhaseIn: false)
                     with { RequiresBogKind = PlainBogOnly },
             // Iron, on plain bog moss only (not a shore, mouth, creek or lake). Its own P1 is tuned in the Economy lab
             // (docs/design/economy.md section 8); terrain boost in Boosts, the Hammerschmiede's radius boost below.
@@ -466,6 +476,7 @@ public static class BuildingCatalogue
         {
             Cost = NiceRound(definition.Cost),
             Prerequisites = PrerequisitesFor(type, level),
+            RequiredSoil = RequiredSoilFor(type),
             RequiredLonghouseLevel = RequiredLonghouseLevelFor(type, level),
             RingCategory = ring.Category,
             RingOrder = ring.Order,
@@ -706,7 +717,7 @@ public static class BuildingCatalogue
     /// <see cref="Totals(IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain}?)"/>.
     /// Crop Mill grinds grain, so it only boosts Farm — PumpkinFarm is a
     /// different crop (see <see cref="BuildingType.PumpkinFarm"/>'s own doc
-    /// comment: the Pumpkin-soil-only bonus, not the staple a mill grinds).
+    /// comment: the Pumpkin-soil island's crop, not grain a mill grinds).
     /// </summary>
     private static readonly IReadOnlyDictionary<BuildingType, IReadOnlySet<BuildingType>> RadiusBoostTargets =
         new Dictionary<BuildingType, IReadOnlySet<BuildingType>>
@@ -884,8 +895,11 @@ public static class BuildingCatalogue
     private static ResourceAmounts ProductionFor(ResourceAmounts incrementAtLevelOne, int level) =>
         incrementAtLevelOne * ((Math.Pow(ProductionGrowth, level) - 1) / (ProductionGrowth - 1));
 
-    /// <summary>The levels (1 to this) at which the start buildings — Longhouse, Tower, Lumberjack, Reindeer Herder — cost no stone.</summary>
-    private const int StartBrickFreeLevels = 5;
+    /// <summary>The levels (1 to this) at which the start buildings — Tower, Lumberjack, Reindeer Herder — cost no stone.</summary>
+    private const int StartBrickFreeLevels = 8;
+
+    /// <summary>The levels (1 to this) at which the Longhouse costs no stone.</summary>
+    private const int LonghouseBrickFreeLevels = 10;
 
     /// <summary>
     /// A building cost rounded the way a player reads it, per resource: below 100 to a whole number, 100 to 999 to the nearest 10,
@@ -922,11 +936,12 @@ public static class BuildingCatalogue
         ResourceAmounts perHourAtLevelOne,
         ResourceAmounts costAtLevelOne,
         int brickFreeLevels = 0,
-        double growth = CostGrowth) => new()
+        double growth = CostGrowth,
+        bool brickPhaseIn = true) => new()
         {
             Type = type,
             Level = level,
-            Cost = BrickFree(costAtLevelOne * CostFactor(level, growth) * ProducerEarlyDiscount(type, level), level, brickFreeLevels),
+            Cost = BrickFree(costAtLevelOne * CostFactor(level, growth) * ProducerEarlyDiscount(type, level), level, brickFreeLevels, brickPhaseIn),
             BuildDuration = BuildTime(type, level),
             // Increment-geometric in level (each level adds x1.20 more than the last), the level's total.
             ProductionPerHour = ProductionFor(perHourAtLevelOne, level),
@@ -942,15 +957,28 @@ public static class BuildingCatalogue
             ? level switch { 1 => 0.6, 2 => 0.75, 3 => 0.9, _ => 1.0 }
             : 1.0;
 
-    /// <summary>The cost without its stone while <paramref name="level"/> is within <paramref name="brickFreeLevels"/>.</summary>
-    private static ResourceAmounts BrickFree(ResourceAmounts cost, int level, int brickFreeLevels) =>
-        level <= brickFreeLevels ? cost with { Stone = 0 } : cost;
+    /// <summary>
+    /// The cost without its stone while <paramref name="level"/> is within <paramref name="brickFreeLevels"/>. With
+    /// <paramref name="phaseIn"/> (the start buildings) the stone then phases in: the first three levels after the brick-free
+    /// ones pay 25%, 50% and 75% of it, the full value from the fourth on.
+    /// </summary>
+    private static ResourceAmounts BrickFree(ResourceAmounts cost, int level, int brickFreeLevels, bool phaseIn = true) =>
+        cost with { Stone = cost.Stone * BrickShare(level, brickFreeLevels, phaseIn) };
+
+    /// <summary>The share of the formula's stone a level pays, see <see cref="BrickFree"/>.</summary>
+    private static double BrickShare(int level, int brickFreeLevels, bool phaseIn)
+    {
+        if (brickFreeLevels <= 0) return 1;
+        var past = level - brickFreeLevels;
+        if (past <= 0) return 0;
+        return phaseIn && past <= 3 ? past * 0.25 : 1;
+    }
 
     private static BuildingDefinition Longhouse(int level) => new()
     {
         Type = BuildingType.Longhouse,
         Level = level,
-        Cost = BrickFree(new ResourceAmounts(Wood: 120, Stone: 100, Food: 60, Iron: 0) * LonghouseCostFactor(level), level, StartBrickFreeLevels),
+        Cost = BrickFree(new ResourceAmounts(Wood: 120, Stone: 100, Food: 60, Iron: 0) * LonghouseCostFactor(level), level, LonghouseBrickFreeLevels),
         BuildDuration = BuildTime(BuildingType.Longhouse, level),
         // The anchor feeds its own settlement a little, so a new holding is
         // never completely stalled. Linear in level (unlike every other

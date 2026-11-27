@@ -116,6 +116,15 @@ describe('SettlementMenu', () => {
       expect(rows[1]!.querySelector('.realm-caption')!.textContent).toBe('Longhouse 2');
     });
 
+    it('focuses the current realm on open, not the first row', async () => {
+      useWorldStore().selectedSettlementId = 's2';
+      const wrapper = mountMenu();
+      await openMenu(wrapper);
+      const picks = bodyAll('.realm-pick');
+      expect(picks[1]!.getAttribute('aria-current')).toBe('true');
+      expect(document.activeElement).toBe(picks[1]);
+    });
+
     it('names a beach camp by its building name instead of a Longhouse level', async () => {
       useWorldStore().myRealms = [summary('s1', 'Bjornstad', 0, 3), summary('s2', 'Sandspit', 7, 1, true)];
       const wrapper = mountMenu();

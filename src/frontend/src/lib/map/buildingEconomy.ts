@@ -312,10 +312,9 @@ export function buildingStatsFor(
     // ReindeerHerder, Farm and PumpkinFarm are deliberately excluded from
     // BuildingCatalogue.cs's Boosts table (they work a herd or a fixed field,
     // not a resource that concentrates nearby) — no terrain or water adjacency
-    // changes their output. The herder is the starting food building; Farm is
-    // buildable everywhere from LH 4; PumpkinFarm is gated to Pumpkin-soil
-    // islands (see ringCatalogue.ts's cropAllowedHere) and yields more, the
-    // "more fertile" island's bonus crop.
+    // changes their output. The herder is the starting food building; from LH 4
+    // an island grows either Farm (Wheat soil) or PumpkinFarm (Pumpkin soil,
+    // see ringCatalogue.ts's soilAllowsBuilding), which yields more.
     case 'reindeerherder':
       return { output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(8, level) } };
     case 'farm':
@@ -613,14 +612,27 @@ export function niceRound(value: number): number {
   return Math.round(value / step) * step;
 }
 
-/** Mirrors `BuildingCatalogue`'s brick-free levels: no stone at levels 1-5 of the start buildings, none at level 1 of the Clay Brickworks. */
-const BRICK_FREE_LEVELS: Partial<Record<BuildingKind, number>> = {
-  longhouse: 5,
-  tower: 5,
-  lumberjack: 5,
-  reindeerherder: 5,
-  claybrickworks: 1,
+/**
+ * Mirrors `BuildingCatalogue`'s brick-free levels: no stone at levels 1-10 of the Longhouse and 1-8 of the other start
+ * buildings, then 25%, 50% and 75% of the stone on the next three levels and the full stone from the fourth on. The Clay
+ * Brickworks pays no stone at level 1 and the full stone from level 2.
+ */
+const BRICK_FREE_LEVELS: Partial<Record<BuildingKind, { levels: number; phaseIn: boolean }>> = {
+  longhouse: { levels: 10, phaseIn: true },
+  tower: { levels: 8, phaseIn: true },
+  lumberjack: { levels: 8, phaseIn: true },
+  reindeerherder: { levels: 8, phaseIn: true },
+  claybrickworks: { levels: 1, phaseIn: false },
 };
+
+/** The share (0..1) of the formula's stone that `type` pays at `level`, see `BRICK_FREE_LEVELS`. */
+export function brickShareAt(type: string, level: number): number {
+  const rule = BRICK_FREE_LEVELS[type as BuildingKind];
+  if (!rule) return 1;
+  const past = level - rule.levels;
+  if (past <= 0) return 0;
+  return rule.phaseIn && past <= 3 ? past * 0.25 : 1;
+}
 
 /** The undiscounted level-1 cost of `type` (`BuildingCatalogue`'s base, before the producers' early-level discount). */
 export function levelOneBaseCost(type: BuildingKind): ResourceLine {
@@ -631,10 +643,9 @@ export function levelOneBaseCost(type: BuildingKind): ResourceLine {
 export function buildingUpgradeCost(type: BuildingKind, targetLevel: number): ResourceLine {
   const base = BASE_COST[type];
   const factor = costFactor(type, targetLevel);
-  const brickFree = targetLevel <= (BRICK_FREE_LEVELS[type] ?? 0);
   return {
     wood: niceRound(base.wood * factor),
-    stone: brickFree ? 0 : niceRound(base.stone * factor),
+    stone: niceRound(base.stone * factor * brickShareAt(type, targetLevel)),
     food: niceRound(base.food * factor),
     iron: niceRound(base.iron * factor),
   };

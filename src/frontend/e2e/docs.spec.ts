@@ -544,6 +544,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         "Resource production",
         "Shrines",
         "Walls",
+        "Extending the realm",
       ]);
       await expect(
         menu.getByRole("menuitem", { name: "Shrines" }),
@@ -669,8 +670,8 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       for (const [group, count] of [
         ["story", 1],
         ["island", 2],
-        ["building", 4],
-        ["move", 6],
+        ["building", 5],
+        ["move", 5],
         ["beyond", 2],
       ] as const) {
         await expect(
@@ -688,10 +689,10 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         "Resource production",
         "Shrines",
         "Walls",
+        "Extending the realm",
         "Training troops",
         "Founding settlements",
         "Beach camp",
-        "Extending the realm",
         "Land movement",
         "Ships and water",
         "Wildlife camps",
@@ -927,11 +928,8 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(graph.locator("svg")).toBeVisible();
     await expect(graph.locator('svg [data-unit="spearman"]')).toBeVisible();
     await expect(graph.locator('svg [data-unit="snekkja"]')).toBeVisible();
-    // The Ram and the Catapult need the Berserker, across lanes; the Berserker needs no other unit.
-    await expect(
-      graph.locator('[data-edge="berserker>ram"]'),
-    ).toHaveCount(1);
-    await expect(graph.locator('[data-edge$=">berserker"]')).toHaveCount(0);
+    // No unit needs another unit, so the graph has no arrows.
+    await expect(graph.locator("[data-edge]")).toHaveCount(0);
     // The Longhouse trains nothing, so it has no lane.
     await expect(
       graph.locator('.lane-label[data-building="longhouse"]'),
@@ -961,8 +959,9 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   }) => {
     await page.goto("/docs/ships");
     await expectPlayerPage(page, "Ships and water", "ships-table");
-    await expect(page.locator('[data-row="attack"]')).toContainText("60");
-    await expect(page.locator('[data-row="needs"]')).toContainText("Shipyard");
+    await expect(page.locator('[data-ship="snekkja"] [data-col="attack"]')).toHaveText("60");
+    await expect(page.locator('[data-ship="karve"] [data-col="cost"]')).toContainText("250");
+    await expect(page.locator("#ships").getByRole("link", { name: "Training troops" })).toHaveAttribute("href", "/docs/training");
     await expect(page.getByText("Under investigation")).toHaveCount(0);
   });
 

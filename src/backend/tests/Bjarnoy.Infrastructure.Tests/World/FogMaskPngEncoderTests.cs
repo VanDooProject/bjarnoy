@@ -36,7 +36,7 @@ public class FogMaskPngEncoderTests
 
         Assert.Equal(originCell.Unknown, pixel.Red);
         Assert.Equal(originCell.OutOfSight, pixel.Green);
-        Assert.Equal(originCell.NoiseSeed, pixel.Blue);
+        Assert.Equal(originCell.Lump, pixel.Blue);
         Assert.Equal(byte.MaxValue, pixel.Alpha);
     }
 

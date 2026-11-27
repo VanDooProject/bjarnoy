@@ -155,9 +155,9 @@ public enum BuildRejection
     SettlementAlreadyHasShrine,
 
     /// <summary>
-    /// PumpkinFarm was ordered on a Wheat-soil island — it's the bonus crop
-    /// only a Pumpkin-soil island (<see cref="World.SoilType"/>) unlocks;
-    /// Farm stays buildable everywhere regardless of soil. See
+    /// A building was ordered on an island whose soil (<see cref="World.SoilType"/>) it does not suit
+    /// (<see cref="BuildingDefinition.RequiredSoil"/>): a Farm or Crop Mill on a Pumpkin-soil island or a PumpkinFarm on a
+    /// Wheat-soil one. See
     /// <see cref="Settlement.PlanBuild"/>'s islandSoil parameter.
     /// </summary>
     WrongCropForIslandSoil,
@@ -221,6 +221,12 @@ public enum BuildRejection
 
     /// <summary>A raze was ordered on the Longhouse, which can never be razed.</summary>
     LonghouseCannotBeRazed,
+
+    /// <summary>
+    /// The order cannot start now and the realm has no waiting-queue room (no Premium), but builds that were queued while it
+    /// had Premium are still waiting: they keep going, and nothing new can be added until every one of them has started.
+    /// </summary>
+    QueueLockedWithoutPremium,
 }
 
 /// <summary>The outcome of asking to build something.</summary>

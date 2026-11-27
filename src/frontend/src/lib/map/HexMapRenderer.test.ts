@@ -11,6 +11,7 @@ import {
   TILE_W,
   cartWorldPoint,
   type ArmyStaticView,
+  armyTapStopsHere,
   armyTapSwallowed,
   armyVisionEntryOf,
   grantsArmyVision,
@@ -1324,6 +1325,25 @@ describe('armyTapSwallowed', () => {
 
   it('keeps the tap on the marker while the send picker is open', () => {
     expect(armyTapSwallowed([marker('a'), marker('b', { pick: 'eligible' })])).toBe(true);
+  });
+});
+
+describe('armyTapStopsHere', () => {
+  const marker = (id: string, extra: Partial<ArmyOverlayMarker> = {}): ArmyOverlayMarker => ({
+    id, position: { q: 0, r: 0 }, selected: false, returning: false, isFleet: true, visionRadius: 1, ...extra,
+  });
+
+  it('lets the tap reach the tile when the host did not handle it', () => {
+    expect(armyTapStopsHere([marker('a')], undefined)).toBe(false);
+    expect(armyTapStopsHere([marker('a')], false)).toBe(false);
+  });
+
+  it('stops the tap at the marker when the host handled it (a moving army: selection only, no ring menu)', () => {
+    expect(armyTapStopsHere([marker('a')], true)).toBe(true);
+  });
+
+  it('stops the tap while the send picker is open', () => {
+    expect(armyTapStopsHere([marker('a', { pick: 'eligible' })], false)).toBe(true);
   });
 });
 

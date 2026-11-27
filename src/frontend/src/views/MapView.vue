@@ -634,13 +634,25 @@ watch(
 const armyHint = ref<{ x: number; y: number; text: string } | null>(null);
 let armyHintTimer: ReturnType<typeof setTimeout> | null = null;
 const sendBlockText = useSendBlockText();
+/**
+ * Whether a tap on an own army's marker ends at the marker: a moving army is only selected, the tap does not also reach the tile (no ring
+ * menu). Not while the send picker is open (the renderer already keeps that tap off the tile) nor while a route is being composed (the tap
+ * adds the waypoint). A standing army's hex stays tappable.
+ */
+function armyTapStopsAtMarker(armyId: string): boolean {
+  if (world.sendPicker || world.dispatchDraft || world.fieldOrderDraft) return false;
+  return !!world.armies.find((a) => a.id === armyId)?.movement;
+}
 function onArmyTap(armyId: string, screen: { x: number; y: number }) {
   if (armyHintTimer) clearTimeout(armyHintTimer);
   armyHint.value = null;
-  // No picker open: the marker selects its army, shown highlighted in the armies panel. The tap still reaches the tile (onHexClick), so
-  // while a route is being composed it adds the waypoint and selects nothing.
+  // No picker open: the marker selects its army, shown highlighted in the armies panel. The tap may still reach the tile (onHexClick, see
+  // armyTapStopsAtMarker), so while a route is being composed it adds the waypoint and selects nothing.
   if (!world.sendPicker) {
-    if (!world.dispatchDraft && !world.fieldOrderDraft) world.selectArmy(armyId);
+    if (world.dispatchDraft || world.fieldOrderDraft) return;
+    world.selectArmy(armyId);
+    // The selection shows in the Armies panel, so bring it up if it was closed or collapsed (the docked panel is settlement view, desktop only).
+    if (!isMobile.value && mode.value === 'settlement') hudPrefs.showPanel('armies');
     return;
   }
   const row = sendPicker.rows.value.find((r) => r.id === armyId);
@@ -1107,13 +1119,13 @@ function upgradeActionFor(tile: Tile): RingAction {
           : stats.modifier
             ? formatModifier(stats.modifier)
             : undefined,
+      givesOutput: rate ? rate.gain : stats.output ? scaleOutput(stats.output, world.worldSpeedFactor) : undefined,
       givesTotal: rate ? t('hud.ringMenu.card.givesTotal', { amount: rate.total }) : undefined,
       locks: busyNote ? [busyNote, ...locks] : locks,
       art: buildingArt(type, nextLevel),
+      okBadge: null,
       availability: busyNote ? undefined : availability,
-      holdHint: quickUpgrade.available
-        ? { text: t('hud.quickUpgrade.holdHint'), locked: false }
-        : { text: t('hud.quickUpgrade.premiumHold'), locked: true },
+      holdHint: quickUpgrade.available ? t('hud.quickUpgrade.holdHint') : undefined,
     },
   };
 }
@@ -1628,15 +1640,12 @@ function quickUpgradeAt(coord: AxialCoord, tile: Tile) {
   void upgradeAt(coord, tile);
 }
 
-// Holding the ring's Upgrade bubble turns the quick upgrade mode on, closes the ring and orders that building's upgrade (or shows
-// the refusal chip, with the mode staying on).
+// Holding the ring's Upgrade bubble turns the quick upgrade mode on and closes the ring. It orders nothing: the mode switch is
+// all the hold does.
 function onRingHold(id: string) {
-  if (id !== 'upgrade' || !selectedCoord.value || !selectedTile.value) return;
-  const coord = selectedCoord.value;
-  const tile = selectedTile.value;
+  if (id !== 'upgrade') return;
   quickUpgrade.start();
   closeRing();
-  quickUpgradeAt(coord, tile);
 }
 
 // The mode's ways out that live on the map: a long press anywhere on the canvas (the renderer reports it only while the mode is
@@ -1684,6 +1693,7 @@ useQuickUpgradeInput({
       @hover="onHover"
       @waypoint-move="onWaypointMove"
       @waypoint-tap="onWaypointTap"
+      :army-tap-stops="armyTapStopsAtMarker"
       @army-tap="onArmyTap"
       @long-press="quickUpgrade.stop()"
       @long-press-progress="onMapLongPressProgress"

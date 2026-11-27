@@ -100,14 +100,7 @@ export async function claimLandfall(page: Page): Promise<void> {
   // already use. This is robust to *any* future reframing of the preview
   // camera, since it never assumes where on screen the plot ends up.
   const { x: hx, y: hy } = await page.evaluate(() => {
-    const renderer = (
-      window as unknown as {
-        __settlementRenderer: () => {
-          previewCenter?: { q: number; r: number };
-          hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number };
-        };
-      }
-    ).__settlementRenderer();
+    const renderer = window.__settlementRenderer();
     if (!renderer.previewCenter) {
       throw new Error('__settlementRenderer().previewCenter is unset — is the landing page preview mounted yet?');
     }
@@ -130,12 +123,8 @@ export async function claimLandfall(page: Page): Promise<void> {
   // the ease, so "no preview and not animating" is the settled camera.
   await page.waitForFunction(
     () => {
-      const win = window as unknown as {
-        __demoWorld?: () => { selectedSettlementId: string | null };
-        __settlementRenderer?: () => { previewCenter?: unknown; cameraAnimating: boolean } | undefined;
-      };
-      const renderer = win.__settlementRenderer?.();
-      return !!win.__demoWorld?.()?.selectedSettlementId && !!renderer && !renderer.previewCenter && !renderer.cameraAnimating;
+      const renderer = window.__settlementRenderer?.();
+      return !!window.__demoWorld?.()?.selectedSettlementId && !!renderer && !renderer.previewCenter && !renderer.cameraAnimating;
     },
     undefined,
     { timeout: 15_000 },
@@ -224,7 +213,7 @@ export async function placeGuidedBuildings(page: Page): Promise<void> {
   // terrain (only the ring's placement filter does, see useBuildRing),
   // so any nearby empty hex works for either type.
   await page.evaluate(() => {
-    const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void } }).__demoWorld();
+    const world = window.__demoWorld() as { model: any; selectedSettlementId: string; syncHud: () => void };
     const settlement = world.model.getSettlement(world.selectedSettlementId);
     const dirs: Array<[number, number]> = [
       [1, 0],
@@ -294,25 +283,33 @@ export async function openRingOnGuidedHex(settlement: SettlementPage, chipText =
 
 /**
  * Builds `building` through the onboarding's ring on the already-clicked hex, the way a player does: Build hub, then
- * the category, then the building (the ring is the map's own, see useBuildRing). A phone taps (the first tap on a
- * building arms it and docks its card, the second commits); desktop clicks with the real pointer.
+ * the category, then the building (the ring is the map's own, see useBuildRing). A category that holds only this one
+ * building on the hex is not offered: the building sits on the Build lane itself, so pass `null` as the category.
+ * A phone taps (the first tap on a building arms it and docks its card, the second commits); desktop clicks with the
+ * real pointer.
  */
-export async function buildThroughOpenRing(settlement: SettlementPage, category: string, building: string): Promise<void> {
+export async function buildThroughOpenRing(settlement: SettlementPage, category: string | null, building: string): Promise<void> {
   const ring = settlement.ring;
   await ring.waitForOpen();
   const phone = (settlement.page.viewportSize()?.width ?? 1280) <= 768;
   if (phone) {
     await ring.action('Build').first().tap();
     await ring.settledLayer();
-    await ring.category(category).first().tap();
-    await ring.settledLayer();
-    const bubble = ring.child(building).first();
+    if (category !== null) {
+      await ring.category(category).first().tap();
+      await ring.settledLayer();
+    }
+    const bubble = (category === null ? ring.category(building) : ring.child(building)).first();
     await expect(bubble).toBeVisible();
     await bubble.tap();
     await bubble.tap();
     return;
   }
   await ring.openBuildCategories();
+  if (category === null) {
+    await ring.click(ring.category(building).first());
+    return;
+  }
   await ring.openCategory(category);
   await ring.click(ring.child(building).first());
 }
@@ -370,11 +367,7 @@ export async function putFleetsFarAtSea(
   homeAt?: { q: number; r: number },
 ): Promise<{ hex: { q: number; r: number }; screen: { x: number; y: number } }> {
   return page.evaluate((homeOverride) => {
-    const win = window as unknown as {
-      __demoWorld: () => { model: any; selectedSettlementId: string; armies: unknown[] };
-      __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
-    };
-    const world = win.__demoWorld();
+    const world = window.__demoWorld() as { model: any; selectedSettlementId: string; armies: unknown[] };
     const home = world.model.getSettlement(world.selectedSettlementId);
     const sides = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]] as const;
     const isSea = (q: number, r: number) => world.model.getTile(q, r).terrain === 'sea';
@@ -409,7 +402,7 @@ export async function putFleetsFarAtSea(
         const tile = world.model.getTile(at.q, at.r);
         if (tile.ownerId !== world.selectedSettlementId || tile.buildingType || tile.terrain !== 'grass') continue;
         if (sides.some(([a, b]) => isSea(at.q + a, at.r + b))) continue;
-        return { hex: at, screen: win.__settlementRenderer().hexCenterScreen(at) };
+        return { hex: at, screen: window.__settlementRenderer().hexCenterScreen(at) };
       }
     }
     throw new Error('no empty inland grass hex in the realm');
@@ -419,7 +412,7 @@ export async function putFleetsFarAtSea(
 /** Triggers an armies refresh, as the live poll does: every army is replaced by a copy. */
 export async function refreshArmies(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const world = (window as unknown as { __demoWorld: () => { armies: object[] } }).__demoWorld();
+    const world = window.__demoWorld() as { armies: object[] };
     world.armies = world.armies.map((a) => ({ ...a }));
   });
 }

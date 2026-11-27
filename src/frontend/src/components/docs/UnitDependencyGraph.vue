@@ -1,9 +1,9 @@
 <script setup lang="ts">
 // The training page's unit dependency graph: one lane per training building, every unit at the building level that opens it,
-// arrows from a prerequisite unit to the unit that needs it. Built from the unit catalogue (see lib/docs/unitGraph.ts for the
+// Built from the unit catalogue (see lib/docs/unitGraph.ts for the
 // layout). Building names link like everywhere in the docs. On phones the graph is too wide, so a list per building,
 // ordered by level, takes its place.
-import { computed, useId } from 'vue';
+import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { unitName } from '../../i18n/catalogueNames';
@@ -16,7 +16,6 @@ import {
   GRAPH_MAX_LEVEL,
   GRAPH_NODE_H,
   GRAPH_NODE_W,
-  edgePath,
   layoutUnitGraph,
   unitsByLevel,
 } from '../../lib/docs/unitGraph';
@@ -24,7 +23,6 @@ import {
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const units = useUnitCatalogueStore();
 const buildings = useBuildingCatalogueStore();
-const markerId = `arrow-${useId()}`;
 
 const layout = computed(() =>
   layoutUnitGraph(units.definitions, (building) => buildings.byType[building]?.[0]?.requiredLonghouseLevel ?? null),
@@ -65,11 +63,6 @@ const lists = computed(() =>
           role="img"
           :aria-label="t('docs.training.graph.label')"
         >
-          <defs>
-            <marker :id="markerId" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-              <path d="M0 0 8 4 0 8z" class="arrow-head" />
-            </marker>
-          </defs>
           <g class="scale">
             <template v-for="level in levels" :key="level">
               <text :x="GRAPH_X0 + GRAPH_COL * (level - 0.5)" y="18" text-anchor="middle" class="level-no">{{ level }}</text>
@@ -90,14 +83,6 @@ const lists = computed(() =>
             :x2="layout.width"
             :y2="lane.top"
             class="lane-line"
-          />
-          <path
-            v-for="edge in layout.edges"
-            :key="`${edge.from}-${edge.to}`"
-            :d="edgePath(nodeByType[edge.from]!, nodeByType[edge.to]!, edge.cross)"
-            :class="['edge', { cross: edge.cross }]"
-            :marker-end="`url(#${markerId})`"
-            :data-edge="`${edge.from}>${edge.to}`"
           />
           <g v-for="node in layout.nodes" :key="node.type" class="node" :data-unit="node.type">
             <rect
@@ -129,9 +114,6 @@ const lists = computed(() =>
             <ul>
               <li v-for="u in row.units" :key="u.type">
                 {{ unitName(u.type) }}
-                <span v-if="u.requiredUnitType" class="req">
-                  · {{ t('docs.training.graph.needsUnit', { unit: unitName(u.requiredUnitType) }) }}
-                </span>
                 <span v-if="nodeByType[u.type]?.longhouseBadge" class="req">
                   · {{ t('docs.training.graph.longhouse', { level: nodeByType[u.type]!.longhouseBadge }) }}
                 </span>
@@ -187,18 +169,6 @@ svg {
 }
 .lane-line {
   stroke: rgba(255, 255, 255, 0.08);
-}
-.edge {
-  fill: none;
-  stroke: rgba(255, 197, 92, 0.6);
-  stroke-width: 1.5;
-}
-.edge.cross {
-  stroke: rgba(255, 197, 92, 0.45);
-  stroke-dasharray: 5 4;
-}
-.arrow-head {
-  fill: var(--gold);
 }
 .node rect {
   fill: rgba(19, 34, 44, 0.9);
