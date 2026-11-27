@@ -87,6 +87,7 @@ import {
   endgameDrawTile,
   giantArtFamilyFor,
   giantTopAnimFor,
+  giantOrientationFor,
   giantTopTextureFor,
   loadAnimAtlases,
   loadBuildingAtlases,
@@ -4896,10 +4897,12 @@ export class HexMapRenderer {
         const giantLevel = worldModel.giantArtLevelAt(tile);
         const giantFamily = giantStageKey(giantArtFamilyFor(tile.giant!.family, tile.wasted ?? false), giantLevel);
         const plainFamily = giantStageKey(tile.giant!.family, giantLevel);
+        // The art pack decides which camera views a giant has (Naglfar ships only NE and SE); every placement lands on one.
+        const giantOrientation = giantOrientationFor(textures, plainFamily, tile.giant!.orientation);
         const giantAnim =
-          giantTopAnimFor(textures, giantFamily, tile.giant!.orientation, tile.giant!.part) ??
+          giantTopAnimFor(textures, giantFamily, giantOrientation, tile.giant!.part) ??
           (giantFamily !== plainFamily
-            ? giantTopAnimFor(textures, plainFamily, tile.giant!.orientation, tile.giant!.part)
+            ? giantTopAnimFor(textures, plainFamily, giantOrientation, tile.giant!.part)
             : undefined);
         // A giant part with an animated clip but no static frame of its own
         // (shouldn't normally happen — every part ships both — but cheap to
@@ -4907,9 +4910,9 @@ export class HexMapRenderer {
         // static texture/crop source, same sourceSize height as a real
         // static frame would have.
         const giantTexture =
-          giantTopTextureFor(textures, giantFamily, tile.giant!.orientation, tile.giant!.part) ??
+          giantTopTextureFor(textures, giantFamily, giantOrientation, tile.giant!.part) ??
           (giantFamily !== plainFamily
-            ? giantTopTextureFor(textures, plainFamily, tile.giant!.orientation, tile.giant!.part)
+            ? giantTopTextureFor(textures, plainFamily, giantOrientation, tile.giant!.part)
             : undefined) ??
           giantAnim?.textures[0];
         if (giantTexture) {

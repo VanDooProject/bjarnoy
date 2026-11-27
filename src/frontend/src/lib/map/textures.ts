@@ -2134,8 +2134,22 @@ export function campArtFor(
     return { orientation, riverArt: { key: family, orientation } };
   }
 
-  if (kept.length === 0) return { orientation: camp.orientation };
-  return { orientation: kept[TILE_ORIENTATIONS.indexOf(camp.orientation) % kept.length]! };
+  return { orientation: keptOrientation(camp.orientation, kept) };
+}
+
+/**
+ * Maps a tile's own orientation onto the orientations its art actually ships (`kept`, in `TILE_ORIENTATIONS` order) by modulo:
+ * the art pack decides which camera views a camp or giant has, and every placement lands on one of them. With nothing kept,
+ * the orientation stays as it is.
+ */
+export function keptOrientation(orientation: TileOrientation, kept: readonly TileOrientation[]): TileOrientation {
+  return kept.length === 0 ? orientation : kept[TILE_ORIENTATIONS.indexOf(orientation) % kept.length]!;
+}
+
+/** The orientation a giant of art key `family` (a `giantStageKey`) draws in: its own, mapped onto the views its pack ships. */
+export function giantOrientationFor(textures: TileTextures, family: string, orientation: TileOrientation): TileOrientation {
+  const kept = TILE_ORIENTATIONS.filter((o) => textures.giants[family]?.[o]?.C !== undefined);
+  return keptOrientation(orientation, kept);
 }
 
 /** The top (props/building) layer texture for a tile, or `undefined` if this key has no top layer. */
