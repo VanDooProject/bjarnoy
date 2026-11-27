@@ -306,4 +306,29 @@ public sealed class UserService(GameDbContext dbContext, TimeProvider timeProvid
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return (UserEditOutcome.Success, user);
     }
+
+    /// <summary>
+    /// Sets the account's renown total (admin correction / testing). Only
+    /// <see cref="UserEntity.RenownTotal"/> changes: <c>RenownSettledAt</c> is
+    /// left alone, so the building accrual not yet settled since the last read
+    /// still lands on top of the value set here, exactly as it would have on the
+    /// old one.
+    /// </summary>
+    public async Task<(UserEditOutcome Outcome, UserEntity? User)> SetRenownAsync(
+        Guid id, double renown, CancellationToken cancellationToken = default)
+    {
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(u => u.Id == id && !u.IsSystem, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (user is null)
+        {
+            return (UserEditOutcome.NotFound, null);
+        }
+
+        user.RenownTotal = renown;
+
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return (UserEditOutcome.Success, user);
+    }
 }

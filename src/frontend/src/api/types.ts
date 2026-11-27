@@ -1064,6 +1064,7 @@ export interface AdminUserResponse {
   createdAt: string;
   lastLoginAt: string | null;
   isPremium: boolean;
+  renown: number;
 }
 
 export interface AdminUserSettlementSummary {
@@ -1107,6 +1108,10 @@ export interface SetUserStatusRequest {
 
 export interface SetUserPremiumRequest {
   isPremium: boolean;
+}
+
+export interface SetUserRenownRequest {
+  renown: number;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminSettlementContracts.cs.
