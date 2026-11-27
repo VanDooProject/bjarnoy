@@ -13,8 +13,12 @@ The table comes first; the per-action sections with screenshots follow below it.
 - Viewports: desktop 1280×800, phone 390×844 (touch). Headless Chromium, software rendering.
 - Driven with Playwright through the real UI (clicks on the canvas and ring bubbles). Live mode has no debug hooks, so hexes
   there were found by clicking around the guidance arrow.
-- Not covered: armies and fights (no armies exist this early, and demo mode has no army dispatch), ships, trade, a
-  second settlement, admin pages, German locale.
+- Armies, ships and the second settlement (B1–B12) were played live on a realm staged with the admin endpoints
+  (longhouse 12, barracks, archery range, town square, cart workshop, harbour, shipyard, troops, two karves, a knarr,
+  five settlers, resources), world speed 200 so marches finish in minutes, and renown raised in the database to clear the
+  second-settlement gate. The rest of the realm's flow is the real one.
+- Not covered: wildlife camps (this world's islands list no camps), sieges, guild actions, phone layout of the army
+  panels, admin pages, German locale.
 
 Rating scale:
 
@@ -70,15 +74,32 @@ Rating scale:
 | P2 | Phone: build via ring | demo | 4 | Two-tap commit with the hint "Tap Reindeer Herder again to build" works; card docks at the bottom |
 | P3 | Phone: drawer after onboarding | demo | 2 | Register nudge overlaps the drawer's nav (Settlement link half covered); realm name truncated ("Unnamed re…") |
 | P4 | Phone: settlement HUD | demo | 3 | Drawer nav has Settlement / Reports / Alliance / Docs, desktop anonymous top bar only Settlement / Docs (same state, different nav) |
+| B1 | Click a rival longhouse | live | 3 | Ring has only "Attack": no owner, no profile or message link, no scouting info besides "LV 1" |
+| B2 | Train units (barracks, shipyard) | live | 4 | Clear modal: stats, cost, time, lock chips, queue with slots. Esc doesn't close it; the button reads "Train 1 order" for five spearmen |
+| B3 | Attack: choose source and troops | live | 3 | "Attack" first opens a source picker inside the Armies panel, then the troop form; every count starts at 0 with no "all" / max; karves, settlers and the knarr are listed in a land attack |
+| B4 | Attack: march and result | live | 2 | No notice when the fight happens or the army comes back; the only sign is an unread dot on the avatar. The army isn't followed or highlighted on the map |
+| B5 | Read the battle report | live | 4 | Clear numbers (power, sent/lost/survived, loot). Doesn't name the target or where it was; defender side says "No stacks recorded." |
+| B6 | Settlers: renown gate | live | 1 | "Send settlers" stays disabled with "Checking your renown…" until you open the Town Square once; renown is only loaded there |
+| B7 | Settlers: pick a site | live | 2 | The ring offers "Send settlers" on hexes the server then refuses ("too close to an already-claimed settlement's border"); the rule isn't shown before you commit |
+| B8 | Dispatch errors | live | 1 | The refusal text is printed at the top of the Armies panel, which has grown past the screen under the Training/Garrison panel; after "Confirm dispatch" nothing visible happens |
+| B9 | Settlers by sea | live | 2 | Fogged target is a white screen; adding a karve gives "No sea route" only after Confirm, with no route preview before |
+| B10 | Move troops by ship | live | 2 | Works, but the order splits into two rows ("1× Karve, moves on in 15s", "10× Spearman, arrives in 15s"), then reads "heads home in 209h 58m" while parked at sea; the source picker also lists the marching settlers as "Can't get there" |
+| B11 | Second settlement founded | live | 2 | No notice; the settler row stays as "5× Settler, heads home in 159h 53m" and a "Connection problem — retrying GET /armies/<id> → 404" banner appears. Default name "Jarl-5f4d's Settlement" uses the anonymous jarl name, not the account name, while the first realm is "Unnamed realm" |
+| B12 | Switch between realms | live | 3 | Realm menu lists both; picking the second switches the top bar but leaves the camera on the first realm |
+| B13 | Trade | live | 1 | No trade UI: the frontend removed it "until trade is redesigned" (`stores/world.ts`). The Reports "Trade" tab and the showcase page ("Trade between players") still advertise it; the knarr can be trained and dispatched but has nothing to do |
 
 ### Biggest problems
 
 1. **A36 session expiry** — a logged-out player is stuck on raw HTTP errors while the client hammers the API.
 2. **A35 / A34** — blank page on unknown URLs; Impressum placeholder text is public.
 3. **A8 onboarding hand-off** — after the guided builds there is no "continue"; the register nudge is the only prompt.
-4. **A24 / A23 / A22 army and world map** — disabled actions look enabled and give no reason; the world map shows nothing.
-5. **Technical text in player UI (live)** — see [Developer text visible with the backend](#developer-text-visible-with-the-backend).
-6. **Naming drift** — realm / settlement / longhouse, Alliance / Guild, Storehouse / Storage House, Bjarnøy / Bjarnoy.
+4. **Army dispatch (B6–B11)** — settlers blocked by a renown check that never runs, refusals hidden off-screen, sites
+   offered that the server refuses, stale army rows and 404 banners after founding, no notice when fights or foundings
+   happen.
+5. **A24 / A23 / A22 world map** — disabled actions look enabled and give no reason; the world map shows nothing.
+6. **B13 trade** — advertised, not playable.
+7. **Technical text in player UI (live)** — see [Developer text visible with the backend](#developer-text-visible-with-the-backend).
+8. **Naming drift** — realm / settlement / longhouse, Alliance / Guild, Storehouse / Storage House, Bjarnøy / Bjarnoy.
 
 ### Developer text visible with the backend
 
@@ -452,6 +473,118 @@ session expires or after logging in elsewhere): `/auth/refresh` answers 401.
   Settlement / Docs.
 - Settlement HUD: compact resource row, quests collapse into a bar at the bottom — works; the map area is still mostly
   fog.
+
+### B1 Click a rival longhouse
+
+![Rival longhouse ring](img/61-enemy-ring.jpg)
+
+- The staged realm for the B rows, for reference:
+
+![Staged realm](img/60-staged-realm.jpg)
+
+- On a neighbour's longhouse the ring shows "LONGHOUSE / LV 1 · HEX -156, 137" and one bubble, "Attack". No owner name,
+  no link to the profile or messages, nothing about its defence.
+
+### B2 Train units
+
+![Barracks](img/62-train-open.jpg)
+![Five spearmen picked](img/63-train-5.jpg)
+![Training queued](img/64-trained.jpg)
+![Shipyard](img/78-shipyard.jpg)
+
+- Barracks → "Train units": unit rows with attack/defence, cost and time, locked units with chips ("Barracks 6 (now 5)").
+  The order lands in "Training here" and in a Training panel on the map.
+- Esc leaves the modal open.
+- Five spearmen are one order, the button says "Train 1 order"; the count of units would be clearer.
+
+### B3 Attack: choose source and troops
+
+![Source picker](img/65-attack-source.jpg)
+![Troops filled](img/66-attack-filled.jpg)
+
+- "Attack" doesn't open the form; it opens "Attack → Unnamed realm" with a list of sources ("Unnamed realm · Home · 68
+  units · Attack"). The troop form comes after picking the source.
+- All counts start at 0; there is no "all" or "max" per row.
+- Karve, Settler and Knarr are offered for a land attack.
+- The target reads "Unnamed realm (Jarl-7ab0)": every new realm has the same name.
+
+### B4 Attack: march and result
+
+![Army marching](img/67-attack-sent.jpg)
+![Army returning](img/68-attack-returning.jpg)
+![After the battle](img/69-after-battle.jpg)
+
+- The Armies panel shows "⚔20 ⚔10 · arrives in 3m 33s", then "home in 1m 31s". The fight happened in between without
+  any message; the avatar got an unread dot, that was all.
+- The camera stays where it was; the army isn't highlighted.
+
+### B5 Read the battle report
+
+![Report list](img/70-battle-report-list.jpg)
+![Report](img/71-battle-report.jpg)
+
+- "Victory · Attack · 0 lost, 30 survived, 800 looted", expanded with attack/defence power, units and loot.
+- The report doesn't say which realm or which hex was attacked.
+- Defender: "No stacks recorded." reads like a log message; "No defenders" would say it.
+
+### B6 Settlers: renown gate
+
+![Stuck renown check](img/72-settler-renown-stuck.jpg)
+![Town Square renown](img/73-townsquare-renown.jpg)
+
+- On a free grass hex, "Send settlers" is disabled with the tooltip "Checking your renown…", and stays so (3 s+ hover,
+  renown 100,098 of 80,000 needed).
+- Opening the Town Square ("Feasts") loads the renown ("You already have enough renown for your next settlement"); after
+  that the bubble is enabled. `world.loadRenownLive()` is only called from the Town Square modal and after a feast.
+
+### B7 Settlers: pick a site / B8 dispatch errors
+
+![Refused, nothing visible](img/74-settler-refused.jpg)
+![The error, scrolled into view](img/77-sea-refused-error.jpg)
+
+- The ring offered "Send settlers" on -149, 134; the server answered 409 "The target hex is too close to an
+  already-claimed settlement's border."
+- On screen nothing changed: the panel had scrolled to its buttons, and its top — where the error is printed — sits
+  under the Training/Garrison panel. Scrolling the panel up shows "No sea route: the ships can't reach that by water."
+  (second attempt) in red at the very top.
+
+### B9 Settlers by sea
+
+![Fogged target](img/75-fog-target-ring.jpg)
+![Karve added](img/76-settlers-by-sea.jpg)
+
+- Targeting the small island Valdey: the map is plain white fog with the ring floating on it ("SHORE / HEX -78, 49").
+- The form explains "With ships the convoy sails and lands on the last hex"; with a karve added, Confirm returns "No sea
+  route". There is no route line or check before Confirm.
+
+### B10 Move troops by ship
+
+![Source picker](img/79-ship-move-source.jpg)
+![Sent](img/80-ship-move-sent.jpg)
+![Parked at sea](img/81-army-at-sea.jpg)
+
+- "Send army here" on open water → source picker. Next to "Home · 63 units" it lists the marching settlers as "Unnamed
+  realm · Can't get there".
+- After Confirm the order shows as two rows (karve and spearmen), then one row "10× Spearman, 1× Karve, heads home in
+  209h 58m" once parked — at world speed 200. Neither a "stay" state nor a recall button is visible in the row.
+
+### B11 Second settlement founded / B12 switch realms
+
+![After founding](img/82-after-founding.jpg)
+![Two realms](img/83-two-realms.jpg)
+![Second realm selected](img/84-second-realm.jpg)
+
+- The settlers arrived and founded, but there was no message. The Armies panel kept "5× Settler, heads home in 159h 53m"
+  and the banner "Connection problem — retrying GET /armies/01a21acd-… → 404" appeared.
+- The realm menu now lists "Unnamed realm" and "Jarl-5f4d's Settlement" (the anonymous jarl name from before
+  registering, not the account name).
+- Picking the second realm switches the top bar (706/750, Longhouse 1) but the camera stays on the first realm.
+
+### B13 Trade
+
+- No trade action anywhere: not on the Town Square, the harbour, the knarr or in a menu. `stores/world.ts` notes the
+  trade UI was "removed until trade is redesigned"; the API endpoints still exist.
+- Still advertised: the Reports "Trade" tab and the showcase card "Trade between players".
 
 ### Other
 
