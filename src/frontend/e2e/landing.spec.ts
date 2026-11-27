@@ -390,6 +390,6 @@ test('desktop keeps the header and the onboarding checklist visible throughout, 
 test('impressum page is reachable and links back', { tag: '@g3' }, async ({ page }) => {
   await page.goto('/impressum');
   await expect(page.getByRole('heading', { name: 'Impressum' })).toBeVisible();
-  await page.getByRole('button', { name: /back/i }).click();
+  await page.getByRole('link', { name: /back/i }).click();
   await page.waitForURL('**/');
 });
