@@ -11,6 +11,8 @@ on:
       - 'deploy/Dockerfile'
       - '.dockerignore'
       - '.github/workflows/docker-image.yml'
+      # markdown-only changes don't need CI
+      - '!**/*.md'
   workflow_dispatch:
 
 env:

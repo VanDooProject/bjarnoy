@@ -16,6 +16,8 @@ on:
       # vitest.config.ts also runs the worldgen-preview tooling's tests
       - 'scripts/worldgen-preview/**'
       - '.github/workflows/frontend-ci.yml'
+      # markdown-only changes don't need CI
+      - '!**/*.md'
 
 defaults:
   run:
