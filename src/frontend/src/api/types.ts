@@ -1491,7 +1491,12 @@ export interface LeaderboardMeResponse {
 export interface BuildingPrerequisiteResponse {
   type: string;
   level: number;
+  /** Set when the prerequisite applies only on islands of that soil (the meadery's Farm on wheat, Pumpkin Farm on pumpkin); absent: every island. */
+  soil?: IslandSoil | null;
 }
+
+/** The crop an island's soil grows — `SoilType` on the backend. */
+export type IslandSoil = 'wheat' | 'pumpkin';
 
 /** A single (building type, level) entry from the tech-tree catalogue — see `GET /api/v1/buildings`. */
 export interface BuildingDefinitionResponse {
@@ -1530,6 +1535,11 @@ export interface BuildingDefinitionResponse {
    * level-10-only tier).
    */
   prerequisites: BuildingPrerequisiteResponse[];
+  /**
+   * The island soil the building can be newly placed on (farm, crop mill: `wheat`; pumpkin farm: `pumpkin`), or null for any island.
+   * Levelling one already standing is never refused by it.
+   */
+  requiredSoil?: IslandSoil | null;
   /**
    * The build ring's group this building is listed under (`resource`, `military`, `logistics`, `defense`, `religion`, `water`), or
    * null for the one building the ring never lists (the longhouse). The ring is built from it (`lib/map/placementRules.ts`).

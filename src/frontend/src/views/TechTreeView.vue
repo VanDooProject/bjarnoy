@@ -19,7 +19,7 @@ import {
 } from '../lib/map/buildingArt';
 import type { MessageSchema } from '../i18n/schema';
 import { HIDDEN_FROM_DOCS } from '../lib/techtree/layout';
-import { prerequisitesOf } from '../lib/techtree/nodes';
+import { prerequisiteGroups, prerequisitesOf } from '../lib/techtree/nodes';
 import { GRAPH_CATEGORY_ORDER, graphCategoryOf } from '../lib/techtree/buildingPresentation';
 
 const catalogue = useBuildingCatalogueStore();
@@ -217,7 +217,12 @@ function thumbAnimatedLayers(type: string) {
 function prerequisiteLabel(type: string): string | null {
   const prerequisites = prerequisitesOf(catalogue.byType, type);
   if (prerequisites.length === 0) return null;
-  return prerequisites.map((p) => `${typeLabel(p.type)} level ${p.level}`).join(' and ');
+  const spell = (list: readonly { type: string; level: number }[], joiner: string) =>
+    list.map((p) => `${typeLabel(p.type)} level ${p.level}`).join(joiner);
+  const { main, variants } = prerequisiteGroups(prerequisites);
+  // What another soil needs instead, e.g. "(pumpkin soil: Pumpkin Farm level 15)".
+  const variantTexts = variants.map((v) => t('docs.needs.variant', { soil: t(`docs.needs.soil.${v.soil}`), needs: spell(v.needs, ', ') }));
+  return [spell(main, ' and '), ...variantTexts].filter((part) => part !== '').join(' ');
 }
 
 function terrainLabel(requiresCoastalWater: boolean, terrain: string[]): string {

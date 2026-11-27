@@ -165,8 +165,8 @@ public static class BuildingCatalogue
     /// </para>
     /// <para>
     /// The Reindeer Herder is the starting food building (LH 1). Farm and Pumpkin
-    /// Farm both unlock at LH 4 behind a level-3 Herder; Pumpkin Farm stays
-    /// soil-gated (see <see cref="Settlement.PlanBuild"/>'s islandSoil parameter).
+    /// Farm both unlock at LH 4 behind a level-3 Herder; each island takes
+    /// only the one its soil grows (see <see cref="Settlement.PlanBuild"/>'s islandSoil parameter).
     /// </para>
     /// </remarks>
     private static readonly IReadOnlyDictionary<BuildingType, int> UnlockLevels =
@@ -318,7 +318,7 @@ public static class BuildingCatalogue
             [BuildingType.SiegeWorkshop] = [new(BuildingType.ArcheryRange, 3)],
             [BuildingType.CartWorkshop] = [new(BuildingType.TownSquare, 3)],
             [BuildingType.BogOreWorks] = [new(BuildingType.ClayBrickworks, 3)],
-            [BuildingType.Meadery] = [new(BuildingType.Farm, 5)],
+            [BuildingType.Meadery] = [new(BuildingType.Farm, 5, SoilType.Wheat), new(BuildingType.PumpkinFarm, 5, SoilType.Pumpkin)],
             [BuildingType.DruidHut] = [new(BuildingType.TownSquare, 5)],
             [BuildingType.Smithy] = [new(BuildingType.Barracks, 10)],
             [BuildingType.GreatStorehouse] = [new(BuildingType.StorageHouse, 25)],
@@ -326,13 +326,24 @@ public static class BuildingCatalogue
             [BuildingType.CropMill] = [new(BuildingType.Farm, 10)],
             [BuildingType.Hammerschmiede] = [new(BuildingType.BogOreWorks, 10)],
             [BuildingType.ShrineOfUllr] = [new(BuildingType.Sawmill, 5)],
-            [BuildingType.ShrineOfFreyja] = [new(BuildingType.CropMill, 5)],
+            [BuildingType.ShrineOfFreyja] = [new(BuildingType.CropMill, 5, SoilType.Wheat), new(BuildingType.PumpkinFarm, 15, SoilType.Pumpkin)],
             [BuildingType.ShrineOfNjord] = [new(BuildingType.Harbour, 10)],
             [BuildingType.ShrineOfThor] = [new(BuildingType.Smithy, 5)],
             // A settlement holds only one shrine, so Odin cannot ask for
             // another one as a feeder; the Druid Hut is the civic line's end.
             [BuildingType.OdinStatue] = [new(BuildingType.DruidHut, 10)],
         };
+
+    /// <summary>
+    /// The island soil a building can be newly placed on (<see cref="BuildingDefinition.RequiredSoil"/>), or
+    /// <see langword="null"/> for any island. The Crop Mill grinds wheat, so it follows Farm.
+    /// </summary>
+    private static SoilType? RequiredSoilFor(BuildingType type) => type switch
+    {
+        BuildingType.Farm or BuildingType.CropMill => SoilType.Wheat,
+        BuildingType.PumpkinFarm => SoilType.Pumpkin,
+        _ => null,
+    };
 
     /// <summary>
     /// The prerequisites attached to one level's definition. Prerequisites gate
@@ -367,17 +378,16 @@ public static class BuildingCatalogue
             // The starting food building: any grass, any island, LH 1. No
             // terrain boost, like Farm (a herd is not a concentrating resource).
             BuildingType.ReindeerHerder => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 8, 0), new ResourceAmounts(Wood: 52, Stone: 36, Food: 7, Iron: 0), brickFreeLevels: StartBrickFreeLevels),
-            // Buildable on any island regardless of soil, from LH 4 behind a
+            // Only buildable on a Wheat-soil island, from LH 4 behind a
             // level-3 Reindeer Herder (it and PumpkinFarm are one tech-tree
             // card, split into two types only by their soil rule).
             BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 12, 0), new ResourceAmounts(Wood: 57, Stone: 29, Food: 9, Iron: 0)),
             BuildingType.StorageHouse => StorageHouse(level),
             BuildingType.Tower => Tower(level),
             BuildingType.FishingHut => FishingHut(level),
-            // The bonus crop: only buildable on a Pumpkin-soil island
+            // Only buildable on a Pumpkin-soil island, where it replaces Farm
             // (Settlement.PlanBuild's islandSoil parameter, from
-            // World.TerrainSampler.SoilAt) — not a free player choice, and
-            // not gated the other way (Farm stays buildable everywhere).
+            // World.TerrainSampler.SoilAt) — not a free player choice.
             // Yields more than Farm: an indirect fertility signal via the
             // production curve rather than a separate bonus multiplier —
             // that's what makes a Pumpkin-soil island "more fertile".
@@ -466,6 +476,7 @@ public static class BuildingCatalogue
         {
             Cost = NiceRound(definition.Cost),
             Prerequisites = PrerequisitesFor(type, level),
+            RequiredSoil = RequiredSoilFor(type),
             RequiredLonghouseLevel = RequiredLonghouseLevelFor(type, level),
             RingCategory = ring.Category,
             RingOrder = ring.Order,
@@ -706,7 +717,7 @@ public static class BuildingCatalogue
     /// <see cref="Totals(IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain}?)"/>.
     /// Crop Mill grinds grain, so it only boosts Farm — PumpkinFarm is a
     /// different crop (see <see cref="BuildingType.PumpkinFarm"/>'s own doc
-    /// comment: the Pumpkin-soil-only bonus, not the staple a mill grinds).
+    /// comment: the Pumpkin-soil island's crop, not grain a mill grinds).
     /// </summary>
     private static readonly IReadOnlyDictionary<BuildingType, IReadOnlySet<BuildingType>> RadiusBoostTargets =
         new Dictionary<BuildingType, IReadOnlySet<BuildingType>>

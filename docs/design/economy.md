@@ -124,8 +124,8 @@ whole number, 100–999 to the nearest 10, 1 000–9 999 to the nearest 50,
 - The Longhouse produces wood and food only: no brick, no iron.
 - Each producer level adds 20% more output than the level before it, starting at 8/h for wood and brick.
 - The food buildings are worth different amounts, so where you build food is a choice: Reindeer Herder 8/h (the start building), Farm 12/h, Pumpkin Farm 13/h, Fishing Hut 16/h (going to the shore for fish pays off).
-- Farms are the upgrade over Reindeer Herders: once Farms unlock, it pays to build Farms instead and tear the old Herders down.
-- The Pumpkin Farm yields more than the Farm, but no mill boosts it (the Crop Mill boosts Farms only).
+- Each island grows one crop: Farms only on wheat soil, Pumpkin Farms only on pumpkin soil (about half the islands each; the player doesn't choose). Once farms unlock, it pays to build the island's farm instead of Reindeer Herders and tear the old Herders down. A Pumpkin Farm counts as a Farm for every building that needs a Farm level.
+- The Pumpkin Farm yields more than the Farm, but no mill boosts it: the Crop Mill can't be built on a pumpkin-soil island.
 - A building costs least of the resource it produces; each building has its own mix of wood, brick and food.
 - Producer levels 1–3 cost less than the formula: ×0.6, ×0.75 and ×0.9.
 - A building's level 1 costs about a quarter of the Longhouse upgrade at the level it unlocks. The late buildings (the Druid Hut and everything unlocking from Longhouse 15 on) grow so that their top level costs 40% of a Longhouse 30; the shrines and the Druid Hut 50%.
@@ -204,12 +204,12 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 | 9 | Archery Range | Barracks 5 |
 | 10 | Cart Workshop (settlers) | Town Square 3 |
 | 10 | Shipyard (warships, fire craft) | Harbour 5 |
-| 11 | Meadery | Farm 5 |
+| 11 | Meadery | Farm 5 (or Pumpkin Farm 5) |
 | 12 | Druid Hut | Town Square 5 |
 | 15 | Weaponsmith, Great Storehouse | Barracks 10 / Storage House 25 (the n-th Great Storehouse: n Storage Houses at 25) |
 | 18 | Siege Workshop (trains the catapult and the battering ram) | Archery Range 3 |
-| 20 | Sawmill, Crop Mill, Hammer Forge | Lumberjack 10 / Farm 10 / Bog-ore works 10 |
-| 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue | Sawmill 5 / Crop Mill 5 / Harbour 10 / Weaponsmith 5 / **Druid Hut 10** (Odin) |
+| 20 | Sawmill, Crop Mill, Hammer Forge | Lumberjack 10 / Farm 10, wheat-soil islands only / Bog-ore works 10 |
+| 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue | Sawmill 5 / Crop Mill 5 (on a pumpkin-soil island: Pumpkin Farm 15) / Harbour 10 / Weaponsmith 5 / **Druid Hut 10** (Odin) |
 
 The shrines all open at LH 25, but each also needs its own feeder, so in
 practice they still arrive one at a time.

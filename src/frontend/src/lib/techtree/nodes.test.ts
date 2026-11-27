@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import catalogue from '../../data/building-catalogue.json';
 import type { BuildingDefinitionResponse } from '../../api/types';
-import { MERGED_CARDS, buildTechTreeNodes, prerequisitesOf, unlockLevel } from './nodes';
+import { MERGED_CARDS, buildTechTreeNodes, prerequisiteGroups, prerequisitesOf, unlockLevel } from './nodes';
+import { buildGraph } from './graph';
 import { HIDDEN_FROM_DOCS, TECH_TREE_LAYOUT } from './layout';
 
 const byType: Record<string, BuildingDefinitionResponse[]> = {};
@@ -89,7 +90,7 @@ describe('buildTechTreeNodes', () => {
     expect(bridge.gives).toBe('Opens a wide river to land armies');
     expect(bridge.category).toBe('logistics');
     expect(byType.bridge).toHaveLength(4);
-    expect(prerequisitesOf(byType, 'bridge')).toEqual([{ type: 'townsquare', level: 1 }]);
+    expect(prerequisitesOf(byType, 'bridge')).toEqual([{ type: 'townsquare', level: 1, soil: null }]);
   });
 
   it('draws the Odin Statue behind the Druid Hut, with both favours on the card', () => {
@@ -128,6 +129,19 @@ describe('buildTechTreeNodes', () => {
     ]);
   });
 
+  it('names what pumpkin soil needs instead as its own chip', () => {
+    expect(byName.get('meadery')!.chips).toEqual([
+      { text: 'LH 11', kind: 'longhouse' },
+      { text: 'Farm 5', kind: 'building' },
+      { text: 'Pumpkin 5', title: 'Pumpkin soil: Pumpkin farm 5', kind: 'soil' },
+    ]);
+    expect(byName.get('shrineoffreyja')!.chips.map((c) => [c.text, c.title])).toEqual([
+      ['LH 25', undefined],
+      ['Crop mill 5', undefined],
+      ['Pumpkin 15', 'Pumpkin soil: Pumpkin farm 15'],
+    ]);
+  });
+
   it('describes what a building gives from the shared stats helper', () => {
     expect(byName.get('lumberjack')!.gives).toBe('+8 Wood/h');
     expect(byName.get('storagehouse')!.gives).toBe('+300 storage capacity');
@@ -154,11 +168,37 @@ describe('buildTechTreeNodes', () => {
 describe('unlockLevel and prerequisitesOf', () => {
   it('read the level-1 definition, not the whole ladder', () => {
     expect(unlockLevel(byType.tower!)).toBe(3);
-    expect(prerequisitesOf(byType, 'archeryrange')).toEqual([{ type: 'barracks', level: 5 }]);
+    expect(prerequisitesOf(byType, 'archeryrange')).toEqual([{ type: 'barracks', level: 5, soil: null }]);
   });
 
   it('report nothing for a building the catalogue does not have', () => {
     expect(prerequisitesOf(byType, 'claypit')).toEqual([]);
     expect(unlockLevel([])).toBe(1);
+  });
+});
+
+describe('prerequisiteGroups', () => {
+  it('reads the wheat prerequisite as the plain one and the pumpkin one as the variant', () => {
+    const { main, variants } = prerequisiteGroups(prerequisitesOf(byType, 'shrineoffreyja'));
+
+    expect(main.map((p) => [p.type, p.level])).toEqual([['cropmill', 5]]);
+    expect(variants).toEqual([{ soil: 'pumpkin', needs: [expect.objectContaining({ type: 'pumpkinfarm', level: 15 })] }]);
+  });
+
+  it('has no variant for a building whose prerequisites do not depend on the soil', () => {
+    expect(prerequisiteGroups(prerequisitesOf(byType, 'shrineofthor')).variants).toEqual([]);
+  });
+});
+
+describe('tech-tree graph with soil-tagged prerequisites', () => {
+  it('draws no edge for the pumpkin variants: Pumpkin Farm has no card of its own', () => {
+    const graph = buildGraph(
+      nodes.map((n) => n.type),
+      (type) => prerequisitesOf(byType, type),
+    );
+
+    expect(graph.edges.filter((e) => e.to === 'meadery')).toEqual([{ from: 'farm', to: 'meadery' }]);
+    expect(graph.edges.filter((e) => e.to === 'shrineoffreyja')).toEqual([{ from: 'cropmill', to: 'shrineoffreyja' }]);
+    expect(graph.edges.some((e) => e.from === 'pumpkinfarm')).toBe(false);
   });
 });
