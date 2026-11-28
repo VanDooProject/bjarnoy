@@ -27,6 +27,15 @@ export const WORLD_SEA_GRADIENT = {
   ],
 } as const satisfies { centre: readonly [number, number]; radius: readonly [number, number]; stops: readonly SeaGradientStop[] };
 
+const cssPercent = (n: number): string => `${Math.round(n * 1000) / 10}%`;
+const cssHex = (hex: number): string => `#${hex.toString(16).padStart(6, '0')}`;
+
+/**
+ * The same gradient as a CSS background, for the map container behind the canvas: what shows before the renderer's first
+ * frame and after a lost WebGL context. The dark tier never sees it (the canvas is opaque over it in world mode).
+ */
+export const WORLD_SEA_GRADIENT_CSS = `radial-gradient(${cssPercent(WORLD_SEA_GRADIENT.radius[0])} ${cssPercent(WORLD_SEA_GRADIENT.radius[1])} at ${cssPercent(WORLD_SEA_GRADIENT.centre[0])} ${cssPercent(WORLD_SEA_GRADIENT.centre[1])}, ${WORLD_SEA_GRADIENT.stops.map((s) => `${cssHex(s.color)} ${cssPercent(s.at)}`).join(', ')})`;
+
 const glFloat = (n: number): string => n.toFixed(6);
 const glVec3 = (hex: number): string => `vec3(${hexToRgb01(hex).map(glFloat).join(', ')})`;
 

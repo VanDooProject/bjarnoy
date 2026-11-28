@@ -1868,9 +1868,8 @@ export type WorldLayerName =
  * it wrong fails *silently* — water over the tall art, or under the islands it
  * is supposed to lap against, both just look like a bad shader.
  *
- * **World mode**: first child. There is no water in the world-map canvas today
- * at all — the sea is the SeaBackdrop quad at the bottom of `underFogLayer`, and open
- * sea hexes are skipped outright — so the water mesh has a plain backdrop to
+ * **World mode**: first child. Open sea hexes are skipped outright and the sea
+ * is the SeaBackdrop quad at the bottom of `underFogLayer`, under `world` — so the water mesh has a plain backdrop to
  * cover, and the opaque island polygons in `terrainFlat` cover it wherever there
  * is land.
  *

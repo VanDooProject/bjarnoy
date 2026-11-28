@@ -44,16 +44,15 @@ player-facing graphics-settings UI.
 
 ## 1. What exists today
 
-### 1.1 World map — there is no water in the canvas at all
-
-This is the single most surprising fact about the current renderer and it
-drives most of §3.
+### 1.1 World map — the sea is a plain backdrop, open sea hexes are not drawn
 
 - The sea is the in-canvas **`SeaBackdrop`** (`lib/map/seaBackdrop.ts`): an opaque
   screen-space quad at the bottom of `underFogLayer`, a radial gradient
   (`WORLD_SEA_GRADIENT`: `#2a92ae` → `#14657f` → `#0b3c50`). It sits inside the
   fog's filtered subtree, so the dark tier greys it; the water mesh only covers
-  the last baked mask rect and no longer leaves saturated sea uncovered.
+  the last baked mask rect and no longer leaves saturated sea uncovered. The
+  container keeps the same gradient as CSS (`WORLD_SEA_GRADIENT_CSS`) for the
+  moment before the first frame and a lost WebGL context.
 - Islands are flat coloured hex polygons drawn into one `Graphics`
   (`HexMapRenderer.rebuildTerrainFlat`, `WORLD_TERRAIN_FILL`). Open sea is
   skipped outright: `if (tile.terrain === 'sea') continue;`
@@ -1347,7 +1346,7 @@ export interface WaterDebugFlags {
   causticShadows: boolean;
   /** Shader shoreline foam (§4.3). */
   shorelineFoam: boolean;       // default true
-  /** Shader sea body under the world map (§4.1); off → the CSS gradient shows through. */
+  /** Shader sea body under the world map (§4.1); off → the SeaBackdrop gradient shows through. */
   seaBody: boolean;             // default true
   /** The world map's wave squiggle sprites (waveLayer) — its surface pattern of record. */
   legacyWaveSquiggles: boolean; // default true

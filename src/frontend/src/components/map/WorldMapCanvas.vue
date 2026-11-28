@@ -4,6 +4,7 @@ import { useHexMapRenderer } from '../../composables/useHexMapRenderer';
 import type { WorldModel } from '../../lib/map/WorldModel';
 import type { AxialCoord } from '../../lib/hex/coords';
 import type { Tile } from '../../lib/map/types';
+import { WORLD_SEA_GRADIENT_CSS } from '../../lib/map/seaBackdrop';
 
 const props = defineProps<{
   worldModel: WorldModel;
@@ -41,7 +42,7 @@ defineExpose({ renderer });
 </script>
 
 <template>
-  <div ref="container" class="map-container">
+  <div ref="container" class="map-container" :style="{ background: WORLD_SEA_GRADIENT_CSS }">
     <canvas ref="canvas" :class="{ 'page-scroll': allowPageScroll }" />
   </div>
 </template>
@@ -53,7 +54,9 @@ defineExpose({ renderer });
   overflow: hidden;
   /* Open sea: islands carry their own flat hex fill (see HexMapRenderer's
      WORLD_TERRAIN_FILL); the sea behind them is drawn in the canvas by the
-     renderer (seaBackdrop.ts), so the fog's dark tier can grey it. */
+     renderer (seaBackdrop.ts), so the fog's dark tier can grey it. The inline
+     background is the same gradient, shown only before the first frame or
+     after a lost WebGL context. */
 }
 canvas {
   display: block;

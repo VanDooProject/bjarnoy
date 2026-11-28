@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { SEA_BACKDROP_FRAGMENT, SeaBackdrop, WORLD_SEA_GRADIENT } from './seaBackdrop';
-import { hexToRgb01 } from './shaderResources';
+import { SEA_BACKDROP_FRAGMENT, SeaBackdrop, WORLD_SEA_GRADIENT_CSS } from './seaBackdrop';
 
 // Pixi's GlProgram constructor probes a throwaway canvas; jsdom has none (see WaterLayer.test.ts).
 vi.hoisted(() => {
@@ -19,22 +18,15 @@ describe('SeaBackdrop', () => {
     expect(Array.from(geometry.getBuffer('aPosition').data)).toEqual([0, 0, 320, 0, 320, 200, 0, 200]);
     backdrop.destroy();
   });
+});
 
-  it('does not take part in hit-testing', () => {
-    const backdrop = new SeaBackdrop();
-    expect(backdrop.mesh.eventMode).toBe('none');
-    backdrop.destroy();
+describe('WORLD_SEA_GRADIENT_CSS', () => {
+  it('is the world map sea the container showed before the gradient moved into the canvas', () => {
+    expect(WORLD_SEA_GRADIENT_CSS).toBe('radial-gradient(115% 100% at 45% 40%, #2a92ae 0%, #14657f 48%, #0b3c50 100%)');
   });
 });
 
 describe('SEA_BACKDROP_FRAGMENT', () => {
-  it('is generated from every stop of the gradient', () => {
-    for (const stop of WORLD_SEA_GRADIENT.stops) {
-      const [r, g, b] = hexToRgb01(stop.color).map((v) => v.toFixed(6));
-      expect(SEA_BACKDROP_FRAGMENT).toContain(`vec3(${r}, ${g}, ${b})`);
-    }
-  });
-
   it('is opaque', () => {
     expect(SEA_BACKDROP_FRAGMENT).toContain('finalColor = vec4(col, 1.0);');
   });

@@ -33,7 +33,8 @@ test.describe('fog dark tier', { tag: '@g1' }, () => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     await gotoWorldMap(page);
-    await page.getByRole('button', { name: 'Later' }).click({ timeout: 2_000 }).catch(() => {});
+    // An anonymous founder always gets the account nudge; it would catch the drag below.
+    await page.getByRole('button', { name: 'Later' }).click();
 
     // Only the never-scouted white mist goes off (FogDebugPanel's own switches): the demo world has almost no explored
     // ground, so the mist would otherwise hide the dark tier this spec is about.

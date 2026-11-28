@@ -103,6 +103,8 @@ import { useSendBlockText, useSendPickerRows, useSendSources } from '../composab
 import { motionEnabled } from '../lib/motion';
 import { useHiddenUnderPhoneLayer, vPhoneHidden } from '../composables/usePhoneLayer';
 import MobileDispatchSheet from '../components/hud/MobileDispatchSheet.vue';
+// The world map's sea behind the canvas: only seen before the renderer's first frame or after a lost WebGL context.
+import { WORLD_SEA_GRADIENT_CSS } from '../lib/map/seaBackdrop';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -1676,6 +1678,7 @@ useQuickUpgradeInput({
       :world-model="world.model"
       :player-id="player.id"
       :settlement-id="world.selectedSettlementId"
+      :background="mode === 'world' ? WORLD_SEA_GRADIENT_CSS : undefined"
       @hex-click="onHexClick"
       @hover="onHover"
       @waypoint-move="onWaypointMove"
