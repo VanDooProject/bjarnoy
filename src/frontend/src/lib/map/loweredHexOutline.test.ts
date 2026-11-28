@@ -113,6 +113,12 @@ describe('pickVisibleHex', () => {
     expect([0, 1, 2].map((e) => neighbourAcrossEdge(C, e))).toContainEqual(behind);
   });
 
+  it("picks the land behind in the strip where its cliff hangs over the sea hex's back", () => {
+    const p = below(topMid, drop / 2);
+    const behind = pickVisibleHex(p, W, H, allSea);
+    expect(pickVisibleHex(p, W, H, loweredExcept([behind]))).toEqual(behind);
+  });
+
   it('picks land in front over the lowered face of the sea hex behind it', () => {
     const front = neighbourAcrossEdge(C, 4);
     expect(pickVisibleHex(below(bottomMid, drop / 2), W, H, loweredExcept([front]))).toEqual(front);
