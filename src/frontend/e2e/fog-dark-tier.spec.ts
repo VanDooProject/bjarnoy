@@ -2,7 +2,7 @@
 //
 // The sea is drawn by the renderer itself (SeaBackdrop, seaBackdrop.ts) inside the subtree the dark tier's filter greys.
 // It used to be a CSS gradient behind a transparent canvas, and the water mesh only covers the last baked water-mask rect:
-// during a pan the bake is deferred (waterMaskDirty), so large parts of the screen were outside the mesh and the filter
+// during a pan the bake is deferred, so large parts of the screen were outside the mesh and the filter
 // had only transparent pixels there, where all it can do is add a dark tint. The CSS teal stayed saturated instead of
 // going grey. Holding the drag keeps that gap open for as long as the test needs.
 import { expect, test } from './fixtures';
@@ -53,18 +53,27 @@ test.describe('fog dark tier', { tag: '@g1' }, () => {
     }
     await waitForRenderedFrames(page);
 
-    // Hold a drag: the bake is deferred while dragging, so the gap exists for as long as the button is down.
+    // Hold a drag: the water mesh is not re-baked while dragging, so it keeps covering only the rect baked before the pan.
+    const box = { x: 700, y: 300, width: 240, height: 220 }; // open sea at the bottom right, clear of the Armies panel and the HUD
     await page.mouse.move(850, 480);
     await page.mouse.down();
     try {
       await page.mouse.move(100, 130, { steps: 10 });
-      await expect
-        .poll(() => page.evaluate(() => (window.__settlementRenderer() as unknown as { waterMaskDirty: boolean }).waterMaskDirty))
-        .toBe(true);
       await waitForRenderedFrames(page, 2);
+      // The sampled box must lie wholly to the right of the baked water rect, i.e. where only the sea backdrop is drawn.
+      // Asked of the camera and the baked rect directly: whether a mid-drag rebuild has run yet is timing-dependent.
+      const boxLeftOfRect = await page.evaluate((left) => {
+        const r = window.__settlementRenderer() as unknown as {
+          camera: { x: number; zoom: number };
+          viewport: { width: number };
+          waterMaskRegionBuilt: { rect: { maxX: number } } | null;
+        };
+        const worldLeft = (left - r.viewport.width / 2) / r.camera.zoom + r.camera.x;
+        return { worldLeft, rectMaxX: r.waterMaskRegionBuilt?.rect.maxX ?? Infinity };
+      }, box.x);
+      expect(boxLeftOfRect.worldLeft).toBeGreaterThan(boxLeftOfRect.rectMaxX);
 
-      // Open sea at the bottom right, clear of the Armies panel and the HUD.
-      const shot = await captureCanvas(page, { x: 640, y: 300, width: 300, height: 220 });
+      const shot = await captureCanvas(page, box);
       expect(await medianChroma(page, shot)).toBeLessThan(CHROMA_LIMIT);
     } finally {
       await page.mouse.up();
