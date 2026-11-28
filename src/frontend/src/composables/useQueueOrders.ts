@@ -67,13 +67,17 @@ export function useBuildOrders(): ComputedRef<BuildOrderRow[]> {
       const remainingAtFetch = waiting ? null : q.completesInSeconds;
       const remainingNow = remainingAtFetch === null ? null : Math.max(0, remainingAtFetch - elapsed);
       const totalSeconds = q.totalSeconds;
-      // A waiting order has made no progress yet: 0, not 1, or the clamp below
-      // would keep its bar full once it gets a slot and starts building.
+      // Neither a waiting order (no progress yet) nor an unknown remaining time
+      // (frozen clock) may report 1: the clamp below would keep the bar full
+      // once the order starts or the world resumes. An unknown time keeps the
+      // last known progress.
       let progress = waiting
         ? 0
-        : remainingAtFetch === null || totalSeconds <= 0
-          ? 1
-          : 1 - Math.max(0, Math.min(1, (remainingNow ?? 0) / totalSeconds));
+        : remainingAtFetch === null
+          ? 0
+          : totalSeconds <= 0
+            ? 1
+            : 1 - Math.max(0, Math.min(1, (remainingNow ?? 0) / totalSeconds));
       progress = Math.max(progress, lastProgress.get(q.id) ?? 0);
       lastProgress.set(q.id, progress);
       const done = remainingNow !== null && remainingNow <= 0.5;
