@@ -20,6 +20,8 @@ import {
   previewGroundCoords,
   attentionPulseFrame,
   clampAnimationDeltaMs,
+  CullRetry,
+  cullThrottleRemainingMs,
   fadeAlphaAt,
   hoverSubjectFor,
   isIslandNearViewport,
@@ -70,6 +72,74 @@ function tileOf(terrain: Tile['terrain']): Tile {
 }
 
 const river: RiverTile = { q: 0, r: 0, shape: 'mouth', inDirections: ['NE'], outDirection: null };
+
+// Regression: a drag that held still after a fast move dropped its last
+// throttled cull and nothing re-queued it until pointerup.
+describe('cullThrottleRemainingMs', () => {
+  it('never delays a cull outside a camera gesture', () => {
+    expect(cullThrottleRemainingMs(false, 1010, 1000)).toBe(0);
+  });
+
+  it('returns the rest of the window right after a rebuild', () => {
+    expect(cullThrottleRemainingMs(true, 1040, 1000, 150)).toBe(110);
+  });
+
+  it('is 0 once the window has passed, so the retried cull runs', () => {
+    expect(cullThrottleRemainingMs(true, 1150, 1000, 150)).toBe(0);
+    expect(cullThrottleRemainingMs(true, 5000, 1000, 150)).toBe(0);
+  });
+
+});
+
+describe('CullRetry', () => {
+  it('runs a dropped cull once the window has passed, with no further event', () => {
+    vi.useFakeTimers();
+    try {
+      const retry = new CullRetry();
+      const run = vi.fn();
+      retry.queue(110, run);
+      vi.advanceTimersByTime(109);
+      expect(run).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(run).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps only one retry pending, and allows a new one after it ran', () => {
+    vi.useFakeTimers();
+    try {
+      const retry = new CullRetry();
+      const first = vi.fn();
+      const second = vi.fn();
+      retry.queue(100, first);
+      retry.queue(50, second);
+      vi.advanceTimersByTime(200);
+      expect(first).toHaveBeenCalledTimes(1);
+      expect(second).not.toHaveBeenCalled();
+      retry.queue(10, second);
+      vi.advanceTimersByTime(10);
+      expect(second).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancel drops the pending retry (destroy)', () => {
+    vi.useFakeTimers();
+    try {
+      const retry = new CullRetry();
+      const run = vi.fn();
+      retry.queue(100, run);
+      retry.cancel();
+      vi.advanceTimersByTime(500);
+      expect(run).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 describe('clampAnimationDeltaMs', () => {
   it('passes ordinary frame deltas through unchanged', () => {

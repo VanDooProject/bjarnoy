@@ -1585,6 +1585,41 @@ function distanceBeyondSources(q: number, r: number, sources: FogSource[]): numb
 // See scheduleCull's own comment for why this exists: throttles how often a
 // drag can trigger a full terrain/border/fog rebuild.
 const DRAG_REBUILD_THROTTLE_MS = 150;
+
+/**
+ * How long a cull must wait before it may rebuild: 0 when it may run now, else
+ * the rest of the throttle window. Only a camera gesture is throttled (see
+ * scheduleCull).
+ */
+export function cullThrottleRemainingMs(
+  interacting: boolean,
+  nowMs: number,
+  lastRebuildAtMs: number,
+  throttleMs: number = DRAG_REBUILD_THROTTLE_MS,
+): number {
+  if (!interacting) return 0;
+  return Math.max(0, throttleMs - (nowMs - lastRebuildAtMs));
+}
+
+/** At most one pending timer: the re-queue of a cull the throttle dropped. */
+export class CullRetry {
+  private timer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Runs `run` after `waitMs` unless a retry is already pending. */
+  queue(waitMs: number, run: () => void): void {
+    if (this.timer !== null) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      run();
+    }, waitMs);
+  }
+
+  cancel(): void {
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+  }
+}
+
 // Total pointer travel (summed |dx|+|dy| over the gesture) below which a
 // pointerdown/up pair counts as a click on a hex rather than a camera pan.
 // Used by onPointerUp for both halves of that decision: whether to open the
@@ -2474,6 +2509,8 @@ export class HexMapRenderer {
   private lastBuiltCamera: Camera | null = null;
   private lastRebuildAtMs = 0;
   private cullQueued = false;
+  /** The one pending re-queue of a cull the drag throttle dropped (see scheduleCull). */
+  private readonly cullRetry = new CullRetry();
   private destroyed = false;
 
   private dragging = false;
@@ -4132,7 +4169,12 @@ export class HexMapRenderer {
       // is released, tickCameraAnim's forceRebuild() when the animation
       // completes, noteZoomActivity's idle timer once zooming settles, and
       // tickKeyPan's when the last arrow key is let go.
-      if (this.isInteracting && performance.now() - this.lastRebuildAtMs < DRAG_REBUILD_THROTTLE_MS) {
+      // A dropped cull is re-queued for when the window ends: a drag that
+      // holds still after a fast move gets no further camera event to
+      // schedule one, and would otherwise stay stale until release.
+      const waitMs = cullThrottleRemainingMs(this.isInteracting, performance.now(), this.lastRebuildAtMs);
+      if (waitMs > 0) {
+        this.cullRetry.queue(waitMs, () => this.scheduleCull());
         return;
       }
       if (this.cameraMovedEnough()) this.rebuildAll();
@@ -7152,6 +7194,7 @@ export class HexMapRenderer {
 
   destroy() {
     this.destroyed = true;
+    this.cullRetry.cancel();
     this.maskBaker.destroy();
     this.labelOverlay?.destroy();
     this.labelOverlay = null;
