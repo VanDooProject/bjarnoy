@@ -112,7 +112,8 @@ async function loadStoreModule(demoMode: boolean) {
       getForeignArmies: (...args: unknown[]) => getForeignArmies(...args),
       queueBuild: (...args: unknown[]) => queueBuild(...args),
       razeBuilding: (...args: unknown[]) => razeBuilding(...args),
-      getRenown: (...args: unknown[]) => getRenown(...args),
+      // Unconfigured, the renown read has nothing yet.
+      getRenown: async (...args: unknown[]) => (await getRenown(...args)) ?? null,
     },
     ApiError: MockApiError,
     // Real implementations check `err instanceof ApiError && err.problem?.error
@@ -2755,6 +2756,20 @@ describe('useWorldStore poll failure reporting', () => {
     expect(getRenown).toHaveBeenCalledWith('world-1');
     store.stopHudSync();
     warn.mockRestore();
+  });
+
+  it('drops a renown answer that lands after the player switched worlds', async () => {
+    const { store } = await loadWithConnection();
+    let answer: (value: unknown) => void = () => {};
+    getRenown.mockReset().mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    store.worldId = 'world-1';
+
+    const pending = store.refreshRenown();
+    store.worldId = 'world-2';
+    answer({ total: 400, requiredForNextSettlement: 300, canFoundAnother: true });
+    await pending;
+
+    expect(store.hud.renown).toBeNull();
   });
 
   it('reports a failed fog mask fetch under "fogMask" and clears it on the next success', async () => {
