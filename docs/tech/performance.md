@@ -259,10 +259,14 @@ interval is listed beside them.
 The frame is not display-paced at this size: 43 ms is well past the 16.7 ms
 vsync floor, so an effect switched off has room to show up in the interval. The
 CPU profile of the same window is mostly idle (~6.9 s of 8.6 s sampled), with
-Pixi's filter path taking most of the rest (`addRenderable` ~246 ms,
+Pixi's render pipeline taking most of the rest (`addRenderable` ~246 ms,
 `packQuadAttributes` ~119 ms, `collectRenderablesSimple` ~114 ms sampled self
 time); the renderer's own tick is single-digit milliseconds in total. This is
-a GPU/fill-rate-bound frame, not a JavaScript-bound one.
+a GPU/fill-rate-bound frame, not a JavaScript-bound one. Those three functions
+are Pixi's ordinary sprite batching, not the fog filter: in the dev server
+they sit in Vite's pre-bundled chunk `Filter-<hash>.js`, which holds Pixi's
+whole render pipeline, hence the misleading file name in the profile. See
+"Fog dark tier filter" below for the on/off measurement.
 
 ### Rebuild (camera move)
 
@@ -443,6 +447,38 @@ framings, zoom with `zoomBy` (or load a camera hash such as
 `#world&q=61&r=-2&z=0.22`) and wait for the new water bake before sampling.
 Keep the camera still during a sweep, report the MAD and baseline drift with
 every result, and say whether the pacer was attached.
+
+### Fog dark tier filter (measured 2026-11-27)
+
+The dark tier (`fog/FogDesaturateFilter.ts`) is a Pixi filter on
+`underFogLayer`: the world is drawn into one canvas-sized render target and
+drawn back through `FOG_DESATURATE_FRAGMENT`. Moving that maths into a
+composite quad over what is already drawn, without the render target, was
+checked and rejected:
+
+- It cannot be exact. A blend computes `dst · factor + src` per channel,
+  with factors that cannot depend on the drawn colour. The shader's
+  desaturation mixes each pixel toward its own luminance, which combines
+  all three channels, and the bright-tone pull (knee at 0.45) is
+  non-linear. The closest a blend can get is a per-channel affine
+  `dst · M + A` (a multiply pass and an add pass). Least-squares fitted to
+  the default settlement's pixels, it differs from the filter by ~6/255 on
+  average where the dark tier is set (95th percentile 12–13, desktop and
+  phone, settlement and world). Snow turns lilac, and the tier gets lighter
+  and flatter, most of all on the world map.
+- An exact version without Pixi's filter would copy the canvas into a
+  texture and draw a full-screen quad from it. That is the same GPU work as
+  the render target, so it is not worth it.
+- The filter costs no measurable CPU. Default settlement framing,
+  1296 × 841, headless Chromium, dark tier (`maskOutOfSight`) on vs off in
+  6 s blocks, two rounds, from the JS sampling profiler: 0.35 / 0.41 ms of
+  JS per frame on, 0.33 / 0.40 ms off. Its cost is GPU fill (one extra
+  canvas-sized target and one draw back), which the component A/B above
+  already puts under the noise (`maskOutOfSight` +1.1 ms).
+
+So the filter stays. Its look was tuned in the same change instead (greying ramp 1.5, darken 0.50; `map-fog-v2.md`), which
+adds one `pow` per pixel and no pass. The fog's 5–7 ms in the layer A/B is both tiers plus
+the field pass, not this filter alone.
 
 ## Possible next steps
 
