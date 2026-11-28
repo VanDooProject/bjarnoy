@@ -291,6 +291,37 @@ public class ReportsModalTests(AppHostFixture fixture)
         var canvas = desktopPage.Locator("canvas");
         await canvas.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 60_000 });
 
+        // --- Desktop unread flow: the column button carries the unread count, the panel lists the report as unread,
+        // opening it marks it read everywhere, and a reload keeps it read (the state lives on the backend) ---
+        var panelToggle = desktopPage.Locator("[data-testid=\"hud-panel-toggle-reports\"]");
+        var panelBadge = desktopPage.Locator("[data-testid=\"hud-panel-badge-reports\"]");
+        var menuBadge = desktopPage.Locator("[data-testid=\"account-menu-badge\"], [data-testid=\"returning-player-badge\"]");
+        await Assertions.Expect(panelBadge).ToHaveTextAsync("1", new() { Timeout = 15_000 });
+        await Assertions.Expect(menuBadge).ToHaveTextAsync("1", new() { Timeout = 15_000 });
+
+        await panelToggle.ClickAsync();
+        var reportsPanel = desktopPage.Locator("[data-testid=\"reports-panel\"]");
+        await Assertions.Expect(reportsPanel).ToBeVisibleAsync(new() { Timeout = 15_000 });
+        var unreadRow = reportsPanel.Locator("[data-unread=\"true\"]");
+        await Assertions.Expect(unreadRow).ToHaveCountAsync(1);
+
+        await unreadRow.Locator("[data-testid=\"report-row\"]").ClickAsync();
+        var panelOpenedModal = desktopPage.Locator("[data-testid=\"reports-modal\"]");
+        await Assertions.Expect(panelOpenedModal).ToBeVisibleAsync(new() { Timeout = 15_000 });
+        await Assertions.Expect(panelOpenedModal.Locator("[data-testid=\"report-detail\"]")).ToBeVisibleAsync(new() { Timeout = 15_000 });
+        await panelOpenedModal.Locator(".close-button").ClickAsync();
+        await Assertions.Expect(panelOpenedModal).Not.ToBeVisibleAsync(new() { Timeout = 15_000 });
+
+        await Assertions.Expect(panelBadge).ToHaveCountAsync(0, new() { Timeout = 15_000 });
+        await Assertions.Expect(menuBadge).ToHaveCountAsync(0, new() { Timeout = 15_000 });
+        await Assertions.Expect(reportsPanel.Locator("[data-unread=\"true\"]")).ToHaveCountAsync(0);
+
+        await desktopPage.ReloadAsync(new PageReloadOptions { Timeout = 120_000 });
+        await canvas.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 60_000 });
+        await Assertions.Expect(panelToggle).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        await Assertions.Expect(panelBadge).ToHaveCountAsync(0);
+        await Assertions.Expect(menuBadge).ToHaveCountAsync(0);
+
         // Reports sits in the avatar menu (HudNav), not inline in the bar. This
         // player is a local, account-less one (BuildLoginInitScript), so the
         // avatar spot is the returning-player trigger; an account would show
@@ -333,6 +364,32 @@ public class ReportsModalTests(AppHostFixture fixture)
         await Assertions.Expect(canvas).ToBeVisibleAsync();
 
         Assert.Empty(desktopConsoleErrors);
+
+        // --- Phone: the chip under the building-info switch opens the reports sheet ---
+        var chipContext = await browser.NewContextAsync(new BrowserNewContextOptions
+        {
+            ViewportSize = new ViewportSize { Width = 390, Height = 844 },
+            HasTouch = true,
+            IsMobile = true,
+        });
+        var chipPage = await chipContext.NewPageAsync();
+        var chipConsoleErrors = chipPage.CollectConsoleErrors();
+        await chipPage.AddInitScriptAsync(BuildLoginInitScript(playerOwnerId, playerSettlement.Id.ToString()));
+        await chipPage.GotoAsync($"{frontendUrl}settlement", new PageGotoOptions { Timeout = 120_000 });
+
+        var chip = chipPage.Locator("[data-testid=\"reports-chip\"]");
+        await Assertions.Expect(chip).ToBeVisibleAsync(new() { Timeout = 60_000 });
+        var infoToggleBox = await chipPage.Locator("[data-testid=\"building-info-toggle\"]").BoundingBoxAsync();
+        var chipBox = await chip.BoundingBoxAsync();
+        if (infoToggleBox is not null && chipBox is not null)
+        {
+            Assert.InRange(chipBox.X, infoToggleBox.X - 1, infoToggleBox.X + 1);
+            Assert.InRange(chipBox.Y - (infoToggleBox.Y + infoToggleBox.Height), 7, 9);
+        }
+
+        await chip.TapAsync();
+        await Assertions.Expect(chipPage.Locator("[data-testid=\"reports-sheet\"]")).ToBeVisibleAsync(new() { Timeout = 15_000 });
+        Assert.Empty(chipConsoleErrors);
 
         // --- Phone: a deep link straight into the report detail renders the
         // modal fullscreen over the (also freshly restored) settlement view ---
