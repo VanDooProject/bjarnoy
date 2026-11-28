@@ -71,6 +71,23 @@ beforeEach(() => {
 });
 
 describe('SimulatorView', () => {
+  it('shows a simulated siege hex as plain text, not as a link to the map', async () => {
+    // The simulator sieges a stand-in Longhouse at (0, 0): no real place to show on the map.
+    simulate.mockResolvedValue({
+      ...fleetResult,
+      shipFight: null,
+      siege: { targetCoord: { q: 0, r: 0 }, targetType: 'longhouse', levelBefore: 2, levelAfter: 1, settlementRazed: false },
+    });
+    const wrapper = await mountView();
+    const axeman = wrapper.findAll('.stack-section')[0]!.findAll('label').find((l) => l.text() === 'axeman')!;
+    await axeman.get('input').setValue('80');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(wrapper.get('.siege-coord').text()).toBe('Hex (0, 0)');
+    expect(wrapper.find('[data-testid="report-location-link"]').exists()).toBe(false);
+  });
+
   it('sends the fleet as one attack and shows the ship fight before the land fight', async () => {
     const wrapper = await mountView();
 

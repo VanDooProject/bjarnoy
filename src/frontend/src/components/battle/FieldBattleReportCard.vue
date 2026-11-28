@@ -99,7 +99,6 @@ const hasVolley = computed(() => volleyPowerOf('sidea') > 0 || volleyPowerOf('si
       <span class="where-sep">·</span>
       <span class="where-label">{{ t('hud.fieldBattleReport.location') }}:</span>
       <ReportLocationLink
-        data-testid="field-battle-location"
         :coord="report.hex"
         :label="t('hud.fieldBattleReport.hexCoord', { q: report.hex.q, r: report.hex.r })"
       />

@@ -104,9 +104,9 @@ const hasVolley = computed(() => props.report.armyVolleyPower > 0);
     <p v-if="report.campCleared" class="note cleared" data-testid="camp-report-cleared">
       {{ t('hud.campReport.cleared', { camp }) }}
     </p>
-    <p v-if="report.kind === 'tower'" class="note" :class="report.towerBurned ? 'burned' : 'held'" data-testid="camp-report-tower">
+    <p v-if="report.kind === 'tower' && report.tower" class="note" :class="report.towerBurned ? 'burned' : 'held'" data-testid="camp-report-tower">
       <i18n-t :keypath="report.towerBurned ? 'hud.campReport.towerBurned' : 'hud.campReport.towerHeld'" tag="span" scope="global">
-        <template #location><ReportLocationLink :coord="report.tower ?? { q: 0, r: 0 }" /></template>
+        <template #location><ReportLocationLink :coord="{ q: report.tower.q, r: report.tower.r }" /></template>
       </i18n-t>
     </p>
 

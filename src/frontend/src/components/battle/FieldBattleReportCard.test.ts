@@ -96,7 +96,7 @@ describe('FieldBattleReportCard', () => {
     const map = useMapFocus();
     map.clear();
     const wrapper = mountCard('sidea');
-    const link = wrapper.find('[data-testid="field-battle-location"]');
+    const link = wrapper.find('[data-testid="report-location-link"]');
     expect(link.text()).toBe('Hex (12, -4)');
 
     await link.trigger('click');
