@@ -1389,7 +1389,7 @@ function roomForRing(screen: { x: number; y: number }): RingPlacement {
 
 // Issue #93 "drag to move a placed waypoint": the renderer resolved the hex
 // the pin was dragged onto (snapping happens there, against the same
-// isoPixelToAxial a click uses); this just writes it into the draft.
+// hex picking a click uses); this just writes it into the draft.
 function onWaypointMove(index: number, coord: AxialCoord) {
   if (world.sendPicker) return; // the picker's target moves by a tap on the map (retargetSendPicker), not by dragging its pin
   if (world.fieldOrderDraft) {

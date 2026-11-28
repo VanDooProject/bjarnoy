@@ -3,7 +3,7 @@
 // that much, and land in front of it (its top face at land level, drawn after the sea) hides whatever of the dropped outline lies on
 // that land's top face. Same rule the realm border follows on coasts (realmBorderWaterline.ts).
 import type { AxialCoord } from '../hex/coords';
-import { isoGridPosition, isoTopPoints } from '../hex/geometry';
+import { isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import { capsulePolygon, clippedStrokePieces, polygonArea, subtractConvex, type Pt } from './convexPolygon';
 import { neighbourAcrossEdge } from './realmBorders';
 import { TILE_ART_SEA_TOPFACE_DROP_FRAC } from './textures';
@@ -66,4 +66,16 @@ export function loweredHexOutline(
   let fill: Pt[][] = [top];
   for (const clip of clips) fill = fill.flatMap((piece) => subtractConvex(piece, clip));
   return { drop, fill, edges };
+}
+
+/**
+ * The hex whose visible top face is under world point `p`. Land under the point wins: it sits at land level and draws in front of
+ * any sea hex whose lowered face reaches down into it. Over sea, the face under the point is the one a sea drop higher on the
+ * grid: the same sea hex for most of it, the hex behind in the strip its lowered face leaves open at its back (the cliff of the land
+ * behind, or that sea hex's own lowered face).
+ */
+export function pickVisibleHex(p: Pt, tileW: number, tileH: number, isLowered: (q: number, r: number) => boolean): AxialCoord {
+  const atLandLevel = isoPixelToAxial(p, tileW, tileH);
+  if (!isLowered(atLandLevel.q, atLandLevel.r)) return atLandLevel;
+  return isoPixelToAxial({ x: p.x, y: p.y - seaTopFaceDrop(tileW) }, tileW, tileH);
 }

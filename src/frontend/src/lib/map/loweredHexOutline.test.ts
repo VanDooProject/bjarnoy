@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { AxialCoord } from '../hex/coords';
 import { isoGridPosition, isoTopPoints } from '../hex/geometry';
 import { polygonArea, type Pt } from './convexPolygon';
-import { loweredHexOutline, seaTopFaceDrop } from './loweredHexOutline';
+import { loweredHexOutline, pickVisibleHex, seaTopFaceDrop } from './loweredHexOutline';
 import { neighbourAcrossEdge } from './realmBorders';
 import { TILE_ART_SEA_TOPFACE_DROP_FRAC } from './textures';
 
@@ -90,5 +90,42 @@ describe('loweredHexOutline', () => {
     expect(o.fill).toHaveLength(1);
     expect(areaOf(o.fill)).toBeCloseTo(polygonArea(topOf(C)));
     expect(o.edges.every((e) => e.pieces === null)).toBe(true);
+  });
+});
+
+describe('pickVisibleHex', () => {
+  const drop = seaTopFaceDrop(W);
+  // The middle of the bottom edge of C's top face at land level (isoTopPoints spans 0..W, 0..H).
+  const grid = isoGridPosition(C, W, H);
+  const bottomMid = { x: grid.x + W / 2, y: grid.y + H };
+  const topMid = { x: grid.x + W / 2, y: grid.y };
+  const allSea = () => true;
+  const below = (p: Pt, d: number) => ({ x: p.x, y: p.y + d });
+
+  it("picks the sea hex in the strip its lowered face reaches below the land grid (the bug: it picked the hex in front)", () => {
+    expect(pickVisibleHex(below(bottomMid, drop / 2), W, H, allSea)).toEqual(C);
+  });
+
+  it('picks the hex behind in the strip a sea hex leaves open at its back', () => {
+    const p = below(topMid, drop / 2);
+    const behind = pickVisibleHex(p, W, H, allSea);
+    expect(behind).not.toEqual(C);
+    expect([0, 1, 2].map((e) => neighbourAcrossEdge(C, e))).toContainEqual(behind);
+  });
+
+  it("picks the land behind in the strip where its cliff hangs over the sea hex's back", () => {
+    const p = below(topMid, drop / 2);
+    const behind = pickVisibleHex(p, W, H, allSea);
+    expect(pickVisibleHex(p, W, H, loweredExcept([behind]))).toEqual(behind);
+  });
+
+  it('picks land in front over the lowered face of the sea hex behind it', () => {
+    const front = neighbourAcrossEdge(C, 4);
+    expect(pickVisibleHex(below(bottomMid, drop / 2), W, H, loweredExcept([front]))).toEqual(front);
+  });
+
+  it('picks on the land grid where nothing is lowered (world map, inland)', () => {
+    expect(pickVisibleHex(below(bottomMid, drop / 2), W, H, () => false)).not.toEqual(C);
+    expect(pickVisibleHex(below(topMid, drop / 2), W, H, () => false)).toEqual(C);
   });
 });

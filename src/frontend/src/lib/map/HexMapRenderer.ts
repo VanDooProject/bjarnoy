@@ -48,7 +48,7 @@ import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import { atlasPageCount } from './atlasManifests';
 import { attachFramePacing } from './framePacing';
 import { clippedStrokePieces } from './convexPolygon';
-import { loweredHexOutline, seaTopFaceDrop, type HexOutline } from './loweredHexOutline';
+import { loweredHexOutline, pickVisibleHex, seaTopFaceDrop, type HexOutline } from './loweredHexOutline';
 import { createWaterlineBorders, type BorderLinePiece } from './realmBorderWaterline';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
 import { drawsAsSea, type CartShipment, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
@@ -3392,7 +3392,7 @@ export class HexMapRenderer {
   private onPointerMove = (e: PointerEvent) => {
     // Issue #93: a pin drag repositions that waypoint instead of panning —
     // the hex under the pointer, resolved the same way a click is
-    // (isoPixelToAxial), so the pin snaps to hexes rather than floating
+    // (pickHex), so the pin snaps to hexes rather than floating
     // between them. Reported only when the pointer actually crosses into a
     // different hex, so a jittery pointer doesn't fire a store write a frame.
     // Gated to the exact finger that grabbed the pin — a second finger
@@ -3403,7 +3403,7 @@ export class HexMapRenderer {
       const screen = this.pointerScreen(e);
       if (!screen) return;
       const world = screenToWorld(this.camera, screen, this.viewport);
-      const coord = isoPixelToAxial(world, TILE_W, TILE_H);
+      const coord = this.pickHex(world);
       if (coordKey(coord) === this.waypointDrag.lastCoordKey) return;
       this.waypointDrag.lastCoordKey = coordKey(coord);
       this.options.onWaypointMove?.(this.waypointDrag.index, coord);
@@ -3582,7 +3582,7 @@ export class HexMapRenderer {
     // Hover (and so the dial's grow-on-hover) is a mouse affordance only.
     this.hoverPointer = e.pointerType === 'mouse' ? screen : null;
     // Over an HTML marker (the building HUD's dial or box) the hover is the hex it belongs to, like its click.
-    this.setHoveredCoord(this.pointerTarget?.(screen) ?? isoPixelToAxial(screenToWorld(this.camera, screen, this.viewport), TILE_W, TILE_H));
+    this.setHoveredCoord(this.pointerTarget?.(screen) ?? this.pickHex(screenToWorld(this.camera, screen, this.viewport)));
   }
 
   private setHoveredCoord(coord: AxialCoord | null) {
@@ -3667,6 +3667,11 @@ export class HexMapRenderer {
   /** How far below the land-level grid a hex's top face is drawn. */
   private topFaceDrop(c: AxialCoord): number {
     return this.isLoweredHex(c.q, c.r) ? seaTopFaceDrop(TILE_W) : 0;
+  }
+
+  /** The hex the player sees under a world point: on a coast, sea faces sit lower than the land grid (see pickVisibleHex). */
+  private pickHex(world: { x: number; y: number }): AxialCoord {
+    return pickVisibleHex(world, TILE_W, TILE_H, this.isLoweredHex);
   }
 
   /** A single-hex overlay's outline on the hex's visible top face (see loweredHexOutline). */
@@ -4034,7 +4039,7 @@ export class HexMapRenderer {
       if (armyTapStopsHere(this.armyOverlay?.armies ?? [], this.options.armyTapStopsAtMarker?.(armyId))) return;
     }
     // A tap on an HTML marker (the building HUD's dial or box) means the hex it belongs to, not the one it is drawn over.
-    const coord = this.pointerTarget?.(screen) ?? isoPixelToAxial(screenToWorld(this.camera, screen, this.viewport), TILE_W, TILE_H);
+    const coord = this.pointerTarget?.(screen) ?? this.pickHex(screenToWorld(this.camera, screen, this.viewport));
     const tile = this.options.worldModel.getTile(coord.q, coord.r);
     // Issue #16 "ring menu on click of tile": the ring anchors on the
     // clicked hex's own screen centre (same point the hover tooltip anchors
