@@ -1232,11 +1232,12 @@ export const useWorldStore = defineStore('world', {
     },
     /**
      * The throwing half of `loadRenownLive`, for `startHudSync`'s poll (via `trackPoll`, so a failing read shows in
-     * the connection banner). Drops an answer for a world the player has since left.
+     * the connection banner). Drops an answer for a world the player has since left. An anonymous visitor (landing,
+     * onboarding) never sends it: the endpoint needs a login and the 401 would surface as a console error.
      */
     async refreshRenown() {
       const { worldId } = this;
-      if (DEMO_MODE || !worldId) return;
+      if (DEMO_MODE || !useAuthStore().isAuthenticated || !worldId) return;
       const renown = await api.getRenown(worldId);
       if (this.worldId !== worldId) return;
       this.hud.renown = renown;

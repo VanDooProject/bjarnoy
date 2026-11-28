@@ -2747,6 +2747,8 @@ describe('useWorldStore poll failure reporting', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { store } = await loadWithConnection();
     const renown = { total: 400, requiredForNextSettlement: 300, canFoundAnother: true };
+    const { useAuthStore } = await import('./auth');
+    useAuthStore().user = { id: 'u1', userName: 'astrid', role: 'player', status: 'active', displayName: null, isPremium: false, preferredLocale: null };
     getRenown.mockReset().mockResolvedValue(renown);
     store.worldId = 'world-1';
     store.ownerId = 'player-1';
@@ -2761,6 +2763,8 @@ describe('useWorldStore poll failure reporting', () => {
   it('drops a renown answer that lands after the player switched worlds', async () => {
     const { store } = await loadWithConnection();
     let answer: (value: unknown) => void = () => {};
+    const { useAuthStore } = await import('./auth');
+    useAuthStore().user = { id: 'u1', userName: 'astrid', role: 'player', status: 'active', displayName: null, isPremium: false, preferredLocale: null };
     getRenown.mockReset().mockReturnValue(new Promise((resolve) => (answer = resolve)));
     store.worldId = 'world-1';
 
@@ -2770,6 +2774,17 @@ describe('useWorldStore poll failure reporting', () => {
     await pending;
 
     expect(store.hud.renown).toBeNull();
+  });
+
+  // Regression: the landing/onboarding flow runs the same poll for a visitor without a login, and the renown endpoint 401s.
+  it('does not request the renown for an anonymous visitor', async () => {
+    const { store } = await loadWithConnection();
+    getRenown.mockReset();
+    store.worldId = 'world-1';
+
+    await store.refreshRenown();
+
+    expect(getRenown).not.toHaveBeenCalled();
   });
 
   it('reports a failed fog mask fetch under "fogMask" and clears it on the next success', async () => {
