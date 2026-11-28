@@ -68,5 +68,22 @@
     "break": "Brechen",
     "chooseGuild": "Gilde wählen…",
     "proposePeace": "Frieden vorschlagen"
+  },
+  "errors": {
+    "loadGuilds": "Die Gilden konnten nicht geladen werden.",
+    "loadGuild": "Diese Gilde konnte nicht geladen werden.",
+    "found": "Die Gilde konnte nicht gegründet werden.",
+    "join": "Du konntest der Gilde nicht beitreten.",
+    "leave": "Du konntest die Gilde nicht verlassen.",
+    "removeMember": "Das Mitglied konnte nicht rausgeworfen werden.",
+    "changeRole": "Die Rolle konnte nicht geändert werden.",
+    "loadBoard": "Die Pinnwand konnte nicht geladen werden.",
+    "loadTopic": "Dieses Thema konnte nicht geladen werden.",
+    "startTopic": "Das Thema konnte nicht eröffnet werden.",
+    "postReply": "Die Antwort konnte nicht gesendet werden.",
+    "loadTreaties": "Die Verträge konnten nicht geladen werden.",
+    "proposeTreaty": "Der Vertrag konnte nicht vorgeschlagen werden.",
+    "respondTreaty": "Du konntest nicht auf den Vertrag antworten.",
+    "breakTreaty": "Der Vertrag konnte nicht gebrochen werden."
   }
 }
