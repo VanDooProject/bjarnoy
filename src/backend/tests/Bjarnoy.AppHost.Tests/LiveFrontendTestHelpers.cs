@@ -242,21 +242,63 @@ public static class LiveFrontendTestHelpers
     /// offers (LandingView's onboarding ring, or SettlementView's full one) —
     /// the caller clicks the ring bubble it wants next.
     /// </summary>
+    /// <remarks>
+    /// <c>Mouse.ClickAsync</c> skips the hit-target check a locator click does, so the click goes to whatever is on top
+    /// of that point. Right after founding that can be the map's status overlay ("Revealing map",
+    /// <c>MapStatusOverlay.vue</c>): it covers the whole map and takes every pointer event until the first fog mask has
+    /// arrived, so on a cold API a click there never reaches the map and no ring opens. Waits for the point to be on
+    /// the canvas itself first, which is what "the map takes this click" means.
+    /// </remarks>
     public static async Task ClickHexAsync(IPage page, int q, int r)
     {
-        var canvas = page.Locator("canvas");
-        var box = await canvas.BoundingBoxAsync()
-            ?? throw new InvalidOperationException("Map canvas never rendered a bounding box.");
-        var point = await page.EvaluateAsync<double[]>(
-            """
-            (coord) => {
-              const p = window.__settlementRenderer().hexCenterScreen(coord);
-              return [p.x, p.y];
-            }
-            """,
-            new { q, r });
-        await page.Mouse.ClickAsync(box.X + (float)point[0], box.Y + (float)point[1]);
+        double[] point;
+        try
+        {
+            var handle = await page.WaitForFunctionAsync(HexClickPointOnCanvasScript, new { q, r }, new() { Timeout = 60_000 });
+            point = (await handle.JsonValueAsync<double[]>())!;
+        }
+        catch (PlaywrightException ex)
+        {
+            var covering = await page.EvaluateAsync<string>(HexClickPointCoverScript, new { q, r });
+            throw new InvalidOperationException($"Hex {q},{r} never became clickable on the map: {covering}.", ex);
+        }
+
+        await page.Mouse.ClickAsync((float)point[0], (float)point[1]);
     }
+
+    /// <summary>
+    /// The page point of hex <c>{q, r}</c>'s centre when the element there is the map canvas, else a falsy value (so
+    /// <c>WaitForFunctionAsync</c> keeps polling).
+    /// </summary>
+    private const string HexClickPointOnCanvasScript = """
+        (coord) => {
+          const renderer = window.__settlementRenderer?.();
+          const canvas = document.querySelector('canvas');
+          if (!renderer || !canvas) return null;
+          const p = renderer.hexCenterScreen(coord);
+          const rect = canvas.getBoundingClientRect();
+          const x = rect.left + p.x;
+          const y = rect.top + p.y;
+          return document.elementFromPoint(x, y) === canvas ? [x, y] : null;
+        }
+        """;
+
+    /// <summary>What sits on top of hex <c>{q, r}</c>'s click point, for <see cref="ClickHexAsync"/>'s timeout message.</summary>
+    private const string HexClickPointCoverScript = """
+        (coord) => {
+          const renderer = window.__settlementRenderer?.();
+          const canvas = document.querySelector('canvas');
+          if (!renderer || !canvas) return `renderer ${!!renderer}, canvas ${!!canvas}`;
+          const p = renderer.hexCenterScreen(coord);
+          const rect = canvas.getBoundingClientRect();
+          const el = document.elementFromPoint(rect.left + p.x, rect.top + p.y);
+          if (!el) return `point ${Math.round(rect.left + p.x)},${Math.round(rect.top + p.y)} is outside the viewport`;
+          const owner = el.closest('[data-testid]');
+          return `covered by <${el.tagName.toLowerCase()} class="${el.getAttribute('class') ?? ''}">`
+            + (owner ? ` in [data-testid=${owner.getAttribute('data-testid')}]` : '')
+            + ` "${(el.textContent ?? '').trim().slice(0, 80)}"`;
+        }
+        """;
 
     /// <summary>
     /// Sets the map's "Smooth edges" setting (<c>lib/perf/antialiasPreference.ts</c>) to off, the way a player does: through
