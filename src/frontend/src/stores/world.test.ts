@@ -45,6 +45,7 @@ const getWorldCamps = vi.fn();
 const getForeignArmies = vi.fn();
 const queueBuild = vi.fn();
 const razeBuilding = vi.fn();
+const getRenown = vi.fn();
 
 // The test environment is `node` (see vitest.config.ts), not `jsdom` — world.ts
 // reads `localStorage.getItem('bjarnoy.worldId')` at module-level state-init
@@ -111,6 +112,7 @@ async function loadStoreModule(demoMode: boolean) {
       getForeignArmies: (...args: unknown[]) => getForeignArmies(...args),
       queueBuild: (...args: unknown[]) => queueBuild(...args),
       razeBuilding: (...args: unknown[]) => razeBuilding(...args),
+      getRenown: (...args: unknown[]) => getRenown(...args),
     },
     ApiError: MockApiError,
     // Real implementations check `err instanceof ApiError && err.problem?.error
@@ -2734,6 +2736,23 @@ describe('useWorldStore poll failure reporting', () => {
 
     store.startHudSync();
     await vi.waitFor(() => expect(connection.issues.settlement?.error).toBe(failure));
+    store.stopHudSync();
+    warn.mockRestore();
+  });
+
+  // Regression: hud.renown was only loaded by the Town Square modal, so the map's founding bubble stayed on
+  // "Checking your renown…" for anyone who had not opened it.
+  it('startHudSync loads the renown so the founding lock does not stay unknown', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { store } = await loadWithConnection();
+    const renown = { total: 400, requiredForNextSettlement: 300, canFoundAnother: true };
+    getRenown.mockReset().mockResolvedValue(renown);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    store.startHudSync();
+    await vi.waitFor(() => expect(store.hud.renown).toEqual(renown));
+    expect(getRenown).toHaveBeenCalledWith('world-1');
     store.stopHudSync();
     warn.mockRestore();
   });

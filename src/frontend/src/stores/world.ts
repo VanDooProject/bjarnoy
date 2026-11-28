@@ -2507,6 +2507,8 @@ export const useWorldStore = defineStore('world', {
           void this.trackPoll('settlement', () => this.refreshLiveSettlement());
           void this.trackPoll('worldSettlements', () => this.refreshWorldSettlements());
           void this.trackPoll('trade', () => this.refreshTradeAsync());
+          // The map's founding bubble locks on renown (foundingLock); without this poll only the Town Square modal loaded it.
+          void this.loadRenownLive();
           void this.fetchFogMask();
         };
         pollLive();
