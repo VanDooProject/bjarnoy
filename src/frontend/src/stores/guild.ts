@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ApiError, api } from '../api/client';
+import { api } from '../api/client';
 import type {
   CreateGuildRequest,
   CreateGuildTopicRequest,
@@ -9,6 +9,8 @@ import type {
   GuildRole,
   GuildTreatyResponse,
 } from '../api/types';
+import { apiErrorMessage } from '../i18n/apiErrors';
+import { i18n } from '../i18n';
 import { useAuthStore } from './auth';
 
 export const useGuildStore = defineStore('guild', {
@@ -83,7 +85,7 @@ export const useGuildStore = defineStore('guild', {
       try {
         this.guilds = await api.listWorldGuilds(worldId);
       } catch (err) {
-        this.guildsError = err instanceof ApiError ? err.message : 'Could not load guilds.';
+        this.guildsError = apiErrorMessage(err, i18n.global.t('guild.errors.loadGuilds'));
       } finally {
         this.guildsLoading = false;
       }
@@ -99,7 +101,7 @@ export const useGuildStore = defineStore('guild', {
         this.current = guild;
         this.caps = caps;
       } catch (err) {
-        this.currentError = err instanceof ApiError ? err.message : 'Could not load this guild.';
+        this.currentError = apiErrorMessage(err, i18n.global.t('guild.errors.loadGuild'));
       } finally {
         this.currentLoading = false;
       }
@@ -117,7 +119,7 @@ export const useGuildStore = defineStore('guild', {
       try {
         return await api.createGuild(worldId, body);
       } catch (err) {
-        this.actionError = err instanceof ApiError ? err.message : 'Could not found the guild.';
+        this.actionError = apiErrorMessage(err, i18n.global.t('guild.errors.found'));
         return null;
       } finally {
         this.actionPending = false;
@@ -130,7 +132,7 @@ export const useGuildStore = defineStore('guild', {
         await api.joinGuild(guildId);
         return true;
       } catch (err) {
-        this.actionError = err instanceof ApiError ? err.message : 'Could not join this guild.';
+        this.actionError = apiErrorMessage(err, i18n.global.t('guild.errors.join'));
         return false;
       } finally {
         this.actionPending = false;
@@ -144,7 +146,7 @@ export const useGuildStore = defineStore('guild', {
         this.current = null;
         return true;
       } catch (err) {
-        this.actionError = err instanceof ApiError ? err.message : 'Could not leave this guild.';
+        this.actionError = apiErrorMessage(err, i18n.global.t('guild.errors.leave'));
         return false;
       } finally {
         this.actionPending = false;
@@ -158,7 +160,7 @@ export const useGuildStore = defineStore('guild', {
         await this.loadGuild(guildId);
         return true;
       } catch (err) {
-        this.actionError = err instanceof ApiError ? err.message : 'Could not remove that member.';
+        this.actionError = apiErrorMessage(err, i18n.global.t('guild.errors.removeMember'));
         return false;
       } finally {
         this.actionPending = false;
@@ -172,7 +174,7 @@ export const useGuildStore = defineStore('guild', {
         await this.loadGuild(guildId);
         return true;
       } catch (err) {
-        this.actionError = err instanceof ApiError ? err.message : 'Could not change that role.';
+        this.actionError = apiErrorMessage(err, i18n.global.t('guild.errors.changeRole'));
         return false;
       } finally {
         this.actionPending = false;
@@ -184,7 +186,7 @@ export const useGuildStore = defineStore('guild', {
       try {
         this.topics = await api.listGuildTopics(guildId);
       } catch (err) {
-        this.topicsError = err instanceof ApiError ? err.message : 'Could not load the board.';
+        this.topicsError = apiErrorMessage(err, i18n.global.t('guild.errors.loadBoard'));
       } finally {
         this.topicsLoading = false;
       }
@@ -196,7 +198,7 @@ export const useGuildStore = defineStore('guild', {
       try {
         this.activeTopic = await api.getGuildTopic(guildId, topicId);
       } catch (err) {
-        this.activeTopicError = err instanceof ApiError ? err.message : 'Could not load this topic.';
+        this.activeTopicError = apiErrorMessage(err, i18n.global.t('guild.errors.loadTopic'));
       } finally {
         this.activeTopicLoading = false;
       }
@@ -209,7 +211,7 @@ export const useGuildStore = defineStore('guild', {
         this.topics = [topic, ...this.topics];
         return topic;
       } catch (err) {
-        this.actionError = err instanceof ApiError ? err.message : 'Could not start that topic.';
+        this.actionError = apiErrorMessage(err, i18n.global.t('guild.errors.startTopic'));
         return null;
       } finally {
         this.actionPending = false;
@@ -223,7 +225,7 @@ export const useGuildStore = defineStore('guild', {
         await this.loadTopic(guildId, topicId);
         return true;
       } catch (err) {
-        this.actionError = err instanceof ApiError ? err.message : 'Could not post that reply.';
+        this.actionError = apiErrorMessage(err, i18n.global.t('guild.errors.postReply'));
         return false;
       } finally {
         this.actionPending = false;
@@ -235,7 +237,7 @@ export const useGuildStore = defineStore('guild', {
       try {
         this.treaties = await api.listGuildTreaties(guildId);
       } catch (err) {
-        this.treatiesError = err instanceof ApiError ? err.message : 'Could not load treaties.';
+        this.treatiesError = apiErrorMessage(err, i18n.global.t('guild.errors.loadTreaties'));
       } finally {
         this.treatiesLoading = false;
       }
@@ -248,7 +250,7 @@ export const useGuildStore = defineStore('guild', {
         this.treaties = [treaty, ...this.treaties];
         return true;
       } catch (err) {
-        this.actionError = err instanceof ApiError ? err.message : 'Could not propose that treaty.';
+        this.actionError = apiErrorMessage(err, i18n.global.t('guild.errors.proposeTreaty'));
         return false;
       } finally {
         this.actionPending = false;
@@ -262,7 +264,7 @@ export const useGuildStore = defineStore('guild', {
         this.treaties = this.treaties.map((t) => (t.id === treatyId ? updated : t));
         return true;
       } catch (err) {
-        this.actionError = err instanceof ApiError ? err.message : 'Could not respond to that treaty.';
+        this.actionError = apiErrorMessage(err, i18n.global.t('guild.errors.respondTreaty'));
         return false;
       } finally {
         this.actionPending = false;
@@ -276,7 +278,7 @@ export const useGuildStore = defineStore('guild', {
         this.treaties = this.treaties.map((t) => (t.id === treatyId ? updated : t));
         return true;
       } catch (err) {
-        this.actionError = err instanceof ApiError ? err.message : 'Could not break that treaty.';
+        this.actionError = apiErrorMessage(err, i18n.global.t('guild.errors.breakTreaty'));
         return false;
       } finally {
         this.actionPending = false;

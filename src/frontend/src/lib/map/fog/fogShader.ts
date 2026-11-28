@@ -514,7 +514,8 @@ void main() {
  * The dark tier's look, as a Pixi filter over everything under the markers (FogDesaturateFilter): where the field's R
  * (dark tier alpha) is set the picture is greyed instead of covered. Bright tones (sand, foam, snow) are first pulled
  * toward mid grey, so greying does not turn them into light bands, then desaturated by uDesat, dimmed by uDarken and
- * given a slight cool tint. Where the canvas is transparent (the settlement view's CSS mist backdrop shows through) the old dark tint is added, so
+ * given a slight cool tint. The bright pull and desaturation follow 1 - (1 - aDark)^uSatRamp, so a band of land just past
+ * the edge of sight is already grey rather than a murky half-desaturated green; the dimming and tint follow aDark. Where the canvas is transparent (the settlement view's CSS mist backdrop shows through) the old dark tint is added, so
  * the tier stays visible there too.
  *
  * Pixi hands a filter a premultiplied input and wants a premultiplied output. The screen position comes from the
@@ -537,6 +538,7 @@ uniform float uDesat;
 uniform float uPull;
 uniform float uDarken;
 uniform vec3 uScoutedColor;
+uniform float uSatRamp;
 
 const vec3 LUMA = vec3(0.299, 0.587, 0.114);
 // Luminance above which tones are pulled toward the knee.
@@ -550,10 +552,13 @@ void main() {
 
   vec3 c = tex.rgb / max(tex.a, 1e-4);
   float lum = dot(c, LUMA);
+  // Colour goes faster than light: the greying follows an eased ramp that reaches full strength sooner past the edge of
+  // sight (uSatRamp = 1 is linear), while the dimming and tint below stay on the plain ramp.
+  float aSat = 1.0 - pow(clamp(1.0 - aDark, 0.0, 1.0), uSatRamp);
   float pulled = lum > KNEE ? KNEE + (lum - KNEE) * (1.0 - uPull) : lum;
-  vec3 t = c * (mix(lum, pulled, aDark) / max(lum, 1e-3));
+  vec3 t = c * (mix(lum, pulled, aSat) / max(lum, 1e-3));
   float lt = dot(t, LUMA);
-  vec3 g = mix(t, vec3(lt), aDark * uDesat);
+  vec3 g = mix(t, vec3(lt), aSat * uDesat);
   g *= 1.0 - uDarken * aDark;
   c = mix(g, g * vec3(0.93, 0.98, 1.06), aDark);
 

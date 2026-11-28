@@ -68,5 +68,22 @@
     "break": "Break",
     "chooseGuild": "Choose a guild…",
     "proposePeace": "Propose peace"
+  },
+  "errors": {
+    "loadGuilds": "Could not load guilds.",
+    "loadGuild": "Could not load this guild.",
+    "found": "Could not found the guild.",
+    "join": "Could not join this guild.",
+    "leave": "Could not leave this guild.",
+    "removeMember": "Could not remove that member.",
+    "changeRole": "Could not change that role.",
+    "loadBoard": "Could not load the board.",
+    "loadTopic": "Could not load this topic.",
+    "startTopic": "Could not start that topic.",
+    "postReply": "Could not post that reply.",
+    "loadTreaties": "Could not load treaties.",
+    "proposeTreaty": "Could not propose that treaty.",
+    "respondTreaty": "Could not respond to that treaty.",
+    "breakTreaty": "Could not break that treaty."
   }
 }

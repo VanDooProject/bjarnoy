@@ -118,8 +118,20 @@ const motion = useBuildingHudMotion();
  * glyphs live on them. One switch for both, so the show / hide animation below is the same one.
  */
 const markersWanted = computed(() => prefs.buildingInfo || quick.applies);
+/**
+ * The look the markers were last shown with (levels only, or full: also the quick upgrade's markers while the HUD is off). It
+ * stays while they hide, so a hide keeps what was on screen: no boxes growing after levels only, none dropping after full.
+ */
+const shownLook = ref<'full' | 'levels'>(prefs.buildingHudMode === 'levels' ? 'levels' : 'full');
+watch(
+  [markersWanted, () => prefs.buildingHudMode],
+  ([wanted, mode]) => {
+    if (wanted) shownLook.value = mode === 'levels' ? 'levels' : 'full';
+  },
+  { flush: 'sync' },
+);
 /** Levels only: the dials stand alone, a box shows only on the hovered (or tapped) marker. */
-const levelsOnly = computed(() => prefs.buildingHudMode === 'levels');
+const levelsOnly = computed(() => (markersWanted.value ? prefs.buildingHudMode === 'levels' : shownLook.value === 'levels'));
 
 /** The markers are in the DOM: from the moment they are switched on until their hide animation has ended. */
 const rendered = ref(props.buildingMarkers && markersWanted.value);

@@ -720,8 +720,10 @@ contour stayed a clean ellipse however ragged the inside was), and the only per-
 **Desaturate filter** (`FogDesaturateFilter.ts`, shader `FOG_DESATURATE_FRAGMENT`). The dark tier is no longer a
 near-black overlay but a Pixi filter on `underFogLayer`, a container holding `world` and the camp paws (everything under
 `markerLayer`). Where the field's `R` is set it pulls bright tones (sand, foam, snow) toward mid grey, desaturates, dims and
-gives a slight cool tint. Defaults: desaturate 0.88, bright pull 0.6, darken 0.40 (`fogDebugTuning`, live sliders in the fog
-debug panel). The world view's sea is the in-canvas `SeaBackdrop` quad at the bottom of `underFogLayer` (`seaBackdrop.ts`), so the tier greys it like the rest. Where the canvas is transparent (the settlement view's CSS mist backdrop shows through) the old dark tint (`0x0b1116` at alpha 0.6 times
+gives a slight cool tint. Defaults: desaturate 0.88, bright pull 0.6, darken 0.50, greying ramp 1.5 (`fogDebugTuning`, live
+sliders in the fog debug panel). The greying (bright pull and desaturation) follows `1 - (1 - R)^ramp` instead of `R`, so it
+reaches full strength sooner past the edge of sight: with the plain ramp the land just outside sight stayed a murky
+half-desaturated green, most visibly on the settlement map's dense forest art. Dimming and tint stay on `R`. The world view's sea is the in-canvas `SeaBackdrop` quad at the bottom of `underFogLayer` (`seaBackdrop.ts`), so the tier greys it like the rest. Where the canvas is transparent (the settlement view's CSS mist backdrop shows through) the old dark tint (`0x0b1116` at alpha 0.6 times
 `R`) is added so the tier stays visible there. The filter exists only while the dark tier is shown (otherwise no pass at
 all) and not during a debug view.
 
