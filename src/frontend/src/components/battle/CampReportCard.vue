@@ -9,6 +9,7 @@ import type { CampReportResponse } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
 import { beastName, campName, resourceName, unitName } from '../../i18n/catalogueNames';
 import { isCampReportVictory, totalCampLoot } from '../../lib/units/campReports';
+import ReportLocationLink from './ReportLocationLink.vue';
 
 const props = defineProps<{ report: CampReportResponse }>();
 
@@ -31,7 +32,10 @@ const hasVolley = computed(() => props.report.armyVolleyPower > 0);
     <h2 class="title" data-testid="camp-report-title">{{ title }}</h2>
     <p class="occurred">
       {{ d(new Date(report.occurredAt), 'long') }} ·
-      {{ t('hud.campReport.campLevel', { level: report.camp.effectiveLevel, q: report.camp.q, r: report.camp.r }) }}
+      <i18n-t keypath="hud.campReport.campLevel" tag="span" scope="global">
+        <template #level>{{ report.camp.effectiveLevel }}</template>
+        <template #location><ReportLocationLink :coord="{ q: report.camp.q, r: report.camp.r }" /></template>
+      </i18n-t>
     </p>
     <p class="powers">
       {{ t('hud.campReport.armyPower') }}: {{ Math.round(report.armyPower) }} ·
@@ -100,12 +104,10 @@ const hasVolley = computed(() => props.report.armyVolleyPower > 0);
     <p v-if="report.campCleared" class="note cleared" data-testid="camp-report-cleared">
       {{ t('hud.campReport.cleared', { camp }) }}
     </p>
-    <p v-if="report.kind === 'tower'" class="note" :class="report.towerBurned ? 'burned' : 'held'" data-testid="camp-report-tower">
-      {{
-        report.towerBurned
-          ? t('hud.campReport.towerBurned', { q: report.tower?.q ?? 0, r: report.tower?.r ?? 0 })
-          : t('hud.campReport.towerHeld', { q: report.tower?.q ?? 0, r: report.tower?.r ?? 0 })
-      }}
+    <p v-if="report.kind === 'tower' && report.tower" class="note" :class="report.towerBurned ? 'burned' : 'held'" data-testid="camp-report-tower">
+      <i18n-t :keypath="report.towerBurned ? 'hud.campReport.towerBurned' : 'hud.campReport.towerHeld'" tag="span" scope="global">
+        <template #location><ReportLocationLink :coord="{ q: report.tower.q, r: report.tower.r }" /></template>
+      </i18n-t>
     </p>
 
     <div v-if="hasLoot" class="loot" data-testid="camp-report-loot">

@@ -10,6 +10,10 @@
     "confirm": "Bestätigen",
     "retry": "Erneut versuchen"
   },
+  "reportLocation": {
+    "coord": "({q}, {r})",
+    "showOnMap": "Auf der Karte zeigen"
+  },
   "states": {
     "loading": "Lädt…",
     "unknown": "Unbekannt"

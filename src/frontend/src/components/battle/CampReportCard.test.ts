@@ -3,8 +3,10 @@
 // Real-DOM render check for CampReportCard.vue: the title per kind, the banner for the
 // viewer, units sent/lost, beasts before/lost per tier with the family's beast names, loot and
 // the cleared / tower burned notes.
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
+import { createMemoryHistory, createRouter } from 'vue-router';
+import { useMapFocus } from '../../composables/useMapFocus';
 import CampReportCard from './CampReportCard.vue';
 import type { CampReportResponse } from '../../api/types';
 import { createTestI18n } from '../../test/i18n';
@@ -33,8 +35,16 @@ const base: CampReportResponse = {
   towerBurned: false,
 };
 
+const router = createRouter({
+  history: createMemoryHistory(),
+  routes: [
+    { path: '/settlement', component: { template: '<div />' } },
+    { path: '/reports/:reportId', component: { template: '<div />' } },
+  ],
+});
+
 function mountCard(report: CampReportResponse) {
-  return mount(CampReportCard, { props: { report }, global: { plugins: [createTestI18n({ hud: enHud })] } });
+  return mount(CampReportCard, { props: { report }, global: { plugins: [createTestI18n({ hud: enHud }), router] } });
 }
 
 describe('CampReportCard', () => {
@@ -105,5 +115,26 @@ describe('CampReportCard', () => {
     const held = mountCard({ ...base, kind: 'tower', tower: { q: 1, r: 1 }, towerBurned: false, campCleared: false });
     expect(held.find('[data-testid="camp-report-tower"]').text()).toContain('held');
     held.unmount();
+  });
+
+  it('shows the camp and the tower location as links that centre the map on that hex', async () => {
+    const map = useMapFocus();
+    map.clear();
+    const w = mountCard({ ...base, kind: 'tower', tower: { q: 1, r: 1 }, towerBurned: true, campCleared: false });
+
+    const links = w.findAll('[data-testid="report-location-link"]');
+    expect(links.map((l) => l.text())).toEqual(['(4, -2)', '(1, 1)']);
+    expect(w.text()).toContain('Camp level 2 at (4, -2)');
+    expect(w.get('[data-testid="camp-report-tower"]').text()).toBe('The tower at (1, 1) burned down.');
+
+    await links[0].trigger('click');
+    await flushPromises();
+    expect(map.pending.value?.coord).toEqual({ q: 4, r: -2 });
+    map.clear();
+    await links[1].trigger('click');
+    await flushPromises();
+    expect(map.pending.value?.coord).toEqual({ q: 1, r: 1 });
+    map.clear();
+    w.unmount();
   });
 });

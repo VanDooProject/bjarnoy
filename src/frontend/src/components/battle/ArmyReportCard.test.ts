@@ -2,8 +2,10 @@
 //
 // Real-DOM render check for ArmyReportCard.vue: the banner and text per kind (stuck / starved) with the hex
 // filled in, and the troops table headed "lost" for a starved army and "in the army" for a stuck one.
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
+import { createMemoryHistory, createRouter } from 'vue-router';
+import { useMapFocus } from '../../composables/useMapFocus';
 import ArmyReportCard from './ArmyReportCard.vue';
 import type { ArmyReportResponse } from '../../api/types';
 import { createTestI18n } from '../../test/i18n';
@@ -19,8 +21,16 @@ const base: ArmyReportResponse = {
   units: [{ type: 'axeman', count: 12 }],
 };
 
+const router = createRouter({
+  history: createMemoryHistory(),
+  routes: [
+    { path: '/settlement', component: { template: '<div />' } },
+    { path: '/reports/:reportId', component: { template: '<div />' } },
+  ],
+});
+
 function mountCard(report: ArmyReportResponse) {
-  return mount(ArmyReportCard, { props: { report }, global: { plugins: [createTestI18n({ reports: enReports })] } });
+  return mount(ArmyReportCard, { props: { report }, global: { plugins: [createTestI18n({ reports: enReports }), router] } });
 }
 
 describe('ArmyReportCard', () => {
@@ -40,6 +50,21 @@ describe('ArmyReportCard', () => {
     expect(w.find('.banner').text()).toBe('Army stuck');
     expect(w.find('[data-testid="army-report-text"]').text()).toBe('Army stuck: a wall blocks its way. It stopped at (4, -2).');
     expect(w.find('[data-testid="army-report-units"] h3').text()).toBe('Troops in the army');
+    w.unmount();
+  });
+
+  it('shows the hex as a link that centres the map on it', async () => {
+    const map = useMapFocus();
+    map.clear();
+    const w = mountCard(base);
+
+    const link = w.get('[data-testid="army-report-text"] [data-testid="report-location-link"]');
+    expect(link.text()).toBe('(4, -2)');
+    await link.trigger('click');
+    await flushPromises();
+
+    expect(map.pending.value?.coord).toEqual({ q: 4, r: -2 });
+    map.clear();
     w.unmount();
   });
 });

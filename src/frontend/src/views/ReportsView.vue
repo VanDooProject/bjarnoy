@@ -36,7 +36,6 @@ import BattleReportCard from '../components/battle/BattleReportCard.vue';
 import FieldBattleReportCard from '../components/battle/FieldBattleReportCard.vue';
 import CampReportCard from '../components/battle/CampReportCard.vue';
 import ArmyReportCard from '../components/battle/ArmyReportCard.vue';
-import { armyReportHex } from '../lib/units/armyReports';
 import { campName } from '../i18n/catalogueNames';
 import { isCampReportVictory, totalBeastsLost, totalCampLoot, totalUnitsLost } from '../lib/units/campReports';
 import type { MessageSchema } from '../i18n/schema';
@@ -168,7 +167,7 @@ const rows = computed(() =>
         isVictory: false,
         isTie: report.kind === 'stuck',
         mission: t('reports.tabs.army'),
-        summary: t(`reports.army.${report.kind}`, { hex: armyReportHex(report) }),
+        summary: t(`reports.army.${report.kind}`, { hex: t('common.reportLocation.coord', { q: report.hex.q, r: report.hex.r }) }),
         when: d(new Date(report.occurredAt), 'long'),
       };
     }

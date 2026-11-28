@@ -7,14 +7,13 @@ import { useI18n } from 'vue-i18n';
 import type { ArmyReportResponse } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
 import { unitName } from '../../i18n/catalogueNames';
-import { armyReportHex } from '../../lib/units/armyReports';
+import ReportLocationLink from './ReportLocationLink.vue';
 
 const props = defineProps<{ report: ArmyReportResponse }>();
 
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const starved = computed(() => props.report.kind === 'starved');
-const text = computed(() => t(`reports.army.${props.report.kind}`, { hex: armyReportHex(props.report) }));
 </script>
 
 <template>
@@ -23,7 +22,11 @@ const text = computed(() => t(`reports.army.${props.report.kind}`, { hex: armyRe
       <span class="banner">{{ t(`reports.army.kind.${report.kind}`) }}</span>
     </div>
     <p class="occurred">{{ d(new Date(report.occurredAt), 'long') }}</p>
-    <p class="text" data-testid="army-report-text">{{ text }}</p>
+    <p class="text" data-testid="army-report-text">
+      <i18n-t :keypath="`reports.army.${report.kind}`" tag="span" scope="global">
+        <template #hex><ReportLocationLink :coord="{ q: report.hex.q, r: report.hex.r }" /></template>
+      </i18n-t>
+    </p>
 
     <section class="side" data-testid="army-report-units">
       <h3>{{ starved ? t('reports.army.lost') : t('reports.army.inArmy') }}</h3>
