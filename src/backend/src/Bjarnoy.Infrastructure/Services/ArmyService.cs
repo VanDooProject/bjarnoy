@@ -1656,9 +1656,12 @@ public sealed class ArmyService(
         // its original movement, or a loser's forced retreat) is applied
         // immediately and any further arrival-specific processing is left
         // for this army's next settle call.
-        if (await _fieldBattleService.TryResolveAsync(army, domain, now, cancellationToken).ConfigureAwait(false))
+        switch (await _fieldBattleService.TryResolveAsync(army, domain, now, cancellationToken).ConfigureAwait(false))
         {
-            return ArmySettleOutcome.Updated;
+            case FieldBattleOutcome.Fought:
+                return ArmySettleOutcome.Updated;
+            case FieldBattleOutcome.ArmyDestroyed:
+                return ArmySettleOutcome.FoldedHome;
         }
 
         // A stranded army stands where it is until its food runs out (docs/design/troop-movement-range.md §2a). It has no

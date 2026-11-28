@@ -14,6 +14,19 @@ using Movement = Bjarnoy.Domain.Movement.Movement;
 
 namespace Bjarnoy.Infrastructure.Services;
 
+/// <summary>What <see cref="FieldBattleService.TryResolveAsync"/> did to the army it was called for.</summary>
+public enum FieldBattleOutcome
+{
+    /// <summary>No battle happened; the army is untouched.</summary>
+    None,
+
+    /// <summary>A battle was fought and the army has survivors (marching on or retreating); its row is kept.</summary>
+    Fought,
+
+    /// <summary>A battle was fought and every unit of the army fell; its row is removed.</summary>
+    ArmyDestroyed,
+}
+
 /// <summary>
 /// In-flight army-vs-army interception (issue #206). Detection and
 /// resolution are one and the same step here, run from
@@ -45,17 +58,14 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
     /// <paramref name="now"/>, and resolves it if so.
     /// </summary>
     /// <returns>
-    /// <see langword="true"/> if a battle was found, claimed, and applied —
-    /// <paramref name="army"/> and the other side's <see cref="ArmyEntity"/>
-    /// (also added to this context) now carry the post-battle state and a
-    /// <see cref="FieldBattleReportEntity"/> was added; the caller still owns
-    /// calling <c>SaveChangesAsync</c>. <see langword="false"/> means either
-    /// nothing was found, or a concurrent request already claimed the one
-    /// meeting that was found — in both cases <paramref name="army"/> is
-    /// untouched and the caller's normal settle logic should proceed as if
-    /// this call had never happened.
+    /// <see cref="FieldBattleOutcome.Fought"/> or <see cref="FieldBattleOutcome.ArmyDestroyed"/> if a battle was found, claimed,
+    /// and applied — <paramref name="army"/> and the other side's <see cref="ArmyEntity"/> (also added to this context) now carry
+    /// the post-battle state, a side that lost every unit is removed from the context, and a <see cref="FieldBattleReportEntity"/>
+    /// was added; the caller still owns calling <c>SaveChangesAsync</c>. <see cref="FieldBattleOutcome.None"/> means either
+    /// nothing was found, or a concurrent request already claimed the one meeting that was found — in both cases
+    /// <paramref name="army"/> is untouched and the caller's normal settle logic should proceed as if this call had never happened.
     /// </returns>
-    public async Task<bool> TryResolveAsync(
+    public async Task<FieldBattleOutcome> TryResolveAsync(
         ArmyEntity army, Army domain, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(army);
@@ -63,7 +73,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
 
         if (domain.Location is not ArmyLocation.InTransit { Movement: var movement })
         {
-            return false;
+            return FieldBattleOutcome.None;
         }
 
         // The army's own world and owner: an army without a home has them too.
@@ -127,7 +137,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
 
         if (earliest is not { } chosen)
         {
-            return false;
+            return FieldBattleOutcome.None;
         }
 
         if (!await TryClaimAsync(army.Id, chosen.Other.Id, chosen.At, cancellationToken).ConfigureAwait(false))
@@ -135,7 +145,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
             // Someone else (a concurrent request touching either army) is
             // already resolving this exact meeting — back off, nothing to
             // apply on our side.
-            return false;
+            return FieldBattleOutcome.None;
         }
 
         var giants = await LoadGiantIndexAsync(worldId, cancellationToken).ConfigureAwait(false);
@@ -145,8 +155,9 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         var walls = await WorldBridges.RouteIndexAsync(
             _dbContext, worldId, new TerrainSampler(army.World!.ToGenerationOptions()).WithBogOverlay(bog).TerrainAt,
             rivers.IsWide, chosen.At, cancellationToken).ConfigureAwait(false);
-        Resolve(army, domain, movement, chosen.Other, chosen.OtherDomain, chosen.OtherMovement, chosen.Hex, chosen.At, giants, bog, rivers, walls, realms);
-        return true;
+        var destroyed = Resolve(
+            army, domain, movement, chosen.Other, chosen.OtherDomain, chosen.OtherMovement, chosen.Hex, chosen.At, giants, bog, rivers, walls, realms);
+        return destroyed ? FieldBattleOutcome.ArmyDestroyed : FieldBattleOutcome.Fought;
     }
 
     /// <summary>Every giant across every island of <paramref name="worldId"/> — see <c>ArmyService.LoadGiantIndexAsync</c>.</summary>
@@ -217,9 +228,10 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
     /// Applies one resolved <see cref="FieldBattlePlan"/> to both
     /// <see cref="ArmyEntity"/> rows and adds the
     /// <see cref="FieldBattleReportEntity"/> — the caller still owns
-    /// <c>SaveChangesAsync</c>.
+    /// <c>SaveChangesAsync</c>. A side that lost every unit is removed instead of retreating.
     /// </summary>
-    private void Resolve(
+    /// <returns>Whether <paramref name="armyA"/> lost every unit (its row is removed).</returns>
+    private bool Resolve(
         ArmyEntity armyA, Army domainA, Movement movementA,
         ArmyEntity armyB, Army domainB, Movement movementB,
         HexCoord hex, DateTimeOffset at, IGiantIndex giants, IReadOnlyDictionary<HexCoord, Terrain> bog,
@@ -234,30 +246,23 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
             domainA.Stacks, claimA, domainB.Stacks, claimB, domainA.Loot, domainB.Loot,
             domainA.ProvisionsAt(at), domainB.ProvisionsAt(at), seed);
 
-        Army updatedA;
-        Army updatedB;
+        // A side that lost every unit is gone: no retreat is worked out for it (an army without units has no speed, and without upkeep
+        // it would never starve either). A tie takes no loot from either side (issue #206 §3), both retreat.
+        Army? updatedA = plan.SideASurvivors.Sum(u => u.Count) <= 0
+            ? null
+            : plan.Winner == FieldBattleWinner.SideA
+                ? ApplyWin(domainA, movementA, plan.SideASurvivors, plan.LootTakenByWinner, plan.FoodRefillToWinner, at)
+                : ApplyLoss(armyA, domainA, hex, at, plan.SideASurvivors,
+                    plan.Winner == FieldBattleWinner.SideB ? TakenFromLoser(plan) : ResourceAmounts.Zero, bog, rivers, walls);
+        Army? updatedB = plan.SideBSurvivors.Sum(u => u.Count) <= 0
+            ? null
+            : plan.Winner == FieldBattleWinner.SideB
+                ? ApplyWin(domainB, movementB, plan.SideBSurvivors, plan.LootTakenByWinner, plan.FoodRefillToWinner, at)
+                : ApplyLoss(armyB, domainB, hex, at, plan.SideBSurvivors,
+                    plan.Winner == FieldBattleWinner.SideA ? TakenFromLoser(plan) : ResourceAmounts.Zero, bog, rivers, walls);
 
-        switch (plan.Winner)
-        {
-            case FieldBattleWinner.SideA:
-                updatedA = ApplyWin(domainA, movementA, plan.SideASurvivors, plan.LootTakenByWinner, plan.FoodRefillToWinner, at);
-                updatedB = ApplyLoss(armyB, domainB, hex, at, plan.SideBSurvivors, TakenFromLoser(plan), bog, rivers, walls);
-                break;
-
-            case FieldBattleWinner.SideB:
-                updatedA = ApplyLoss(armyA, domainA, hex, at, plan.SideASurvivors, TakenFromLoser(plan), bog, rivers, walls);
-                updatedB = ApplyWin(domainB, movementB, plan.SideBSurvivors, plan.LootTakenByWinner, plan.FoodRefillToWinner, at);
-                break;
-
-            default:
-                // A tie: no loot changes hands (issue #206 §3), both retreat.
-                updatedA = ApplyLoss(armyA, domainA, hex, at, plan.SideASurvivors, ResourceAmounts.Zero, bog, rivers, walls);
-                updatedB = ApplyLoss(armyB, domainB, hex, at, plan.SideBSurvivors, ResourceAmounts.Zero, bog, rivers, walls);
-                break;
-        }
-
-        armyA.ApplyDomain(updatedA);
-        armyB.ApplyDomain(updatedB);
+        var destroyedA = ApplyOrRemove(armyA, updatedA, movementA, at);
+        var destroyedB = ApplyOrRemove(armyB, updatedB, movementB, at);
 
         var report = FieldBattleReportEntity.FromDomain(
             Guid.CreateVersion7(), at, hex, armyA.Id, armyA.SettlementId ?? Guid.Empty, armyB.Id, armyB.SettlementId ?? Guid.Empty, plan, seed);
@@ -270,6 +275,33 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
             "Field battle at ({Q},{R}) between army {ArmyA} and army {ArmyB}: {Winner} won "
                 + "({PowerA} vs {PowerB}).",
             hex.Q, hex.R, armyA.Id, armyB.Id, plan.Winner, plan.SideAPower, plan.SideBPower);
+        if (destroyedA || destroyedB)
+        {
+            _logger.LogInformation(
+                "Field battle at ({Q},{R}) wiped out {Destroyed}.",
+                hex.Q, hex.R, string.Join(" and ", new[] { (destroyedA, armyA.Id), (destroyedB, armyB.Id) }.Where(d => d.Item1).Select(d => d.Item2)));
+        }
+
+        return destroyedA;
+    }
+
+    /// <summary>
+    /// Stores <paramref name="updated"/> on <paramref name="entity"/>, or — when no unit of it is left (<see langword="null"/>) —
+    /// removes the row where the battle caught it.
+    /// </summary>
+    /// <returns>Whether the row was removed.</returns>
+    private bool ApplyOrRemove(ArmyEntity entity, Army? updated, Movement movement, DateTimeOffset at)
+    {
+        if (updated is not null)
+        {
+            entity.ApplyDomain(updated);
+            return false;
+        }
+
+        // The ground it crossed up to the battle still counts as explored.
+        entity.WalkedLegs.Add(new WalkedLeg(movement, at));
+        _dbContext.Armies.Remove(entity);
+        return true;
     }
 
     /// <summary>

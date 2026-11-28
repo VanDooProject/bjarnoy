@@ -193,7 +193,7 @@ public sealed class FieldBattleServiceTests : IDisposable
         var loaded = (await LoadAsync(db, armyA.Id, Ct))!;
         var resolved = await service.TryResolveAsync(loaded, loaded.ToDomain(), T0 + TimeSpan.FromHours(3), Ct);
 
-        Assert.False(resolved);
+        Assert.Equal(FieldBattleOutcome.None, resolved);
         Assert.Empty(db.FieldBattleReports);
     }
 
@@ -220,7 +220,7 @@ public sealed class FieldBattleServiceTests : IDisposable
         var loaded = (await LoadAsync(db, armyA.Id, Ct))!;
         var resolved = await service.TryResolveAsync(loaded, loaded.ToDomain(), T0 + TimeSpan.FromHours(3), Ct);
 
-        Assert.False(resolved);
+        Assert.Equal(FieldBattleOutcome.None, resolved);
         Assert.Empty(db.FieldBattleReports);
     }
 
@@ -249,7 +249,7 @@ public sealed class FieldBattleServiceTests : IDisposable
         var loaded = (await LoadAsync(db, armyA.Id, Ct))!;
         var resolved = await service.TryResolveAsync(loaded, loaded.ToDomain(), T0 + TimeSpan.FromHours(3), Ct);
 
-        Assert.False(resolved);
+        Assert.Equal(FieldBattleOutcome.None, resolved);
         Assert.Empty(db.FieldBattleReports);
     }
 
@@ -276,7 +276,7 @@ public sealed class FieldBattleServiceTests : IDisposable
         var loadedA = (await LoadAsync(db, armyA.Id, Ct))!;
         var now = T0 + TimeSpan.FromHours(3);
         var resolved = await service.TryResolveAsync(loadedA, loadedA.ToDomain(), now, Ct);
-        Assert.True(resolved);
+        Assert.Equal(FieldBattleOutcome.Fought, resolved);
         await db.SaveChangesAsync(Ct);
 
         var report = Assert.Single(db.FieldBattleReports);
@@ -302,6 +302,46 @@ public sealed class FieldBattleServiceTests : IDisposable
         Assert.Equal(new HexCoord(0, 0), loserTransit.Movement.Path[0]);
     }
 
+    /// <summary>
+    /// A loser with a single unit loses it (half of one rounds up to one): no army is left, so its row is removed instead of being
+    /// sent on a retreat with no units. Such a row has no upkeep, never starves and stood on other players' maps for good.
+    /// Checked from both sides: the winner settling (the other row goes) and the wiped-out army settling itself.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_side_that_loses_every_unit_in_a_field_battle_is_removed_not_sent_home_empty(bool loserSettles)
+    {
+        using var db = CreateContext();
+        var worldId = AddWorld(db);
+        var islandId = AddIsland(db, worldId);
+        var settlementA = AddSettlement(db, worldId, islandId, AddUser(db), -20, 0);
+        var settlementB = AddSettlement(db, worldId, islandId, AddUser(db), 20, 0);
+        var winner = MakeInTransitArmy(
+            settlementA, [(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Axeman, 10));
+        var loser = MakeInTransitArmy(
+            settlementB, [(2, 0), (1, 0), (0, 0), (-1, 0), (-2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Spearman, 1));
+        db.AddArmyRows(winner, loser);
+        await db.SaveChangesAsync(Ct);
+
+        var service = new FieldBattleService(db, NullLogger<FieldBattleService>.Instance);
+        var settling = (await LoadAsync(db, loserSettles ? loser.Id : winner.Id, Ct))!;
+        var outcome = await service.TryResolveAsync(settling, settling.ToDomain(), T0 + TimeSpan.FromHours(3), Ct);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(loserSettles ? FieldBattleOutcome.ArmyDestroyed : FieldBattleOutcome.Fought, outcome);
+
+        using var verify = CreateContext();
+        Assert.False(await verify.Armies.AnyAsync(a => a.Id == loser.Id, Ct));
+        Assert.Empty(await verify.Set<ArmyUnitStackEntity>().Where(s => s.ArmyId == loser.Id).ToListAsync(Ct));
+        var survivor = await verify.Armies.Include(a => a.Stacks).SingleAsync(a => a.Id == winner.Id, Ct);
+        Assert.True(survivor.Stacks.Sum(s => s.Count) > 0);
+
+        // The battle is still reported to both sides.
+        var report = Assert.Single(await verify.FieldBattleReports.ToListAsync(Ct));
+        Assert.Equal((int)(loserSettles ? FieldBattleWinner.SideB : FieldBattleWinner.SideA), report.Winner);
+    }
+
     /// <summary>Two hostile armies crossing at (0,0) during [2h, 3h); the weak one is protected until <paramref name="immuneUntilHours"/> (or not at all).</summary>
     private async Task<bool> ResolveCrossingAsync(double? immuneUntilHours)
     {
@@ -320,7 +360,7 @@ public sealed class FieldBattleServiceTests : IDisposable
 
         var service = new FieldBattleService(db, NullLogger<FieldBattleService>.Instance);
         var loaded = (await LoadAsync(db, armyA.Id, Ct))!;
-        var resolved = await service.TryResolveAsync(loaded, loaded.ToDomain(), T0 + TimeSpan.FromHours(3), Ct);
+        var resolved = await service.TryResolveAsync(loaded, loaded.ToDomain(), T0 + TimeSpan.FromHours(3), Ct) != FieldBattleOutcome.None;
         await db.SaveChangesAsync(Ct);
         Assert.Equal(resolved ? 1 : 0, db.FieldBattleReports.Count());
         return resolved;
@@ -362,7 +402,7 @@ public sealed class FieldBattleServiceTests : IDisposable
 
         var service = new FieldBattleService(db, NullLogger<FieldBattleService>.Instance);
         var loadedA = (await LoadAsync(db, armyA.Id, Ct))!;
-        Assert.True(await service.TryResolveAsync(loadedA, loadedA.ToDomain(), T0 + TimeSpan.FromHours(3), Ct));
+        Assert.Equal(FieldBattleOutcome.Fought, await service.TryResolveAsync(loadedA, loadedA.ToDomain(), T0 + TimeSpan.FromHours(3), Ct));
         await db.SaveChangesAsync(Ct);
 
         var loser = (await LoadAsync(db, armyB.Id, Ct))!.ToDomain();
@@ -396,7 +436,7 @@ public sealed class FieldBattleServiceTests : IDisposable
         var loadedA = (await LoadAsync(db, armyA.Id, Ct))!;
         var before = loadedA.ToDomain();
         var now = T0 + TimeSpan.FromHours(3);
-        Assert.True(await service.TryResolveAsync(loadedA, before, now, Ct));
+        Assert.Equal(FieldBattleOutcome.Fought, await service.TryResolveAsync(loadedA, before, now, Ct));
         await db.SaveChangesAsync(Ct);
 
         // Both armies cross hex (0,0) two hours in: that is the battle instant.
@@ -431,7 +471,7 @@ public sealed class FieldBattleServiceTests : IDisposable
         var service = new FieldBattleService(db, NullLogger<FieldBattleService>.Instance);
         var loadedA = (await LoadAsync(db, armyA.Id, Ct))!;
         var resolved = await service.TryResolveAsync(loadedA, loadedA.ToDomain(), T0 + TimeSpan.FromHours(3), Ct);
-        Assert.True(resolved);
+        Assert.Equal(FieldBattleOutcome.Fought, resolved);
         await db.SaveChangesAsync(Ct);
 
         var report = Assert.Single(db.FieldBattleReports);
@@ -483,8 +523,8 @@ public sealed class FieldBattleServiceTests : IDisposable
         var result1 = await service1.TryResolveAsync(loaded1, loaded1.ToDomain(), now, Ct);
         var result2 = await service2.TryResolveAsync(loaded2, loaded2.ToDomain(), now, Ct);
 
-        Assert.True(result1);
-        Assert.False(result2);
+        Assert.Equal(FieldBattleOutcome.Fought, result1);
+        Assert.Equal(FieldBattleOutcome.None, result2);
 
         await db1.SaveChangesAsync(Ct);
 
