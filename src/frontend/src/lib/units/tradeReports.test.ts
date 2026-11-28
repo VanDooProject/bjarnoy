@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isTradeReportUnread, tradeSummaryLine, tradeUnreadCount } from './tradeReports';
+import { tradeSummaryLine } from './tradeReports';
 import type { TradeReportResponse } from '../../api/types';
 
 const baseReport: TradeReportResponse = {
@@ -15,6 +15,7 @@ const baseReport: TradeReportResponse = {
   guildTrade: false,
   travelHours: 1.5,
   viewerSide: 'poster',
+  read: false,
 };
 
 describe('tradeSummaryLine', () => {
@@ -23,26 +24,5 @@ describe('tradeSummaryLine', () => {
   });
   it('describes the acceptor side as the mirror image', () => {
     expect(tradeSummaryLine(baseReport, 'acceptor')).toBe('Gave 100 iron for 200 wood');
-  });
-});
-
-describe('isTradeReportUnread / tradeUnreadCount', () => {
-  const earlier = { ...baseReport, id: 'earlier', completedAt: '2026-08-29T10:00:00.000Z' };
-  const later = { ...baseReport, id: 'later', completedAt: '2026-08-29T12:00:00.000Z' };
-
-  it('everything is unread when nothing has been seen yet', () => {
-    expect(isTradeReportUnread(earlier, null)).toBe(true);
-  });
-
-  it('a report before the last-seen timestamp is read', () => {
-    expect(isTradeReportUnread(earlier, '2026-08-29T11:00:00.000Z')).toBe(false);
-  });
-
-  it('a report after the last-seen timestamp is unread', () => {
-    expect(isTradeReportUnread(later, '2026-08-29T11:00:00.000Z')).toBe(true);
-  });
-
-  it('counts only the unread ones', () => {
-    expect(tradeUnreadCount([earlier, later], '2026-08-29T11:00:00.000Z')).toBe(1);
   });
 });

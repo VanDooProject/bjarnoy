@@ -60,6 +60,7 @@ function battleReport(overrides: Partial<BattleReportResponse> = {}): BattleRepo
     fireShipsBurned: 0,
     fireSiege: null,
     viewerSide: 'attacker',
+    read: false,
     ...overrides,
   };
 }

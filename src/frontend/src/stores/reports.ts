@@ -8,15 +8,21 @@ import type {
   TradeReportResponse,
 } from '../api/types';
 import { DEMO_MODE } from '../config';
-import { type InboxItem, inboxUnreadCount, mergeInbox } from '../lib/units/inbox';
+import {
+  type InboxItem,
+  type InboxKind,
+  inboxKey,
+  inboxUnreadByKind,
+  inboxUnreadCount,
+  isInboxItemUnread,
+  mergeInbox,
+} from '../lib/units/inbox';
 
 // How often the badge/inbox re-polls while a HUD nav is mounted — battle
 // reports arrive at unpredictable times (whenever another player's army
 // settles a fight), so this is a light poll rather than a websocket/push
 // channel, matching ARMY_POLL_MS's own reasoning in stores/world.ts.
 const REPORT_POLL_MS = 5000;
-
-const LAST_SEEN_KEY = 'bjarnoy.reportsLastSeenAt';
 
 /**
  * Battle reports of the player in the current world (issue #40 phase 3). Kept
@@ -27,10 +33,12 @@ const LAST_SEEN_KEY = 'bjarnoy.reportsLastSeenAt';
  * `stopPolling`), unlike `hud.garrison`/`armies` which poll for as long as
  * the settlement/world view itself is open.
  *
- * "Unread" is a purely client-side notion — the backend does not track a
- * per-player read state for reports (see `BattleReportService`) — so it's
- * just "occurred after the last time this browser looked at the inbox",
- * persisted in `localStorage` (per `lastSeenAt`'s own comment).
+ * Whether a report was read is kept by the backend per player (each report
+ * response carries `read`), so it follows the player across browsers and
+ * devices. `localRead` is only an optimistic overlay: opening a report marks
+ * it here at once and a poll that still says `read: false` (it raced the
+ * request) cannot flip it back; `load` clears the overlay when the world or
+ * owner changes. A failed request takes the report out of the overlay again.
  *
  * Issue #46 phase 3 folds `TradeReport`s into the same inbox/badge — see
  * the design doc's §7 note that both kinds share one per-player inbox.
@@ -57,13 +65,8 @@ export const useReportsStore = defineStore('reports', {
     armyItems: [] as ArmyReportResponse[],
     loading: false,
     error: null as string | null,
-    lastSeenAt: (() => {
-      try {
-        return localStorage.getItem(LAST_SEEN_KEY);
-      } catch {
-        return null;
-      }
-    })() as string | null,
+    // Reports marked read in this session, keyed by `inboxKey` — see the store comment.
+    localRead: {} as Record<string, true>,
     pollHandle: null as ReturnType<typeof setInterval> | null,
   }),
   getters: {
@@ -71,8 +74,14 @@ export const useReportsStore = defineStore('reports', {
     inboxItems(state): InboxItem[] {
       return mergeInbox(state.items, state.tradeItems, state.fieldItems, state.campItems, state.armyItems);
     },
+    isUnread(state): (item: InboxItem) => boolean {
+      return (item) => isInboxItemUnread(item, state.localRead);
+    },
     unreadCount(state): number {
-      return inboxUnreadCount(mergeInbox(state.items, state.tradeItems, state.fieldItems, state.campItems, state.armyItems), state.lastSeenAt);
+      return inboxUnreadCount(mergeInbox(state.items, state.tradeItems, state.fieldItems, state.campItems, state.armyItems), state.localRead);
+    },
+    unreadCountByKind(state): Record<InboxKind, number> {
+      return inboxUnreadByKind(mergeInbox(state.items, state.tradeItems, state.fieldItems, state.campItems, state.armyItems), state.localRead);
     },
   },
   actions: {
@@ -86,6 +95,7 @@ export const useReportsStore = defineStore('reports', {
      * the already-loaded list.
      */
     async load(worldId: string, ownerId?: string) {
+      if (this.worldId !== (worldId ?? null) || this.ownerId !== (ownerId ?? null)) this.localRead = {};
       this.ownerId = ownerId ?? null;
       this.worldId = worldId ?? null;
       this.loading = true;
@@ -163,13 +173,33 @@ export const useReportsStore = defineStore('reports', {
         return null;
       }
     },
-    /** Marks every currently-known report as seen — call when the player opens the inbox. */
-    markAllSeen() {
-      this.lastSeenAt = new Date().toISOString();
+    /** Marks one report read for the player: optimistic, undone when the request fails. No-op in the demo, without a world, or when it is already read. */
+    async markRead(item: InboxItem) {
+      const worldId = this.worldId;
+      if (DEMO_MODE || !worldId || !isInboxItemUnread(item, this.localRead)) return;
+      const key = inboxKey(item);
+      this.localRead = { ...this.localRead, [key]: true };
       try {
-        localStorage.setItem(LAST_SEEN_KEY, this.lastSeenAt);
+        await api.markReportRead(worldId, item.kind, item.report.id, this.ownerId ?? undefined);
       } catch {
-        // Private-browsing/storage-disabled: unread badge just won't persist across reloads.
+        const { [key]: _undone, ...rest } = this.localRead;
+        this.localRead = rest;
+      }
+    },
+    /** Marks every unread report read for the player: optimistic, undone for the whole batch when the request fails. */
+    async markAllRead() {
+      const worldId = this.worldId;
+      if (DEMO_MODE || !worldId) return;
+      const unread = this.inboxItems.filter((item) => isInboxItemUnread(item, this.localRead));
+      if (!unread.length) return;
+      const keys = unread.map(inboxKey);
+      this.localRead = { ...this.localRead, ...Object.fromEntries(keys.map((key) => [key, true as const])) };
+      try {
+        await api.markAllReportsRead(worldId, this.ownerId ?? undefined);
+      } catch {
+        const rest = { ...this.localRead };
+        for (const key of keys) delete rest[key];
+        this.localRead = rest;
       }
     },
     /** Starts (or restarts, if already polling for a different world) the light background poll HudNav's badge relies on. */

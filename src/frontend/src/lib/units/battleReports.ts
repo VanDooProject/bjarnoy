@@ -87,17 +87,6 @@ export function reportSummaryLine(
   return parts.join(', ');
 }
 
-/** A report counts as unread if it happened after `lastSeenIso` (or nothing has been seen yet). */
-export function isUnread(report: { occurredAt: string }, lastSeenIso: string | null): boolean {
-  if (!lastSeenIso) return true;
-  return new Date(report.occurredAt).getTime() > new Date(lastSeenIso).getTime();
-}
-
-/** How many of `reports` are unread as of `lastSeenIso` — the HUD badge count. */
-export function unreadCount(reports: Array<{ occurredAt: string }>, lastSeenIso: string | null): number {
-  return reports.filter((r) => isUnread(r, lastSeenIso)).length;
-}
-
 /**
  * A one-line summary for a report's siege section (issue #40 phase 5),
  * mirroring `reportSummaryLine`'s style — e.g. `"Storehouse destroyed"`,
