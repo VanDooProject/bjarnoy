@@ -429,7 +429,6 @@
     "summaryTied": "tied, {n} lost",
     "summaryLooted": "{n} looted",
     "hexCoord": "Hex ({q}, {r})",
-    "showOnMap": "Show on map",
     "location": "Location",
     "unknownOpponent": "Unknown"
   },
@@ -665,7 +664,7 @@
       "ambush": "Ambushed by {camp}",
       "tower": "{camp} attacked your tower"
     },
-    "campLevel": "Camp level {level} at ({q}, {r})",
+    "campLevel": "Camp level {level} at {location}",
     "armyPower": "Army",
     "campPower": "Camp",
     "yourUnits": "Your units",
@@ -673,8 +672,8 @@
     "beast": "Beast",
     "before": "Before",
     "cleared": "The {camp} is cleared.",
-    "towerBurned": "The tower at ({q}, {r}) burned down.",
-    "towerHeld": "The tower at ({q}, {r}) held.",
+    "towerBurned": "The tower at {location} burned down.",
+    "towerHeld": "The tower at {location} held.",
     "summary": "{title}: {lost} units lost, {beasts} beasts slain, {loot} loot"
   },
   "buildingHud": {

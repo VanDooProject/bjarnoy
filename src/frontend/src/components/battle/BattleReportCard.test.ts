@@ -2,8 +2,10 @@
 //
 // The battle outcome card: a land army's report is one fight as it always was, a fleet's report shows the ship fight, then the
 // land fight, the drowned passengers and the Fire Hulks' fire damage.
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
+import { createMemoryHistory, createRouter } from 'vue-router';
+import { useMapFocus } from '../../composables/useMapFocus';
 import BattleReportCard, { type BattleReportCardData } from './BattleReportCard.vue';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
@@ -40,10 +42,18 @@ const fleetReport: BattleReportCardData = {
   fireSiege: { targetCoord: { q: 5, r: 0 }, targetType: 'harbour', levelBefore: 3, levelAfter: 1, settlementRazed: false },
 };
 
+const router = createRouter({
+  history: createMemoryHistory(),
+  routes: [
+    { path: '/settlement', component: { template: '<div />' } },
+    { path: '/reports/:reportId', component: { template: '<div />' } },
+  ],
+});
+
 function mountCard(report: BattleReportCardData) {
   return mount(BattleReportCard, {
     props: { report, side: 'attacker', occurredAt: '2026-09-09T10:00:00.000Z' },
-    global: { plugins: [createTestI18n({ hud: enHud })] },
+    global: { plugins: [createTestI18n({ hud: enHud }), router] },
   });
 }
 
@@ -129,5 +139,20 @@ describe('BattleReportCard', () => {
 
     expect(wrapper.get('[data-testid=land-fight]').text()).toContain('No land fight was fought.');
     expect(wrapper.find('[data-testid=ship-fight]').exists()).toBe(true);
+  });
+
+  it('shows where the fire damage landed as a link that centres the map on that hex', async () => {
+    const map = useMapFocus();
+    map.clear();
+    const wrapper = mountCard(fleetReport);
+
+    const link = wrapper.get('[data-testid=fire-damage] [data-testid=report-location-link]');
+    expect(link.text()).toBe('Hex (5, 0)');
+    await link.trigger('click');
+    await flushPromises();
+
+    expect(map.pending.value?.coord).toEqual({ q: 5, r: 0 });
+    map.clear();
+    wrapper.unmount();
   });
 });

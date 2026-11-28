@@ -429,7 +429,6 @@
     "summaryTied": "unentschieden, {n} verloren",
     "summaryLooted": "{n} erbeutet",
     "hexCoord": "Hex ({q}, {r})",
-    "showOnMap": "Auf der Karte zeigen",
     "location": "Ort",
     "unknownOpponent": "Unbekannt"
   },
@@ -665,7 +664,7 @@
       "ambush": "Überfallen von {camp}",
       "tower": "{camp} griff deinen Turm an"
     },
-    "campLevel": "Lager Stufe {level} bei ({q}, {r})",
+    "campLevel": "Lager Stufe {level} bei {location}",
     "armyPower": "Armee",
     "campPower": "Lager",
     "yourUnits": "Deine Einheiten",
@@ -673,8 +672,8 @@
     "beast": "Tier",
     "before": "Vorher",
     "cleared": "{camp} ist geräumt.",
-    "towerBurned": "Der Turm bei ({q}, {r}) brannte nieder.",
-    "towerHeld": "Der Turm bei ({q}, {r}) hielt stand.",
+    "towerBurned": "Der Turm bei {location} brannte nieder.",
+    "towerHeld": "Der Turm bei {location} hielt stand.",
     "summary": "{title}: {lost} Einheiten verloren, {beasts} Tiere erlegt, {loot} Beute"
   },
   "buildingHud": {

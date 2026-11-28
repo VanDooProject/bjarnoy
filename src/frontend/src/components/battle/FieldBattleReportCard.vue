@@ -19,9 +19,7 @@ import {
   isFieldBattleVictoryFor,
   totalFieldBattleLoot,
 } from '../../lib/units/fieldBattleReports';
-import { useRouter } from 'vue-router';
-import { useMapFocus } from '../../composables/useMapFocus';
-import { backgroundViewPath, closeModalRoute } from '../../lib/modalRoute';
+import ReportLocationLink from './ReportLocationLink.vue';
 
 /**
  * Everything the card needs to render — the subset of `FieldBattleReportResponse`
@@ -68,17 +66,6 @@ const opponentLabel = computed(() => {
   if (ownerName && settlementName) return `${ownerName} (${settlementName})`;
   return ownerName ?? settlementName ?? t('hud.fieldBattleReport.unknownOpponent');
 });
-const router = useRouter();
-const mapFocus = useMapFocus();
-// Back to the map as it was (same mode, same zoom), centred on where the battle was fought. A report opened over a page
-// without a map (the docs) has no map to go back to, so it goes to the map instead; a request must never wait for a later
-// visit.
-function showOnMap() {
-  mapFocus.request(props.report.hex);
-  const background = backgroundViewPath(router);
-  if (background === null || background === '/settlement') closeModalRoute(router);
-  else void router.replace('/settlement');
-}
 
 const sideARows = computed(() => groupFieldBattleLinesByUnit(props.report.lines, 'sidea'));
 const sideBRows = computed(() => groupFieldBattleLinesByUnit(props.report.lines, 'sideb'));
@@ -111,15 +98,11 @@ const hasVolley = computed(() => volleyPowerOf('sidea') > 0 || volleyPowerOf('si
       <span data-testid="field-battle-opponent">{{ opponentLabel }}</span>
       <span class="where-sep">·</span>
       <span class="where-label">{{ t('hud.fieldBattleReport.location') }}:</span>
-      <button
-        type="button"
-        class="where-link"
+      <ReportLocationLink
         data-testid="field-battle-location"
-        :title="t('hud.fieldBattleReport.showOnMap')"
-        @click="showOnMap"
-      >
-        {{ t('hud.fieldBattleReport.hexCoord', { q: report.hex.q, r: report.hex.r }) }}
-      </button>
+        :coord="report.hex"
+        :label="t('hud.fieldBattleReport.hexCoord', { q: report.hex.q, r: report.hex.r })"
+      />
     </p>
 
     <div class="sides">
@@ -238,15 +221,6 @@ const hasVolley = computed(() => volleyPowerOf('sidea') > 0 || volleyPowerOf('si
 }
 .where-label {
   color: var(--muted);
-}
-.where-link {
-  padding: 0;
-  background: none;
-  border: 0;
-  font: inherit;
-  color: var(--gold);
-  text-decoration: underline;
-  cursor: pointer;
 }
 .sides {
   display: grid;

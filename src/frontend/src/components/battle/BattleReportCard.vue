@@ -18,6 +18,7 @@ import BattleFightSection from './BattleFightSection.vue';
 import type { MessageSchema } from '../../i18n/schema';
 import { resourceName, unitName } from '../../i18n/catalogueNames';
 import { isVictoryFor, missionLabel, outcomeLabel, siegeSummaryLine, totalLoot } from '../../lib/units/battleReports';
+import ReportLocationLink from './ReportLocationLink.vue';
 
 /**
  * Everything the card needs to render — deliberately just the fields
@@ -107,7 +108,10 @@ const hasLandFight = computed(() => !isFleet.value || props.report.attackerLines
       <p v-if="fireShipsBurned > 0">{{ t('hud.battleReport.fireShipsBurned', { n: fireShipsBurned }) }}</p>
       <p v-if="fireSiegeSummary">{{ fireSiegeSummary }}</p>
       <p v-if="report.fireSiege" class="siege-coord">
-        {{ t('hud.battleReport.hexCoord', { q: report.fireSiege.targetCoord.q, r: report.fireSiege.targetCoord.r }) }}
+        <ReportLocationLink
+          :coord="report.fireSiege.targetCoord"
+          :label="t('hud.battleReport.hexCoord', { q: report.fireSiege.targetCoord.q, r: report.fireSiege.targetCoord.r })"
+        />
       </p>
     </div>
 
@@ -115,7 +119,12 @@ const hasLandFight = computed(() => !isFleet.value || props.report.attackerLines
       <div v-if="report.siege.settlementRazed" class="razed-banner">{{ t('hud.battleReport.settlementRazed') }}</div>
       <h3>{{ t('hud.battleReport.siege') }}</h3>
       <p>{{ siegeSummary }}</p>
-      <p class="siege-coord">{{ t('hud.battleReport.hexCoord', { q: report.siege.targetCoord.q, r: report.siege.targetCoord.r }) }}</p>
+      <p class="siege-coord">
+        <ReportLocationLink
+          :coord="report.siege.targetCoord"
+          :label="t('hud.battleReport.hexCoord', { q: report.siege.targetCoord.q, r: report.siege.targetCoord.r })"
+        />
+      </p>
     </div>
   </div>
 </template>
