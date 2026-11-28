@@ -390,6 +390,7 @@ app.MapTradeEndpoints(versionSet);
 app.MapProfileEndpoints(versionSet);
 app.MapLeaderboardEndpoints(versionSet);
 app.MapArmyEndpoints(versionSet);
+app.MapReportReadEndpoints(versionSet);
 app.MapSettlerEndpoints(versionSet);
 app.MapActivityEndpoints(versionSet);
 app.MapSimulatorEndpoints(versionSet);

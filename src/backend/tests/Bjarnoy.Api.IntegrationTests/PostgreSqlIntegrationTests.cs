@@ -168,6 +168,43 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture postgres)
     }
 
     /// <summary>
+    /// Read state is written with <c>ExecuteUpdate</c> and a <c>ReadAt ?? now</c> column expression; PostgreSQL must keep the
+    /// first read time and treat the two sides of a report independently.
+    /// </summary>
+    [Fact]
+    public async Task Report_read_state_round_trips_through_postgresql()
+    {
+        await using var factory = CreateFactory();
+        await factory.MigrateAsync(Ct);
+        var world = await factory.CreateWorldAsync($"pg-{Guid.CreateVersion7():N}"[..20], seed: 7, radius: 30, cancellationToken: Ct);
+        Guid first, second;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var a = new BattleReportEntity { OccurredAt = DateTimeOffset.UnixEpoch, WorldId = world.Id, AttackerOwnerId = "ulf", DefenderOwnerId = "sigrid" };
+            var b = new BattleReportEntity { OccurredAt = DateTimeOffset.UnixEpoch, WorldId = world.Id, AttackerOwnerId = "ulf", DefenderOwnerId = "sigrid" };
+            db.BattleReports.AddRange(a, b);
+            await db.SaveChangesAsync(Ct);
+            (first, second) = (a.Id, b.Id);
+        }
+
+        using var ulf = factory.CreateClient();
+        ulf.DefaultRequestHeaders.Add("X-Owner-Id", "ulf");
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await ulf.PostAsync($"/api/v1/worlds/{world.Id}/reports/battle/{first}/read", null, Ct)).StatusCode);
+        var all = await ulf.PostAsync($"/api/v1/worlds/{world.Id}/reports/read", null, Ct);
+        Assert.Equal(1, (await all.Content.ReadFromJsonAsync<MarkReadResponse>(SqliteApiFixture.StrictJson, Ct))!.MarkedRead);
+
+        var list = await ulf.GetFromJsonAsync<List<BattleReportResponse>>($"/api/v1/worlds/{world.Id}/reports", SqliteApiFixture.StrictJson, Ct);
+        Assert.All(list!, r => Assert.True(r.Read));
+        using var sigrid = factory.CreateClient();
+        sigrid.DefaultRequestHeaders.Add("X-Owner-Id", "sigrid");
+        var theirs = await sigrid.GetFromJsonAsync<List<BattleReportResponse>>($"/api/v1/worlds/{world.Id}/reports", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(2, theirs!.Count);
+        Assert.All(theirs, r => Assert.False(r.Read));
+    }
+
+    /// <summary>
     /// Two reads of one settlement both find a training batch due. The winner settles it (deletes the order, inserts
     /// the unit stack); the loser's batch updates 0 rows on the Version check and then hits the unique
     /// (SettlementId, UnitType) index. PostgreSQL aborts the batch there, so EF never sees the 0-row update and the

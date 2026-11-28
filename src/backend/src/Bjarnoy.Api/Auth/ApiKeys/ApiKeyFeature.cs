@@ -38,7 +38,7 @@ public static class ApiKeyFeature
     [
         new(Worlds, true, false, "Worlds: listing, islands, camps, tiles, fog, membership, plot suggestions, and the caller's own renown and settlements."),
         new(Settlements, true, false, "Settlements: founding, reading, build and training queues, feasts, quests and runes."),
-        new(Armies, true, false, "Armies: dispatching, retargeting and reading armies, plus battle, field-battle and camp reports."),
+        new(Armies, true, false, "Armies: dispatching, retargeting and reading armies, plus battle, field-battle and camp reports, and marking any report read (trade included)."),
         new(Guilds, true, false, "Guilds: directory, membership, board, fees and peace treaties."),
         new(Trade, true, false, "Trade: offers, the board, shipments and trade reports."),
         new(Leaderboards, true, false, "Leaderboards: boards, own rank and weekly stat cards."),

@@ -398,7 +398,8 @@ public sealed record BattleReportResponse(
     IReadOnlyList<ArmyUnitStackResponse> Drowned,
     int FireShipsBurned,
     BattleReportSiegeResponse? FireSiege,
-    string? ViewerSide = null)
+    string? ViewerSide = null,
+    bool Read = false)
 {
     /// <param name="entity">The stored report.</param>
     /// <param name="viewerOwnerId">The reading player; <see cref="ViewerSide"/> is the side that player fought on.</param>
@@ -410,7 +411,13 @@ public sealed record BattleReportResponse(
             : viewerOwnerId == entity.AttackerOwnerId ? "attacker"
             : viewerOwnerId == entity.DefenderOwnerId ? "defender"
             : null;
-        return From(entity.ToDomain()) with { ViewerSide = side };
+        var read = side switch
+        {
+            "attacker" => entity.AttackerReadAt is not null,
+            "defender" => entity.DefenderReadAt is not null,
+            _ => false,
+        };
+        return From(entity.ToDomain()) with { ViewerSide = side, Read = read };
     }
 
     public static BattleReportResponse From(BattleReport domain)
@@ -478,7 +485,8 @@ public sealed record FieldBattleReportResponse(
     int Seed,
     ResourceAmountsResponse LootTaken,
     IReadOnlyList<FieldBattleReportLineResponse> Lines,
-    string? ViewerSide = null)
+    string? ViewerSide = null,
+    bool Read = false)
 {
     /// <param name="names">Settlement/owner names by settlement id (<c>FieldBattleReportService.GetSideNamesAsync</c>); a side whose settlement is gone has null names.</param>
     /// <param name="viewerOwnerId">The reading player; <see cref="ViewerSide"/> is the side (<c>"sidea"</c>/<c>"sideb"</c>) that player fought on, null when neither.</param>
@@ -516,7 +524,11 @@ public sealed record FieldBattleReportResponse(
             viewerOwnerId is null ? null
                 : viewerOwnerId == entity.SideAOwnerId ? "sidea"
                 : viewerOwnerId == entity.SideBOwnerId ? "sideb"
-                : null);
+                : null,
+            viewerOwnerId is not null
+                && (viewerOwnerId == entity.SideAOwnerId ? entity.SideAReadAt
+                    : viewerOwnerId == entity.SideBOwnerId ? entity.SideBReadAt
+                    : null) is not null);
     }
 }
 
@@ -554,7 +566,8 @@ public sealed record CampReportResponse(
     ResourceAmountsResponse Loot,
     bool CampCleared,
     HexPointResponse? Tower,
-    bool TowerBurned)
+    bool TowerBurned,
+    bool Read = false)
 {
     public static CampReportResponse From(CampReportEntity entity)
     {
@@ -577,7 +590,8 @@ public sealed record CampReportResponse(
             ResourceAmountsResponse.From(report.Loot),
             report.CampCleared,
             report.TowerCoord is { } tower ? HexPointResponse.From(tower) : null,
-            report.TowerBurned);
+            report.TowerBurned,
+            entity.ReadAt is not null);
     }
 }
 
@@ -637,7 +651,8 @@ public sealed record ArmyReportResponse(
     Guid ArmyId,
     HexPointResponse Hex,
     string Mission,
-    IReadOnlyList<ArmyReportUnitLineResponse> Units)
+    IReadOnlyList<ArmyReportUnitLineResponse> Units,
+    bool Read = false)
 {
     public static ArmyReportResponse From(ArmyReportEntity entity)
     {
@@ -650,6 +665,7 @@ public sealed record ArmyReportResponse(
             entity.ArmyId,
             new HexPointResponse(entity.Q, entity.R),
             ((ArmyMission)entity.Mission).ToString().ToLowerInvariant(),
-            [.. entity.UnitLines.OrderBy(l => l.UnitType).Select(l => new ArmyReportUnitLineResponse(l.UnitType.ToWireName(), l.Count))]);
+            [.. entity.UnitLines.OrderBy(l => l.UnitType).Select(l => new ArmyReportUnitLineResponse(l.UnitType.ToWireName(), l.Count))],
+            entity.ReadAt is not null);
     }
 }

@@ -108,7 +108,8 @@ public sealed record TradeReportResponse(
     double RequestedAmount,
     bool GuildTrade,
     double TravelHours,
-    string? ViewerSide = null)
+    string? ViewerSide = null,
+    bool Read = false)
 {
     /// <param name="viewerOwnerId">The reading player; <see cref="ViewerSide"/> is <c>"poster"</c> or <c>"acceptor"</c>, null when neither.</param>
     public static TradeReportResponse From(TradeReportEntity entity, string? viewerOwnerId = null)
@@ -130,6 +131,10 @@ public sealed record TradeReportResponse(
             viewerOwnerId is null ? null
                 : viewerOwnerId == entity.PosterOwnerId ? "poster"
                 : viewerOwnerId == entity.AcceptorOwnerId ? "acceptor"
-                : null);
+                : null,
+            viewerOwnerId is not null
+                && (viewerOwnerId == entity.PosterOwnerId ? entity.PosterReadAt
+                    : viewerOwnerId == entity.AcceptorOwnerId ? entity.AcceptorReadAt
+                    : null) is not null);
     }
 }
