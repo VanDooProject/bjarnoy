@@ -13,34 +13,32 @@
 // expanded (and is scrolled into view); opening and closing rows never
 // touches the URL.
 //
+// Reading is per report: expanding an unread row marks it read (the server
+// keeps that per player), opening the window marks nothing. A row opened this
+// way stays in the "Unread" group until it is collapsed, so it does not jump
+// away under the cursor; "Mark read" clears the whole group at once.
+//
 // The battle-detail card itself is BattleReportCard.vue (issue #40 phase 7)
 // — extracted so the premium fight simulator can render its result with the
 // exact same markup as a real report, rather than duplicating it.
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { useI18n } from 'vue-i18n';
 import { usePlayerStore } from '../stores/player';
 import { useReportsStore } from '../stores/reports';
 import { useWorldStore } from '../stores/world';
 import { DEMO_MODE } from '../config';
-import type { BattleReportResponse, FieldBattleReportResponse, TradeReportResponse } from '../api/types';
-import { isVictoryFor, missionLabel, outcomeLabel, reportSummaryLine } from '../lib/units/battleReports';
-import {
-  fieldBattleOutcomeLabel,
-  fieldBattleSummaryLine,
-  isFieldBattleVictoryFor,
-} from '../lib/units/fieldBattleReports';
-import { tradeSummaryLine } from '../lib/units/tradeReports';
-import { type InboxKindFilter, filterInbox } from '../lib/units/inbox';
+import { INBOX_KINDS, type InboxKindFilter, filterInbox, inboxKey } from '../lib/units/inbox';
+import { fieldSideOf, sideOf, tradeSideOf, useInboxGroups, type InboxRowView } from '../composables/useInboxRows';
 import BattleReportCard from '../components/battle/BattleReportCard.vue';
 import FieldBattleReportCard from '../components/battle/FieldBattleReportCard.vue';
 import CampReportCard from '../components/battle/CampReportCard.vue';
 import ArmyReportCard from '../components/battle/ArmyReportCard.vue';
-import { campName } from '../i18n/catalogueNames';
-import { isCampReportVictory, totalBeastsLost, totalCampLoot, totalUnitsLost } from '../lib/units/campReports';
+import ReportKindIcon from '../components/battle/ReportKindIcon.vue';
+import ReportInboxRow from '../components/reports/ReportInboxRow.vue';
+import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 
-const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const route = useRoute();
 const player = usePlayerStore();
@@ -49,6 +47,7 @@ const world = useWorldStore();
 
 const reportId = computed(() => (typeof route.params.reportId === 'string' ? route.params.reportId : null));
 const kindFilter = ref<InboxKindFilter>('all');
+const tabs = ['all', ...INBOX_KINDS] as const;
 
 async function load() {
   if (!world.worldId) return;
@@ -60,127 +59,71 @@ watch(() => world.worldId, load);
 
 // Rows currently expanded. Local state, not the URL: any number can be open at once.
 const expanded = ref(new Set<string>());
+// Keys of the rows opened while unread: they stay in the "Unread" group until collapsed.
+const keptOpen = ref(new Set<string>());
 const listRef = ref<HTMLElement | null>(null);
 function isExpanded(id: string): boolean {
   return expanded.value.has(id);
 }
-function toggle(id: string) {
-  const next = new Set(expanded.value);
-  if (!next.delete(id)) next.add(id);
-  expanded.value = next;
+function expand(row: InboxRowView) {
+  expanded.value = new Set(expanded.value).add(row.id);
+  if (row.unread) {
+    keptOpen.value = new Set(keptOpen.value).add(row.key);
+    void reports.markRead(row.item);
+  }
 }
-// A deep link (`/reports/:reportId`) opens that report's row and brings it into view once the list has rendered.
+function toggle(row: InboxRowView) {
+  if (!expanded.value.has(row.id)) {
+    expand(row);
+    return;
+  }
+  const nextExpanded = new Set(expanded.value);
+  nextExpanded.delete(row.id);
+  expanded.value = nextExpanded;
+  const nextKept = new Set(keptOpen.value);
+  nextKept.delete(row.key);
+  keptOpen.value = nextKept;
+}
+
+const filteredItems = computed(() => filterInbox(reports.inboxItems, kindFilter.value));
+const { unread, earlier } = useInboxGroups(filteredItems, keptOpen);
+const sections = computed(() => [
+  { key: 'unread' as const, rows: unread.value },
+  { key: 'earlier' as const, rows: earlier.value },
+]);
+const rowCount = computed(() => unread.value.length + earlier.value.length);
+
+// A deep link (`/reports/:reportId`) opens that report's row (once, when the list has it) and brings it into view.
+let deepLinked: string | null = null;
 watch(
-  reportId,
-  async (id) => {
-    if (!id) return;
-    expanded.value = new Set(expanded.value).add(id);
+  [reportId, () => reports.inboxItems],
+  async ([id, items]) => {
+    if (!id) {
+      deepLinked = null;
+      return;
+    }
+    if (deepLinked === id) return;
+    const item = items.find((candidate) => candidate.report.id === id);
+    if (!item) return;
+    deepLinked = id;
+    const key = inboxKey(item);
+    const rows = [...unread.value, ...earlier.value];
+    const row = rows.find((candidate) => candidate.key === key);
+    if (row) expand(row);
     await nextTick();
     listRef.value?.querySelector<HTMLElement>(`[data-report-id="${CSS.escape(id)}"]`)?.scrollIntoView?.({ block: 'nearest' });
   },
   { immediate: true },
 );
-watch(
-  () => reports.inboxItems.length,
-  async () => {
-    if (!reportId.value) return;
-    await nextTick();
-    listRef.value?.querySelector<HTMLElement>(`[data-report-id="${CSS.escape(reportId.value)}"]`)?.scrollIntoView?.({ block: 'nearest' });
-  },
-);
 
-// The side comes from the server (`viewerSide`): a player's inbox covers all their settlements, so it cannot be told from one settlement id.
-function sideOf(report: BattleReportResponse): 'attacker' | 'defender' {
-  return report.viewerSide ?? 'attacker';
+function tabCount(tab: (typeof tabs)[number]): number {
+  return tab === 'all' ? reports.unreadCount : reports.unreadCountByKind[tab];
 }
-
-function fieldSideOf(report: FieldBattleReportResponse): 'sidea' | 'sideb' {
-  return report.viewerSide ?? 'sidea';
+function tabLabel(tab: (typeof tabs)[number]): string {
+  const name = t(`reports.tabs.${tab}`);
+  const count = tabCount(tab);
+  return count ? t('reports.tabs.withUnread', { kind: name, count }) : name;
 }
-
-function tradeSideOf(report: TradeReportResponse): 'poster' | 'acceptor' {
-  return report.viewerSide ?? 'poster';
-}
-
-const filteredItems = computed(() => filterInbox(reports.inboxItems, kindFilter.value));
-
-const rows = computed(() =>
-  filteredItems.value.map((item) => {
-    if (item.kind === 'battle') {
-      const side = sideOf(item.report);
-      return {
-        kind: 'battle' as const,
-        item,
-        id: item.report.id,
-        outcome: outcomeLabel(item.report, side),
-        isVictory: isVictoryFor(item.report, side),
-        isTie: false,
-        mission: missionLabel(item.report.mission),
-        summary: reportSummaryLine(item.report, side),
-        when: d(new Date(item.report.occurredAt), 'long'),
-      };
-    }
-    if (item.kind === 'field') {
-      const side = fieldSideOf(item.report);
-      return {
-        kind: 'field' as const,
-        item,
-        id: item.report.id,
-        outcome: fieldBattleOutcomeLabel(item.report, side),
-        isVictory: isFieldBattleVictoryFor(item.report, side),
-        isTie: item.report.winner === 'tie',
-        mission: t('hud.fieldBattleReport.title'),
-        summary: fieldBattleSummaryLine(item.report, side),
-        when: d(new Date(item.report.occurredAt), 'long'),
-      };
-    }
-    if (item.kind === 'camp') {
-      const report = item.report;
-      return {
-        kind: 'camp' as const,
-        item,
-        id: report.id,
-        outcome: isCampReportVictory(report) ? t('hud.campReport.won') : t('hud.campReport.lost'),
-        isVictory: isCampReportVictory(report),
-        isTie: false,
-        mission: t(`hud.campReport.kind.${report.kind}`),
-        summary: t('hud.campReport.summary', {
-          title: t(`hud.campReport.title.${report.kind}`, { camp: campName(report.camp.family) }),
-          lost: totalUnitsLost(report),
-          beasts: totalBeastsLost(report),
-          loot: totalCampLoot(report.loot),
-        }),
-        when: d(new Date(report.occurredAt), 'long'),
-      };
-    }
-    if (item.kind === 'army') {
-      const report = item.report;
-      return {
-        kind: 'army' as const,
-        item,
-        id: report.id,
-        outcome: t(`reports.army.kind.${report.kind}`),
-        isVictory: false,
-        isTie: report.kind === 'stuck',
-        mission: t('reports.tabs.army'),
-        summary: t(`reports.army.${report.kind}`, { hex: t('common.reportLocation.coord', { q: report.hex.q, r: report.hex.r }) }),
-        when: d(new Date(report.occurredAt), 'long'),
-      };
-    }
-    const side = tradeSideOf(item.report);
-    return {
-      kind: 'trade' as const,
-      item,
-      id: item.report.id,
-      outcome: null,
-      isVictory: false,
-      isTie: false,
-      mission: item.report.guildTrade ? t('reports.trade.guildTrade') : t('reports.trade.trade'),
-      summary: tradeSummaryLine(item.report, side),
-      when: d(new Date(item.report.completedAt), 'long'),
-    };
-  }),
-);
 </script>
 
 <template>
@@ -193,90 +136,89 @@ const rows = computed(() =>
 
       <div class="kind-tabs">
         <button
-          v-for="tab in (['all', 'battle', 'field', 'camp', 'army', 'trade'] as const)"
+          v-for="tab in tabs"
           :key="tab"
           type="button"
           class="kind-tab"
           :class="{ active: kindFilter === tab }"
+          :data-testid="`report-kind-tab-${tab}`"
+          :aria-pressed="kindFilter === tab"
+          :aria-label="tabLabel(tab)"
+          :title="tabLabel(tab)"
           @click="kindFilter = tab"
         >
-          {{ $t(`reports.tabs.${tab}`) }}
+          <template v-if="tab === 'all'">{{ $t('reports.tabs.all') }}</template>
+          <ReportKindIcon v-else :kind="tab" :size="22" />
+          <span v-if="tabCount(tab) > 0" class="kind-tab-badge" :data-testid="`report-kind-tab-badge-${tab}`" aria-hidden="true">{{ tabCount(tab) }}</span>
         </button>
       </div>
 
-      <p v-if="reports.loading && !rows.length">{{ $t('common.states.loading') }}</p>
+      <p v-if="reports.loading && !rowCount">{{ $t('common.states.loading') }}</p>
       <p v-else-if="reports.error" class="hint error">{{ reports.error }}</p>
-      <p v-else-if="!rows.length" class="hint">{{ $t('reports.noReports') }}</p>
+      <p v-else-if="!rowCount" class="hint">{{ $t('reports.noReports') }}</p>
 
       <div v-else ref="listRef" class="list">
-        <div v-for="row in rows" :key="row.id" class="item" :data-report-id="row.id">
-          <button
-            type="button"
-            class="row"
-            :class="{ open: isExpanded(row.id) }"
-            data-testid="report-row"
-            :aria-expanded="isExpanded(row.id)"
-            @click="toggle(row.id)"
-          >
-            <div class="row-top">
-              <span
-                v-if="row.kind === 'battle' || row.kind === 'field' || row.kind === 'camp' || row.kind === 'army'"
-                class="outcome"
-                :class="row.isTie ? 'tie' : row.isVictory ? 'victory' : 'defeat'"
-              >
-                {{ row.outcome }}
-              </span>
-              <span v-else class="outcome trade-outcome">{{ $t('reports.trade.trade') }}</span>
-              <span class="mission-pill">{{ row.mission }}</span>
-              <span class="when">{{ row.when }}</span>
-              <span class="chevron" aria-hidden="true" />
-            </div>
-            <div class="row-summary">{{ row.summary }}</div>
+        <div v-if="unread.length" class="group-header">
+          <span class="group-label unread-label" data-testid="reports-unread-header">{{ $t('reports.groups.unread', { count: unread.length }) }}</span>
+          <button v-if="reports.unreadCount > 0" type="button" class="mark-read" data-testid="reports-mark-read" @click="reports.markAllRead()">
+            {{ $t('reports.markRead') }}
           </button>
+        </div>
 
-          <div v-if="isExpanded(row.id)" class="row-body" data-testid="report-detail">
-            <BattleReportCard
-              v-if="row.item.kind === 'battle'"
-              :report="row.item.report"
-              :side="sideOf(row.item.report)"
-              :occurred-at="row.item.report.occurredAt"
-            />
-            <FieldBattleReportCard
-              v-else-if="row.item.kind === 'field'"
-              :report="row.item.report"
-              :side="fieldSideOf(row.item.report)"
-              :occurred-at="row.item.report.occurredAt"
-            />
-            <CampReportCard v-else-if="row.item.kind === 'camp'" :report="row.item.report" />
-            <ArmyReportCard v-else-if="row.item.kind === 'army'" :report="row.item.report" />
-            <div v-else class="card trade">
-              <div class="card-header">
-                <span class="banner trade-banner">{{ $t('reports.trade.completed') }}</span>
-                <span class="mission-pill">{{ row.mission }}</span>
-              </div>
-              <p class="occurred">{{ row.when }}</p>
+        <template v-for="section in sections" :key="section.key">
+          <div v-if="section.key === 'earlier' && unread.length && earlier.length" class="group-header earlier-divider" data-testid="reports-earlier-divider">
+            <span class="group-label">{{ $t('reports.groups.earlier') }}</span>
+            <span class="divider-line" />
+          </div>
+          <div v-if="section.rows.length" class="group">
+            <div v-for="row in section.rows" :key="row.key" class="item" :data-report-id="row.id">
+              <ReportInboxRow :row="row" :tile="44" summary :expanded="isExpanded(row.id)" @open="toggle(row)" />
 
-              <div class="power-row">
-                <div class="power">
-                  <span class="power-label">{{ $t('reports.trade.youGave') }}</span>
-                  <span class="power-value">
-                    {{ Math.round(tradeSideOf(row.item.report) === 'poster' ? row.item.report.offeredAmount : row.item.report.requestedAmount) }}
-                    {{ tradeSideOf(row.item.report) === 'poster' ? row.item.report.offeredResource : row.item.report.requestedResource }}
-                  </span>
+              <div v-if="isExpanded(row.id)" class="row-body" data-testid="report-detail">
+                <BattleReportCard
+                  v-if="row.item.kind === 'battle'"
+                  :report="row.item.report"
+                  :side="sideOf(row.item.report)"
+                  :occurred-at="row.item.report.occurredAt"
+                />
+                <FieldBattleReportCard
+                  v-else-if="row.item.kind === 'field'"
+                  :report="row.item.report"
+                  :side="fieldSideOf(row.item.report)"
+                  :occurred-at="row.item.report.occurredAt"
+                />
+                <CampReportCard v-else-if="row.item.kind === 'camp'" :report="row.item.report" />
+                <ArmyReportCard v-else-if="row.item.kind === 'army'" :report="row.item.report" />
+                <div v-else class="card trade">
+                  <div class="card-header">
+                    <span class="banner trade-banner">{{ $t('reports.trade.completed') }}</span>
+                    <span class="mission-pill">{{ row.item.report.guildTrade ? $t('reports.trade.guildTrade') : $t('reports.trade.trade') }}</span>
+                  </div>
+                  <p class="occurred">{{ row.when }}</p>
+
+                  <div class="power-row">
+                    <div class="power">
+                      <span class="power-label">{{ $t('reports.trade.youGave') }}</span>
+                      <span class="power-value">
+                        {{ Math.round(tradeSideOf(row.item.report) === 'poster' ? row.item.report.offeredAmount : row.item.report.requestedAmount) }}
+                        {{ tradeSideOf(row.item.report) === 'poster' ? row.item.report.offeredResource : row.item.report.requestedResource }}
+                      </span>
+                    </div>
+                    <div class="power">
+                      <span class="power-label">{{ $t('reports.trade.youReceived') }}</span>
+                      <span class="power-value">
+                        {{ Math.round(tradeSideOf(row.item.report) === 'poster' ? row.item.report.requestedAmount : row.item.report.offeredAmount) }}
+                        {{ tradeSideOf(row.item.report) === 'poster' ? row.item.report.requestedResource : row.item.report.offeredResource }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <p class="trade-travel">{{ $t('reports.trade.travelled', { hours: row.item.report.travelHours.toFixed(1) }) }}</p>
                 </div>
-                <div class="power">
-                  <span class="power-label">{{ $t('reports.trade.youReceived') }}</span>
-                  <span class="power-value">
-                    {{ Math.round(tradeSideOf(row.item.report) === 'poster' ? row.item.report.requestedAmount : row.item.report.offeredAmount) }}
-                    {{ tradeSideOf(row.item.report) === 'poster' ? row.item.report.requestedResource : row.item.report.offeredResource }}
-                  </span>
-                </div>
               </div>
-
-              <p class="trade-travel">{{ $t('reports.trade.travelled', { hours: row.item.report.travelHours.toFixed(1) }) }}</p>
             </div>
           </div>
-        </div>
+        </template>
       </div>
 
       <p class="simulator-link">
@@ -318,6 +260,8 @@ h1 {
   display: flex;
   gap: 8px;
   margin-top: 16px;
+  /* Room above and to the right for the corner badges, which overhang their tab. */
+  padding: 9px 9px 2px 0;
   /* Mobile-readiness audit: four tabs plus longer German labels don't fit a
      360px width without wrapping the row's height around — a horizontal
      scroll strip keeps the tabs' own row a single, predictable height. */
@@ -325,66 +269,98 @@ h1 {
   -webkit-overflow-scrolling: touch;
 }
 .kind-tab {
+  position: relative;
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  height: 44px;
+  padding: 0 12px;
+  box-sizing: border-box;
   background: transparent;
-  border: 1px solid var(--panel-border);
-  color: var(--muted);
-  padding: 6px 14px;
-  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  color: #cbd5dc;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
   font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
 }
 .kind-tab:hover {
   color: var(--text);
 }
 .kind-tab.active {
+  background: var(--gold);
   border-color: var(--gold);
-  color: var(--gold);
+  color: #1a1408;
 }
-
+.kind-tab-badge {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  background: var(--gold);
+  color: #1a1408;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 0 0 2px #0a141b;
+}
 .list {
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin-top: 20px;
 }
-.row {
+.group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 0;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
+  gap: 6px;
+}
+.group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.group-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.unread-label {
+  color: var(--gold);
+}
+.earlier-divider {
+  margin-top: 4px;
+  justify-content: flex-start;
+}
+.divider-line {
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.mark-read {
+  min-height: 32px;
+  padding: 0;
+  background: none;
+  border: 0;
   font-family: inherit;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: underline;
+  cursor: pointer;
 }
-.row {
-  width: 100%;
-}
-.row:hover,
-.row.open {
-  border-color: var(--gold);
-}
-.chevron {
-  width: 7px;
-  height: 7px;
-  margin: 0 4px 3px 2px;
-  border-right: 2px solid var(--muted);
-  border-bottom: 2px solid var(--muted);
-  transform: rotate(45deg);
-  transition: transform 0.15s;
-}
-.row.open .chevron {
-  margin-bottom: 0;
-  margin-top: 3px;
-  transform: rotate(225deg);
+.mark-read:hover {
+  color: var(--text);
 }
 /* The expanded report sits directly under its row, the cards' own top margin dropped. */
 .row-body {
@@ -394,34 +370,6 @@ h1 {
 .row-body :deep(.card) {
   margin-top: 0;
 }
-.row-top {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  /* Mobile-readiness audit: wraps rather than squeezing the date against
-     the mission pill at 360px — the `.when` rule below moves it to its own
-     full-width line once wrapped, instead of leaving it half-squeezed next
-     to the pill. */
-  flex-wrap: wrap;
-}
-.outcome {
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-.outcome.victory {
-  color: var(--gold);
-}
-.outcome.defeat {
-  color: #e08a8a;
-}
-.outcome.tie {
-  color: var(--muted);
-}
-.outcome.trade-outcome {
-  color: var(--gold);
-}
 .mission-pill {
   font-size: 11px;
   font-weight: 600;
@@ -430,15 +378,6 @@ h1 {
   padding: 2px 8px;
   border: 1px solid var(--panel-border);
   border-radius: 10px;
-  color: var(--muted);
-}
-.when {
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--muted);
-}
-.row-summary {
-  font-size: 13px;
   color: var(--muted);
 }
 .simulator-link {
@@ -510,25 +449,9 @@ h1 {
 }
 
 @media (max-width: 640px) {
-  /* Touch targets >= 40px tall for the list rows and kind-filter tabs. */
-  .row {
-    min-height: 40px;
-    justify-content: center;
-  }
   .kind-tabs {
     /* The heading above it is hidden on mobile (see .back-to-list's block). */
     margin-top: 0;
-  }
-  .kind-tab {
-    min-height: 40px;
-    display: inline-flex;
-    align-items: center;
-  }
-  .when {
-    /* Drops to its own full-width line under `.row-top`'s wrap above,
-       instead of sitting squeezed against the mission pill. */
-    margin-left: 0;
-    flex: 1 0 100%;
   }
 }
 </style>

@@ -16,7 +16,8 @@
     "field": "Field",
     "trade": "Trade",
     "camp": "Camps",
-    "army": "Armies"
+    "army": "Armies",
+    "withUnread": "{kind}, {count} unread"
   },
   "noReports": "No reports yet.",
   "simulatorHint": "Want to test a fight without risking real troops?",
@@ -34,5 +35,15 @@
   "row": {
     "title": "{outcome} · {mission}",
     "unread": "Unread"
+  },
+  "groups": {
+    "unread": "Unread · {count}",
+    "new": "New · {count}",
+    "earlier": "Earlier"
+  },
+  "markRead": "Mark read",
+  "allReports": "All reports",
+  "panel": {
+    "unread": "{count} unread"
   }
 }

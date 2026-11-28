@@ -16,7 +16,8 @@
     "field": "Feldschlacht",
     "trade": "Handel",
     "camp": "Lager",
-    "army": "Armeen"
+    "army": "Armeen",
+    "withUnread": "{kind}, {count} ungelesen"
   },
   "noReports": "Noch keine Berichte.",
   "simulatorHint": "Willst du einen Kampf testen, ohne echte Truppen zu riskieren?",
@@ -34,5 +35,15 @@
   "row": {
     "title": "{outcome} · {mission}",
     "unread": "Ungelesen"
+  },
+  "groups": {
+    "unread": "Ungelesen · {count}",
+    "new": "Neu · {count}",
+    "earlier": "Früher"
+  },
+  "markRead": "Als gelesen markieren",
+  "allReports": "Alle Berichte",
+  "panel": {
+    "unread": "{count} ungelesen"
   }
 }

@@ -4,7 +4,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportsModal from './ReportsModal.vue';
-import type { BattleReportResponse } from '../../api/types';
+import type { BattleReportResponse, CampReportResponse } from '../../api/types';
 import { usePlayerStore } from '../../stores/player';
 import { useWorldStore } from '../../stores/world';
 import { createTestI18n } from '../../test/i18n';
@@ -21,7 +21,9 @@ vi.mock('../../config', async (importOriginal) => {
   return { ...actual, DEMO_MODE: false };
 });
 
-const { getWorldReports, getWorldTradeReports, getWorldFieldReports, getWorldCampReports, getWorldArmyReports } = vi.hoisted(() => ({
+const { getWorldReports, getWorldTradeReports, getWorldFieldReports, getWorldCampReports, getWorldArmyReports, markReportRead, markAllReportsRead } = vi.hoisted(() => ({
+  markReportRead: vi.fn(),
+  markAllReportsRead: vi.fn(),
   getWorldReports: vi.fn(),
   getWorldArmyReports: vi.fn(),
   getWorldTradeReports: vi.fn(),
@@ -33,7 +35,7 @@ vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
   return {
     ...actual,
-    api: { getWorldReports, getWorldTradeReports, getWorldFieldReports, getWorldCampReports, getWorldArmyReports },
+    api: { getWorldReports, getWorldTradeReports, getWorldFieldReports, getWorldCampReports, getWorldArmyReports, markReportRead, markAllReportsRead },
   };
 });
 
@@ -60,6 +62,29 @@ function battleReport(overrides: Partial<BattleReportResponse> = {}): BattleRepo
     fireShipsBurned: 0,
     fireSiege: null,
     viewerSide: 'attacker',
+    read: false,
+    ...overrides,
+  };
+}
+
+function campReport(overrides: Partial<CampReportResponse> = {}): CampReportResponse {
+  return {
+    id: 'camp-1',
+    kind: 'hunt',
+    occurredAt: '2026-01-14T00:00:00Z',
+    camp: { q: 1, r: 2, family: 'wolfden', effectiveLevel: 1 },
+    settlementId: 'settlement-1',
+    armyId: 'army-1',
+    winner: 'army',
+    armyPower: 300,
+    campPower: 195,
+    armyVolleyPower: 0,
+    units: [],
+    beasts: [],
+    loot: { wood: 0, stone: 0, food: 0, iron: 0 },
+    campCleared: true,
+    tower: null,
+    towerBurned: false,
     read: false,
     ...overrides,
   };
@@ -105,6 +130,8 @@ beforeEach(() => {
   getWorldFieldReports.mockResolvedValue([]);
   getWorldCampReports.mockResolvedValue([]);
   getWorldArmyReports.mockResolvedValue([]);
+  markReportRead.mockResolvedValue(undefined);
+  markAllReportsRead.mockResolvedValue({ markedRead: 1 });
   const player = usePlayerStore();
   player.settlementId = 'settlement-1';
   useWorldStore().worldId = 'world-1';
@@ -216,5 +243,118 @@ describe('ReportsModal', () => {
     await flushPromises();
 
     expect(router.currentRoute.value.path).toBe('/settlement');
+  });
+
+  describe('read state', () => {
+    it('opening the window marks nothing read', async () => {
+      const router = testRouter();
+      await router.push('/reports');
+      await router.isReady();
+
+      const wrapper = await mountModal(router);
+
+      expect(markReportRead).not.toHaveBeenCalled();
+      expect(markAllReportsRead).not.toHaveBeenCalled();
+      expect(wrapper.find('[data-testid="reports-unread-header"]').text()).toBe('Unread · 1');
+      expect(wrapper.find('[data-testid="report-row"]').attributes('data-unread')).toBeUndefined();
+      expect(wrapper.find('.report-inbox-row').attributes('data-unread')).toBe('true');
+    });
+
+    it('expanding an unread row marks it read once, keeps it under Unread while open, and moves it to Earlier once collapsed', async () => {
+      getWorldReports.mockResolvedValue([battleReport({ id: 'battle-1' }), battleReport({ id: 'battle-2', occurredAt: '2026-01-14T00:00:00Z' })]);
+      const router = testRouter();
+      await router.push('/reports');
+      await router.isReady();
+      const wrapper = await mountModal(router);
+
+      await wrapper.find('[data-testid="report-row"]').trigger('click');
+      await flushPromises();
+
+      expect(markReportRead).toHaveBeenCalledTimes(1);
+      expect(markReportRead).toHaveBeenCalledWith('world-1', 'battle', 'battle-1', expect.anything());
+      // The opened row stays in the unread group; the other unread row is still there too.
+      expect(wrapper.find('[data-testid="reports-unread-header"]').text()).toBe('Unread · 2');
+      expect(wrapper.find('[data-testid="reports-earlier-divider"]').exists()).toBe(false);
+
+      await wrapper.find('[data-testid="report-row"]').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('[data-testid="reports-unread-header"]').text()).toBe('Unread · 1');
+      expect(wrapper.find('[data-testid="reports-earlier-divider"]').exists()).toBe(true);
+      expect(markReportRead).toHaveBeenCalledTimes(1);
+    });
+
+    it('a deep link marks that report read', async () => {
+      getWorldReports.mockResolvedValue([battleReport({ id: 'battle-1' }), battleReport({ id: 'battle-2' })]);
+      const router = testRouter();
+      await router.push('/reports/battle-2');
+      await router.isReady();
+
+      await mountModal(router);
+
+      expect(markReportRead).toHaveBeenCalledTimes(1);
+      expect(markReportRead).toHaveBeenCalledWith('world-1', 'battle', 'battle-2', expect.anything());
+    });
+
+    it('"Mark read" marks every report read at once', async () => {
+      getWorldReports.mockResolvedValue([battleReport({ id: 'battle-1' }), battleReport({ id: 'battle-2' })]);
+      const router = testRouter();
+      await router.push('/reports');
+      await router.isReady();
+      const wrapper = await mountModal(router);
+
+      await wrapper.find('[data-testid="reports-mark-read"]').trigger('click');
+      await flushPromises();
+
+      expect(markAllReportsRead).toHaveBeenCalledTimes(1);
+      expect(wrapper.find('[data-testid="reports-mark-read"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="reports-unread-header"]').exists()).toBe(false);
+    });
+
+    it('a report the server has as read starts under Earlier, with no Unread header', async () => {
+      getWorldReports.mockResolvedValue([battleReport({ read: true })]);
+      const router = testRouter();
+      await router.push('/reports');
+      await router.isReady();
+
+      const wrapper = await mountModal(router);
+
+      expect(wrapper.find('[data-testid="reports-unread-header"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="reports-mark-read"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="reports-earlier-divider"]').exists()).toBe(false);
+      expect(wrapper.find('.report-inbox-row').attributes('data-unread')).toBe('false');
+    });
+  });
+
+  describe('kind tabs', () => {
+    async function mountTabs() {
+      getWorldReports.mockResolvedValue([battleReport({ id: 'battle-1' }), battleReport({ id: 'battle-2', read: true })]);
+      getWorldCampReports.mockResolvedValue([campReport()]);
+      const router = testRouter();
+      await router.push('/reports');
+      await router.isReady();
+      return mountModal(router);
+    }
+
+    it('shows the unread count per kind in a corner badge, and the total on All', async () => {
+      const wrapper = await mountTabs();
+
+      expect(wrapper.find('[data-testid="report-kind-tab-badge-all"]').text()).toBe('2');
+      expect(wrapper.find('[data-testid="report-kind-tab-badge-battle"]').text()).toBe('1');
+      expect(wrapper.find('[data-testid="report-kind-tab-badge-camp"]').text()).toBe('1');
+      expect(wrapper.find('[data-testid="report-kind-tab-badge-trade"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="report-kind-tab-battle"]').attributes('aria-label')).toBe('Battle, 1 unread');
+      expect(wrapper.find('[data-testid="report-kind-tab-trade"]').attributes('aria-label')).toBe('Trade');
+    });
+
+    it('filters the rows by kind', async () => {
+      const wrapper = await mountTabs();
+      expect(wrapper.findAll('[data-testid="report-row"]')).toHaveLength(3);
+
+      await wrapper.find('[data-testid="report-kind-tab-camp"]').trigger('click');
+
+      expect(wrapper.find('[data-testid="report-kind-tab-camp"]').attributes('aria-pressed')).toBe('true');
+      expect(wrapper.findAll('[data-testid="report-row"]')).toHaveLength(1);
+    });
   });
 });

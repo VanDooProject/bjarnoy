@@ -30,7 +30,6 @@ const iconSize = props.tile === 44 ? 24 : 22;
     class="report-inbox-row"
     :class="[`tone-${row.tone}`, { unread: row.unread }]"
     :data-unread="row.unread"
-    :data-report-id="row.id"
     :style="{ '--tile': `${tile}px` }"
   >
     <button
