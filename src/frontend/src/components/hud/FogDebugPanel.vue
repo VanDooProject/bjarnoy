@@ -34,6 +34,10 @@ const DESATURATE_SLIDERS: ReadonlyArray<{ key: 'desaturate' | 'brightPull' | 'da
   { key: 'darken', label: 'Dark tier: darken', max: 0.8 },
 ];
 const DESATURATE_STEP = 0.02;
+// The greying's ramp exponent (1 = linear), shown as a plain number.
+const DESATURATE_RAMP_MIN = 1;
+const DESATURATE_RAMP_MAX = 4;
+const DESATURATE_RAMP_STEP = 0.1;
 
 // Labelled to match FogPerfPanel's row names ("Terrain", "Borders", "Mask
 // fetch") so a toggle here and the number it moves there are easy to line
@@ -90,6 +94,20 @@ watch(
         :step="DESATURATE_STEP"
         :disabled="!flags.maskOutOfSight"
         v-model.number="tuning[slider.key]"
+      />
+    </div>
+    <div class="row slider-row" :class="{ disabled: !flags.maskOutOfSight }">
+      <span class="slider-label">
+        Dark tier: greying ramp
+        <span class="slider-value">{{ tuning.desaturateRamp.toFixed(1) }}</span>
+      </span>
+      <input
+        type="range"
+        :min="DESATURATE_RAMP_MIN"
+        :max="DESATURATE_RAMP_MAX"
+        :step="DESATURATE_RAMP_STEP"
+        :disabled="!flags.maskOutOfSight"
+        v-model.number="tuning.desaturateRamp"
       />
     </div>
   </DebugPanel>

@@ -22,9 +22,14 @@ export interface FogDesaturateTuning {
   brightPull: number;
   /** How much the dark tier dims the picture. */
   darken: number;
+  /**
+   * How fast the greying (desaturate and bright pull) reaches full strength across the dark tier's ramp: the strength is
+   * 1 - (1 - alpha)^ramp, so 1 is linear and higher values grey the land closer to the edge of sight. Dimming stays linear.
+   */
+  desaturateRamp: number;
 }
 
-export const FOG_DESATURATE_DEFAULTS: FogDesaturateTuning = { desaturate: 0.88, brightPull: 0.6, darken: 0.4 };
+export const FOG_DESATURATE_DEFAULTS: FogDesaturateTuning = { desaturate: 0.88, brightPull: 0.6, darken: 0.5, desaturateRamp: 1.5 };
 
 let sharedGlProgram: GlProgram | null = null;
 function desaturateGlProgram(): GlProgram {
@@ -41,6 +46,7 @@ export class FogDesaturateFilter extends Filter {
       uDesat: { value: FOG_DESATURATE_DEFAULTS.desaturate, type: 'f32' },
       uPull: { value: FOG_DESATURATE_DEFAULTS.brightPull, type: 'f32' },
       uDarken: { value: FOG_DESATURATE_DEFAULTS.darken, type: 'f32' },
+      uSatRamp: { value: FOG_DESATURATE_DEFAULTS.desaturateRamp, type: 'f32' },
       uScoutedColor: { value: new Float32Array([r, g, b]), type: 'vec3<f32>' },
     });
     super({
@@ -57,12 +63,13 @@ export class FogDesaturateFilter extends Filter {
     this.tuning = tuning;
   }
 
-  /** Writes the slider values; cheap (three uniforms), called every frame. */
+  /** Writes the slider values; cheap (four uniforms), called every frame. */
   setTuning(values: FogDesaturateTuning): void {
     const u = this.tuning.uniforms;
     u.uDesat = values.desaturate;
     u.uPull = values.brightPull;
     u.uDarken = values.darken;
+    u.uSatRamp = values.desaturateRamp;
   }
 }
 
