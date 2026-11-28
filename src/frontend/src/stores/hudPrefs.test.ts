@@ -65,11 +65,11 @@ describe('hudPrefs store', () => {
     expect(prefs.barPosition).toBe('bottom');
   });
 
-  it('shows the full building HUD by default, and remembers the chosen mode', () => {
+  it('starts with the building HUD off, and remembers the chosen mode', () => {
     const backing = stubLocalStorage();
     const prefs = useHudPrefsStore();
-    expect(prefs.buildingHudMode).toBe('full');
-    expect(prefs.buildingInfo).toBe(true);
+    expect(prefs.buildingHudMode).toBe('off');
+    expect(prefs.buildingInfo).toBe(false);
     prefs.setBuildingHudMode('levels');
     expect(backing.get('bjarnoy.hudBuildingInfo')).toBe('levels');
     setActivePinia(createPinia());
@@ -97,14 +97,17 @@ describe('hudPrefs store', () => {
       removeItem: () => {},
     });
     const prefs = useHudPrefsStore();
-    expect(prefs.buildingHudMode).toBe('full');
-    expect(() => prefs.setBuildingHudMode('off')).not.toThrow();
     expect(prefs.buildingHudMode).toBe('off');
+    expect(() => prefs.setBuildingHudMode('full')).not.toThrow();
+    expect(prefs.buildingHudMode).toBe('full');
   });
 
   it('cycleBuildingHud steps full, levels only, off and back to full, and persists each step', () => {
     const backing = stubLocalStorage();
     const prefs = useHudPrefsStore();
+    prefs.cycleBuildingHud();
+    expect(prefs.buildingHudMode).toBe('full');
+    expect(backing.get('bjarnoy.hudBuildingInfo')).toBe('full');
     prefs.cycleBuildingHud();
     expect(prefs.buildingHudMode).toBe('levels');
     expect(backing.get('bjarnoy.hudBuildingInfo')).toBe('levels');

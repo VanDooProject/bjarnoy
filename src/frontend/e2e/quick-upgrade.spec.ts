@@ -51,6 +51,8 @@ test.describe('quick upgrade with Shift on desktop', { tag: '@g2' }, () => {
   test('while Shift is held the hovered building\'s marker box shows what a click would upgrade to', async ({ page, adminAuth }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await foundAs(page, adminAuth, true);
+    // Building info starts off; the marker box shows with it on.
+    await settlement.hud.switchTo('full');
     const centre = await settlement.centreHex();
     const box = await settlement.canvasBox();
     await page.mouse.move(box.x + centre.screen.x, box.y + centre.screen.y, { steps: 3 });
@@ -71,6 +73,8 @@ test.describe('quick upgrade on a building that cannot be upgraded now', { tag: 
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await foundAs(page, adminAuth, true);
     await settlement.setResources({ wood: 0, stone: 0, food: 0, iron: 0 });
+    // Building info starts off; the refusal plays on the longhouse's marker dial.
+    await settlement.hud.switchTo('full');
     const centre = await settlement.centreHex();
     const before = await settlement.longhouseBuildingLevel();
     const dial = settlement.hud.dial(centre.hex).locator('.hud-dial');
@@ -93,6 +97,8 @@ test.describe('quick upgrade for a free account', { tag: '@g2' }, () => {
   test('Shift+click opens the ring like a plain click, and the marker box says it is premium', async ({ page, adminAuth }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await foundAs(page, adminAuth, false);
+    // Building info starts off; the marker box shows with it on.
+    await settlement.hud.switchTo('full');
     const centre = await settlement.centreHex();
     const box = await settlement.canvasBox();
     const before = await settlement.longhouseBuildingLevel();

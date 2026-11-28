@@ -27,9 +27,10 @@ export const BUILDING_HUD_CYCLE: Record<BuildingHudMode, BuildingHudMode> = { fu
 function readBuildingHudMode(): BuildingHudMode {
   try {
     const raw = localStorage.getItem(BUILDING_INFO_KEY);
-    return raw === 'off' || raw === 'levels' ? raw : 'full';
+    // Off until the player switches it on (the old "on" value counts as the full HUD).
+    return raw === 'full' || raw === 'on' ? 'full' : raw === 'levels' ? 'levels' : 'off';
   } catch {
-    return 'full';
+    return 'off';
   }
 }
 

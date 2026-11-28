@@ -128,6 +128,8 @@ describe('BuildingHudLayer', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     localStorage.clear();
+    // Building info starts off for a player; these tests start from it switched on (levels and details).
+    localStorage.setItem('bjarnoy.hudBuildingInfo', 'full');
     frames = [];
     mounted = null;
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {

@@ -23,9 +23,7 @@ test.describe('settlement badge', { tag: '@g2' }, () => {
       return Number(await badge.evaluate((el) => getComputedStyle(el).opacity));
     };
 
-    // Building info is on by default and covers the settlement: no badge.
-    await expect.poll(badgeAlpha).toBe(0);
-    await hud.switchTo('off');
+    // Building info starts off: the badge shows.
     await expect.poll(badgeAlpha).toBe(1);
 
     const box = (await badge.boundingBox())!;
@@ -34,6 +32,9 @@ test.describe('settlement badge', { tag: '@g2' }, () => {
     await page.mouse.move(box.x + box.width / 2, box.y + box.height + 120);
     await expect.poll(badgeAlpha).toBe(1);
 
+    // Building info on (levels and details, or levels only) covers the settlement: no badge.
+    await hud.switchTo('full');
+    await expect.poll(badgeAlpha).toBe(0);
     await hud.switchTo('levels');
     await expect.poll(badgeAlpha).toBe(0);
     await hud.switchTo('off');
