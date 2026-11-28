@@ -2,6 +2,9 @@
 // One report in a list: a kind icon tile (tinted by how it went, a gold dot while unread), the title, one summary line and the
 // date, plus the "show on map" link when the report has a place. The one row every list of reports uses (the Reports window,
 // the desktop panel and the phone sheet). The link is a sibling of the row button, not inside it: a button cannot hold another.
+// The root is a one-cell grid: the button fills the cell (the whole row stays clickable) and the link floats over its bottom
+// right corner. Wide rows (the window) show the date top right with the link under it; short rows (panel, sheet) show the
+// title on its own line and the date and the link together on the line below. The chevron is always the last thing on the right.
 import { useI18n } from 'vue-i18n';
 import type { InboxRowView } from '../../composables/useInboxRows';
 import type { MessageSchema } from '../../i18n/schema';
@@ -28,7 +31,7 @@ const iconSize = props.tile === 44 ? 24 : 22;
 <template>
   <div
     class="report-inbox-row"
-    :class="[`tone-${row.tone}`, { unread: row.unread }]"
+    :class="[`tone-${row.tone}`, { unread: row.unread, short, 'has-location': !!row.location, 'has-chevron': expanded !== undefined }]"
     :data-unread="row.unread"
     :style="{ '--tile': `${tile}px` }"
   >
@@ -49,8 +52,9 @@ const iconSize = props.tile === 44 ? 24 : 22;
           <span v-if="row.unread" class="visually-hidden">{{ t('reports.row.unread') }}</span>
         </span>
         <span v-if="summary" class="sub">{{ row.summary }}</span>
+        <span v-if="short" class="when">{{ row.whenShort }}</span>
       </span>
-      <span class="when">{{ short ? row.whenShort : row.when }}</span>
+      <span v-if="!short" class="when">{{ row.when }}</span>
       <span v-if="expanded !== undefined" class="chevron" :class="{ open: expanded }" aria-hidden="true" />
     </button>
     <ReportLocationLink v-if="row.location" class="location" :coord="row.location" pin @navigate="emit('navigate')" />
@@ -60,9 +64,7 @@ const iconSize = props.tile === 44 ? 24 : 22;
 <style scoped>
 .report-inbox-row {
   --tone: var(--muted);
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
   padding: 8px 12px;
   box-sizing: border-box;
   border: 1px solid rgba(255, 255, 255, 0.07);
@@ -86,7 +88,7 @@ const iconSize = props.tile === 44 ? 24 : 22;
   border-color: rgba(255, 197, 92, 0.3);
 }
 .main {
-  flex: 1;
+  grid-area: 1 / 1;
   min-width: 0;
   min-height: var(--tile);
   display: flex;
@@ -162,6 +164,20 @@ const iconSize = props.tile === 44 ? 24 : 22;
   color: var(--muted);
   white-space: nowrap;
 }
+/* Wide rows: the date sits top right, the link under it (reserve its width so the summary never runs under it). */
+.report-inbox-row:not(.short) .when {
+  align-self: flex-start;
+  text-align: right;
+}
+.report-inbox-row.has-location:not(.short) .when {
+  min-width: 84px;
+}
+/* Short rows: the date is the second line of the text column, level with the link. */
+.short .when {
+  align-self: flex-start;
+  min-height: 20px;
+  line-height: 20px;
+}
 .unread .when {
   color: var(--text);
 }
@@ -180,7 +196,15 @@ const iconSize = props.tile === 44 ? 24 : 22;
   transform: rotate(225deg);
 }
 .location {
-  flex: none;
+  grid-area: 1 / 1;
+  justify-self: end;
+  align-self: end;
+  position: relative;
+  z-index: 1;
+}
+/* Wide rows keep the chevron's column (7px + its margins) free to the link's right. */
+.has-chevron:not(.short) .location {
+  margin-right: 20px;
 }
 .unread .location {
   border: 1px solid rgba(255, 197, 92, 0.4);
@@ -197,6 +221,15 @@ const iconSize = props.tile === 44 ? 24 : 22;
 @media (max-width: 640px) {
   .report-inbox-row {
     min-height: 44px;
+  }
+  .main {
+    min-height: max(var(--tile), 44px);
+  }
+  /* The pill is small; its tap area grows to 44px without growing the pill. */
+  .location::after {
+    content: '';
+    position: absolute;
+    inset: -12px -6px;
   }
 }
 </style>

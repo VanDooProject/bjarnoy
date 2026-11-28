@@ -62,6 +62,9 @@ describe('ReportsPanel', () => {
     const rows = wrapper.findAll('[data-testid="report-row"]');
     expect(rows).toHaveLength(REPORTS_PANEL_ROWS);
     expect(wrapper.findAll('.report-inbox-row').every((row) => row.attributes('data-unread') === 'true')).toBe(true);
+    // The unread look (gold tint and border) is the row component's own: every unread row carries its class.
+    expect(wrapper.findAll('.report-inbox-row.unread')).toHaveLength(REPORTS_PANEL_ROWS);
+    expect(wrapper.findAll('.report-inbox-row.short')).toHaveLength(REPORTS_PANEL_ROWS);
     expect(wrapper.find('.unread-count').text()).toBe('5 unread');
   });
 

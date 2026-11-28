@@ -27,9 +27,9 @@ function rowView(overrides: Partial<InboxRowView> = {}): InboxRowView {
   };
 }
 
-function mountRow(row: InboxRowView, props: { expanded?: boolean; summary?: boolean } = {}) {
+function mountRow(row: InboxRowView, props: { expanded?: boolean; summary?: boolean; short?: boolean; tile?: 34 | 40 | 44 } = {}) {
   return mount(ReportInboxRow, {
-    props: { row, tile: 44, ...props },
+    props: { tile: 44, row, ...props },
     global: { plugins: [router, createTestI18n({ reports: enReports, common: enCommon })] },
   });
 }
@@ -75,5 +75,34 @@ describe('ReportInboxRow', () => {
     const wrapper = mountRow(rowView());
     await wrapper.get('[data-testid="report-row"]').trigger('click');
     expect(wrapper.emitted('open')).toHaveLength(1);
+  });
+
+  it('a wide row keeps the date beside the text and the chevron as the last element of the button', () => {
+    const wrapper = mountRow(rowView(), { summary: true, expanded: false });
+    const button = wrapper.get('[data-testid="report-row"]');
+    expect(button.find('.text .when').exists()).toBe(false);
+    expect(button.get('.when').text()).toBe('Jan 3, 2026, 10:00');
+    expect(button.element.lastElementChild?.classList.contains('chevron')).toBe(true);
+    expect(wrapper.classes()).not.toContain('short');
+    // The link is the row's second child (grid cell over the button), not part of the button.
+    expect(wrapper.element.children[1]?.getAttribute('data-testid')).toBe('report-location-link');
+  });
+
+  it('a short row puts the date under the title, in the text column, with the link beside the button', () => {
+    const wrapper = mountRow(rowView(), { short: true, tile: 34 });
+    const text = wrapper.get('[data-testid="report-row"] .text');
+    const children = Array.from(text.element.children).map((c) => c.className);
+    expect(children[0]).toContain('title');
+    expect(children[children.length - 1]).toContain('when');
+    expect(text.get('.when').text()).toBe('Jan 3, 2026');
+    expect(wrapper.classes()).toContain('short');
+    expect(wrapper.classes()).toContain('has-location');
+    expect(wrapper.find('button [data-testid="report-location-link"]').exists()).toBe(false);
+  });
+
+  it('a short row with a summary keeps it between the title and the date', () => {
+    const wrapper = mountRow(rowView(), { short: true, summary: true, tile: 40 });
+    const children = Array.from(wrapper.get('.text').element.children).map((c) => c.className);
+    expect(children.map((c) => c.split(' ')[0])).toEqual(['title', 'sub', 'when']);
   });
 });

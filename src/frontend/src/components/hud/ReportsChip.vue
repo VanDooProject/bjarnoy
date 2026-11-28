@@ -33,3 +33,10 @@ const label = computed(() =>
     <span v-if="reports.unreadCount > 0" class="hud-count-badge" data-testid="reports-chip-badge" aria-hidden="true">{{ reports.unreadCount }}</span>
   </HudIconButton>
 </template>
+
+<style scoped>
+/* The count badge is absolutely placed: the chip is its corner reference, wherever the chip is slotted in. */
+.reports-chip {
+  position: relative;
+}
+</style>

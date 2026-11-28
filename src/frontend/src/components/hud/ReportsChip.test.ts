@@ -52,6 +52,8 @@ describe('ReportsChip', () => {
   it('shows the unread count in its badge and its label, and opens the sheet on a tap', async () => {
     const wrapper = mountChip();
     expect(wrapper.get('[data-testid="reports-chip-badge"]').text()).toBe('2');
+    // The badge is positioned against the chip itself, so it must be rendered inside the chip button.
+    expect(wrapper.get('[data-testid="reports-chip"]').find('[data-testid="reports-chip-badge"]').exists()).toBe(true);
     expect(wrapper.get('[data-testid="reports-chip"]').attributes('aria-label')).toBe('Reports (2)');
     await wrapper.get('[data-testid="reports-chip"]').trigger('click');
     expect(reportsSheetOpen.value).toBe(true);

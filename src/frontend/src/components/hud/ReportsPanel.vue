@@ -39,11 +39,7 @@ const rows = computed(() => reports.inboxItems.slice(0, REPORTS_PANEL_ROWS).map(
 <style scoped>
 .status-card {
   width: 280px;
-  padding: 12px 0 0;
-}
-.status-card-header {
-  padding: 0 14px 10px;
-  margin-bottom: 0;
+  padding: 12px 14px 0;
 }
 .unread-count {
   color: var(--gold);
@@ -51,16 +47,9 @@ const rows = computed(() => reports.inboxItems.slice(0, REPORTS_PANEL_ROWS).map(
 .rows {
   display: flex;
   flex-direction: column;
+  gap: 6px;
   min-height: 0;
   overflow-y: auto;
-}
-/* The rows sit flush in the card: a divider instead of each row's own box. */
-.rows :deep(.report-inbox-row) {
-  border-width: 1px 0 0;
-  border-color: rgba(255, 255, 255, 0.07);
-}
-.rows :deep(.report-inbox-row.unread) {
-  border-color: rgba(255, 255, 255, 0.07);
 }
 .all {
   display: flex;
@@ -68,10 +57,10 @@ const rows = computed(() => reports.inboxItems.slice(0, REPORTS_PANEL_ROWS).map(
   justify-content: center;
   gap: 4px;
   min-height: 40px;
+  margin-top: 6px;
   padding: 10px;
   background: none;
   border: 0;
-  border-top: 1px solid var(--panel-border);
   color: var(--gold);
   font: inherit;
   font-size: 13px;
