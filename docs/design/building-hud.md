@@ -20,7 +20,7 @@
 - The building HUD has three modes: levels and details (dial and box), levels only (the dials alone; the hovered or tapped
   marker shows its box) and off. The icon button (on desktop the top icon of the panel icon column at the map's bottom left
   (it moves right of the left panel columns when they reach down to it), on phones at the top left of the map) and H step
-  through them in that order and start over; the choice is remembered. While building info shows, the building's own dial shows every order on an existing building:
+  through them in that order and start over; the choice is remembered. Building info starts off; the player switches it on. While building info shows, the building's own dial shows every order on an existing building:
   running upgrade, waiting (`#place`), just clicked (sweep and dots), refused (red flash and cross), raze and the finish
   animation. A construction dial on a hex without a marker (a new build with no building standing yet, a wall) is a dial-only
   marker: just the dial, placed, scaled, hovered, tapped and faded under the ring menu like every marker. With the info off
