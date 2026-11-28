@@ -51,6 +51,30 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     expect(Buffer.compare(hoverA, hoverB)).not.toBe(0);
   });
 
+  test('the hover follows the camera when the map moves under a still mouse', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.found(page);
+    // The building markers off, so the hover is the plain hex under the mouse.
+    await settlement.hud.switchTo('off');
+    const { x: cx, y: cy } = await settlement.canvasCentre();
+    const hovered = () => page.evaluate(() => window.__settlementRenderer().hoveredHexKey);
+    await page.mouse.move(cx, cy + 20, { steps: 6 });
+    await expect.poll(hovered).not.toBeNull();
+    const before = await hovered();
+
+    // The arrow keys pan the map; the mouse does not move.
+    await page.keyboard.down('ArrowRight');
+    await page.waitForTimeout(600);
+    await page.keyboard.up('ArrowRight');
+    await expect.poll(hovered).not.toBe(before);
+    const afterPan = await hovered();
+
+    // The same hex a mouse move there works out.
+    await page.mouse.move(cx + 1, cy + 20);
+    await page.mouse.move(cx, cy + 20);
+    await expect.poll(hovered).toBe(afterPan);
+  });
+
   test('the onboarding quest tray shows the first quest in the settlement view', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);

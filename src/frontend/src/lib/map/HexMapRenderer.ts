@@ -2539,6 +2539,8 @@ export class HexMapRenderer {
   private hoveredKey: string | null = null;
   /** Mouse position in canvas px while hovering the canvas (never set for touch/pen); null otherwise. */
   private hoverPointer: { x: number; y: number } | null = null;
+  /** The camera the hover was last worked out under; a camera move under a still mouse works it out again (`refreshHover`). */
+  private hoverCamera: Camera | null = null;
   /** Told of every touch/pen tap on the map (canvas px) without taking it over; see `setTapObserver`. */
   private tapObserver: ((screen: { x: number; y: number }) => void) | null = null;
   /** The hex an HTML marker under the pointer stands for (it covers another hex), for hover and click; see `setPointerTarget`. */
@@ -3020,6 +3022,8 @@ export class HexMapRenderer {
     // HTML overlays placed from the camera (the building HUD) follow in this same tick, so what they place is the frame Pixi
     // presents; a tick Pixi skips (framePacing) skips them too.
     this.frameObserver?.();
+    // After the overlays are placed for this frame, so a marker the camera moved under the mouse counts.
+    this.refreshHover();
     this.rebuildMarkers();
     // The label overlay carries the same camera in the same frame as the canvas.
     // Snapped to the device's pixels, not the canvas's render resolution: the text is the browser's, at full DPR.
@@ -3583,8 +3587,24 @@ export class HexMapRenderer {
     if (!screen) return;
     // Hover (and so the dial's grow-on-hover) is a mouse affordance only.
     this.hoverPointer = e.pointerType === 'mouse' ? screen : null;
-    // Over an HTML marker (the building HUD's dial or box) the hover is the hex it belongs to, like its click.
-    this.setHoveredCoord(this.pointerTarget?.(screen) ?? this.pickHex(screenToWorld(this.camera, screen, this.viewport)));
+    this.hoverCamera = this.camera;
+    this.setHoveredCoord(this.hexAtPointer(screen));
+  }
+
+  /** The hex the pointer at canvas point `screen` means: over an HTML marker's dial the hex it belongs to (like its click), else the hex under it. */
+  private hexAtPointer(screen: { x: number; y: number }): AxialCoord {
+    return this.pointerTarget?.(screen) ?? this.pickHex(screenToWorld(this.camera, screen, this.viewport));
+  }
+
+  /**
+   * The camera moved (wheel zoom, keyboard pan, a camera animation, idle drift) while the mouse stood still: the hover follows
+   * the hex now under the mouse, as a mouse move would. Not while dragging or with the map locked, where hover is off.
+   */
+  private refreshHover() {
+    const at = this.hoverPointer;
+    if (!at || this.dragging || this.interactionLocked || this.camera === this.hoverCamera) return;
+    this.hoverCamera = this.camera;
+    this.setHoveredCoord(this.hexAtPointer(at));
   }
 
   private setHoveredCoord(coord: AxialCoord | null) {
@@ -4041,7 +4061,7 @@ export class HexMapRenderer {
       if (armyTapStopsHere(this.armyOverlay?.armies ?? [], this.options.armyTapStopsAtMarker?.(armyId))) return;
     }
     // A tap on an HTML marker (the building HUD's dial or box) means the hex it belongs to, not the one it is drawn over.
-    const coord = this.pointerTarget?.(screen) ?? this.pickHex(screenToWorld(this.camera, screen, this.viewport));
+    const coord = this.hexAtPointer(screen);
     const tile = this.options.worldModel.getTile(coord.q, coord.r);
     // Issue #16 "ring menu on click of tile": the ring anchors on the
     // clicked hex's own screen centre (same point the hover tooltip anchors
