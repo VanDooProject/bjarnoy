@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MARKER_FADE_MS,
+  badgeOccluded,
   circleIntersectsRect,
   circlesIntersect,
   markerFadeStep,
@@ -59,5 +60,32 @@ describe('markerFadeStep', () => {
   it('is instant under reduced motion', () => {
     expect(markerFadeStep(1, true, 1, true)).toBe(0);
     expect(markerFadeStep(0, false, 1, true)).toBe(1);
+  });
+});
+
+describe('badgeOccluded', () => {
+  const rect = { x: 100, y: 50, w: 120, h: 30 };
+  const none = { ringCircle: null, mouse: null, covered: false, rect };
+
+  it('stays visible with no ring, no mouse over it and nothing covering it', () => {
+    expect(badgeOccluded(none)).toBe(false);
+    expect(badgeOccluded({ ...none, mouse: { x: 90, y: 60 } })).toBe(false);
+    expect(badgeOccluded({ ...none, mouse: { x: 160, y: 85 } })).toBe(false);
+  });
+
+  it('hides while the mouse is over it, and shows again once it has left', () => {
+    expect(badgeOccluded({ ...none, mouse: { x: 160, y: 65 } })).toBe(true);
+    expect(badgeOccluded({ ...none, mouse: { x: 100, y: 50 } })).toBe(true);
+    expect(badgeOccluded({ ...none, mouse: { x: 220, y: 80 } })).toBe(true);
+    expect(badgeOccluded({ ...none, mouse: null })).toBe(false);
+  });
+
+  it('hides while something covers it', () => {
+    expect(badgeOccluded({ ...none, covered: true })).toBe(true);
+  });
+
+  it('hides when the ring reaches it, not when the ring is far away', () => {
+    expect(badgeOccluded({ ...none, ringCircle: { x: 160, y: 200, r: 100 } })).toBe(false);
+    expect(badgeOccluded({ ...none, ringCircle: { x: 160, y: 140, r: 100 } })).toBe(true);
   });
 });

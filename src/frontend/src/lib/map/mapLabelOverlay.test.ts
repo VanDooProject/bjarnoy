@@ -55,12 +55,12 @@ describe('labelPlaneOffset', () => {
 });
 
 describe('badgeScreenRect', () => {
-  it('is centred on the anchor with its bottom 10 scaled px above it (plus half the border)', () => {
+  it('is centred on the anchor both ways, scaled', () => {
     const r = badgeScreenRect({ x: 100, y: 200 }, { width: 120, height: 31.5 }, 2);
     expect(r.w).toBe(240);
     expect(r.h).toBe(63);
     expect(r.x + r.w / 2).toBe(100);
-    expect(r.y + r.h).toBeCloseTo(200 + (REALM_PILL.badge.border / 2 - 10) * 2);
+    expect(r.y + r.h / 2).toBe(200);
   });
 });
 
@@ -82,9 +82,10 @@ describe('MapLabelOverlay', () => {
 
   it('reuses an element per key across frames and rewrites the text only when it changed', () => {
     const { overlay, els, find } = setup();
-    const show = (text: string) => frame(overlay, () => overlay.ownerLabel('owner:a', { wx: 1, wy: 2, text, color: 0xff0000 }));
+    const show = (name: string) =>
+      frame(overlay, () => overlay.badgeLabel('badge:a', { wx: 1, wy: 2, name, suffix: 'you · Lv 4', color: 0xff0000 }));
     show('Hafrsvik');
-    const el = find('owner:a')!;
+    const el = find('badge:a')!;
     const span = el.querySelector('.map-label__text')!;
     const spy = vi.spyOn(span, 'textContent', 'set');
     show('Hafrsvik');
@@ -92,7 +93,7 @@ describe('MapLabelOverlay', () => {
     expect(spy).not.toHaveBeenCalled();
     show('Draugrvik');
     expect(spy).toHaveBeenCalledTimes(1);
-    expect(find('owner:a')).toBe(el);
+    expect(find('badge:a')).toBe(el);
     expect(els()).toHaveLength(1);
     expect(span.textContent).toBe('Draugrvik');
   });
@@ -106,9 +107,9 @@ describe('MapLabelOverlay', () => {
 
   it('writes the anchor and the realm colour only when they change', () => {
     const { overlay, find } = setup();
-    const draw = (wx: number, color: number) => frame(overlay, () => overlay.ownerLabel('owner:a', { wx, wy: 5, text: 'x', color }));
+    const draw = (wx: number, color: number) => frame(overlay, () => overlay.badgeLabel('badge:a', { wx, wy: 5, name: 'x', suffix: 'y', color }));
     draw(1, 0xff0000);
-    const el = find('owner:a')!;
+    const el = find('badge:a')!;
     const spy = vi.spyOn(el.style, 'setProperty');
     draw(1, 0xff0000);
     expect(spy).not.toHaveBeenCalled();
@@ -121,10 +122,9 @@ describe('MapLabelOverlay', () => {
 
   it('sizes the pill from REALM_PILL through custom properties', () => {
     const { overlay, find } = setup();
-    frame(overlay, () => overlay.ownerLabel('owner:a', { wx: 0, wy: 0, text: 'x', color: 1 }));
     frame(overlay, () => overlay.badgeLabel('badge:a', { wx: 0, wy: 0, name: 'x', suffix: 'y', color: 1 }));
-    expect(find('owner:a')!.style.getPropertyValue('--pill-h')).toBe(String(REALM_PILL.owner.height));
-    expect(find('owner:a')!.style.getPropertyValue('--pill-pad')).toBe(String(REALM_PILL.owner.padX));
+    expect(find('badge:a')!.style.getPropertyValue('--pill-h')).toBe(String(REALM_PILL.badge.height));
+    expect(find('badge:a')!.style.getPropertyValue('--pill-pad')).toBe(String(REALM_PILL.badge.padX));
     expect(find('badge:a')!.style.getPropertyValue('--pill-mark-r')).toBe(String(REALM_PILL.badge.markR));
     expect(find('badge:a')!.style.getPropertyValue('--pill-border')).toBe(String(REALM_PILL.badge.border));
   });
@@ -150,17 +150,17 @@ describe('MapLabelOverlay', () => {
   it('hides keys not used this frame and removes them after the idle limit', () => {
     const { overlay, els, find } = setup();
     frame(overlay, () => {
-      overlay.ownerLabel('owner:a', { wx: 0, wy: 0, text: 'a', color: 1 });
-      overlay.ownerLabel('owner:b', { wx: 0, wy: 0, text: 'b', color: 1 });
+      overlay.islandLabel('island:a', { wx: 0, wy: 0, text: 'a', mine: false, hidden: false });
+      overlay.islandLabel('island:b', { wx: 0, wy: 0, text: 'b', mine: false, hidden: false });
     });
-    expect(find('owner:a')!.classList.contains('is-hidden')).toBe(false);
-    frame(overlay, () => overlay.ownerLabel('owner:b', { wx: 0, wy: 0, text: 'b', color: 1 }));
-    expect(find('owner:a')!.classList.contains('is-hidden')).toBe(true);
-    expect(find('owner:b')!.classList.contains('is-hidden')).toBe(false);
-    for (let i = 0; i < 599; i++) frame(overlay, () => overlay.ownerLabel('owner:b', { wx: 0, wy: 0, text: 'b', color: 1 }));
-    expect(find('owner:a')).not.toBeNull();
-    frame(overlay, () => overlay.ownerLabel('owner:b', { wx: 0, wy: 0, text: 'b', color: 1 }));
-    expect(find('owner:a')).toBeNull();
+    expect(find('island:a')!.classList.contains('is-hidden')).toBe(false);
+    frame(overlay, () => overlay.islandLabel('island:b', { wx: 0, wy: 0, text: 'b', mine: false, hidden: false }));
+    expect(find('island:a')!.classList.contains('is-hidden')).toBe(true);
+    expect(find('island:b')!.classList.contains('is-hidden')).toBe(false);
+    for (let i = 0; i < 599; i++) frame(overlay, () => overlay.islandLabel('island:b', { wx: 0, wy: 0, text: 'b', mine: false, hidden: false }));
+    expect(find('island:a')).not.toBeNull();
+    frame(overlay, () => overlay.islandLabel('island:b', { wx: 0, wy: 0, text: 'b', mine: false, hidden: false }));
+    expect(find('island:a')).toBeNull();
     expect(els()).toHaveLength(1);
   });
 

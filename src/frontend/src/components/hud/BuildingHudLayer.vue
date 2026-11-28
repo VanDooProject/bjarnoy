@@ -84,6 +84,8 @@ export interface BuildingHudRenderer {
   setFrameObserver(fn: (() => void) | null): void;
   /** The open ring menu's footprint (canvas px); markers beneath it fade out like the progress dials do. */
   readonly markerOcclusionCircle: OcclusionCircle | null;
+  /** While the building markers are shown they sit on the settlements: the renderer fades the settlement name badges out meanwhile. */
+  setSettlementBadgeCovered(covered: boolean): void;
   /** The construction dials the renderer holds: the queue's, plus finishing and refused ones. Replaced on every change. */
   readonly constructionDialList: readonly ConstructionDial[];
   /** The markers playing the blocked-upgrade animation (a quick upgrade hit a building that cannot be upgraded now). Replaced on every change. */
@@ -829,7 +831,11 @@ onMounted(() => {
   props.renderer?.setTapObserver(onMapTap);
   props.renderer?.setPointerTarget(pointerTargetAt);
   props.renderer?.setFrameObserver(tick);
+  props.renderer?.setSettlementBadgeCovered(badgeCovered.value);
 });
+// The settlement badges give way to the markers while those are wanted (the same moment they start to show, so the fades overlap).
+const badgeCovered = computed(() => props.buildingMarkers && markersWanted.value);
+watch(badgeCovered, (covered) => props.renderer?.setSettlementBadgeCovered(covered));
 watch(
   () => props.renderer,
   (next, previous) => {
@@ -837,9 +843,11 @@ watch(
     previous?.setTapObserver(null);
     previous?.setPointerTarget(null);
     previous?.setFrameObserver(null);
+    previous?.setSettlementBadgeCovered(false);
     next?.setTapObserver(onMapTap);
     next?.setPointerTarget(pointerTargetAt);
     next?.setFrameObserver(tick);
+    next?.setSettlementBadgeCovered(badgeCovered.value);
   },
 );
 onUnmounted(() => {
@@ -855,6 +863,7 @@ onUnmounted(() => {
   props.renderer?.setTapObserver(null);
   props.renderer?.setPointerTarget(null);
   props.renderer?.setFrameObserver(null);
+  props.renderer?.setSettlementBadgeCovered(false);
 });
 </script>
 

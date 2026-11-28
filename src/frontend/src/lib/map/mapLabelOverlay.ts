@@ -15,7 +15,7 @@ import './mapLabelOverlay.css';
 /** Frames a keyed label may stay unused before its element is removed. */
 const LABEL_IDLE_FRAMES = 600;
 
-type LabelKind = 'owner' | 'island' | 'badge';
+type LabelKind = 'island' | 'badge';
 
 /** Where the plane's top-left sits on screen, so that `offset + world * zoom` is `worldToScreen`; rounded to a device pixel. */
 export function labelPlaneOffset(
@@ -33,8 +33,8 @@ export function cssColor(color: number): string {
 }
 
 /**
- * The settlement badge's outer screen rect (for the ring-occlusion test), given the screen point of its anchor, its
- * unscaled outer size and its zoom scale. The badge's bottom sits 10 (scaled) px above the anchor, plus half the border.
+ * The settlement badge's outer screen rect (for the hover and ring-occlusion tests), given the screen point of its anchor (the
+ * centre of the badge), its unscaled outer size and its zoom scale.
  */
 export function badgeScreenRect(
   anchor: { x: number; y: number },
@@ -43,15 +43,13 @@ export function badgeScreenRect(
 ): { x: number; y: number; w: number; h: number } {
   const w = size.width * scale;
   const h = size.height * scale;
-  const bottom = anchor.y + (REALM_PILL.badge.border / 2 - 10) * scale;
-  return { x: anchor.x - w / 2, y: bottom - h, w, h };
+  return { x: anchor.x - w / 2, y: anchor.y - h / 2, w, h };
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-/** Pointy-top hexagon (the one TopBar's logo and ResourceBar's icons use) or diamond, as unit-radius points around (0,0). */
-function markPoints(mark: 'hex' | 'diamond'): string {
-  if (mark === 'diamond') return '0,-1 1,0 0,1 -1,0';
+/** Pointy-top hexagon (the one TopBar's logo and ResourceBar's icons use), as unit-radius points around (0,0). */
+function hexMarkPoints(): string {
   const points: string[] = [];
   for (let i = 0; i < 6; i++) {
     const a = (Math.PI / 180) * (-90 + 60 * i);
@@ -60,12 +58,12 @@ function markPoints(mark: 'hex' | 'diamond'): string {
   return points.join(' ');
 }
 
-function createMark(mark: 'hex' | 'diamond'): SVGSVGElement {
+function createMark(): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', '-1 -1 2 2');
   svg.setAttribute('class', 'map-label__mark');
   const polygon = document.createElementNS(SVG_NS, 'polygon');
-  polygon.setAttribute('points', markPoints(mark));
+  polygon.setAttribute('points', hexMarkPoints());
   svg.appendChild(polygon);
   return svg;
 }
@@ -82,7 +80,7 @@ function applyPillSize(el: HTMLElement, size: RealmPillSize) {
 /** One label element. Every write goes through a setter that skips unchanged values. */
 export class MapLabel {
   readonly el: HTMLElement;
-  /** Outer layout size in px (unscaled), measured when the text last changed; pills only. */
+  /** Outer layout size in px (unscaled), measured when the text last changed; badges only. */
   width = 0;
   height = 0;
   private readonly texts: HTMLElement[];
@@ -227,16 +225,6 @@ export class MapLabelOverlay {
     this.root.style.opacity = o === 1 ? '' : String(o);
   }
 
-  /** World-map owner pill, centred on the world point (wx, wy). */
-  ownerLabel(key: string, p: { wx: number; wy: number; text: string; color: number }): MapLabel {
-    const label = this.acquire(key, 'owner');
-    label.setAnchor(p.wx, p.wy);
-    label.setColor(p.color);
-    label.setHidden(false);
-    if (label.setText(0, p.text)) label.measure();
-    return label;
-  }
-
   /** Island name, its top centre on the world point; `hidden` fades it out. */
   islandLabel(key: string, p: { wx: number; wy: number; text: string; mine: boolean; hidden: boolean }): MapLabel {
     const label = this.acquire(key, 'island');
@@ -247,7 +235,7 @@ export class MapLabelOverlay {
     return label;
   }
 
-  /** Settlement badge (name + suffix), its bottom centre on the world point. The caller sets its visibility. */
+  /** Settlement badge (name + suffix), centred on the world point. The caller sets its visibility. */
   badgeLabel(key: string, p: { wx: number; wy: number; name: string; suffix: string; color: number }): MapLabel {
     const label = this.acquire(key, 'badge');
     label.setAnchor(p.wx, p.wy);
@@ -281,10 +269,9 @@ function createLabel(kind: LabelKind): MapLabel {
     return new MapLabel(el, [el]);
   }
   el.classList.add('map-label--pill');
-  applyPillSize(el, kind === 'owner' ? REALM_PILL.owner : REALM_PILL.badge);
-  el.appendChild(createMark(kind === 'owner' ? 'diamond' : 'hex'));
-  const names = kind === 'owner' ? ['map-label__text'] : ['map-label__text map-label__text--badge-name', 'map-label__text map-label__text--badge-suffix'];
-  const texts = names.map((className) => {
+  applyPillSize(el, REALM_PILL.badge);
+  el.appendChild(createMark());
+  const texts = ['map-label__text map-label__text--badge-name', 'map-label__text map-label__text--badge-suffix'].map((className) => {
     const span = document.createElement('span');
     span.className = className;
     el.appendChild(span);

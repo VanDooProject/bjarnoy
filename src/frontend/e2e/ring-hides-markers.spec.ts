@@ -61,6 +61,8 @@ test.describe('markers beneath the ring menu', { tag: '@g2' }, () => {
       return { near: nearHex, far: farHex, settlementId: world.selectedSettlementId };
     });
     const { hud } = settlement;
+    // Building info on already hides the badge (its markers cover the settlement); the ring is what is tested here.
+    await hud.switchTo('off');
     const badge = page.locator(`[data-map-label="badge:${settlementId}"]`);
     // Hidden (visibility) counts as 0: the overlay hides a badge once its fade has run out.
     const badgeAlpha = async () => {

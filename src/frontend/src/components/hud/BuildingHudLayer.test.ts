@@ -70,6 +70,11 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
       this.frameObserver = fn;
     },
     markerOcclusionCircle: null as { x: number; y: number; r: number } | null,
+    // Whether the layer has the settlement name badges faded out (the markers cover them).
+    badgeCovered: false,
+    setSettlementBadgeCovered(covered: boolean) {
+      this.badgeCovered = covered;
+    },
     // The renderer's construction dials; a test replaces the array to change them, like the renderer does.
     constructionDialList: [] as ConstructionDial[],
     // The markers playing the blocked-upgrade animation; a test replaces the array, like the renderer does.
@@ -85,6 +90,7 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
     tapObserver: ((screen: { x: number; y: number }) => void) | null;
     pointerTarget: ((screen: { x: number; y: number }) => { q: number; r: number } | null) | null;
     frameObserver: (() => void) | null;
+    badgeCovered: boolean;
     constructionDialList: ConstructionDial[];
     blockedMarkerList: BlockedMarker[];
   };
@@ -204,6 +210,34 @@ describe('BuildingHudLayer', () => {
     wrapper.unmount();
     wrapper = undefined;
     expect(second.frameObserver).toBeNull();
+  });
+
+  it('tells the renderer to hide the settlement badges while building info is on, and to bring them back when it goes off', async () => {
+    seedBuildings();
+    const renderer = fakeRenderer();
+    wrapper = mountLayer(renderer);
+    // Building info is on by default.
+    expect(useHudPrefsStore().buildingInfo).toBe(true);
+    expect(renderer.badgeCovered).toBe(true);
+    useHudPrefsStore().setBuildingHudMode('off');
+    await flushPromises();
+    expect(renderer.badgeCovered).toBe(false);
+    useHudPrefsStore().setBuildingHudMode('full');
+    await flushPromises();
+    expect(renderer.badgeCovered).toBe(true);
+  });
+
+  it('uncovers the badges of the renderer it lets go of, and covers those of the one it is given', async () => {
+    seedBuildings();
+    const first = fakeRenderer();
+    wrapper = mountLayer(first);
+    const second = fakeRenderer();
+    await wrapper.setProps({ renderer: second });
+    expect(first.badgeCovered).toBe(false);
+    expect(second.badgeCovered).toBe(true);
+    wrapper.unmount();
+    wrapper = undefined;
+    expect(second.badgeCovered).toBe(false);
   });
 
   it('scales the whole marker with the map like the progress dial', () => {
