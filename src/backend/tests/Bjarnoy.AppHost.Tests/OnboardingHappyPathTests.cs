@@ -120,9 +120,10 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
         // --- Guided build 1: Reindeer Herder on the grass hex, via the REAL ring menu -----
         // The ring returns once its last bubble is clicked; each order counts as queued only once the server answered.
         var buildsPath = $"/api/v1/settlements/{settlement.Id}/builds";
+        // Longer than the Lumberjack's hold below (up to 45 s + 30 s) plus the ring's own clicks.
         Task<IResponse> BuildQueuedAsync() => page.WaitForResponseAsync(
             response => response.Request.Method == "POST" && response.Url.EndsWith(buildsPath),
-            new PageWaitForResponseOptions { Timeout = 45_000 });
+            new PageWaitForResponseOptions { Timeout = 120_000 });
 
         await LiveFrontendTestHelpers.ClickHexAsync(page, grassTile.Q, grassTile.R);
         var herderQueued = BuildQueuedAsync();
@@ -139,28 +140,42 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
         // time, not only on a slow runner.
         var statusCard = page.Locator(".status-card");
         var buildsRoute = $"**{buildsPath}";
+        // Playwright swallows an exception thrown in a route handler and leaves the request hanging, so a failed
+        // wait in here aborts the request and is rethrown below instead of surfacing as a response timeout.
+        Exception? holdFailure = null;
         await page.RouteAsync(buildsRoute, async route =>
         {
-            await WaitForStandingBuildingAsync(apiClient, settlement.Id, "reindeerherder", cancellationToken);
-            await Assertions.Expect(statusCard).ToBeHiddenAsync(new() { Timeout = 30_000 });
+            try
+            {
+                await WaitForStandingBuildingAsync(apiClient, settlement.Id, "reindeerherder", cancellationToken);
+                await Assertions.Expect(statusCard).ToBeHiddenAsync(new() { Timeout = 30_000 });
+            }
+            catch (Exception ex)
+            {
+                holdFailure = ex;
+                await route.AbortAsync();
+                return;
+            }
             await route.ContinueAsync();
         });
         await LiveFrontendTestHelpers.ClickHexAsync(page, forestTile.Q, forestTile.R);
         var lumberjackQueued = BuildQueuedAsync();
         await LiveFrontendTestHelpers.BuildThroughRingAsync(page, null, "Lumberjack");
         var lumberjackResponse = await lumberjackQueued;
+        if (holdFailure is not null) throw new InvalidOperationException("Holding the Lumberjack's order failed.", holdFailure);
         Assert.True(lumberjackResponse.Ok, $"Queueing the Lumberjack answered {lumberjackResponse.Status}.");
         await page.UnrouteAsync(buildsRoute);
 
-        // Both orders are on the server now; once the Lumberjack stands, startHudSync()'s poll has to clear the
-        // construction card with no reload or click.
+        // Both orders are on the server now; once the Lumberjack stands, startHudSync()'s poll clears the
+        // construction card with no reload or click. (That the card shows up at all is LandingBuildQueueTests'
+        // job: on a loaded runner it can take longer than these sped-up builds last.)
         await WaitForStandingBuildingAsync(apiClient, settlement.Id, "lumberjack", cancellationToken);
         await Assertions.Expect(statusCard).ToBeHiddenAsync(new() { Timeout = 45_000 });
 
         var settlementAfterCompletion = await apiClient.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlement.Id}", cancellationToken);
-        Assert.Contains(settlementAfterCompletion!.Buildings, b => b.Type == "reindeerherder");
-        Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "lumberjack");
+        Assert.Contains(settlementAfterCompletion!.Buildings, b => b.Type == "reindeerherder" && b.Level >= 1);
+        Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "lumberjack" && b.Level >= 1);
 
         // --- Profile nudge -> a real /register form -----------------------------
         // Onboarding complete: the "Name your jarl" nudge is the one call to
@@ -287,7 +302,7 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
             var current = await apiClient.GetFromJsonAsync<SettlementResponse>(
                 $"/api/v1/settlements/{settlementId}", timeout.Token);
             if (current!.Buildings.Any(b => b.Type == type && b.Level >= 1)) return;
-            await Task.Delay(TimeSpan.FromMilliseconds(500), timeout.Token);
+            await Task.Delay(TimeSpan.FromSeconds(1), timeout.Token);
         }
     }
 }
