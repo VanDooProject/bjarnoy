@@ -67,8 +67,11 @@ export function useBuildOrders(): ComputedRef<BuildOrderRow[]> {
       const remainingAtFetch = waiting ? null : q.completesInSeconds;
       const remainingNow = remainingAtFetch === null ? null : Math.max(0, remainingAtFetch - elapsed);
       const totalSeconds = q.totalSeconds;
-      let progress =
-        waiting || remainingAtFetch === null || totalSeconds <= 0
+      // A waiting order has made no progress yet: 0, not 1, or the clamp below
+      // would keep its bar full once it gets a slot and starts building.
+      let progress = waiting
+        ? 0
+        : remainingAtFetch === null || totalSeconds <= 0
           ? 1
           : 1 - Math.max(0, Math.min(1, (remainingNow ?? 0) / totalSeconds));
       progress = Math.max(progress, lastProgress.get(q.id) ?? 0);
