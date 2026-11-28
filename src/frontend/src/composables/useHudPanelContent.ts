@@ -3,6 +3,8 @@
 // that could do nothing is left out, ui-guidelines section 1). The one exception is the Construction icon: the column always
 // has it, disabled and dimmed while there are no build orders, but the panel itself still renders only with orders.
 import { computed, type ComputedRef } from 'vue';
+import { DEMO_MODE } from '../config';
+import { useReportsStore } from '../stores/reports';
 import { useWorldStore } from '../stores/world';
 import type { HudPanelId } from '../lib/hud/hudPanelDock';
 import { useBuildOrders, useTrainingOrders } from './useQueueOrders';
@@ -19,6 +21,7 @@ export function useHudPanelContent(): Record<HudPanelId, ComputedRef<boolean>> {
   const buildOrders = useBuildOrders();
   const trainingOrders = useTrainingOrders();
   const { current } = useQuests();
+  const reports = useReportsStore();
   const hasActiveDraft = useHasActiveDraft();
   return {
     construction: computed(() => buildOrders.value.length > 0),
@@ -27,6 +30,8 @@ export function useHudPanelContent(): Record<HudPanelId, ComputedRef<boolean>> {
     // Always something to show: the dispatch button, or the armies on the road.
     armies: computed(() => true),
     quests: computed(() => !!current.value && !hasActiveDraft.value),
+    // Only with reports to list; the demo has none.
+    reports: computed(() => !DEMO_MODE && reports.inboxItems.length > 0),
   };
 }
 
@@ -38,10 +43,12 @@ export function useHudPanelCounts(): Record<HudPanelId, ComputedRef<number>> {
   const world = useWorldStore();
   const buildOrders = useBuildOrders();
   const { claimable } = useQuests();
+  const reports = useReportsStore();
   return {
     construction: computed(() => buildOrders.value.length),
     garrison: computed(() => 0),
     armies: computed(() => world.armies.filter((a) => a.movement !== null).length),
     quests: computed(() => claimable.value.length),
+    reports: computed(() => reports.unreadCount),
   };
 }

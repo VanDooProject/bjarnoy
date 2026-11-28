@@ -797,7 +797,7 @@ onUnmounted(() => stageObserver?.disconnect());
 // the panels' widths:
 //   columns         full height: top:76 (TopBar .hud-bar height 64, plus a 12px gap), bottom:16, left/right 16
 //   icon rail       left 16, or right of the left panel columns when they reach down to it (HudPanelColumn)
-//   panel widths    Construction 240, Garrison 240, Armies 260, Quests 280
+//   panel widths    Construction 240, Garrison 240, Armies 260, Quests 280, Reports 280
 // The left edge stays at the default Construction column (left 16 + 240 + 12 -> 268). The right edge is set by the widest
 // panel that can sit in the ring's way: Armies (260 wide, runs down to the bottom bound) beats Garrison (240) ->
 // right = stage width - (16 + 260 + 16), floored at 420. These are constants, not the live layout: every panel is treated

@@ -12,13 +12,14 @@ import { createTestI18n } from '../../test/i18n';
 import { railLeft } from '../../composables/useHudRail';
 import enHud from '../../i18n/locales/en/hud.json';
 import enQuests from '../../i18n/locales/en/quests.json';
+import enReports from '../../i18n/locales/en/reports.json';
 
 const flags = vi.hoisted(() => ({ draft: undefined as unknown, hasNew: undefined as unknown, content: undefined as unknown, counts: undefined as unknown }));
 vi.mock('../../composables/useHudPanelContent', async () => {
   const { ref } = await import('vue');
-  flags.content = { construction: ref(true), garrison: ref(true), armies: ref(true), quests: ref(true) };
+  flags.content = { construction: ref(true), garrison: ref(true), armies: ref(true), quests: ref(true), reports: ref(true) };
   flags.draft = ref(false);
-  flags.counts = { construction: ref(0), garrison: ref(0), armies: ref(0), quests: ref(0) };
+  flags.counts = { construction: ref(0), garrison: ref(0), armies: ref(0), quests: ref(0), reports: ref(0) };
   return { useHudPanelContent: () => flags.content, useHudPanelCounts: () => flags.counts, useHasActiveDraft: () => flags.draft };
 });
 vi.mock('../../composables/useQuests', async () => {
@@ -27,11 +28,11 @@ vi.mock('../../composables/useQuests', async () => {
   return { useQuests: () => ({ hasNew: flags.hasNew }) };
 });
 
-const counts = () => flags.counts as Record<'construction' | 'garrison' | 'armies' | 'quests', ReturnType<typeof ref<number>>>;
-const content = () => flags.content as Record<'construction' | 'garrison' | 'armies' | 'quests', ReturnType<typeof ref<boolean>>>;
+const counts = () => flags.counts as Record<'construction' | 'garrison' | 'armies' | 'quests' | 'reports', ReturnType<typeof ref<number>>>;
+const content = () => flags.content as Record<'construction' | 'garrison' | 'armies' | 'quests' | 'reports', ReturnType<typeof ref<boolean>>>;
 
 function mountColumn() {
-  return mount(HudPanelColumn, { global: { plugins: [createTestI18n({ hud: enHud, quests: enQuests })] } });
+  return mount(HudPanelColumn, { global: { plugins: [createTestI18n({ hud: enHud, quests: enQuests, reports: enReports })] } });
 }
 
 const labels = (w: ReturnType<typeof mountColumn>) => w.findAll('button').map((b) => b.attributes('aria-label'));
@@ -58,13 +59,14 @@ describe('HudPanelColumn', () => {
     expect(rail.style.left).toBe('308px');
   });
 
-  it('shows the five icons top to bottom: building info, construction, garrison, armies, quests', () => {
-    expect(labels(mountColumn())).toEqual(['Building info: levels and details (H)', 'Construction', 'Garrison', 'Armies', 'Quests']);
+  it('shows the six icons top to bottom: building info, construction, garrison, armies, quests, reports', () => {
+    expect(labels(mountColumn())).toEqual(['Building info: levels and details (H)', 'Construction', 'Garrison', 'Armies', 'Quests', 'Reports']);
   });
 
   it('leaves out the icon of a panel that has nothing to show, but never the building info switch or construction', () => {
     content().garrison.value = false;
     content().quests.value = false;
+    content().reports.value = false;
     expect(labels(mountColumn())).toEqual(['Building info: levels and details (H)', 'Construction', 'Armies']);
     for (const flag of Object.values(content())) flag.value = false;
     expect(labels(mountColumn())).toEqual(['Building info: levels and details (H)', 'Construction']);
@@ -99,6 +101,13 @@ describe('HudPanelColumn', () => {
     counts()[id].value = 0;
     await wrapper.vm.$nextTick();
     expect(badge().exists()).toBe(false);
+  });
+
+  it('shows the unread reports count on the closed reports icon, which starts closed', () => {
+    counts().reports.value = 2;
+    const wrapper = mountColumn();
+    expect(wrapper.get('[data-testid="hud-panel-badge-reports"]').text()).toBe('2');
+    expect(wrapper.get('[data-testid="hud-panel-toggle-reports"]').attributes('aria-label')).toContain('(2)');
   });
 
   it('never shows a count badge on the garrison icon', async () => {

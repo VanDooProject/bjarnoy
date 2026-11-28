@@ -1,11 +1,11 @@
 <script setup lang="ts">
-// Desktop settlement view: the four HUD panels dock into full-height columns on the left and right of the map area (model
+// Desktop settlement view: the five HUD panels dock into full-height columns on the left and right of the map area (model
 // and geometry in lib/hud/hudPanelDock.ts). Each side holds columns, outermost first; a column stacks its top-aligned
 // panels from the top and its bottom-aligned ones from the bottom, and they only shrink (their panels scroll) when the two
 // groups do not fit together. A panel is shown when it is open (stores/hudPrefs.ts, toggled from HudPanelColumn) and has
 // something to show (composables/useHudPanelContent.ts). Every panel enters and leaves through the one transition here,
 // a drag on a panel's header moves it to another group (composables/useHudPanelDock.ts), and the dock owns collapsing a
-// panel to its header (HudPanelCollapseButton) so the four panels carry no collapse code. The left columns also tell the
+// panel to its header (HudPanelCollapseButton) so the panels carry no collapse code. The left columns also tell the
 // icon rail where to sit (composables/useHudRail.ts). The world view keeps ArmyPanel undocked and does not use this.
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component } from 'vue';
 import { useHudPanelShown } from '../../composables/useHudPanelShown';
@@ -27,6 +27,7 @@ import {
 import ArmyPanel from './ArmyPanel.vue';
 import BuildQueuePanel from './BuildQueuePanel.vue';
 import HudPanelCollapseButton from './HudPanelCollapseButton.vue';
+import ReportsPanel from './ReportsPanel.vue';
 import TrainingQueuePanel from './TrainingQueuePanel.vue';
 import QuestTray from '../onboarding/QuestTray.vue';
 
@@ -51,6 +52,7 @@ const panelComponents: Record<HudPanelId, Component> = {
   garrison: TrainingQueuePanel,
   armies: ArmyPanel,
   quests: QuestTray,
+  reports: ReportsPanel,
 };
 
 // Each panel's own events, passed up; a panel only gets the listeners it declares (an undeclared `select` would land on its
@@ -60,6 +62,7 @@ const listeners: Record<HudPanelId, Record<string, unknown>> = {
   garrison: {},
   armies: { onFocusArmy: (armyId: string) => emit('focus-army', armyId) },
   quests: {},
+  reports: {},
 };
 
 const shown = (id: HudPanelId) => panelShown[id].value;

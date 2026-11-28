@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Desktop settlement view: the vertical icon column at the map's bottom left. Top to bottom: the building info switch, then
-// one icon per dockable panel (Construction, Garrison, Armies, Quests) that has something to show right now (Construction is
+// one icon per dockable panel (Construction, Garrison, Armies, Quests, Reports) that has something to show right now (Construction is
 // the exception: its icon is always there, dimmed and disabled while nothing is being built). A panel icon
 // collapses its panel to just the icon and opens it again (pressed = open), and a collapsed icon carries a count badge for
 // what waits in its panel; the panels themselves are HudPanelDock's.
@@ -15,6 +15,7 @@ import { useQuests } from '../../composables/useQuests';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { COLUMN_BUTTON_GAP, HUD_PANEL_IDS, HUD_PANEL_LABEL_KEYS, type HudPanelId } from '../../lib/hud/hudPanelDock';
 import { CROSSED_SWORDS_PATHS } from '../../lib/hud/iconPaths';
+import ReportKindIcon from '../battle/ReportKindIcon.vue';
 import QuestIcon from '../onboarding/QuestIcon.vue';
 import BuildingInfoToggle from './BuildingInfoToggle.vue';
 import HudIconButton from './HudIconButton.vue';
@@ -91,6 +92,7 @@ onUnmounted(() => observer?.disconnect());
       <svg v-else-if="id === 'armies'" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
         <path v-for="d in CROSSED_SWORDS_PATHS" :key="d" :d="d" />
       </svg>
+      <ReportKindIcon v-else-if="id === 'reports'" kind="letter" />
       <QuestIcon v-else />
       <span v-if="badge(id)" class="hud-panel-column__badge" :data-testid="`hud-panel-badge-${id}`" aria-hidden="true">{{ badge(id) }}</span>
       <!-- A collapsed tray cannot show its "new" dot itself; the quest count badge wins over it. -->

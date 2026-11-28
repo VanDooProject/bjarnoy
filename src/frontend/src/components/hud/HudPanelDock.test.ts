@@ -10,6 +10,7 @@ import type { ref } from 'vue';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enQuests from '../../i18n/locales/en/quests.json';
+import enReports from '../../i18n/locales/en/reports.json';
 import HudPanelDock from './HudPanelDock.vue';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { DEFAULT_HUD_PANELS, type HudPanelId } from '../../lib/hud/hudPanelDock';
@@ -17,7 +18,7 @@ import { DEFAULT_HUD_PANELS, type HudPanelId } from '../../lib/hud/hudPanelDock'
 const flags = vi.hoisted(() => ({ draft: undefined as unknown, content: undefined as unknown }));
 vi.mock('../../composables/useHudPanelContent', async () => {
   const { ref } = await import('vue');
-  flags.content = { construction: ref(true), garrison: ref(true), armies: ref(true), quests: ref(true) };
+  flags.content = { construction: ref(true), garrison: ref(true), armies: ref(true), quests: ref(true), reports: ref(true) };
   flags.draft = ref(false);
   return { useHudPanelContent: () => flags.content, useHasActiveDraft: () => flags.draft };
 });
@@ -31,11 +32,12 @@ const stubs = {
   TrainingQueuePanel: stub('garrison'),
   ArmyPanel: stub('armies'),
   QuestTray: stub('quests'),
+  ReportsPanel: stub('reports'),
 };
 
 let wrapper: VueWrapper;
 function mountDock() {
-  wrapper = mount(HudPanelDock, { attachTo: document.body, global: { stubs, plugins: [createTestI18n({ hud: enHud, quests: enQuests })] } });
+  wrapper = mount(HudPanelDock, { attachTo: document.body, global: { stubs, plugins: [createTestI18n({ hud: enHud, quests: enQuests, reports: enReports })] } });
   return wrapper;
 }
 
@@ -84,6 +86,15 @@ describe('HudPanelDock', () => {
     expect(slot(w, 'construction').attributes()).toMatchObject({ 'data-side': 'left', 'data-column': '0', 'data-align': 'top' });
     expect(slot(w, 'quests').attributes()).toMatchObject({ 'data-side': 'left', 'data-column': '0', 'data-align': 'bottom' });
     expect(slot(w, 'armies').attributes()).toMatchObject({ 'data-side': 'right', 'data-align': 'bottom' });
+  });
+
+  it('docks the reports panel above the quests in the left bottom group once it is opened', async () => {
+    const w = mountDock();
+    expect(w.find('[data-hud-panel="reports"]').exists()).toBe(false);
+    store().togglePanel('reports');
+    await w.vm.$nextTick();
+    expect(idsIn(w, 'left-0')).toEqual(['construction', 'quests', 'reports']);
+    expect(slot(w, 'reports').attributes()).toMatchObject({ 'data-side': 'left', 'data-column': '0', 'data-align': 'bottom' });
   });
 
   it('renders one column per stored column and lets a column hold the full height without a cap', () => {
