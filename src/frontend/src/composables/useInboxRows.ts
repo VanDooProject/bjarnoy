@@ -108,7 +108,7 @@ export function useInboxRowView(): (item: InboxItem) => InboxRowView {
       title: outcome === null ? mission : t('reports.row.title', { outcome, mission }),
       summary,
       when: d(date, 'long'),
-      whenShort: d(date, 'short'),
+      whenShort: d(date, 'dayTime'),
       location: inboxLocation(item),
       unread: reports.isUnread(item),
     };
