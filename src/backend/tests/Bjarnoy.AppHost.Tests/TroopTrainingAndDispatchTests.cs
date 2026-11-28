@@ -194,7 +194,8 @@ public class TroopTrainingAndDispatchTests(AppHostFixture fixture)
         {
             try
             {
-                // The renderer is null until the canvas has mounted it, which throws a PlaywrightException: retry.
+                // ClickHexAsync itself waits for the renderer and for the map to take the click; a ring that has not
+                // opened within the expect below is clicked again.
                 await LiveFrontendTestHelpers.ClickHexAsync(page, barracksHex.Q, barracksHex.R);
                 await Assertions.Expect(trainUnitsBubble).ToBeVisibleAsync(new() { Timeout = 2_000 });
                 ringOpened = true;
