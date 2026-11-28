@@ -44,6 +44,22 @@ export function circleIntersectsRect(c: OcclusionCircle, rect: OcclusionRect): b
   return Math.hypot(c.x - nx, c.y - ny) <= c.r;
 }
 
+/**
+ * Whether a settlement badge fades out: the open ring menu reaches its screen rect, the mouse is over it (so the map under it is
+ * readable), or something else already covers that spot (the building HUD markers).
+ */
+export function badgeOccluded(p: {
+  ringCircle: OcclusionCircle | null;
+  mouse: { x: number; y: number } | null;
+  covered: boolean;
+  rect: OcclusionRect;
+}): boolean {
+  if (p.covered) return true;
+  const { rect, mouse } = p;
+  if (mouse && mouse.x >= rect.x && mouse.x <= rect.x + rect.w && mouse.y >= rect.y && mouse.y <= rect.y + rect.h) return true;
+  return p.ringCircle !== null && circleIntersectsRect(p.ringCircle, rect);
+}
+
 /** Next visibility 0..1 of a marker: fades towards 0 while occluded, 1 otherwise; instant under reduced motion. */
 export function markerFadeStep(visible: number, occluded: boolean, dtMs: number, reducedMotion: boolean): number {
   const target = occluded ? 0 : 1;

@@ -412,6 +412,8 @@ Fixed both in `rebuildSettlementLabels`: (1) the anchor now scans every hex the 
 
 **Verified:** yes — a Playwright run through the landing page's founding flow confirmed no badge appears while still on `/`, and a follow-up navigation to `/settlement` (the real village-view route, not the landing page's in-place preview) confirmed the badge appears there with the reduced clearance and is still clear of the trees below it.
 
+**Current placement and hiding (supersedes the placement above):** the world view and the settlement view show the same badge: the settlement's name, then "you · Lv 4" for your own settlement or the owner's name for a rival's ("Jarl-f0da · Lv 4"); a beach camp shows "Beach camp" in place of the level. It sits centred on the settlement's hex in both views. It fades out while the mouse is over it (so the map under it can be read and used), while an open ring menu covers it, and while building info is on (its markers sit on the same hex).
+
 ---
 
 ## 5. Status box (left side)

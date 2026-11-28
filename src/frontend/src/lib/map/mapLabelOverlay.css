@@ -1,4 +1,4 @@
-/* The map's text labels (owner pills, island names, settlement badges): DOM, so the glyphs stay sharp however the canvas
+/* The map's text labels (island names, settlement badges): DOM, so the glyphs stay sharp however the canvas
    is rendered. Placement is one transformed plane per frame (--zoom, translate3d) plus each label's own --wx / --wy;
    sizes of the pills come from REALM_PILL as --pill-* custom properties (mapLabelOverlay.ts). */
 .map-labels {
@@ -31,7 +31,7 @@
   visibility: hidden;
 }
 
-/* Realm pill: dark plate with a realm-coloured border and a mark. The Pixi plate strokes its border centred on the edge,
+/* Settlement badge: dark plate with a realm-coloured border and a mark. The Pixi plate strokes its border centred on the edge,
    so the outer size is the plate plus the border. The border is an inset ring (a real border would snap to whole device
    pixels), so the padding is padX plus half the border. */
 .map-label--pill {
@@ -63,16 +63,9 @@
   margin-left: calc(var(--pill-label-gap) * 1px);
 }
 
-.map-label--owner {
-  transform: var(--anchor) translate(-50%, -50%);
-  color: #e8f0f5;
-  font-weight: 600;
-  font-size: 12.5px;
-}
-
 .map-label--badge {
-  transform-origin: 50% 100%;
-  transform: var(--anchor) translate(-50%, -100%) translateY(calc((var(--pill-border) * 0.5 - 10) * 1px * var(--zs))) scale(var(--zs));
+  transform-origin: 50% 50%;
+  transform: var(--anchor) translate(-50%, -50%) scale(var(--zs));
 }
 
 .map-label__text--badge-name {

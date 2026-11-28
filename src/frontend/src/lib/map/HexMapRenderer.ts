@@ -34,8 +34,8 @@
 // its whole tile, props included.
 import { exploredShare, frameCameraFor } from './frameCamera';
 import {
-  circleIntersectsRect,
   markerFadeStep,
+  badgeOccluded,
   type OcclusionCircle,
 } from './markerOcclusion';
 import { Application, Container, Graphics, GraphicsContext, Rectangle, Sprite, Texture, UPDATE_PRIORITY } from 'pixi.js';
@@ -55,6 +55,7 @@ import { drawsAsSea, type CartShipment, type IslandLabel, type RiverTile, type S
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { buildingName } from '../../i18n/catalogueNames';
+import { i18n } from '../../i18n';
 import { settlementBadgeSuffix } from './settlementBadge';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import { FogField } from './fog/FogField';
@@ -2382,7 +2383,7 @@ export class HexMapRenderer {
   // World mode's camp paws (drawCampPaws): under both fog layers, like the terrain they mark, so the fog covers them
   // the way it covers the ground (markerLayer sits above the out-of-sight fog).
   private campPawLayer = new Graphics();
-  // The map's text labels (owner pills, island names, settlement badges): DOM, created in mount() right after the canvas.
+  // The map's text labels (island names, settlement badges): DOM, created in mount() right after the canvas.
   private labelOverlay: MapLabelOverlay | null = null;
   /**
    * World-space Y of each island's bottom edge, for placing its name label.
@@ -2589,6 +2590,8 @@ export class HexMapRenderer {
   private markerOcclusion: OcclusionCircle | null = null;
   /** Per-badge visibility 0..1 (`markerFadeStep`), keyed by settlement id. Absent = 1. */
   private badgeVisibility = new Map<string, number>();
+  /** The building HUD markers are shown over the settlement (`setSettlementBadgeCovered`): the badges fade out. */
+  private settlementBadgeCovered = false;
   // Issue #16 "ring menu": while a RingMenu is open, its DOM overlay sits on
   // top of the canvas, but this renderer's own pointer tracking is a
   // window-level listener (see onPointerMove below) that keeps resolving a
@@ -5834,15 +5837,7 @@ export class HexMapRenderer {
       // one of its buildings is that building's hex (`labelHexOf`), not the centre.
       const labelHex = worldModel.labelHexOf(settlement);
       if (fogActive && !worldModel.isExplored(labelHex.q, labelHex.r)) continue;
-      const grid = isoGridPosition(labelHex, TILE_W, TILE_H);
-      // The settlement is marked by the realm pill alone (its diamond carries the realm colour), centred on the
-      // settlement hex, so the name stays readable over water and terrain.
-      overlay?.ownerLabel(`owner:${settlement.id}`, {
-        wx: grid.x + TILE_W / 2,
-        wy: grid.y + TILE_H / 2,
-        text: settlement.ownerName,
-        color: realmColor(settlement, playerId),
-      });
+      this.drawSettlementBadge(settlement, labelHex);
     }
 
     // Issue #16 "map island names": "the one where the current player has
@@ -5989,79 +5984,60 @@ export class HexMapRenderer {
   // mode uses for its own labels), not just on cull rebuilds, so it stays
   // glued to the hex while the camera pans.
   private rebuildSettlementLabels() {
-    const { worldModel, playerId } = this.options;
-    const overlay = this.labelOverlay;
-    if (!overlay) return;
-
+    const { worldModel } = this.options;
     for (const settlement of worldModel.listSettlements()) {
       // Don't reveal a rival's name over ground you haven't scouted: the badge sits on the hex the server picked (`labelHexOf`),
       // the centre when it is explored, else the explored building closest to it.
       const labelHex = worldModel.labelHexOf(settlement);
       if (!worldModel.isExplored(labelHex.q, labelHex.r)) continue;
-      const grid = isoGridPosition(labelHex, TILE_W, TILE_H);
-      // Issue #16 follow-up: the badge floated above the longhouse's own
-      // tile, which sits in the *middle* of the settlement's claimed hexes,
-      // not its northmost edge — the reference has it clear above the whole
-      // cluster instead. Same footprint-scanning approach section 6 uses for
-      // world-map island labels (there: lowest tile-bottom vertex; here:
-      // highest tile-top vertex), scanned over `borderRadius`'s centre disc
-      // rather than a flood fill or the settlement's full (Tower-extended)
-      // territory — purely cosmetic vertical clearance for a name badge, so
-      // a settlement with a Tower's satellite disc off to one side clears
-      // slightly less than its true full footprint, not worth the extra
-      // per-frame disc-union scan to fix.
-      // Measured against each tile's own art, halfway up the sprite rather
-      // than its full height (grid.y - TILE_TOPFACE_Y_OFFSET / 2) — the same
-      // offset `rebuildTerrain` places building/tree sprites at (see its
-      // comment above) gave the badge enough clearance to never overlap a
-      // treetop, but read as floating noticeably farther above the
-      // settlement than the reference. Half that offset still clears a
-      // bare topmost tile's own vertex (0 < TILE_TOPFACE_Y_OFFSET / 2) and
-      // most of a neighbouring forest tile's canopy, while sitting closer.
-      let topWorldY = grid.y - TILE_TOPFACE_Y_OFFSET / 2; // this hex's own ceiling
-      for (const c of hexesInRadius(labelHex, worldModel.borderRadius(settlement))) {
-        const tileGrid = isoGridPosition(c, TILE_W, TILE_H);
-        //topWorldY = Math.min(topWorldY, tileGrid.y - TILE_TOPFACE_Y_OFFSET / 4);
-        topWorldY = Math.min(topWorldY, tileGrid.y);
-      }
-      const top = this.toScreen({ x: grid.x + TILE_W / 2, y: topWorldY });
-      const mine = settlement.ownerId === playerId;
-      const color = realmColor(settlement, playerId);
-
-      // The badge stays a constant on-screen size at and below the settlement's default zoom, like the HUD chrome.
-      // Past that zoom level it grows again (CSS scales it by the same `zoomScale`, see mapLabelOverlay.css) — a
-      // fixed-size badge reads as undersized once you've zoomed in close to the (now much larger) hex art around it.
-      // Issue #16 "settlement badge": "above longhouse also showing its level" — "Bjornstad  you · Lv 4", the
-      // suffix in a lighter colour and weight than the bold settlement name; one element holding both spans.
-      const zoomScale = Math.max(1, this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM);
-      const badge = overlay.badgeLabel(`badge:${settlement.id}`, {
-        wx: grid.x + TILE_W / 2,
-        wy: topWorldY,
-        name: settlement.name,
-        suffix: settlementBadgeSuffix(settlement, mine, worldModel.isBeachCamp(settlement.id), buildingName('beachcamp')),
-        color,
-      });
-
-      // Beneath an open ring menu the badge fades out instead of showing through the bubbles - under the HUD motion
-      // setting, like the building markers' fade in BuildingHudLayer.vue.
-      const occluded =
-        this.markerOcclusion !== null && circleIntersectsRect(this.markerOcclusion, badgeScreenRect(top, badge, zoomScale));
-      const dtMs = this.app ? clampAnimationDeltaMs(this.app.ticker.deltaMS) : 0;
-      const vis = markerFadeStep(
-        this.badgeVisibility.get(settlement.id) ?? 1,
-        occluded,
-        dtMs,
-        prefersReducedMotion(),
-      );
-      if (vis < 1) this.badgeVisibility.set(settlement.id, vis);
-      else this.badgeVisibility.delete(settlement.id);
-      if (vis <= 0) {
-        badge.setHidden(true);
-        continue;
-      }
-      badge.setOpacity(vis);
-      badge.setHidden(false);
+      this.drawSettlementBadge(settlement, labelHex);
     }
+  }
+
+  /**
+   * The settlement's name badge, the same in the world and the settlement view: the settlement's name, then "you · Lv 4" (a rival: its
+   * owner's name), centred on the settlement's label hex. It stays a constant on-screen size at and below the settlement's default zoom,
+   * like the HUD chrome, and grows with the zoom past it (CSS scales it by the same `zoomScale`, see mapLabelOverlay.css).
+   */
+  private drawSettlementBadge(settlement: Settlement, labelHex: AxialCoord) {
+    const { worldModel, playerId } = this.options;
+    const overlay = this.labelOverlay;
+    if (!overlay) return;
+    const grid = isoGridPosition(labelHex, TILE_W, TILE_H);
+    const center = { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
+    const zoomScale = Math.max(1, this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM);
+    const t = (key: string, named?: Record<string, unknown>) => i18n.global.t(key, named ?? {}) as string;
+    const badge = overlay.badgeLabel(`badge:${settlement.id}`, {
+      wx: center.x,
+      wy: center.y,
+      name: settlement.name,
+      suffix: settlementBadgeSuffix(settlement, settlement.ownerId === playerId, worldModel.isBeachCamp(settlement.id), {
+        you: t('hud.mapLabel.you'),
+        beachCamp: buildingName('beachcamp'),
+        level: (level) => t('hud.realmPanel.levelShort', { level }),
+        join: (who, kind) => t('hud.mapLabel.suffix', { who, kind }),
+      }),
+      color: realmColor(settlement, playerId),
+    });
+
+    // The badge fades out under an open ring menu, under the mouse (so the hex below can be read) and while the building HUD
+    // markers cover the settlement, under the HUD motion setting, like the building markers' fade in BuildingHudLayer.vue.
+    const occluded = badgeOccluded({
+      ringCircle: this.markerOcclusion,
+      mouse: this.hoverPointer,
+      covered: this.settlementBadgeCovered,
+      rect: badgeScreenRect(this.toScreen(center), badge, zoomScale),
+    });
+    const dtMs = this.app ? clampAnimationDeltaMs(this.app.ticker.deltaMS) : 0;
+    const vis = markerFadeStep(this.badgeVisibility.get(settlement.id) ?? 1, occluded, dtMs, prefersReducedMotion());
+    if (vis < 1) this.badgeVisibility.set(settlement.id, vis);
+    else this.badgeVisibility.delete(settlement.id);
+    if (vis <= 0) {
+      badge.setHidden(true);
+      return;
+    }
+    badge.setOpacity(vis);
+    badge.setHidden(false);
   }
 
   /**
@@ -6084,6 +6060,11 @@ export class HexMapRenderer {
    */
   setMarkerOcclusion(circle: OcclusionCircle | null) {
     this.markerOcclusion = circle;
+  }
+
+  /** While the building HUD markers are shown (they sit right on the settlement hex) the settlement badges fade out; false brings them back. */
+  setSettlementBadgeCovered(covered: boolean) {
+    this.settlementBadgeCovered = covered;
   }
 
   private hideUnusedIcons(sink: IconSink = this.movingIcons) {

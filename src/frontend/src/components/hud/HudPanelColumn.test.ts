@@ -39,6 +39,8 @@ const labels = (w: ReturnType<typeof mountColumn>) => w.findAll('button').map((b
 describe('HudPanelColumn', () => {
   beforeEach(() => {
     localStorage.clear();
+    // Building info starts off for a player; these tests start from it switched on (levels and details).
+    localStorage.setItem('bjarnoy.hudBuildingInfo', 'full');
     setActivePinia(createPinia());
     for (const flag of Object.values(content())) flag.value = true;
     for (const c of Object.values(counts())) c.value = 0;

@@ -50,6 +50,10 @@
   "realmPanel": {
     "levelShort": "Lv {level}"
   },
+  "mapLabel": {
+    "you": "you",
+    "suffix": "{who} · {kind}"
+  },
   "hoverTooltip": {
     "level": "LEVEL {level}",
     "clickToOpen": "CLICK TO OPEN",

@@ -16,6 +16,8 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
     const { hud } = settlement;
+    // Building info starts off; these check the markers it shows.
+    await hud.switchTo('full');
 
     const farm = (await settlement.findHex({ terrain: 'grass' })).hex;
     await hud.standBuildingAt(farm, 'farm', 1);
@@ -39,6 +41,8 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
     const { hud } = settlement;
+    // Building info starts off; these check the markers it shows.
+    await hud.switchTo('full');
     const { hex } = await settlement.centreHex();
     // A farm shows a production row, which only the near box spells out ("/h").
     const farm = (await settlement.findHex({ terrain: 'grass' })).hex;
@@ -75,14 +79,20 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     await expect(hud.box(farm)).toContainText('/h');
   });
 
-  test('the toggle button and the H key step full, levels only and off, and the choice is kept across a reload', async ({ page }) => {
+  test('building info starts off, the toggle button and the H key step full, levels only and off, and the choice is kept across a reload', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
     const { hud } = settlement;
     const total = (await hud.ownedBuildings()).length;
-    await expect(hud.markers).toHaveCount(total);
+    // Off until the player switches it on.
+    await expect(hud.markers).toHaveCount(0);
+    await expect(hud.toggle).toHaveAttribute('data-mode', 'off');
+    await expect(hud.toggle).toHaveAttribute('aria-pressed', 'false');
+
+    await hud.toggle.click();
     await expect(hud.toggle).toHaveAttribute('data-mode', 'full');
     await expect(hud.toggle).toHaveAccessibleName('Building info: levels and details (H)');
+    await expect(hud.markers).toHaveCount(total);
 
     // Levels only: every dial stays.
     await hud.toggle.click();
@@ -90,7 +100,7 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     await expect(hud.toggle).toHaveAttribute('aria-pressed', 'true');
     await expect(hud.markers).toHaveCount(total);
 
-    await hud.toggle.click();
+    await page.keyboard.press('h');
     await expect(hud.markers).toHaveCount(0);
     await expect(hud.toggle).toHaveAttribute('aria-pressed', 'false');
 
@@ -115,6 +125,8 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
     const { hud } = settlement;
+    // Building info starts off; these check the markers it shows.
+    await hud.switchTo('full');
     const { hex } = await settlement.centreHex();
     await settlement.zoomTo(1.3);
     await expect(hud.marker(hex)).toHaveAttribute('data-tier', 'near');
@@ -152,6 +164,8 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
     const { hud } = settlement;
+    // Building info starts off; these check the markers it shows.
+    await hud.switchTo('full');
     const farm = (await settlement.findHex({ terrain: 'grass' })).hex;
     const key = `${farm.q},${farm.r}`;
     await hud.standBuildingAt(farm, 'farm', 1);
@@ -179,6 +193,8 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
     const { hud } = settlement;
+    // Building info starts off; these check the markers it shows.
+    await hud.switchTo('full');
     const site = (await settlement.findHex({ terrain: 'grass' })).hex;
     await settlement.zoomTo(0.85);
     await hud.startUpgrade(site, 'farm', 1);
