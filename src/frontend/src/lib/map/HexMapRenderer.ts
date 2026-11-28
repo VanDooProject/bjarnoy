@@ -63,6 +63,7 @@ import { FOG_DESATURATE_DEFAULTS, FogDesaturateFilter, fogFilterArea } from './f
 import type { FogCoverageLookup } from './fog/fogCoverage';
 import { UNKNOWN_RAMP_MARGIN_HEXES } from './fog/fogRamp';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
+import { SeaBackdrop } from './seaBackdrop';
 import { WaterLayer } from './water/WaterLayer';
 import { WaterDryLayer, entriesWorldBounds, maskEntries, type DryEntry } from './water/waterDryMask';
 import { BogLakeLayer } from './water/BogLakeLayer';
@@ -1868,9 +1869,9 @@ export type WorldLayerName =
  * is supposed to lap against, both just look like a bad shader.
  *
  * **World mode**: first child. There is no water in the world-map canvas today
- * at all — the sea is a CSS gradient on the container div behind it, and open
- * sea hexes are skipped outright — so the water mesh has an empty canvas to
- * fill, and the opaque island polygons in `terrainFlat` cover it wherever there
+ * at all — the sea is the SeaBackdrop quad at the bottom of `underFogLayer`, and open
+ * sea hexes are skipped outright — so the water mesh has a plain backdrop to
+ * cover, and the opaque island polygons in `terrainFlat` cover it wherever there
  * is land.
  *
  * **Settlement mode**: between `terrainBase` and `borderLayer` — above all the
@@ -2321,6 +2322,8 @@ export class HexMapRenderer {
   // The world and the camp paws, the content the dark tier's filter greys. Unfiltered (no filter pass at all) while the
   // dark tier is off, hidden or a debug view shows the field's channels.
   private underFogLayer = new Container();
+  // World mode's open-sea backdrop (seaBackdrop.ts): a screen-space quad at the bottom of underFogLayer, so the dark tier greys it too.
+  private seaBackdrop = new SeaBackdrop();
   private darkTierFiltered = false;
   // The fetched (or, before the first fetch resolves, not-yet-fetched) mask
   // texture and the world-to-mask-UV placement it was decoded with — see
@@ -2926,13 +2929,16 @@ export class HexMapRenderer {
     // §4's layer stack: the mist quad is the only genuinely screen-space
     // `app.stage` child — everything else (terrain, borders, buildings)
     // stays nested inside `world`, camera-transformed as one. The dark tier
-    // is the desaturation filter on underFogLayer (world + camp paws), which
+    // is the desaturation filter on underFogLayer (the sea backdrop quad, world and
+    // camp paws, bottom to top; the backdrop is screen-space, not camera-transformed), which
     // sits under markerLayer so troop/settlement labels read as veiled by it
     // rather than floating in front; whiteMistLayer (never-scouted) sits
     // over everything, since nothing should show through ground that's never
     // been seen at all.
-    this.underFogLayer.addChild(this.world, this.campPawLayer);
+    this.underFogLayer.addChild(this.seaBackdrop.mesh, this.world, this.campPawLayer);
     this.underFogLayer.filterArea = fogFilterArea(this.viewport.width, this.viewport.height);
+    this.seaBackdrop.resize(this.viewport.width, this.viewport.height);
+    this.syncSeaBackdrop();
     app.stage.addChild(this.underFogLayer, this.markerLayer, this.whiteMistLayer.mesh);
     this.armyStatic.addChild(this.armyStaticGraphics);
     this.markerLayer.addChildAt(this.armyStatic, 0);
@@ -2946,12 +2952,18 @@ export class HexMapRenderer {
     this.rebuildAll();
   }
 
+  /** The sea backdrop is the world view's open water; the settlement view draws its own sea tiles. */
+  private syncSeaBackdrop(): void {
+    this.seaBackdrop.mesh.visible = this.options.mode === 'world';
+  }
+
   resize(width: number, height: number) {
     if (!this.app) return;
     this.viewport = { width, height };
     this.app.renderer.resize(width, height);
     // The filter's area is the screen rectangle (see FogDesaturateFilter): pinned so Pixi never measures the world.
     this.underFogLayer.filterArea = fogFilterArea(width, height);
+    this.seaBackdrop.resize(width, height);
     // A locked preview must stay fit to the island on every resize/rotation —
     // unlike the normal camera, which just keeps whatever position/zoom it
     // had (re-projected onto the new viewport), a locked one has no other
@@ -7087,6 +7099,7 @@ export class HexMapRenderer {
     this.drawRangeOverlay();
     this.idleDrift = mode === 'world';
     this.waterLayer.setMode(mode);
+    this.syncSeaBackdrop();
     // World mode draws no sea tiles, so nothing is dry there.
     this.waterDryEntries = [];
     this.bogLakeEntries = [];
@@ -7148,6 +7161,7 @@ export class HexMapRenderer {
     this.fogOverviewTexture?.destroy(true);
     this.fogOverviewTexture = null;
     this.underFogLayer.filters = [];
+    this.seaBackdrop.destroy();
     this.fogDesaturateFilter.destroy();
     this.whiteMistLayer.destroy();
     this.fogField.destroy();

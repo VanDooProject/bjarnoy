@@ -116,7 +116,7 @@ describe('worldLayerOrder', () => {
 
   it('puts the water mesh under the island polygons in world mode', () => {
     // §3.2: there is no water in the world-map canvas at all today (the sea is
-    // a CSS gradient behind it), so the mesh fills an empty canvas and the
+    // the SeaBackdrop quad behind it), so the mesh covers a plain backdrop and the
     // opaque terrainFlat hexes cover it wherever there is land.
     expect(worldLayerOrder('world')[0]).toBe('water');
     expect(indexIn('world', 'water')).toBeLessThan(indexIn('world', 'terrainFlat'));

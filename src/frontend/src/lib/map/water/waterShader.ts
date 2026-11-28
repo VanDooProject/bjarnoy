@@ -547,11 +547,12 @@ void main() {
   // World mode only; in settlement mode the painted watertile_*/
   // coastalwatertile_* art *is* the sea body and this term is always off.
   //
-  // The two stops are WorldMapCanvas.vue's own CSS gradient endpoints, so
-  // flipping this flag off is a small change rather than a jarring one — and
-  // their linear midpoint (#1a677f) lands within a couple of levels of that
-  // gradient's own middle stop (#14657f), which is why a two-stop ramp
-  // reproduces a three-stop gradient here.
+  // The two stops are the first two stops of WORLD_SEA_GRADIENT (the
+  // SeaBackdrop's gradient, seaBackdrop.ts), so flipping this flag off is a
+  // small change rather than a jarring one — and their linear midpoint
+  // (#1a677f) lands within a couple of levels of that gradient's own middle
+  // stop (#14657f), which is why a two-stop ramp reproduces a three-stop
+  // gradient here.
   if (water && uSeaBody > 0.5) {
     float depth = smoothstep(0.0, 1.0, m.g);
     col = mix(uShallowColor, uDeepColor, depth);

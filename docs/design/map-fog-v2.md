@@ -721,7 +721,7 @@ contour stayed a clean ellipse however ragged the inside was), and the only per-
 near-black overlay but a Pixi filter on `underFogLayer`, a container holding `world` and the camp paws (everything under
 `markerLayer`). Where the field's `R` is set it pulls bright tones (sand, foam, snow) toward mid grey, desaturates, dims and
 gives a slight cool tint. Defaults: desaturate 0.88, bright pull 0.6, darken 0.40 (`fogDebugTuning`, live sliders in the fog
-debug panel). Where the canvas is transparent (a CSS backdrop shows through) the old dark tint (`0x0b1116` at alpha 0.6 times
+debug panel). The world view's sea is the in-canvas `SeaBackdrop` quad at the bottom of `underFogLayer` (`seaBackdrop.ts`), so the tier greys it like the rest. Where the canvas is transparent (the settlement view's CSS mist backdrop shows through) the old dark tint (`0x0b1116` at alpha 0.6 times
 `R`) is added so the tier stays visible there. The filter exists only while the dark tier is shown (otherwise no pass at
 all) and not during a debug view.
 

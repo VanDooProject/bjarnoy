@@ -109,7 +109,7 @@ Slightly *cheaper*, not more expensive: the fixed-cutoff path (`terrainCullJitte
 
 ### Root cause
 
-World mode never draws a terrain sprite for open sea at any distance (`rebuildTerrainFlat` skips `terrain === 'sea'` unconditionally — open water is meant to be a plain painted CSS backdrop, per that method's own comment). But the fog layer had no equivalent awareness: `rebuildBordersAndFog`'s per-hex loop drew a `Graphics.poly().fill()` for **every** unexplored hex in the viewport, land or sea, all the way out — plus, within `FOG_BLOB_OVERLAP_HEXES` of the ring, an additional blurred blob sprite per hex.
+World mode never draws a terrain sprite for open sea at any distance (`rebuildTerrainFlat` skips `terrain === 'sea'` unconditionally — open water is meant to be a plain backdrop, per that method's own comment (today the in-canvas `SeaBackdrop` quad, `seaBackdrop.ts`; it was a CSS gradient when this was written)). But the fog layer had no equivalent awareness: `rebuildBordersAndFog`'s per-hex loop drew a `Graphics.poly().fill()` for **every** unexplored hex in the viewport, land or sea, all the way out — plus, within `FOG_BLOB_OVERLAP_HEXES` of the ring, an additional blurred blob sprite per hex.
 
 At `WORLD_DEFAULT_ZOOM` (0.22), a full viewport-plus-margin can be thousands of hexes, and the world map is mostly open ocean at that zoom — so the overwhelming majority of those per-hex fills were tessellating and filling a hexagon whose only job was "paint flat, fully-opaque `FOG_UNEXPLORED`, with nothing else drawn under or over it, ever." That's exactly what a canvas clear colour already does, for free, with zero per-hex work.
 

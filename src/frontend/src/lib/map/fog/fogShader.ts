@@ -514,7 +514,7 @@ void main() {
  * The dark tier's look, as a Pixi filter over everything under the markers (FogDesaturateFilter): where the field's R
  * (dark tier alpha) is set the picture is greyed instead of covered. Bright tones (sand, foam, snow) are first pulled
  * toward mid grey, so greying does not turn them into light bands, then desaturated by uDesat, dimmed by uDarken and
- * given a slight cool tint. Where the canvas is transparent (a CSS backdrop shows through) the old dark tint is added, so
+ * given a slight cool tint. Where the canvas is transparent (the settlement view's CSS mist backdrop shows through) the old dark tint is added, so
  * the tier stays visible there too.
  *
  * Pixi hands a filter a premultiplied input and wants a premultiplied output. The screen position comes from the
