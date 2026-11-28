@@ -1224,12 +1224,23 @@ export const useWorldStore = defineStore('world', {
      * a failed read keeps whatever was last shown.
      */
     async loadRenownLive() {
-      if (DEMO_MODE || !this.worldId) return;
       try {
-        this.hud.renown = await api.getRenown(this.worldId);
+        await this.refreshRenown();
       } catch {
         // Transient hiccup: the modal keeps its last figures.
       }
+    },
+    /**
+     * The throwing half of `loadRenownLive`, for `startHudSync`'s poll (via `trackPoll`, so a failing read shows in
+     * the connection banner). Drops an answer for a world the player has since left. An anonymous visitor (landing,
+     * onboarding) never sends it: the endpoint needs a login and the 401 would surface as a console error.
+     */
+    async refreshRenown() {
+      const { worldId } = this;
+      if (DEMO_MODE || !useAuthStore().isAuthenticated || !worldId) return;
+      const renown = await api.getRenown(worldId);
+      if (this.worldId !== worldId) return;
+      this.hud.renown = renown;
     },
     /**
      * Pulls the settlement's current resources/level/buildings/garrison/
@@ -2507,6 +2518,8 @@ export const useWorldStore = defineStore('world', {
           void this.trackPoll('settlement', () => this.refreshLiveSettlement());
           void this.trackPoll('worldSettlements', () => this.refreshWorldSettlements());
           void this.trackPoll('trade', () => this.refreshTradeAsync());
+          // The map's founding bubble locks on renown (foundingLock); without this poll only the Town Square modal loaded it.
+          void this.trackPoll('renown', () => this.refreshRenown());
           void this.fetchFogMask();
         };
         pollLive();

@@ -45,6 +45,7 @@ const getWorldCamps = vi.fn();
 const getForeignArmies = vi.fn();
 const queueBuild = vi.fn();
 const razeBuilding = vi.fn();
+const getRenown = vi.fn();
 
 // The test environment is `node` (see vitest.config.ts), not `jsdom` — world.ts
 // reads `localStorage.getItem('bjarnoy.worldId')` at module-level state-init
@@ -111,6 +112,8 @@ async function loadStoreModule(demoMode: boolean) {
       getForeignArmies: (...args: unknown[]) => getForeignArmies(...args),
       queueBuild: (...args: unknown[]) => queueBuild(...args),
       razeBuilding: (...args: unknown[]) => razeBuilding(...args),
+      // Unconfigured, the renown read has nothing yet.
+      getRenown: async (...args: unknown[]) => (await getRenown(...args)) ?? null,
     },
     ApiError: MockApiError,
     // Real implementations check `err instanceof ApiError && err.problem?.error
@@ -2736,6 +2739,52 @@ describe('useWorldStore poll failure reporting', () => {
     await vi.waitFor(() => expect(connection.issues.settlement?.error).toBe(failure));
     store.stopHudSync();
     warn.mockRestore();
+  });
+
+  // Regression: hud.renown was only loaded by the Town Square modal, so the map's founding bubble stayed on
+  // "Checking your renown…" for anyone who had not opened it.
+  it('startHudSync loads the renown so the founding lock does not stay unknown', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { store } = await loadWithConnection();
+    const renown = { total: 400, requiredForNextSettlement: 300, canFoundAnother: true };
+    const { useAuthStore } = await import('./auth');
+    useAuthStore().user = { id: 'u1', userName: 'astrid', role: 'player', status: 'active', displayName: null, isPremium: false, preferredLocale: null };
+    getRenown.mockReset().mockResolvedValue(renown);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    store.startHudSync();
+    await vi.waitFor(() => expect(store.hud.renown).toEqual(renown));
+    expect(getRenown).toHaveBeenCalledWith('world-1');
+    store.stopHudSync();
+    warn.mockRestore();
+  });
+
+  it('drops a renown answer that lands after the player switched worlds', async () => {
+    const { store } = await loadWithConnection();
+    let answer: (value: unknown) => void = () => {};
+    const { useAuthStore } = await import('./auth');
+    useAuthStore().user = { id: 'u1', userName: 'astrid', role: 'player', status: 'active', displayName: null, isPremium: false, preferredLocale: null };
+    getRenown.mockReset().mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    store.worldId = 'world-1';
+
+    const pending = store.refreshRenown();
+    store.worldId = 'world-2';
+    answer({ total: 400, requiredForNextSettlement: 300, canFoundAnother: true });
+    await pending;
+
+    expect(store.hud.renown).toBeNull();
+  });
+
+  // Regression: the landing/onboarding flow runs the same poll for a visitor without a login, and the renown endpoint 401s.
+  it('does not request the renown for an anonymous visitor', async () => {
+    const { store } = await loadWithConnection();
+    getRenown.mockReset();
+    store.worldId = 'world-1';
+
+    await store.refreshRenown();
+
+    expect(getRenown).not.toHaveBeenCalled();
   });
 
   it('reports a failed fog mask fetch under "fogMask" and clears it on the next success', async () => {
