@@ -118,8 +118,19 @@ const motion = useBuildingHudMotion();
  * glyphs live on them. One switch for both, so the show / hide animation below is the same one.
  */
 const markersWanted = computed(() => prefs.buildingInfo || quick.applies);
-/** Levels only: the dials stand alone, a box shows only on the hovered (or tapped) marker. */
-const levelsOnly = computed(() => prefs.buildingHudMode === 'levels');
+/** The mode the markers were last shown in; it stays while they hide, so switching off from levels only grows no boxes. */
+const shownMode = ref<'full' | 'levels'>(prefs.buildingHudMode === 'levels' ? 'levels' : 'full');
+watch(
+  () => prefs.buildingHudMode,
+  (mode) => {
+    if (mode !== 'off') shownMode.value = mode;
+  },
+);
+/**
+ * Levels only: the dials stand alone, a box shows only on the hovered (or tapped) marker. Also while the markers hide after
+ * levels only was switched off (no longer wanted, still on screen), so the hide shows what was there.
+ */
+const levelsOnly = computed(() => shownMode.value === 'levels' && (prefs.buildingHudMode === 'levels' || !markersWanted.value));
 
 /** The markers are in the DOM: from the moment they are switched on until their hide animation has ended. */
 const rendered = ref(props.buildingMarkers && markersWanted.value);

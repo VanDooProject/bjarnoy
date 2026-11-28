@@ -1264,6 +1264,33 @@ describe('BuildingHudLayer', () => {
       expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
     });
 
+    it('hides from levels only without growing boxes: the markers leave as they were shown', async () => {
+      seedBuildings();
+      const prefs = useHudPrefsStore();
+      prefs.setBuildingHudMode('levels');
+      fake = installFakeAnimate();
+      wrapper = mountLayer(fakeRenderer());
+      runFrame();
+      await flushPromises();
+      expect(wrapper.findAll('.hud-marker__box')).toHaveLength(0);
+      prefs.setBuildingHudMode('off');
+      await flushPromises();
+      runFrame();
+      await flushPromises();
+      // Still on screen for the hide animation, still without boxes.
+      expect(wrapper.findAll('.hud-marker')).toHaveLength(4);
+      expect(wrapper.findAll('.hud-marker__box')).toHaveLength(0);
+      fake.finishAll();
+      await flushPromises();
+      expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
+      // Shown again in full: the boxes are back.
+      prefs.setBuildingHudMode('full');
+      await flushPromises();
+      runFrame();
+      await flushPromises();
+      expect(wrapper.findAll('.hud-marker__box').length).toBeGreaterThan(0);
+    });
+
     it('turns around when switched back on mid-animation: the same markers, the running animations reversed', async () => {
       seedBuildings();
       fake = installFakeAnimate();
