@@ -7189,6 +7189,8 @@ export class HexMapRenderer {
     }
 
     this.options.mode = mode;
+    // The reach wash is static, and its sea hexes sit lower in the settlement view only (see hexOutline).
+    this.drawRangeOverlay();
     this.idleDrift = mode === 'world';
     this.waterLayer.setMode(mode);
     // World mode draws no sea tiles, so nothing is dry there.

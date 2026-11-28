@@ -65,6 +65,23 @@ describe('loweredHexOutline', () => {
     const pieces = o.edges.flatMap((e) => e.pieces ?? []);
     expect(pieces.length).toBeGreaterThan(0);
     for (const p of pieces.flat()) expect(strictlyInside(p, landTop)).toBe(false);
+    // Only the edges the land reaches are cut; the back edges stay plain strokes (no overlapping caps at their corners).
+    expect([0, 1, 2].map((e) => o.edges[e].pieces)).toEqual([null, null, null]);
+  });
+
+  it('hides the outline behind land across each front edge', () => {
+    for (const e of [3, 4, 5]) {
+      const front = neighbourAcrossEdge(C, e);
+      const o = loweredHexOutline(C, W, H, loweredExcept([front]), STROKE);
+      expect(areaOf(o.fill)).toBeLessThan(polygonArea(topOf(C)) - 1);
+      expect(o.edges[e].pieces).not.toBeNull();
+    }
+  });
+
+  it('builds no stroke pieces for a fill-only overlay', () => {
+    const o = loweredHexOutline(C, W, H, loweredExcept([neighbourAcrossEdge(C, 4)]), 0);
+    expect(o.edges.every((e) => e.pieces === null)).toBe(true);
+    expect(o.fill.length).toBeGreaterThan(1);
   });
 
   it('is not hidden by land behind a sea hex: that land is drawn first', () => {
