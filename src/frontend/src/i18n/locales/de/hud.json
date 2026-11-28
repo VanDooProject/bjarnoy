@@ -158,6 +158,9 @@
       "upgrade": "Ausbauen",
       "notEnough": "Benötigt {resources}",
       "raze": "Abreißen",
+      "cancelBuild": "Bau abbrechen",
+      "cancelUpgrade": "Ausbau abbrechen",
+      "cancelRaze": "Abriss abbrechen",
       "cantRazeLonghouse": "Das Langhaus kann nicht abgerissen werden",
       "trainUnits": "Einheiten ausbilden",
       "feasts": "Feste",
@@ -208,7 +211,8 @@
       "couldNotSwitchRealm": "Der Wechsel in dieses Reich ist fehlgeschlagen.",
       "couldNotQueueBuild": "Der Bau konnte nicht eingereiht werden.",
       "couldNotQueueUpgrade": "Der Ausbau konnte nicht eingereiht werden.",
-      "couldNotQueueRaze": "Der Abriss konnte nicht eingereiht werden."
+      "couldNotQueueRaze": "Der Abriss konnte nicht eingereiht werden.",
+      "couldNotCancelBuild": "Der Auftrag ließ sich nicht abbrechen."
     },
     "towerCampWarning": "Wilde Tiere brennen diesen Turm nieder, wenn keine Armee ihn bewacht.",
     "razeTime": "Abrisszeit",
