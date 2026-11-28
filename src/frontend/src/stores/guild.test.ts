@@ -1,5 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { describe, expect, it, vi } from 'vitest';
+import { i18n } from '../i18n';
 import type { GuildResponse, GuildTreatyResponse } from '../api/types';
 
 const api = {
@@ -23,9 +24,11 @@ vi.mock('../api/client', () => ({
   api,
   ApiError: class ApiError extends Error {
     status: number;
-    constructor(status: number, message?: string) {
-      super(message ?? `status ${status}`);
+    problem?: { rejection?: string };
+    constructor(status: number, problem?: { detail?: string; rejection?: string }) {
+      super(problem?.detail ?? `status ${status}`);
       this.status = status;
+      this.problem = problem;
     }
   },
 }));
@@ -78,7 +81,7 @@ describe('useGuildStore', () => {
 
     await store.loadGuilds('world-1');
 
-    expect(store.guildsError).toBe('Could not load guilds.');
+    expect(store.guildsError).toBe(i18n.global.t('guild.errors.loadGuilds'));
     expect(store.guilds).toEqual([]);
   });
 
@@ -163,15 +166,27 @@ describe('useGuildStore', () => {
     expect(store.treaties[0]?.status).toBe('active');
   });
 
-  it('surfaces the API error message when founding a guild fails', async () => {
+  it('falls back to the translated action text when founding a guild fails without a rejection code', async () => {
     api.createGuild.mockReset().mockRejectedValue(new Error('name already taken'));
     const store = await freshStore();
 
     const result = await store.createGuild('world-1', { name: 'Bjornstad Hird', tag: 'BJH' });
 
     expect(result).toBeNull();
-    expect(store.actionError).toBe('Could not found the guild.');
+    expect(store.actionError).toBe(i18n.global.t('guild.errors.found'));
     expect(store.actionPending).toBe(false);
+  });
+
+  it('shows the translated rejection text, not the raw backend detail, when a join is refused', async () => {
+    const { ApiError } = await import('../api/client');
+    api.joinGuild.mockReset().mockRejectedValue(new ApiError(409, { detail: 'The guild is at its member cap.', rejection: 'GuildFull' }));
+    const store = await freshStore();
+
+    const ok = await store.join('guild-1');
+
+    expect(ok).toBe(false);
+    expect(store.actionError).toBe(i18n.global.t('apiErrors.rejections.GuildFull'));
+    expect(store.actionError).not.toBe('The guild is at its member cap.');
   });
 
   it('counts guildmates and members of guilds at peace as friends, not the player, proposed treaties or strangers', async () => {

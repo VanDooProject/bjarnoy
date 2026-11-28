@@ -14,8 +14,7 @@ namespace Bjarnoy.Infrastructure.Tests;
 /// ("Dispatch failed.") and the player never learns why the order was refused.
 /// </summary>
 /// <remarks>
-/// <c>GuildRejection</c> is left out: the guild screens show the error message directly and never go through
-/// <c>apiErrorMessage</c>. The single string codes (<c>WorldPaused</c>, <c>UsernameTaken</c>, <c>RouteRateLimited</c>) and
+/// The single string codes (<c>WorldPaused</c>, <c>UsernameTaken</c>, <c>RouteRateLimited</c>) and
 /// <c>RecallOutcome</c> are not enum-wide either and are not covered here.
 /// </remarks>
 public class RejectionTranslationTests
@@ -34,6 +33,7 @@ public class RejectionTranslationTests
         typeof(QuestRejection),
         typeof(FoundingRejection),
         typeof(PlotSuggestionRejection),
+        typeof(GuildRejection),
     ];
 
     [Theory]
