@@ -341,6 +341,8 @@ export interface FogDebugTuning {
   brightPull: number;
   /** FogDesaturateFilter: how much the dark tier dims the picture, 0..0.8. */
   darken: number;
+  /** FogDesaturateFilter: how fast the greying reaches full strength across the dark tier's ramp, 1 (linear)..4. */
+  desaturateRamp: number;
 }
 export const fogDebugTuning: FogDebugTuning = {
   driftSpeed: 1,
