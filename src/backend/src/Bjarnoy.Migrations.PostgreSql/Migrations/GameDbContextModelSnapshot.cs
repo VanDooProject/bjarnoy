@@ -445,6 +445,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("R")
                         .HasColumnType("integer");
 
+                    b.Property<DateTimeOffset?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
@@ -579,6 +582,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<DateTimeOffset?>("AttackerReadAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("AttackerSettlementId")
                         .HasColumnType("uuid");
 
@@ -589,6 +595,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("DefenderReadAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("DefenderSettlementId")
                         .HasColumnType("uuid");
@@ -814,6 +823,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<DateTimeOffset?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("Seed")
                         .HasColumnType("integer");
 
@@ -968,6 +980,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<double>("SideAPower")
                         .HasColumnType("double precision");
 
+                    b.Property<DateTimeOffset?>("SideAReadAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("SideASettlementId")
                         .HasColumnType("uuid");
 
@@ -987,6 +1002,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<double>("SideBPower")
                         .HasColumnType("double precision");
+
+                    b.Property<DateTimeOffset?>("SideBReadAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("SideBSettlementId")
                         .HasColumnType("uuid");
@@ -1911,6 +1929,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<DateTimeOffset?>("AcceptorReadAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("AcceptorSettlementId")
                         .HasColumnType("uuid");
 
@@ -1933,6 +1954,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("PosterReadAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("PosterSettlementId")
                         .HasColumnType("uuid");

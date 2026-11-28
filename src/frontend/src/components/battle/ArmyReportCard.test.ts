@@ -19,6 +19,7 @@ const base: ArmyReportResponse = {
   hex: { q: 4, r: -2 },
   mission: 'move',
   units: [{ type: 'axeman', count: 12 }],
+  read: false,
 };
 
 const router = createRouter({

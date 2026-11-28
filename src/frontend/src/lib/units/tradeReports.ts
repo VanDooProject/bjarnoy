@@ -1,7 +1,6 @@
 // Issue #46 phase 3 (frontend): pure helpers behind the trade-report side of
 // the shared inbox (ReportsView.vue, stores/reports.ts) — kept dependency-
 // free and unit-testable, mirroring lib/units/battleReports.ts's own split.
-import type { TradeReportResponse } from '../../api/types';
 import { i18n } from '../../i18n';
 
 /**
@@ -28,14 +27,4 @@ export function tradeSummaryLine(
     gotAmount: Math.round(gotAmount),
     got,
   });
-}
-
-/** A trade report counts as unread if it completed after `lastSeenIso` (or nothing has been seen yet). */
-export function isTradeReportUnread(report: { completedAt: string }, lastSeenIso: string | null): boolean {
-  if (!lastSeenIso) return true;
-  return new Date(report.completedAt).getTime() > new Date(lastSeenIso).getTime();
-}
-
-export function tradeUnreadCount(reports: TradeReportResponse[], lastSeenIso: string | null): number {
-  return reports.filter((r) => isTradeReportUnread(r, lastSeenIso)).length;
 }

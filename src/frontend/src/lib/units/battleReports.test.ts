@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildingLabel,
-  isUnread,
   isVictoryFor,
   missionLabel,
   outcomeLabel,
   reportSummaryLine,
   siegeSummaryLine,
   totalLoot,
-  unreadCount,
 } from './battleReports';
 
 const baseReport = {
@@ -126,26 +124,5 @@ describe('siegeSummaryLine', () => {
     expect(
       siegeSummaryLine({ targetType: 'longhouse', levelBefore: 1, levelAfter: 0, settlementRazed: true }),
     ).toBe('Longhouse destroyed — settlement razed');
-  });
-});
-
-describe('isUnread / unreadCount', () => {
-  const earlier = { occurredAt: '2026-08-29T10:00:00.000Z' };
-  const later = { occurredAt: '2026-08-29T12:00:00.000Z' };
-
-  it('everything is unread when nothing has been seen yet', () => {
-    expect(isUnread(earlier, null)).toBe(true);
-  });
-
-  it('a report before the last-seen timestamp is read', () => {
-    expect(isUnread(earlier, '2026-08-29T11:00:00.000Z')).toBe(false);
-  });
-
-  it('a report after the last-seen timestamp is unread', () => {
-    expect(isUnread(later, '2026-08-29T11:00:00.000Z')).toBe(true);
-  });
-
-  it('counts only the unread ones', () => {
-    expect(unreadCount([earlier, later], '2026-08-29T11:00:00.000Z')).toBe(1);
   });
 });

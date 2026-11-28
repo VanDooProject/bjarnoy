@@ -108,6 +108,9 @@ public class CampReportEntity
     /// <summary>The player the report belongs to (<c>SettlementEntity.OwnerId</c> at fight time); the inbox lists by this.</summary>
     public string OwnerId { get; set; } = string.Empty;
 
+    /// <summary>Wall time the owner first opened it; null = unread.</summary>
+    public DateTimeOffset? ReadAt { get; set; }
+
     public Guid? ArmyId { get; set; }
 
     /// <summary>A <see cref="CampFightWinner"/>.</summary>

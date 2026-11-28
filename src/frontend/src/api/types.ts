@@ -197,6 +197,8 @@ export interface CampReportResponse {
   campCleared: boolean;
   tower: { q: number; r: number } | null;
   towerBurned: boolean;
+  /** Whether the reading player has already opened this report. */
+  read: boolean;
 }
 
 export interface ArmyReportUnitLine {
@@ -216,6 +218,8 @@ export interface ArmyReportResponse {
   hex: { q: number; r: number };
   mission: string;
   units: ArmyReportUnitLine[];
+  /** Whether the reading player has already opened this report. */
+  read: boolean;
 }
 
 /**
@@ -700,6 +704,8 @@ export interface TradeReportResponse {
   travelHours: number;
   /** The side the reading player traded on (a player's reports cover all their settlements); null when neither. */
   viewerSide: 'poster' | 'acceptor' | null;
+  /** Whether the reading player has already opened this report. */
+  read: boolean;
 }
 
 export interface CreateWorldRequest {
@@ -1911,6 +1917,8 @@ export interface BattleReportResponse {
   fireSiege: BattleReportSiege | null;
   /** The side the reading player fought on (a player's reports cover all their settlements); null when neither. */
   viewerSide: 'attacker' | 'defender' | null;
+  /** Whether the reading player has already opened this report. */
+  read: boolean;
 }
 
 // Issue #206 (frontend): in-flight field battles — army-vs-army interception
@@ -1957,6 +1965,8 @@ export interface FieldBattleReportResponse {
   lines: FieldBattleReportLine[];
   /** The side the reading player fought on (a player's reports cover all their settlements); null when neither. */
   viewerSide: 'sidea' | 'sideb' | null;
+  /** Whether the reading player has already opened this report. */
+  read: boolean;
 }
 
 // Issue #40 phase 7 (frontend): the premium fight simulator. Mirrors

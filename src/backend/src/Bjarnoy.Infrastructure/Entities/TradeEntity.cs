@@ -145,6 +145,12 @@ public class TradeReportEntity
     /// <summary>The acceptor's player; see <see cref="PosterOwnerId"/>.</summary>
     public string AcceptorOwnerId { get; set; } = string.Empty;
 
+    /// <summary>Wall time the poster's player first opened it; null = unread.</summary>
+    public DateTimeOffset? PosterReadAt { get; set; }
+
+    /// <summary>Wall time the acceptor's player first opened it; null = unread.</summary>
+    public DateTimeOffset? AcceptorReadAt { get; set; }
+
     public TradeResource OfferedResource { get; set; }
 
     public double OfferedAmount { get; set; }

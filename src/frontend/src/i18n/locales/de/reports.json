@@ -16,7 +16,8 @@
     "field": "Feldschlacht",
     "trade": "Handel",
     "camp": "Lager",
-    "army": "Armeen"
+    "army": "Armeen",
+    "withUnread": "{kind}, {count} ungelesen"
   },
   "noReports": "Noch keine Berichte.",
   "simulatorHint": "Willst du einen Kampf testen, ohne echte Truppen zu riskieren?",
@@ -30,5 +31,19 @@
     "starved": "Armee bei {hex} verhungert. Ihr ging die Nahrung aus, und sie fand keinen Weg nach Hause.",
     "lost": "Verlorene Truppen",
     "inArmy": "Truppen der Armee"
+  },
+  "row": {
+    "title": "{outcome} · {mission}",
+    "unread": "Ungelesen"
+  },
+  "groups": {
+    "unread": "Ungelesen · {count}",
+    "new": "Neu · {count}",
+    "earlier": "Früher"
+  },
+  "markRead": "Als gelesen markieren",
+  "allReports": "Alle Berichte",
+  "panel": {
+    "unread": "{count} ungelesen"
   }
 }

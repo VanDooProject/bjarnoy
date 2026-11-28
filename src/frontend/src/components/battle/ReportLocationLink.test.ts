@@ -14,11 +14,11 @@ const router = createRouter({
   routes: [
     { path: '/settlement', component: { template: '<div />' } },
     { path: '/docs', component: { template: '<div />' } },
-    { path: '/reports/:reportId', component: { template: '<div />' } },
+    { path: '/reports/:reportId', name: 'report-detail', component: { template: '<div />' } },
   ],
 });
 
-function mountLink(props: { coord: { q: number; r: number }; label?: string }) {
+function mountLink(props: { coord: { q: number; r: number }; label?: string; pin?: boolean }) {
   return mount(ReportLocationLink, { props, global: { plugins: [createTestI18n(), router] } });
 }
 
@@ -61,6 +61,23 @@ describe('ReportLocationLink', () => {
 
     expect(router.currentRoute.value.path).toBe('/settlement');
     expect(map.pending.value?.coord).toEqual({ q: 12, r: -4 });
+    map.clear();
+    wrapper.unmount();
+  });
+
+  it('outside a modal route (the HUD panel on the map) only asks the map to centre and emits navigate', async () => {
+    const map = useMapFocus();
+    map.clear();
+    await router.push('/settlement');
+    const wrapper = mountLink({ coord: { q: 5, r: 6 }, pin: true });
+    expect(wrapper.find('svg.pin').exists()).toBe(true);
+
+    await wrapper.get('[data-testid="report-location-link"]').trigger('click');
+    await flushPromises();
+
+    expect(router.currentRoute.value.path).toBe('/settlement');
+    expect(map.pending.value?.coord).toEqual({ q: 5, r: 6 });
+    expect(wrapper.emitted('navigate')).toHaveLength(1);
     map.clear();
     wrapper.unmount();
   });

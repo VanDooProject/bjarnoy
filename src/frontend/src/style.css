@@ -333,6 +333,25 @@ html[data-hud-motion='reduced'] .floating-art-shadow {
   text-transform: uppercase;
   color: var(--text);
 }
+/* The gold count on a HUD icon button's corner (the panel column's icons, the phone's Reports chip). */
+.hud-count-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: var(--gold, #ffc55c);
+  color: #1a1408;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 2px var(--panel-bg);
+}
 /* A group heading inside a card's list (the army lists' "Without home"). */
 .army-group-heading {
   margin: 8px 0 4px;

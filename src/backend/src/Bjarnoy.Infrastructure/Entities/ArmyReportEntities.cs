@@ -17,6 +17,9 @@ public class ArmyReportEntity
     /// <summary>Same meaning as <see cref="SettlementEntity.OwnerId"/>.</summary>
     public required string OwnerId { get; set; }
 
+    /// <summary>Wall time the owner first opened it; null = unread.</summary>
+    public DateTimeOffset? ReadAt { get; set; }
+
     /// <summary>Same meaning as <see cref="SettlementEntity.UserId"/>.</summary>
     public Guid UserId { get; set; }
 

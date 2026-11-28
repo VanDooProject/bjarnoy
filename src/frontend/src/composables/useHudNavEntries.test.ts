@@ -107,9 +107,8 @@ describe('useHudNavEntries', () => {
   it('carries the unread reports count as the reports badge', async () => {
     const { api } = await setup('/docs');
     const reports = useReportsStore();
-    reports.lastSeenAt = null;
     expect(api.entries.value.find((e) => e.id === 'reports')?.badge).toBe(0);
-    reports.items = [{ id: 'r1', occurredAt: '2026-01-01T00:00:00Z' }] as never;
+    reports.items = [{ id: 'r1', occurredAt: '2026-01-01T00:00:00Z', read: false }] as never;
     expect(api.entries.value.find((e) => e.id === 'reports')?.badge).toBe(1);
   });
 

@@ -33,6 +33,7 @@ const base: CampReportResponse = {
   campCleared: true,
   tower: null,
   towerBurned: false,
+  read: false,
 };
 
 const router = createRouter({

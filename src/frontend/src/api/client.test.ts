@@ -176,6 +176,31 @@ describe('camp reads identify the caller', () => {
   });
 });
 
+describe('report read state', () => {
+  it('marks one report read with a POST to its kind and id, as the caller', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(undefined, 204));
+
+    await api.markReportRead('w1', 'camp', 'r1', 'player-1');
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0]!;
+    expect(String(url)).toContain('/worlds/w1/reports/camp/r1/read');
+    expect(init?.method).toBe('POST');
+    expect((init?.headers as Record<string, string>)['X-Owner-Id']).toBe('player-1');
+  });
+
+  it('marks every report read and returns how many were newly marked', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ markedRead: 3 }));
+
+    const result = await api.markAllReportsRead('w1', 'player-1');
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0]!;
+    expect(String(url)).toContain('/worlds/w1/reports/read');
+    expect(init?.method).toBe('POST');
+    expect((init?.headers as Record<string, string>)['X-Owner-Id']).toBe('player-1');
+    expect(result).toEqual({ markedRead: 3 });
+  });
+});
+
 describe('terrain chunks', () => {
   it('reads the manifest, then every chunk, and returns the islands in chunk order', async () => {
     vi.mocked(fetch)

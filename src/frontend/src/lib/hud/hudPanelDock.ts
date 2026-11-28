@@ -1,11 +1,11 @@
-// Desktop settlement view: the four HUD panels (Construction, Garrison, Armies, Quests) dock into full-height columns on
+// Desktop settlement view: the five HUD panels (Construction, Garrison, Armies, Quests, Reports) dock into full-height columns on
 // the left and right of the map area. A panel sits in a (side, column, align) group: `column` 0 is the column at that
 // side's outer screen edge, higher numbers lie further toward the centre; `align` top-stacks from the column's top, bottom
 // stacks from its bottom; `order` is the position inside the group. The defaults, the validation of stored prefs, the
 // column lists, the drop target of a dragged panel and the icon rail's offset live here as plain numbers and pure
 // functions; components/hud/HudPanelDock.vue, HudPanelColumn.vue and stores/hudPrefs.ts read them.
 
-export const HUD_PANEL_IDS = ['construction', 'garrison', 'armies', 'quests'] as const;
+export const HUD_PANEL_IDS = ['construction', 'garrison', 'armies', 'quests', 'reports'] as const;
 export type HudPanelId = (typeof HUD_PANEL_IDS)[number];
 
 /** The i18n key of each panel's name (its header title); shared by the icon rail and the dock's collapse buttons. */
@@ -14,6 +14,7 @@ export const HUD_PANEL_LABEL_KEYS: Record<HudPanelId, string> = {
   garrison: 'hud.trainingQueue.garrison',
   armies: 'hud.armyPanel.title',
   quests: 'quests.title',
+  reports: 'reports.title',
 };
 
 export type DockSide = 'left' | 'right';
@@ -28,12 +29,13 @@ export interface HudPanelPref {
   order: number;
 }
 
-/** The first spots: queue top left, garrison top right, armies bottom right, quests bottom left; all open and expanded. */
+/** The first spots: queue top left, garrison top right, armies bottom right, quests and reports bottom left (reports above quests); all open and expanded. */
 export const DEFAULT_HUD_PANELS: Readonly<Record<HudPanelId, HudPanelPref>> = {
   construction: { open: true, collapsed: false, side: 'left', column: 0, align: 'top', order: 0 },
   garrison: { open: true, collapsed: false, side: 'right', column: 0, align: 'top', order: 0 },
   armies: { open: true, collapsed: false, side: 'right', column: 0, align: 'bottom', order: 0 },
   quests: { open: true, collapsed: false, side: 'left', column: 0, align: 'bottom', order: 0 },
+  reports: { open: false, collapsed: false, side: 'left', column: 0, align: 'bottom', order: 1 },
 };
 
 const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;

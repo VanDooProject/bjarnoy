@@ -1,6 +1,7 @@
 import { API_BASE_URL } from '../config';
 import { clientFingerprint } from '../lib/clientFingerprint';
 import { checkBuildHeader } from '../lib/appUpdate';
+import type { InboxKind } from '../lib/units/inbox';
 import type {
   AcceptTradeOfferRequest,
   ActivitySummaryResponse,
@@ -779,6 +780,12 @@ export const api = {
     request<ArmyReportResponse>(`/army-reports/${reportId}`, { headers: ownerHeader(ownerId) }),
   getWorldArmyReports: (worldId: string, ownerId?: string) =>
     request<ArmyReportResponse[]>(`/worlds/${worldId}/army-reports`, { headers: ownerHeader(ownerId) }),
+  // Per-player read state of the report inbox. Mirrors ReportReadEndpoints.cs: marking one report is 204 with no body
+  // (404 when the caller is not a party to it), marking all returns how many were newly marked.
+  markReportRead: (worldId: string, kind: InboxKind, reportId: string, ownerId?: string) =>
+    request<void>(`/worlds/${worldId}/reports/${kind}/${reportId}/read`, { method: 'POST', headers: ownerHeader(ownerId) }),
+  markAllReportsRead: (worldId: string, ownerId?: string) =>
+    request<MarkReadResponse>(`/worlds/${worldId}/reports/read`, { method: 'POST', headers: ownerHeader(ownerId) }),
   getMyLeaderboardRank: (
     worldId: string,
     scope: LeaderboardScope,

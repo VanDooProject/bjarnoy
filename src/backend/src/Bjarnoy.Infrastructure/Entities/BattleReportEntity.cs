@@ -39,6 +39,12 @@ public class BattleReportEntity
     /// <summary>The defending player; see <see cref="AttackerOwnerId"/>.</summary>
     public string DefenderOwnerId { get; set; } = string.Empty;
 
+    /// <summary>Wall time the attacker's player first opened it; null = unread.</summary>
+    public DateTimeOffset? AttackerReadAt { get; set; }
+
+    /// <summary>Wall time the defender's player first opened it; null = unread.</summary>
+    public DateTimeOffset? DefenderReadAt { get; set; }
+
     public int Winner { get; set; }
 
     public double AttackPower { get; set; }

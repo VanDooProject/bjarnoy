@@ -35,7 +35,7 @@ describe('isHudPanelPref', () => {
 
 describe('columnsOnSide', () => {
   it('lists the default layout: construction top and quests bottom on the left', () => {
-    expect(columnsOnSide(panels(), 'left')).toEqual([{ column: 0, top: ['construction'], bottom: ['quests'] }]);
+    expect(columnsOnSide(panels(), 'left')).toEqual([{ column: 0, top: ['construction'], bottom: ['quests', 'reports'] }]);
     expect(columnsOnSide(panels(), 'right')).toEqual([{ column: 0, top: ['garrison'], bottom: ['armies'] }]);
   });
 
@@ -46,7 +46,7 @@ describe('columnsOnSide', () => {
       quests: { side: 'left', column: 1, align: 'top', order: 0 },
     });
     expect(columnsOnSide(p, 'left')).toEqual([
-      { column: 0, top: ['construction'], bottom: [] },
+      { column: 0, top: ['construction'], bottom: ['reports'] },
       { column: 1, top: ['armies', 'quests', 'garrison'], bottom: [] },
     ]);
   });
@@ -153,7 +153,7 @@ describe('applyDrop', () => {
     const grown = applyDrop(panels(), 'quests', { side: 'left', column: 1, align: 'top', before: null });
     expect(grown.quests).toMatchObject({ side: 'left', column: 1 });
     // Moving the only panel of column 0 into a new column 1 leaves one column: 0.
-    const solo = panels({ quests: { side: 'right', column: 0, align: 'bottom' } });
+    const solo = panels({ quests: { side: 'right', column: 0, align: 'bottom' }, reports: { side: 'right', column: 0, align: 'bottom' } });
     const moved = applyDrop(solo, 'construction', { side: 'left', column: 1, align: 'top', before: null });
     expect(moved.construction.column).toBe(0);
   });

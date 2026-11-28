@@ -121,13 +121,17 @@ describe('hudPrefs store', () => {
   describe('dockable panels', () => {
     const def = (side: 'left' | 'right', align: 'top' | 'bottom') => ({ open: true, collapsed: false, side, column: 0, align, order: 0 });
 
-    it('defaults to every panel open and expanded in the first spots', () => {
+    // Reports sits above the quests and starts closed: its icon carries the unread count until the player opens it.
+    const reportsDef = { open: false, collapsed: false, side: 'left', column: 0, align: 'bottom', order: 1 };
+
+    it('defaults to every panel but reports open and expanded in the first spots', () => {
       stubLocalStorage();
       expect(useHudPrefsStore().panels).toEqual({
         construction: def('left', 'top'),
         garrison: def('right', 'top'),
         armies: def('right', 'bottom'),
         quests: def('left', 'bottom'),
+        reports: reportsDef,
       });
     });
 
@@ -183,6 +187,7 @@ describe('hudPrefs store', () => {
         garrison: def('right', 'top'),
         armies: def('right', 'bottom'),
         quests: def('left', 'bottom'),
+        reports: reportsDef,
       });
     });
 

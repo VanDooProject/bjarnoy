@@ -509,8 +509,7 @@ describe('HudNav secondary entries in the avatar menu', () => {
   it('shows the unread reports count on the avatar and on the Reports row', async () => {
     authenticate(useAuthStore());
     const reports = useReportsStore();
-    reports.items = [{ id: 'r1', occurredAt: '2026-01-01T00:00:00Z' }, { id: 'r2', occurredAt: '2026-01-02T00:00:00Z' }] as never;
-    reports.lastSeenAt = null;
+    reports.items = [{ id: 'r1', occurredAt: '2026-01-01T00:00:00Z', read: false }, { id: 'r2', occurredAt: '2026-01-02T00:00:00Z', read: false }] as never;
     const wrapper = await mountHudNav('/settlement');
     expect(wrapper.find('[data-testid="account-menu-trigger"] .badge').text()).toBe('2');
     await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
@@ -519,10 +518,9 @@ describe('HudNav secondary entries in the avatar menu', () => {
 
   it('shows the unread reports count on the returning-player trigger too, and no badge at zero', async () => {
     const reports = useReportsStore();
-    reports.lastSeenAt = null;
     const wrapper = await mountHudNav('/docs');
     expect(wrapper.find('[data-testid="returning-player-badge"]').exists()).toBe(false);
-    reports.items = [{ id: 'r1', occurredAt: '2026-01-01T00:00:00Z' }] as never;
+    reports.items = [{ id: 'r1', occurredAt: '2026-01-01T00:00:00Z', read: false }] as never;
     await flushPromises();
     expect(wrapper.find('[data-testid="returning-player-trigger"] .badge').text()).toBe('1');
   });
