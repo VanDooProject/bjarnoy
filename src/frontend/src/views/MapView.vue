@@ -21,6 +21,8 @@ import HudPanelColumn from '../components/hud/HudPanelColumn.vue';
 import HudPanelDock from '../components/hud/HudPanelDock.vue';
 import QuestTray from '../components/onboarding/QuestTray.vue';
 import QueueDrawer from '../components/hud/QueueDrawer.vue';
+import ReportsChip from '../components/hud/ReportsChip.vue';
+import ReportsSheet from '../components/hud/ReportsSheet.vue';
 import ArmyPanel from '../components/hud/ArmyPanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
 import HoldProgress from '../components/hud/HoldProgress.vue';
@@ -72,7 +74,8 @@ import { upgradeVerdict } from '../lib/hud/upgradeRules';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
-import { useHasActiveDraft } from '../composables/useHudPanelContent';
+import { useHasActiveDraft, useHudPanelContent } from '../composables/useHudPanelContent';
+import { reportsSheetOpen } from '../composables/useReportsSheet';
 import { useEscapeCancelsPlanning } from '../composables/useEscapeCancelsPlanning';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
@@ -863,6 +866,12 @@ watch(canvasInteractionLocked, (locked) => {
 // otherwise clash with it) hides, and the HUD pull-down drawer closes the
 // same way opening QueueDrawer already does above.
 const hasActiveDraft = useHasActiveDraft();
+// The phone's Reports chip: in the settlement view, with reports to list and no order being composed. Without it the sheet closes too.
+const panelContent = useHudPanelContent();
+const showReportsChip = computed(() => mode.value === 'settlement' && !hasActiveDraft.value && panelContent.reports.value);
+watch(showReportsChip, (shown) => {
+  if (!shown) reportsSheetOpen.value = false;
+});
 useEscapeCancelsPlanning();
 watch(hasActiveDraft, (active) => {
   if (active) {
@@ -1761,6 +1770,8 @@ useQuickUpgradeInput({
       <BuildingHudLayer :renderer="canvasRef?.renderer" @update:hovering="hudHovering = $event" />
       <template v-if="isMobile">
         <QueueDrawer v-if="!hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
+        <ReportsChip v-if="showReportsChip" />
+        <ReportsSheet />
       </template>
       <template v-else>
         <!-- Desktop: the four panels dock to the map's corners; their icons sit in the column at the bottom left. -->

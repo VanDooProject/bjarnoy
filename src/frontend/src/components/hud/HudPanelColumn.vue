@@ -94,7 +94,7 @@ onUnmounted(() => observer?.disconnect());
       </svg>
       <ReportKindIcon v-else-if="id === 'reports'" kind="letter" />
       <QuestIcon v-else />
-      <span v-if="badge(id)" class="hud-panel-column__badge" :data-testid="`hud-panel-badge-${id}`" aria-hidden="true">{{ badge(id) }}</span>
+      <span v-if="badge(id)" class="hud-count-badge" :data-testid="`hud-panel-badge-${id}`" aria-hidden="true">{{ badge(id) }}</span>
       <!-- A collapsed tray cannot show its "new" dot itself; the quest count badge wins over it. -->
       <span v-else-if="id === 'quests' && hasNew && !prefs.panels.quests.open" class="hud-panel-column__dot" data-testid="quest-ready-dot" aria-hidden="true" />
     </HudIconButton>
@@ -117,24 +117,6 @@ onUnmounted(() => observer?.disconnect());
 }
 .hud-panel-column__button--empty {
   opacity: 0.4;
-}
-.hud-panel-column__badge {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  box-sizing: border-box;
-  border-radius: 8px;
-  background: var(--gold, #ffc55c);
-  color: #1a1408;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 16px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  box-shadow: 0 0 0 2px var(--panel-bg);
 }
 .hud-panel-column__dot {
   position: absolute;
