@@ -75,6 +75,12 @@ public class FieldBattleReportEntity
     /// <summary>Side B's player; see <see cref="SideAOwnerId"/>.</summary>
     public string SideBOwnerId { get; set; } = string.Empty;
 
+    /// <summary>Wall time side A's player first opened it; null = unread.</summary>
+    public DateTimeOffset? SideAReadAt { get; set; }
+
+    /// <summary>Wall time side B's player first opened it; null = unread.</summary>
+    public DateTimeOffset? SideBReadAt { get; set; }
+
     public int Winner { get; set; }
 
     public double SideAPower { get; set; }

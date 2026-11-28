@@ -440,6 +440,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("R")
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTimeOffset?>("ReadAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("TEXT");
 
@@ -574,6 +577,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("AttackerReadAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("AttackerSettlementId")
                         .HasColumnType("TEXT");
 
@@ -583,6 +589,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<string>("DefenderOwnerId")
                         .IsRequired()
                         .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("DefenderReadAt")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("DefenderSettlementId")
@@ -809,6 +818,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("ReadAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Seed")
                         .HasColumnType("INTEGER");
 
@@ -963,6 +975,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<double>("SideAPower")
                         .HasColumnType("REAL");
 
+                    b.Property<DateTimeOffset?>("SideAReadAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("SideASettlementId")
                         .HasColumnType("TEXT");
 
@@ -982,6 +997,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<double>("SideBPower")
                         .HasColumnType("REAL");
+
+                    b.Property<DateTimeOffset?>("SideBReadAt")
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid>("SideBSettlementId")
                         .HasColumnType("TEXT");
@@ -1906,6 +1924,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("AcceptorReadAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("AcceptorSettlementId")
                         .HasColumnType("TEXT");
 
@@ -1927,6 +1948,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<string>("PosterOwnerId")
                         .IsRequired()
                         .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("PosterReadAt")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("PosterSettlementId")
