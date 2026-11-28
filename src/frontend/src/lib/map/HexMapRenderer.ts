@@ -1585,6 +1585,21 @@ function distanceBeyondSources(q: number, r: number, sources: FogSource[]): numb
 // See scheduleCull's own comment for why this exists: throttles how often a
 // drag can trigger a full terrain/border/fog rebuild.
 const DRAG_REBUILD_THROTTLE_MS = 150;
+
+/**
+ * How long a cull must wait before it may rebuild: 0 when it may run now, else
+ * the rest of the throttle window. Only a camera gesture is throttled (see
+ * scheduleCull).
+ */
+export function cullThrottleRemainingMs(
+  interacting: boolean,
+  nowMs: number,
+  lastRebuildAtMs: number,
+  throttleMs: number = DRAG_REBUILD_THROTTLE_MS,
+): number {
+  if (!interacting) return 0;
+  return Math.max(0, throttleMs - (nowMs - lastRebuildAtMs));
+}
 // Total pointer travel (summed |dx|+|dy| over the gesture) below which a
 // pointerdown/up pair counts as a click on a hex rather than a camera pan.
 // Used by onPointerUp for both halves of that decision: whether to open the
@@ -2474,6 +2489,8 @@ export class HexMapRenderer {
   private lastBuiltCamera: Camera | null = null;
   private lastRebuildAtMs = 0;
   private cullQueued = false;
+  /** The one pending re-queue of a cull the drag throttle dropped (see scheduleCull). */
+  private cullRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
 
   private dragging = false;
@@ -4132,7 +4149,17 @@ export class HexMapRenderer {
       // is released, tickCameraAnim's forceRebuild() when the animation
       // completes, noteZoomActivity's idle timer once zooming settles, and
       // tickKeyPan's when the last arrow key is let go.
-      if (this.isInteracting && performance.now() - this.lastRebuildAtMs < DRAG_REBUILD_THROTTLE_MS) {
+      // A dropped cull is re-queued for when the window ends: a drag that
+      // holds still after a fast move gets no further camera event to
+      // schedule one, and would otherwise stay stale until release.
+      const waitMs = cullThrottleRemainingMs(this.isInteracting, performance.now(), this.lastRebuildAtMs);
+      if (waitMs > 0) {
+        if (this.cullRetryTimer === null) {
+          this.cullRetryTimer = setTimeout(() => {
+            this.cullRetryTimer = null;
+            this.scheduleCull();
+          }, waitMs);
+        }
         return;
       }
       if (this.cameraMovedEnough()) this.rebuildAll();
@@ -7152,6 +7179,8 @@ export class HexMapRenderer {
 
   destroy() {
     this.destroyed = true;
+    if (this.cullRetryTimer !== null) clearTimeout(this.cullRetryTimer);
+    this.cullRetryTimer = null;
     this.maskBaker.destroy();
     this.labelOverlay?.destroy();
     this.labelOverlay = null;

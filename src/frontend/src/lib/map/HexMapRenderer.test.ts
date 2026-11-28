@@ -20,6 +20,7 @@ import {
   previewGroundCoords,
   attentionPulseFrame,
   clampAnimationDeltaMs,
+  cullThrottleRemainingMs,
   fadeAlphaAt,
   hoverSubjectFor,
   isIslandNearViewport,
@@ -70,6 +71,28 @@ function tileOf(terrain: Tile['terrain']): Tile {
 }
 
 const river: RiverTile = { q: 0, r: 0, shape: 'mouth', inDirections: ['NE'], outDirection: null };
+
+// Regression: a drag that held still after a fast move dropped its last
+// throttled cull and nothing re-queued it until pointerup. The renderer now
+// retries after this many ms, so it must be the exact rest of the window.
+describe('cullThrottleRemainingMs', () => {
+  it('never delays a cull outside a camera gesture', () => {
+    expect(cullThrottleRemainingMs(false, 1010, 1000)).toBe(0);
+  });
+
+  it('returns the rest of the window right after a rebuild', () => {
+    expect(cullThrottleRemainingMs(true, 1040, 1000, 150)).toBe(110);
+  });
+
+  it('is 0 once the window has passed, so the retried cull runs', () => {
+    expect(cullThrottleRemainingMs(true, 1150, 1000, 150)).toBe(0);
+    expect(cullThrottleRemainingMs(true, 5000, 1000, 150)).toBe(0);
+  });
+
+  it('defaults to the drag rebuild throttle of 150 ms', () => {
+    expect(cullThrottleRemainingMs(true, 1000, 1000)).toBe(150);
+  });
+});
 
 describe('clampAnimationDeltaMs', () => {
   it('passes ordinary frame deltas through unchanged', () => {
