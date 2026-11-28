@@ -5,7 +5,6 @@ import { nextTick } from 'vue';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import ReportsChip from './ReportsChip.vue';
 import type { CampReportResponse } from '../../api/types';
-import { queueHandleBottomPx } from '../../composables/hudBarHeight';
 import { __resetPhoneLayersForTest, usePhoneLayer } from '../../composables/usePhoneLayer';
 import { reportsSheetOpen } from '../../composables/useReportsSheet';
 import { useReportsStore } from '../../stores/reports';
@@ -44,7 +43,6 @@ describe('ReportsChip', () => {
     setActivePinia(createPinia());
     __resetPhoneLayersForTest();
     reportsSheetOpen.value = false;
-    queueHandleBottomPx.value = 0;
     useReportsStore().campItems = [campReport(1, false), campReport(2, false), campReport(3, true)];
   });
   afterEach(() => {
@@ -64,12 +62,6 @@ describe('ReportsChip', () => {
     const wrapper = mountChip();
     expect(wrapper.find('[data-testid="reports-chip-badge"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="reports-chip"]').attributes('aria-label')).toBe('Reports');
-  });
-
-  it('sits below the queue drawer handle: the handle\'s bottom edge goes into its position', async () => {
-    queueHandleBottomPx.value = 300;
-    const wrapper = mountChip();
-    expect((wrapper.get('[data-testid="reports-chip"]').element as HTMLElement).style.getPropertyValue('--queue-handle-bottom')).toBe('300px');
   });
 
   it('hides under a phone layer', async () => {

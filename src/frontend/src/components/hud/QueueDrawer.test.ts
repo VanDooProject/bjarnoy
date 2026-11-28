@@ -1,9 +1,7 @@
 // @vitest-environment jsdom
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
-import { queueHandleBottomPx } from '../../composables/hudBarHeight';
 import QueueDrawer from './QueueDrawer.vue';
 import { useWorldStore } from '../../stores/world';
 import type { ArmyResponse, BuildOrderResponse, TrainingOrderResponse } from '../../api/types';
@@ -188,24 +186,6 @@ describe('QueueDrawer', () => {
     const wrapper = mountDrawer();
     const trainRow = wrapper.get('.queue-drawer-handle-row.is-train');
     expect(trainRow.get('.queue-drawer-handle-progress-fill').attributes('style')).toContain('width: 80%');
-  });
-
-  it('publishes the handle\'s bottom edge for the Reports chip and resets it when the drawer goes', async () => {
-    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ bottom: 320 } as DOMRect);
-    const world = useWorldStore();
-    world.hud.trainingQueueFetchedAt = Date.now();
-    world.hud.trainingQueue = [trainingOrder()];
-    expect(queueHandleBottomPx.value).toBe(0);
-
-    const wrapper = mountDrawer();
-    await nextTick();
-    expect(queueHandleBottomPx.value).toBe(320);
-
-    wrapper.unmount();
-    expect(queueHandleBottomPx.value).toBe(0);
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
   });
 
   it('clicking the handle opens the drawer', async () => {

@@ -15,7 +15,7 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { useWorldStore } from '../../stores/world';
 import GarrisonList from './GarrisonList.vue';
-import { hudRailHeightPx, queueHandleBottomPx } from '../../composables/hudBarHeight';
+import { hudRailHeightPx } from '../../composables/hudBarHeight';
 import {
   formatCountdownShort,
   useBuildOrders,
@@ -356,32 +356,11 @@ function onKeydown(event: KeyboardEvent) {
   }
 }
 
-// The handle's bottom edge, published for the Reports chip: it follows the handle through its size, the column's height
-// (viewport changes) and the handle leaving with the last order.
-let handleObserver: ResizeObserver | null = null;
-function measureHandle() {
-  queueHandleBottomPx.value = handleEl.value ? Math.round(handleEl.value.getBoundingClientRect().bottom) : 0;
-}
-watch(
-  handleEl,
-  (el) => {
-    handleObserver?.disconnect();
-    measureHandle();
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    handleObserver ??= new ResizeObserver(measureHandle);
-    handleObserver.observe(el);
-    if (el.parentElement) handleObserver.observe(el.parentElement);
-  },
-  { flush: 'post' },
-);
-
 onMounted(() => {
   window.addEventListener('keydown', onKeydown);
   window.addEventListener('resize', onWindowResize);
 });
 onUnmounted(() => {
-  handleObserver?.disconnect();
-  queueHandleBottomPx.value = 0;
   window.removeEventListener('keydown', onKeydown);
   window.removeEventListener('resize', onWindowResize);
   // Backstop for hasAnything's own watch above: whatever unmounts this

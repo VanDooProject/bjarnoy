@@ -1767,10 +1767,13 @@ useQuickUpgradeInput({
     </TopBar>
     <template v-if="mode === 'settlement'">
       <!-- Over the map, under every panel: one marker per own building (dial + docked box) and the switch that hides them. -->
-      <BuildingHudLayer :renderer="canvasRef?.renderer" @update:hovering="hudHovering = $event" />
+      <BuildingHudLayer :renderer="canvasRef?.renderer" @update:hovering="hudHovering = $event">
+        <template v-if="isMobile" #phone-corner>
+          <ReportsChip v-if="showReportsChip" />
+        </template>
+      </BuildingHudLayer>
       <template v-if="isMobile">
         <QueueDrawer v-if="!hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
-        <ReportsChip v-if="showReportsChip" />
         <ReportsSheet />
       </template>
       <template v-else>

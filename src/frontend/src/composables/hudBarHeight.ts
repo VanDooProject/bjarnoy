@@ -19,7 +19,3 @@ export const hudBarHeightPx = ref(DEFAULT_HUD_BAR_HEIGHT);
 // queue drawer's collapsed handle clears the height. Both 0 outside rail mode.
 export const hudRailWidthPx = ref(0);
 export const hudRailHeightPx = ref(0);
-
-// Bottom edge (viewport y, px) of the phone queue drawer's collapsed handle, 0 while there is no handle. QueueDrawer.vue
-// measures and writes it; the Reports chip (components/hud/ReportsChip.vue) sits below it.
-export const queueHandleBottomPx = ref(0);

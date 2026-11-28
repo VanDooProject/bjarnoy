@@ -932,7 +932,11 @@ onUnmounted(() => {
         </div>
     </div>
     <!-- Desktop: the switch is the first icon of the panel column (HudPanelColumn). -->
-    <BuildingInfoToggle v-if="buildingMarkers && isMobile" class="building-hud__toggle--phone" />
+    <!-- Phone: the switch and whatever the parent slots in below it (the Reports chip) stack in one column at the map's top left. -->
+    <div v-if="isMobile" class="building-hud__corner--phone">
+      <BuildingInfoToggle v-if="buildingMarkers" />
+      <slot name="phone-corner" />
+    </div>
   </div>
 </template>
 
@@ -1025,10 +1029,14 @@ html[data-hud-motion='reduced'] .hud-marker__box > * {
   transition: none;
 }
 /* Phone: the switch sits at the map's top left, below the settlement bubble that sits there (it ends about 44px under the bar). */
-.building-hud__toggle--phone {
+.building-hud__corner--phone {
   position: absolute;
   z-index: 1;
   top: calc(var(--hud-inset-top, 0px) + 60px);
   left: calc(16px + var(--hud-inset-left, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
 }
 </style>
