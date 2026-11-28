@@ -118,8 +118,8 @@
     "BuildingOutsideRealm": "The building that trains this unit stands outside your realm. It works again once your realm reaches it.",
     "WrongBuilding": "There is no building on that hex that trains this unit.",
     "BuildingLevelTooLow": "This building's level is too low to train that unit.",
-    "GuildNotFound": "That guild doesn't exist.",
-    "TargetGuildNotFound": "The guild you chose doesn't exist.",
+    "GuildNotFound": "That guild no longer exists.",
+    "TargetGuildNotFound": "The guild you chose no longer exists.",
     "NameTaken": "That guild name is already taken in this world.",
     "TagTaken": "That guild tag is already taken in this world.",
     "AlreadyInAGuild": "You are already in a guild.",
@@ -128,12 +128,12 @@
     "Forbidden": "You are not allowed to do that.",
     "TargetIsSelf": "A guild can't make peace with itself.",
     "TreatyCapReached": "This guild has reached its limit of peace treaties.",
-    "TreatyAlreadyActive": "These guilds already have a treaty.",
+    "TreatyAlreadyActive": "There's already a treaty or an open peace proposal between these guilds.",
     "TreatyNotFound": "That treaty doesn't exist.",
-    "TreatyNotPending": "That treaty can't be changed that way right now.",
+    "TreatyNotPending": "That treaty has changed in the meantime. Reload to see where it stands.",
     "TopicNotFound": "That topic doesn't exist.",
     "TopicLocked": "That topic is locked.",
-    "LeaderCannotLeave": "Hand over leadership before you leave. If you are the only member, leave to disband the guild."
+    "LeaderCannotLeave": "Make another member leader before you leave."
   },
   "transport": {
     "network": "Couldn't reach the server. Check your connection and try again.",
