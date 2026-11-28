@@ -130,6 +130,14 @@ describe('worldLayerOrder', () => {
     expect(indexIn('settlement', 'water')).toBeLessThan(indexIn('settlement', 'terrainTop'));
   });
 
+  it('draws the hover outline under the water mesh in settlement mode, the pinned highlight and reach wash over it', () => {
+    // The shore foam and crest lines cover the hover like anything else lying in the water; signals stay on top.
+    expect(indexIn('settlement', 'terrainFlat')).toBeLessThan(indexIn('settlement', 'hover'));
+    expect(indexIn('settlement', 'hover')).toBeLessThan(indexIn('settlement', 'water'));
+    expect(indexIn('settlement', 'water')).toBeLessThan(indexIn('settlement', 'highlight'));
+    expect(indexIn('settlement', 'water')).toBeLessThan(indexIn('settlement', 'range'));
+  });
+
   it('draws the river flow mesh right after the water mesh in both modes', () => {
     // §4.4e: the river flow is its own mesh, drawn over the water mesh's beach foam and under everything after it.
     for (const mode of ['world', 'settlement'] as const) {
