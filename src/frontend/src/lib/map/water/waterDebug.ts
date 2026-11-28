@@ -51,7 +51,7 @@ export interface WaterDebugFlags {
   causticShadows: boolean;
   /** Shader shoreline foam (§4.3). */
   shorelineFoam: boolean;
-  /** Shader sea body under the world map (§4.1); off lets WorldMapCanvas's CSS gradient show through. Never drawn in settlement mode — the painted water tiles are the sea body there. */
+  /** Shader sea body under the world map (§4.1); off lets the SeaBackdrop gradient (seaBackdrop.ts) show through. Never drawn in settlement mode — the painted water tiles are the sea body there. */
   seaBody: boolean;
   /**
    * The wave squiggle sprites (HexMapRenderer's waveLayer) — world map only,

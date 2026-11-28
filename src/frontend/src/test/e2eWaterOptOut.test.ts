@@ -11,7 +11,7 @@ const E2E_DIR = join(__dirname, '../../e2e');
 const OPT_OUT = /mapLayers:\s*\{[^}]*\b(water|fog):\s*false/;
 
 /** Specs that must always render every layer: they are about water, fog, shore or the map's own transitions. */
-const FULL_RENDERING_SPECS = ['water-shader.spec.ts', 'fog-drift.spec.ts', 'onboarding-happy-path.spec.ts', 'zoom-transition.spec.ts'];
+const FULL_RENDERING_SPECS = ['water-shader.spec.ts', 'fog-drift.spec.ts', 'onboarding-happy-path.spec.ts', 'zoom-transition.spec.ts', 'fog-dark-tier.spec.ts'];
 
 /**
  * Specs that play real motion (`reducedMotion: 'no-preference'`) and may still

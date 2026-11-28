@@ -40,7 +40,7 @@ const LABELS: Record<WaterDebugToggle, string> = {
   fineCaustics: 'Caustics: fine highlight net',
   causticShadows: 'Caustics: drifting dark blobs',
   shorelineFoam: 'Shoreline foam',
-  seaBody: 'Sea body (world map; off = CSS gradient)',
+  seaBody: 'Sea body (world map; off = plain backdrop gradient)',
   legacyWaveSquiggles: 'World map: wave squiggle sprites',
   showWaterMask: 'Debug: show the raw water mask',
   riverFlow: 'River ripples (settlement)',

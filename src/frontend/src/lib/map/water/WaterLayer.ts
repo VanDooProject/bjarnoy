@@ -7,6 +7,7 @@ import { noiseLatticeTexture } from '../shaderNoise';
 import { hexToRgb01, placeholderDryTexture } from '../shaderResources';
 import { FOAM_REACH_TILES, NEAR_SPAN_TILES, groundSquash, type WaterMask } from './waterMask';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
+import { WORLD_SEA_GRADIENT } from '../seaBackdrop';
 import { WaterMeshBuffers, seaAndShoreHexes } from './waterCoverage';
 import { WATER_FRAGMENT, WATER_VERTEX } from './waterShader';
 import { RiverFlowMesh } from './riverFlowMesh';
@@ -14,12 +15,11 @@ import { RiverFlowMesh } from './riverFlowMesh';
 /** Which view this layer is drawing for — decides whether the sea body term is available at all (§4.1). */
 export type WaterMode = 'world' | 'settlement';
 
-// The first two stops of WorldMapCanvas.vue's `.map-container` gradient
-// (#2a92ae -> #14657f -> #0b3c50). Kept in sync with it deliberately: with
-// `seaBody` off that gradient is what shows through, so the two want to be the
-// same water.
+// The first two stops of WORLD_SEA_GRADIENT, the SeaBackdrop's gradient
+// (#2a92ae -> #14657f -> #0b3c50): with `seaBody` off that gradient is what
+// shows through, so the two are the same water by construction.
 //
-// The third stop is deliberately *not* used. The CSS gradient is radial in
+// The third stop is deliberately *not* used. The backdrop gradient is radial in
 // **screen** space, so its darkest stop is a vignette at the viewport corners;
 // this ramp is relative to the **coastline**, and saturates at FOAM_REACH_TILES
 // — 1.5 tiles offshore. Ramping all the way to #0b3c50 over that distance
@@ -34,8 +34,8 @@ export type WaterMode = 'world' | 'settlement';
  */
 const TAINT_WASH = 0.9;
 
-const SHALLOW_COLOR = 0x2a92ae;
-const DEEP_COLOR = 0x14657f;
+const SHALLOW_COLOR = WORLD_SEA_GRADIENT.stops[0].color;
+const DEEP_COLOR = WORLD_SEA_GRADIENT.stops[1].color;
 
 /**
  * Tainted water, around a revealed wasted island (docs/design/water-shader.md's

@@ -11,7 +11,7 @@ import { hexToRgb01 } from '../shaderResources';
 import { FOG_DESATURATE_FRAGMENT } from './fogShader';
 import type { FogField } from './FogField';
 
-/** The dark tier's tint where the canvas is transparent (a CSS backdrop shows through): today's scouted-but-out-of-sight colour. */
+/** The dark tier's tint where the canvas is transparent (the settlement view's CSS mist backdrop shows through): today's scouted-but-out-of-sight colour. */
 export const FOG_SCOUTED = 0x0b1116;
 
 /** The live-tunable strengths (FogDebugPanel's sliders), each 0..1. */

@@ -515,7 +515,7 @@ void main() {
  * (dark tier alpha) is set the picture is greyed instead of covered. Bright tones (sand, foam, snow) are first pulled
  * toward mid grey, so greying does not turn them into light bands, then desaturated by uDesat, dimmed by uDarken and
  * given a slight cool tint. The bright pull and desaturation follow 1 - (1 - aDark)^uSatRamp, so a band of land just past
- * the edge of sight is already grey rather than a murky half-desaturated green; the dimming and tint follow aDark. Where the canvas is transparent (a CSS backdrop shows through) the old dark tint is added, so
+ * the edge of sight is already grey rather than a murky half-desaturated green; the dimming and tint follow aDark. Where the canvas is transparent (the settlement view's CSS mist backdrop shows through) the old dark tint is added, so
  * the tier stays visible there too.
  *
  * Pixi hands a filter a premultiplied input and wants a premultiplied output. The screen position comes from the

@@ -44,14 +44,15 @@ player-facing graphics-settings UI.
 
 ## 1. What exists today
 
-### 1.1 World map — there is no water in the canvas at all
+### 1.1 World map — the sea is a plain backdrop, open sea hexes are not drawn
 
-This is the single most surprising fact about the current renderer and it
-drives most of §3.
-
-- The sea is a **CSS `radial-gradient` on the container `<div>`**, *behind* the
-  canvas — `components/map/WorldMapCanvas.vue`'s `.map-container` background
-  (`#2a92ae` → `#14657f` → `#0b3c50`).
+- The sea is the in-canvas **`SeaBackdrop`** (`lib/map/seaBackdrop.ts`): an opaque
+  screen-space quad at the bottom of `underFogLayer`, a radial gradient
+  (`WORLD_SEA_GRADIENT`: `#2a92ae` → `#14657f` → `#0b3c50`). It sits inside the
+  fog's filtered subtree, so the dark tier greys it; the water mesh only covers
+  the last baked mask rect and no longer leaves saturated sea uncovered. The
+  container keeps the same gradient as CSS (`WORLD_SEA_GRADIENT_CSS`) for the
+  moment before the first frame and a lost WebGL context.
 - Islands are flat coloured hex polygons drawn into one `Graphics`
   (`HexMapRenderer.rebuildTerrainFlat`, `WORLD_TERRAIN_FILL`). Open sea is
   skipped outright: `if (tile.terrain === 'sea') continue;`
@@ -299,11 +300,10 @@ world
  └─ ...
 ```
 
-The sea body replaces what the CSS gradient was doing, and the island
-polygons cover the shader wherever there is land. Keep the CSS gradient in
-`WorldMapCanvas.vue` unchanged as the fallback for a lost WebGL context or a
-switched-off `seaBody` flag; it should be tuned to match the shader's own deep
-colour so flipping the flag is a small change, not a jarring one.
+The sea body is drawn over the `SeaBackdrop`, and the island polygons cover the
+shader wherever there is land. The backdrop is the fallback for a switched-off
+`seaBody` flag; the shader's shallow/deep colours read from the same
+`WORLD_SEA_GRADIENT`, so flipping the flag is a small change, not a jarring one.
 
 ### 3.3 Settlement mode — above `terrainBase`, and the legacy-art caveat
 
@@ -536,7 +536,7 @@ World mode only. Base colour ramped by the mask's R channel: shallow teal at
 the coast → deep blue offshore, over the existing palette
 (`#2a92ae`/`#14657f`/`#0b3c50`), plus a very low-frequency fbm mottle so a
 large expanse of open water isn't a flat fill. Off → the mesh outputs nothing
-here and the CSS gradient shows through.
+here and the `SeaBackdrop` gradient shows through.
 
 In settlement mode this term is always off: the painted tiles are the sea
 body.
@@ -1346,7 +1346,7 @@ export interface WaterDebugFlags {
   causticShadows: boolean;
   /** Shader shoreline foam (§4.3). */
   shorelineFoam: boolean;       // default true
-  /** Shader sea body under the world map (§4.1); off → the CSS gradient shows through. */
+  /** Shader sea body under the world map (§4.1); off → the SeaBackdrop gradient shows through. */
   seaBody: boolean;             // default true
   /** The world map's wave squiggle sprites (waveLayer) — its surface pattern of record. */
   legacyWaveSquiggles: boolean; // default true

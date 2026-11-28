@@ -103,6 +103,8 @@ import { useSendBlockText, useSendPickerRows, useSendSources } from '../composab
 import { motionEnabled } from '../lib/motion';
 import { useHiddenUnderPhoneLayer, vPhoneHidden } from '../composables/usePhoneLayer';
 import MobileDispatchSheet from '../components/hud/MobileDispatchSheet.vue';
+// The world map's sea behind the canvas: only seen before the renderer's first frame or after a lost WebGL context.
+import { WORLD_SEA_GRADIENT_CSS } from '../lib/map/seaBackdrop';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -144,11 +146,6 @@ const router = useRouter();
 // crossing, a nav click, browser back/forward, or a direct URL load all agree with the
 // renderer on what to show.
 const mode = computed<RenderMode>(() => (isWorldHash(route.value.hash) ? 'world' : 'settlement'));
-// World map's own sea backdrop (must match WorldMapCanvas.vue's — that
-// component is still used standalone by AdminWorldReseedView's world
-// preview, which has no settlement/ring-menu UI to merge and so keeps its
-// own separate renderer instance).
-const WORLD_SEA_BACKGROUND = 'radial-gradient(115% 100% at 45% 40%, #2a92ae 0%, #14657f 48%, #0b3c50 100%)';
 // Set right before a zoom-driven crossing pushes the route, and consumed by
 // the very next `mode` watcher run — distinguishes "the renderer already
 // switched mode itself, mid-gesture, camera untouched" from every other way
@@ -1681,7 +1678,7 @@ useQuickUpgradeInput({
       :world-model="world.model"
       :player-id="player.id"
       :settlement-id="world.selectedSettlementId"
-      :background="mode === 'world' ? WORLD_SEA_BACKGROUND : undefined"
+      :background="mode === 'world' ? WORLD_SEA_GRADIENT_CSS : undefined"
       @hex-click="onHexClick"
       @hover="onHover"
       @waypoint-move="onWaypointMove"

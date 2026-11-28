@@ -4,6 +4,7 @@ import { useHexMapRenderer } from '../../composables/useHexMapRenderer';
 import type { WorldModel } from '../../lib/map/WorldModel';
 import type { AxialCoord } from '../../lib/hex/coords';
 import type { Tile } from '../../lib/map/types';
+import { WORLD_SEA_GRADIENT_CSS } from '../../lib/map/seaBackdrop';
 
 const props = defineProps<{
   worldModel: WorldModel;
@@ -41,7 +42,7 @@ defineExpose({ renderer });
 </script>
 
 <template>
-  <div ref="container" class="map-container">
+  <div ref="container" class="map-container" :style="{ background: WORLD_SEA_GRADIENT_CSS }">
     <canvas ref="canvas" :class="{ 'page-scroll': allowPageScroll }" />
   </div>
 </template>
@@ -51,14 +52,11 @@ defineExpose({ renderer });
   position: absolute;
   inset: 0;
   overflow: hidden;
-  /* Open sea: islands carry their own flat hex fill (see
-     HexMapRenderer's WORLD_TERRAIN_FILL), so the water itself is a plain
-     painted backdrop underneath — matches the "playful" sea style in
-     prototypes/worldmap/Viking Realm.dc.html's sea() method, the style
-     shown in docs/design/img/worldmap.png. Wave squiggles are drawn in
-     the canvas itself (HexMapRenderer's waveLayer/drawWaves), not here —
-     they need to know which patches of sea are actually open water. */
-  background: radial-gradient(115% 100% at 45% 40%, #2a92ae 0%, #14657f 48%, #0b3c50 100%);
+  /* Open sea: islands carry their own flat hex fill (see HexMapRenderer's
+     WORLD_TERRAIN_FILL); the sea behind them is drawn in the canvas by the
+     renderer (seaBackdrop.ts), so the fog's dark tier can grey it. The inline
+     background is the same gradient, shown only before the first frame or
+     after a lost WebGL context. */
 }
 canvas {
   display: block;
