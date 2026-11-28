@@ -10,7 +10,8 @@ namespace Bjarnoy.AppHost.Tests;
 /// <summary>
 /// Regression test for an <see cref="OnboardingHappyPathTests"/> flake: on a cold stack the Reindeer Herder's ring never
 /// opened after the first <see cref="LiveFrontendTestHelpers.ClickHexAsync"/> following founding. Until the first fog
-/// mask arrives, LandingView shows "Revealing map" (<c>MapStatusOverlay.vue</c>), which covers the whole map and takes
+/// mask arrives, LandingView shows "Lifting the fog…"
+/// (<c>hud.mapStatus.revealingMap</c>, <c>MapStatusOverlay.vue</c>), which covers the whole map and takes
 /// every pointer event; a slow first <c>fog-chunks</c> answer kept it up past the founding camera ease, and the raw
 /// mouse click landed on the overlay. Holding that answer here makes the slow API the normal case.
 /// </summary>
@@ -33,7 +34,7 @@ public class HexClickWhileMapRevealsTests(AppHostFixture fixture)
         await LiveFrontendTestHelpers.TurnSmoothEdgesOffAsync(page);
 
         // Every fog-chunks answer waits until the test lets it through: the first one after founding is what lifts
-        // the "Revealing map" overlay.
+        // the "Lifting the fog…" overlay.
         var releaseFog = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await page.RouteAsync("**/fog-chunks**", async route =>
         {

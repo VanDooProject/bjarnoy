@@ -244,7 +244,7 @@ public static class LiveFrontendTestHelpers
     /// </summary>
     /// <remarks>
     /// <c>Mouse.ClickAsync</c> skips the hit-target check a locator click does, so the click goes to whatever is on top
-    /// of that point. Right after founding that can be the map's status overlay ("Revealing map",
+    /// of that point. Right after founding that can be the map's status overlay ("Lifting the fog…", <c>hud.mapStatus.revealingMap</c> in
     /// <c>MapStatusOverlay.vue</c>): it covers the whole map and takes every pointer event until the first fog mask has
     /// arrived, so on a cold API a click there never reaches the map and no ring opens. Waits for the point to be on
     /// the canvas itself first, which is what "the map takes this click" means.
