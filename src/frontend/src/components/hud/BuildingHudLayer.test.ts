@@ -1264,6 +1264,63 @@ describe('BuildingHudLayer', () => {
       expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
     });
 
+    it('hides from levels only without growing boxes: the markers leave as they were shown', async () => {
+      seedBuildings();
+      const prefs = useHudPrefsStore();
+      prefs.setBuildingHudMode('levels');
+      fake = installFakeAnimate();
+      wrapper = mountLayer(fakeRenderer());
+      runFrame();
+      await flushPromises();
+      expect(wrapper.findAll('.hud-marker__box')).toHaveLength(0);
+      prefs.setBuildingHudMode('off');
+      await flushPromises();
+      runFrame();
+      await flushPromises();
+      // Still on screen for the hide animation, still without boxes.
+      expect(wrapper.findAll('.hud-marker')).toHaveLength(4);
+      expect(wrapper.findAll('.hud-marker__box')).toHaveLength(0);
+      fake.finishAll();
+      await flushPromises();
+      expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
+      // Shown again in full: the boxes are back.
+      prefs.setBuildingHudMode('full');
+      await flushPromises();
+      runFrame();
+      await flushPromises();
+      expect(wrapper.findAll('.hud-marker__box').length).toBeGreaterThan(0);
+    });
+
+    it('keeps the boxes of the quick upgrade look through its hide, even after levels only was switched off', async () => {
+      useAuthStore().user = { id: 'u1', userName: 'p', role: 'player', preferredLocale: null, isPremium: true } as never;
+      const world = seedBuildings();
+      world.hud.available = { wood: 1e6, stone: 1e6, food: 1e6, iron: 1e6 };
+      world.hud.storageCap = { wood: 1e6, stone: 1e6, food: 1e6, iron: 1e6 };
+      const prefs = useHudPrefsStore();
+      prefs.setBuildingHudMode('levels');
+      fake = installFakeAnimate();
+      wrapper = mountLayer(fakeRenderer());
+      runFrame();
+      prefs.setBuildingHudMode('off');
+      await flushPromises();
+      fake.finishAll();
+      await flushPromises();
+      // Off, then Shift held: the quick upgrade shows the markers in full, boxes included.
+      useQuickUpgradeStore().setShift(true);
+      await flushPromises();
+      runFrame();
+      await flushPromises();
+      const boxes = wrapper.findAll('.hud-marker__box').length;
+      expect(boxes).toBeGreaterThan(0);
+      // Shift released: the markers hide with their boxes still on.
+      useQuickUpgradeStore().setShift(false);
+      await flushPromises();
+      runFrame();
+      await flushPromises();
+      expect(wrapper.findAll('.hud-marker').length).toBeGreaterThan(0);
+      expect(wrapper.findAll('.hud-marker__box')).toHaveLength(boxes);
+    });
+
     it('turns around when switched back on mid-animation: the same markers, the running animations reversed', async () => {
       seedBuildings();
       fake = installFakeAnimate();
