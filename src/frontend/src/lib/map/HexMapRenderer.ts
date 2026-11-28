@@ -38,7 +38,7 @@ import {
   markerFadeStep,
   type OcclusionCircle,
 } from './markerOcclusion';
-import { Application, Container, Graphics, GraphicsContext, Rectangle, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
+import { Application, Container, Graphics, GraphicsContext, Rectangle, Sprite, Texture, UPDATE_PRIORITY } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
 import { axialToOddQ, coordKey, hexesInRadius, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
@@ -121,8 +121,8 @@ import { prefersReducedMotion } from '../motion';
 import { antialiasPreference } from '../perf/antialiasPreference';
 import { advanceClipFrame, clipTimingOf, phasedStart, sharedClockPlayback, swayPeriodOffset } from './clipPlayback';
 import { hash2 } from './worldGenerator';
-import { OWN_REALM_COLOR, realmColor, RIVAL_REALM_COLOR } from './realmColours';
-import { layoutRealmPill, REALM_PILL, type RealmPillLayout } from './realmPill';
+import { realmColor, RIVAL_REALM_COLOR } from './realmColours';
+import { badgeScreenRect, MapLabelOverlay } from './mapLabelOverlay';
 
 export type RenderMode = 'world' | 'settlement';
 
@@ -190,61 +190,6 @@ export function worldHexFill(terrain: Terrain, wasted: boolean): number {
 // sized against its own hex, which is only WW=40px wide there. Our hex is
 // TILE_W=168px wide, so every wave measurement below is scaled up by the
 // same ratio (168/40 = 4.2) to read at the same size relative to the hex.
-/**
- * One `TextStyle` per kind of map label, built once.
- *
- * `rebuildMarkers` runs every tick, and it used to set each label's style
- * properties there — which reads as harmless, since most of Pixi's setters
- * early-return when the value is unchanged. Two of them cannot:
- * `dropShadow = { ... }` hands over a fresh object literal, and
- * `dropShadow = false` is compared against the `null` the setter stored last
- * time. Both fail the identity check, so both call `update()`, which bumps
- * the style's `_tick` — and `styleKey` is `${uid}-${_tick}`.
- *
- * That key is what every text cache is keyed on. A new one every frame means
- * `measureText` misses, the glyphs are re-rasterised through Canvas 2D with a
- * shadow blur, and the result is re-uploaded to the GPU — for every label on
- * screen, sixty times a second, with the camera sitting perfectly still.
- *
- * Shared instances assigned by reference (see `acquireLabel`) leave the tick
- * alone, so the cache hits and a label is rasterised once.
- */
-export const LABEL_STYLES = {
-  // Realm-pill name (world-map owner label): the dark plate gives the contrast, so no drop shadow.
-  ownerName: new TextStyle({
-    fill: 0xe8f0f5,
-    fontFamily: "'Barlow', sans-serif",
-    fontWeight: '600',
-    fontSize: 12.5,
-  }),
-  // Reference (prototypes/worldmap/Viking Realm.dc.html's island labels) sets
-  // island names in 'Alegreya Sans SC' — a display small-caps face, distinct
-  // from the 'sans-serif' the other labels use — loaded alongside 'Outfit' in
-  // index.html's Google Fonts link. The soft drop shadow is for legibility
-  // over the lighter sand-coloured tiles some names sit near.
-  islandMine: new TextStyle({
-    fill: OWN_REALM_COLOR,
-    fontFamily: "'Alegreya Sans SC', serif",
-    fontWeight: 'bold',
-    fontSize: 13,
-    letterSpacing: 1.5,
-    dropShadow: { color: 0x000000, alpha: 0.6, blur: 3, distance: 1, angle: Math.PI / 2 },
-  }),
-  islandOther: new TextStyle({
-    fill: 0x8fa3af,
-    fontFamily: "'Alegreya Sans SC', serif",
-    fontWeight: '600',
-    fontSize: 13,
-    letterSpacing: 1.5,
-    dropShadow: { color: 0x000000, alpha: 0.6, blur: 3, distance: 1, angle: Math.PI / 2 },
-  }),
-  badgeName: new TextStyle({ fill: 0xf4f8fa, fontFamily: "'Barlow', sans-serif", fontWeight: '700', fontSize: 15 }),
-  badgeSuffix: new TextStyle({ fill: 0xb9c8d1, fontFamily: "'Barlow', sans-serif", fontWeight: '600', fontSize: 13 }),
-} as const;
-
-/** Frames a keyed label may stay unused before its Text is destroyed (see hideUnusedLabels). */
-const LABEL_POOL_IDLE_FRAMES = 600;
-
 /** Texels per world unit of the baked wave squiggle: 4 keeps it crisp at the world map's top zoom (4); the texture is tiny. */
 const WAVE_TEXTURE_RESOLUTION = 4;
 
@@ -1062,23 +1007,6 @@ interface BaseArt {
 // on/over, on the far edge of (or past) the tile's own front face.
 const TILE_CENTER_Y_OFFSET = TILE_H / 2;
 
-/**
- * A small pointy-top regular hexagon centred at (cx, cy) with "radius" r
- * (centre-to-vertex) — the same six-vertex shape as TopBar's inline-SVG hex
- * logo (`polygon points="50,4 93,27 93,73 50,96 7,73 7,27"`), not the
- * isometric tile's own flattened diamond top-face. Used for small HUD
- * markers (the settlement badge's icon) that should read as "a hex", not as
- * a scaled-down tile.
- */
-function hexPoints(cx: number, cy: number, r: number): number[] {
-  const points: number[] = [];
-  for (let i = 0; i < 6; i++) {
-    const angle = (Math.PI / 180) * (-90 + 60 * i);
-    points.push(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
-  }
-  return points;
-}
-
 const NO_DIALS: readonly ConstructionDial[] = [];
 const NO_BLOCKED: readonly BlockedMarker[] = [];
 
@@ -1209,6 +1137,22 @@ export function previewIslandBounds(tiles: AxialCoord[]): {
     if (cy > maxY) maxY = cy;
   }
   return { minX, maxX, minY, maxY, centerX: (minX + maxX) / 2, centerY: (minY + maxY) / 2 };
+}
+
+/** World point an island's name label hangs from: centred under the island's bottom edge, with 10 world units of clearance. */
+export function islandLabelAnchor(grid: { x: number; y: number }, bottomWorldY: number): { x: number; y: number } {
+  return { x: grid.x + TILE_W / 2, y: bottomWorldY + 10 };
+}
+
+/** Whether an island's name is hidden: with fog on, the hex under the label's own anchor must be explored (the mist no longer covers the DOM label). */
+export function islandLabelHidden(
+  anchor: { x: number; y: number },
+  fogActive: boolean,
+  isExplored: (q: number, r: number) => boolean,
+): boolean {
+  if (!fogActive) return false;
+  const coord = isoPixelToAxial(anchor, TILE_W, TILE_H);
+  return !isExplored(coord.q, coord.r);
 }
 
 /**
@@ -2394,9 +2338,8 @@ export class HexMapRenderer {
   // World mode's camp paws (drawCampPaws): under both fog layers, like the terrain they mark, so the fog covers them
   // the way it covers the ground (markerLayer sits above the out-of-sight fog).
   private campPawLayer = new Graphics();
-  // Pooled labels keyed by what they show (`owner:<settlementId>`, `island:<islandId>`, ...), so a label that stays on
-  // screen keeps its Text (and its rasterised glyphs) while others come and go; see acquireLabel.
-  private labelPool = new IdleKeyedPool<Text>(LABEL_POOL_IDLE_FRAMES);
+  // The map's text labels (owner pills, island names, settlement badges): DOM, created in mount() right after the canvas.
+  private labelOverlay: MapLabelOverlay | null = null;
   /**
    * World-space Y of each island's bottom edge, for placing its name label.
    * Measuring it walks the island's whole footprint, so it is done once per
@@ -2847,6 +2790,7 @@ export class HexMapRenderer {
     });
     this.app = app;
     this.viewport = { width, height };
+    this.labelOverlay = new MapLabelOverlay(canvas, SETTLEMENT_DEFAULT_ZOOM);
     // zoomForFogMargin needs the real viewport size to pick a zoom — the
     // constructor ran before it, with viewport still {0,0}, so the camera
     // it produced there fell back to SETTLEMENT_DEFAULT_ZOOM. Redo it now
@@ -3070,15 +3014,18 @@ export class HexMapRenderer {
     // presents; a tick Pixi skips (framePacing) skips them too.
     this.frameObserver?.();
     this.rebuildMarkers();
+    // The label overlay carries the same camera in the same frame as the canvas.
+    // Snapped to the device's pixels, not the canvas's render resolution: the text is the browser's, at full DPR.
+    this.labelOverlay?.setPlane(this.camera, this.viewport, window.devicePixelRatio || 1);
     // Issue #16 "ring menu": the settlement name badge (rebuildSettlementLabels,
-    // below) floats right where the ring's own bubbles/track need to sit — it
-    // stays fully opaque otherwise since it's PixiJS-rendered, not DOM, so the
-    // ring's CSS z-index/opacity tricks can't touch it. `interactionLocked` is
+    // below) floats right where the ring's own bubbles/track need to sit, so the
+    // ring's own CSS z-index/opacity tricks don't reach it. `interactionLocked` is
     // already the "a ring is open" signal (see setInteractionLocked); ease the
-    // whole marker layer's alpha toward hidden/shown off that same flag rather
-    // than snapping.
+    // whole marker layer's alpha, and the label overlay's opacity with it, toward
+    // hidden/shown off that same flag rather than snapping.
     const targetMarkerAlpha = this.interactionLocked ? 0 : 1;
     this.markerLayer.alpha += (targetMarkerAlpha - this.markerLayer.alpha) * 0.25;
+    this.labelOverlay?.setOpacity(this.markerLayer.alpha);
     // Crossfade back in after a zoom-driven mode switch dropped this.world
     // to alpha 0 (see zoomBy) — time-constant based so the fade actually
     // takes zoomTransitionTuning.fadeMs regardless of frame rate, rather
@@ -5759,14 +5706,15 @@ export class HexMapRenderer {
     this.armyFrameGraphics.clear();
     this.campPawLayer.clear();
     // markerLayer.clear() only wipes the Graphics geometry, not the pooled
-    // Sprite/Text children parented to it — each pass counts what it used and
-    // hides the rest, same bookkeeping labels do (hideUnusedLabels).
+    // Sprite children parented to it — each pass counts what it used and
+    // hides the rest; the label overlay keeps the same books (beginFrame / endFrame).
     this.movingIcons.used = 0;
-    this.labelPool.nextFrame();
+    const overlay = this.labelOverlay;
+    overlay?.beginFrame();
     if (this.options.mode === 'settlement') {
       if (!this.options.hideSettlementBadge) this.rebuildSettlementLabels();
       this.pruneConstructionDials();
-      this.hideUnusedLabels();
+      overlay?.endFrame();
       this.drawArmyOverlay();
       this.hideUnusedIcons();
       return;
@@ -5774,7 +5722,7 @@ export class HexMapRenderer {
     if (this.options.mode !== 'world') {
       this.clearArmyStatic();
       this.hideUnusedIcons();
-      this.hideUnusedLabels();
+      overlay?.endFrame();
       return;
     }
     const { worldModel, playerId } = this.options;
@@ -5787,17 +5735,14 @@ export class HexMapRenderer {
       const labelHex = worldModel.labelHexOf(settlement);
       if (fogActive && !worldModel.isExplored(labelHex.q, labelHex.r)) continue;
       const grid = isoGridPosition(labelHex, TILE_W, TILE_H);
-      const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
-      // The settlement is marked by the shared realm pill alone (see
-      // drawRealmPill; its diamond carries the realm colour), centred on the
+      // The settlement is marked by the realm pill alone (its diamond carries the realm colour), centred on the
       // settlement hex, so the name stays readable over water and terrain.
-      const ownerLabel = this.acquireLabel(`owner:${settlement.id}`, LABEL_STYLES.ownerName);
-      ownerLabel.text = settlement.ownerName;
-      ownerLabel.anchor.set(0, 0.5);
-      const pill = layoutRealmPill(REALM_PILL.owner, 1, [ownerLabel.width], center.x, center.y - REALM_PILL.owner.height / 2);
-      this.drawRealmPill(pill, realmColor(settlement, playerId), 'diamond', 1);
-      ownerLabel.position.set(pill.labelXs[0], pill.labelY);
-      ownerLabel.visible = true;
+      overlay?.ownerLabel(`owner:${settlement.id}`, {
+        wx: grid.x + TILE_W / 2,
+        wy: grid.y + TILE_H / 2,
+        text: settlement.ownerName,
+        color: realmColor(settlement, playerId),
+      });
     }
 
     // Issue #16 "map island names": "the one where the current player has
@@ -5825,12 +5770,7 @@ export class HexMapRenderer {
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
       if (!isIslandNearViewport(center, this.viewport, cullMarginPx)) continue;
       const mineIsland = island.id === myIslandId;
-      // Reference styling: uppercase, letter-spaced small-caps label, muted
-      // gray for other islands, gold + bold for the player's own (see
-      // LABEL_STYLES.islandMine/islandOther).
-      const label = this.acquireLabel(`island:${island.id}`, mineIsland ? LABEL_STYLES.islandMine : LABEL_STYLES.islandOther);
-      label.text = island.name.toUpperCase();
-      // Reference places the name below the island's shape entirely, not
+      // Reference placement: below the island's shape entirely, not
       // over its tiles or clipping its bottom edge. Islands are generated at
       // varying sizes (worldGenerator's ISLAND_MIN/MAX_RADIUS), so a fixed
       // offset either overlaps a big island or floats far below a small one
@@ -5845,10 +5785,16 @@ export class HexMapRenderer {
         }
         this.islandBottomCache.set(island.id, bottomWorldY);
       }
-      const bottom = this.toScreen({ x: grid.x + TILE_W / 2, y: bottomWorldY });
-      label.anchor.set(0.5, 0);
-      label.position.set(center.x, bottom.y + 10 * this.camera.zoom + 6);
-      label.visible = true;
+      const anchor = islandLabelAnchor(grid, bottomWorldY);
+      // Reference styling: uppercase, letter-spaced small-caps label, muted gray for other islands, gold + bold for the
+      // player's own. The label only shows over ground that is explored under its own anchor (the mist no longer covers it).
+      overlay?.islandLabel(`island:${island.id}`, {
+        wx: anchor.x,
+        wy: anchor.y,
+        text: island.name.toUpperCase(),
+        mine: mineIsland,
+        hidden: islandLabelHidden(anchor, fogActive, (q, r) => worldModel.isExplored(q, r)),
+      });
     }
 
     this.drawCampPaws();
@@ -5895,7 +5841,7 @@ export class HexMapRenderer {
     // hideUnusedIcons() moves to after this call instead of before it.
     this.drawArmyOverlay();
     this.hideUnusedIcons();
-    this.hideUnusedLabels();
+    overlay?.endFrame();
   }
 
   /**
@@ -5935,30 +5881,6 @@ export class HexMapRenderer {
     for (const toe of toes) g.circle(toe.x, toe.y, toeR).fill({ color });
   }
 
-  /**
-   * The one realm pill both name labels use (settlement badge: 'hex' mark;
-   * world-map owner label: 'diamond'): soft shadow, dark plate bordered in the
-   * realm colour, then the mark. The text is positioned by the caller from
-   * `layout.labelXs` / `labelY`.
-   */
-  private drawRealmPill(layout: RealmPillLayout, color: number, mark: 'hex' | 'diamond', alpha: number) {
-    const g = this.markerLayer;
-    const k = layout.h / REALM_PILL.badge.height;
-    for (const dy of [2 * k, 3.5 * k]) {
-      g.roundRect(layout.x - 1, layout.y + dy - 1, layout.w + 2, layout.h + 2, layout.radius + 1).fill({
-        color: 0x000000,
-        alpha: 0.22 * alpha,
-      });
-    }
-    g.roundRect(layout.x, layout.y, layout.w, layout.h, layout.radius)
-      .fill({ color: 0x08121a, alpha: 0.95 * alpha })
-      .stroke({ width: layout.border, color, alpha: 0.9 * alpha });
-    const { markX: x, markY: y, markR: r } = layout;
-    // Hex: the same pointy-top hexagon TopBar's logo badge and ResourceBar's icons use.
-    const points = mark === 'hex' ? hexPoints(x, y, r) : [x, y - r, x + r, y, x, y + r, x - r, y];
-    g.poly(points).fill({ color, alpha });
-  }
-
   // zip 9's settlement view floats a name badge over the longhouse hex
   // itself — a dot + settlement name in a dark rounded pill, bordered in
   // the owner's colour (Viking Realm.dc.html's `labels`: "HAFRSVIK" over
@@ -5968,6 +5890,8 @@ export class HexMapRenderer {
   // glued to the hex while the camera pans.
   private rebuildSettlementLabels() {
     const { worldModel, playerId } = this.options;
+    const overlay = this.labelOverlay;
+    if (!overlay) return;
 
     for (const settlement of worldModel.listSettlements()) {
       // Don't reveal a rival's name over ground you haven't scouted: the badge sits on the hex the server picked (`labelHexOf`),
@@ -6004,48 +5928,24 @@ export class HexMapRenderer {
       const mine = settlement.ownerId === playerId;
       const color = realmColor(settlement, playerId);
 
-      // markerLayer is a sibling of the camera-scaled `world` container (see
-      // mount()), so it already draws in fixed screen pixels — `top` above
-      // is a screen-space point via toScreen(). Scaling the pill's own
-      // geometry by camera.zoom on top of that shrank it as you zoomed out,
-      // squeezing the label against its padding; the badge stays a constant
-      // on-screen size at and below the settlement's default zoom, like the
-      // HUD chrome. Past that zoom level it grows again — a fixed-size badge
-      // reads as undersized once you've zoomed in close to the (now much
-      // larger) hex art around it.
-      // Issue #16 "settlement badge": "above longhouse also showing its
-      // level" — "Bjornstad  you · Lv 4", the suffix in a lighter colour and
-      // weight than the bold settlement name (both at full alpha). Two pooled
-      // labels side by side, rather than one, since Pixi's Text has no
-      // per-run rich styling.
+      // The badge stays a constant on-screen size at and below the settlement's default zoom, like the HUD chrome.
+      // Past that zoom level it grows again (CSS scales it by the same `zoomScale`, see mapLabelOverlay.css) — a
+      // fixed-size badge reads as undersized once you've zoomed in close to the (now much larger) hex art around it.
+      // Issue #16 "settlement badge": "above longhouse also showing its level" — "Bjornstad  you · Lv 4", the
+      // suffix in a lighter colour and weight than the bold settlement name; one element holding both spans.
       const zoomScale = Math.max(1, this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM);
-      // Scaled rather than re-sized: a changing `fontSize` re-rasterises the
-      // glyphs (see LABEL_STYLES), while `scale` is a transform on the texture
-      // already in hand — and `width` below still reports the scaled size, so
-      // the pill measures the same either way.
-      const nameLabel = this.acquireLabel(`badgeName:${settlement.id}`, LABEL_STYLES.badgeName, zoomScale);
-      nameLabel.text = settlement.name;
-      nameLabel.anchor.set(0, 0.5);
-
-      const suffixLabel = this.acquireLabel(`badgeSuffix:${settlement.id}`, LABEL_STYLES.badgeSuffix, zoomScale);
-      suffixLabel.text = settlementBadgeSuffix(settlement, mine, worldModel.isBeachCamp(settlement.id), buildingName('beachcamp'));
-      suffixLabel.anchor.set(0, 0.5);
-
-      // `top` is already clear of every claimed tile's tallest possible art
-      // (see above), so this only needs a small breathing-room margin.
-      const pill = layoutRealmPill(
-        REALM_PILL.badge,
-        zoomScale,
-        [nameLabel.width, suffixLabel.width],
-        top.x,
-        top.y - 10 * zoomScale - REALM_PILL.badge.height * zoomScale,
-      );
+      const badge = overlay.badgeLabel(`badge:${settlement.id}`, {
+        wx: grid.x + TILE_W / 2,
+        wy: topWorldY,
+        name: settlement.name,
+        suffix: settlementBadgeSuffix(settlement, mine, worldModel.isBeachCamp(settlement.id), buildingName('beachcamp')),
+        color,
+      });
 
       // Beneath an open ring menu the badge fades out instead of showing through the bubbles - under the HUD motion
       // setting, like the building markers' fade in BuildingHudLayer.vue.
       const occluded =
-        this.markerOcclusion !== null &&
-        circleIntersectsRect(this.markerOcclusion, { x: pill.x, y: pill.y, w: pill.w, h: pill.h });
+        this.markerOcclusion !== null && circleIntersectsRect(this.markerOcclusion, badgeScreenRect(top, badge, zoomScale));
       const dtMs = this.app ? clampAnimationDeltaMs(this.app.ticker.deltaMS) : 0;
       const vis = markerFadeStep(
         this.badgeVisibility.get(settlement.id) ?? 1,
@@ -6056,18 +5956,11 @@ export class HexMapRenderer {
       if (vis < 1) this.badgeVisibility.set(settlement.id, vis);
       else this.badgeVisibility.delete(settlement.id);
       if (vis <= 0) {
-        nameLabel.visible = false;
-        suffixLabel.visible = false;
+        badge.setHidden(true);
         continue;
       }
-      nameLabel.alpha = vis;
-      suffixLabel.alpha = vis;
-
-      this.drawRealmPill(pill, color, 'hex', vis);
-      nameLabel.position.set(pill.labelXs[0], pill.labelY);
-      suffixLabel.position.set(pill.labelXs[1], pill.labelY);
-      nameLabel.visible = true;
-      suffixLabel.visible = true;
+      badge.setOpacity(vis);
+      badge.setHidden(false);
     }
   }
 
@@ -6091,11 +5984,6 @@ export class HexMapRenderer {
    */
   setMarkerOcclusion(circle: OcclusionCircle | null) {
     this.markerOcclusion = circle;
-  }
-
-  /** Current marker visibility 0..1 (read-only): badges by settlement id; absent = fully visible. */
-  markerVisibility(): { badges: Record<string, number> } {
-    return { badges: Object.fromEntries(this.badgeVisibility) };
   }
 
   private hideUnusedIcons(sink: IconSink = this.movingIcons) {
@@ -6155,36 +6043,6 @@ export class HexMapRenderer {
     sprite.position.set(x, y);
     sprite.visible = true;
     return true;
-  }
-
-  /**
-   * The pooled label for `key` (created on first use), set to one of the shared styles (see LABEL_STYLES for why
-   * the style is assigned by reference rather than written property by
-   * property).
-   *
-   * The key is the label's identity, not its draw order: when the set of visible labels changes (island labels
-   * culled by the viewport while panning) every other label keeps its Text, so nothing is re-rasterised.
-   * `scale` and `alpha` are reset here because a label's scale changes with the zoom and the pool outlives a mode switch.
-   */
-  private acquireLabel(key: string, style: TextStyle, scale = 1): Text {
-    const label = this.labelPool.acquire(key, () => {
-      const text = new Text({ text: '', style });
-      this.markerLayer.addChild(text);
-      return text;
-    });
-    if (label.style !== style) label.style = style;
-    label.scale.set(scale);
-    label.alpha = 1;
-    label.tint = 0xffffff;
-    return label;
-  }
-
-  /** Labels not acquired this frame are hidden; ones unused for LABEL_POOL_IDLE_FRAMES frames are destroyed. */
-  private hideUnusedLabels() {
-    this.labelPool.sweep(
-      (text) => (text.visible = false),
-      (text) => text.destroy(),
-    );
   }
 
   /**
@@ -7234,6 +7092,8 @@ export class HexMapRenderer {
   destroy() {
     this.destroyed = true;
     this.maskBaker.destroy();
+    this.labelOverlay?.destroy();
+    this.labelOverlay = null;
     const canvas = this.app?.canvas;
     canvas?.removeEventListener('pointerdown', this.onPointerDown);
     window.removeEventListener('pointermove', this.onPointerMove);
@@ -7373,51 +7233,6 @@ export class ArmyStaticCache {
 
   get isBuilt(): boolean {
     return this.hasBuilt;
-  }
-}
-
-/**
- * Keyed pool of display objects with idle expiry: `acquire` hands out the same object for the same key, `sweep` (once per
- * frame, after the frame's acquires) hides the ones not acquired this frame and destroys the ones unused for more than
- * `idleFrames` frames. `nextFrame` starts a frame.
- */
-export class IdleKeyedPool<T> {
-  private entries = new Map<string, { item: T; lastUsedFrame: number }>();
-  private frame = 0;
-
-  private readonly idleFrames: number;
-
-  constructor(idleFrames: number) {
-    this.idleFrames = idleFrames;
-  }
-
-  nextFrame() {
-    this.frame++;
-  }
-
-  acquire(key: string, create: () => T): T {
-    let entry = this.entries.get(key);
-    if (!entry) {
-      entry = { item: create(), lastUsedFrame: this.frame };
-      this.entries.set(key, entry);
-    }
-    entry.lastUsedFrame = this.frame;
-    return entry.item;
-  }
-
-  sweep(hide: (item: T) => void, destroy: (item: T) => void) {
-    for (const [key, entry] of this.entries) {
-      if (entry.lastUsedFrame === this.frame) continue;
-      hide(entry.item);
-      if (this.frame - entry.lastUsedFrame > this.idleFrames) {
-        destroy(entry.item);
-        this.entries.delete(key);
-      }
-    }
-  }
-
-  get size(): number {
-    return this.entries.size;
   }
 }
 

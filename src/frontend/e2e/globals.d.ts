@@ -42,7 +42,6 @@ declare global {
     dialScreenPoint(coord: AxialCoord): { x: number; y: number };
     whenFrameRendered(): Promise<void>;
     forceRebuild(opts?: { transition?: { durationMs: number; delayMs?: (coord: AxialCoord) => number } }): void;
-    markerVisibility(): { badges: Record<string, number> };
     lastArmyOverlayFrame(): ArmyOverlayFrameSnapshot;
     readonly renderedFrames: number;
     readonly cameraZoom: number;
