@@ -30,5 +30,9 @@
     "starved": "Armee bei {hex} verhungert. Ihr ging die Nahrung aus, und sie fand keinen Weg nach Hause.",
     "lost": "Verlorene Truppen",
     "inArmy": "Truppen der Armee"
+  },
+  "row": {
+    "title": "{outcome} · {mission}",
+    "unread": "Ungelesen"
   }
 }

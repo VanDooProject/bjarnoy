@@ -14,6 +14,7 @@ import { animate, motionEnabled } from '../../lib/motion';
 import { useQuests } from '../../composables/useQuests';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { COLUMN_BUTTON_GAP, HUD_PANEL_IDS, HUD_PANEL_LABEL_KEYS, type HudPanelId } from '../../lib/hud/hudPanelDock';
+import { CROSSED_SWORDS_PATHS } from '../../lib/hud/iconPaths';
 import QuestIcon from '../onboarding/QuestIcon.vue';
 import BuildingInfoToggle from './BuildingInfoToggle.vue';
 import HudIconButton from './HudIconButton.vue';
@@ -88,9 +89,7 @@ onUnmounted(() => observer?.disconnect());
       </svg>
       <!-- Armies: two crossed swords. -->
       <svg v-else-if="id === 'armies'" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
-        <path d="M5 5 17.5 17.5M5 5V8.5M5 5H8.5" />
-        <path d="M19 5 6.5 17.5M19 5V8.5M19 5H15.5" />
-        <path d="M15.5 15.5 18.5 18.5M8.5 15.5 5.5 18.5" />
+        <path v-for="d in CROSSED_SWORDS_PATHS" :key="d" :d="d" />
       </svg>
       <QuestIcon v-else />
       <span v-if="badge(id)" class="hud-panel-column__badge" :data-testid="`hud-panel-badge-${id}`" aria-hidden="true">{{ badge(id) }}</span>
