@@ -1600,6 +1600,26 @@ export function cullThrottleRemainingMs(
   if (!interacting) return 0;
   return Math.max(0, throttleMs - (nowMs - lastRebuildAtMs));
 }
+
+/** At most one pending timer: the re-queue of a cull the throttle dropped. */
+export class CullRetry {
+  private timer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Runs `run` after `waitMs` unless a retry is already pending. */
+  queue(waitMs: number, run: () => void): void {
+    if (this.timer !== null) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      run();
+    }, waitMs);
+  }
+
+  cancel(): void {
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+  }
+}
+
 // Total pointer travel (summed |dx|+|dy| over the gesture) below which a
 // pointerdown/up pair counts as a click on a hex rather than a camera pan.
 // Used by onPointerUp for both halves of that decision: whether to open the
@@ -2490,7 +2510,7 @@ export class HexMapRenderer {
   private lastRebuildAtMs = 0;
   private cullQueued = false;
   /** The one pending re-queue of a cull the drag throttle dropped (see scheduleCull). */
-  private cullRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly cullRetry = new CullRetry();
   private destroyed = false;
 
   private dragging = false;
@@ -4154,12 +4174,7 @@ export class HexMapRenderer {
       // schedule one, and would otherwise stay stale until release.
       const waitMs = cullThrottleRemainingMs(this.isInteracting, performance.now(), this.lastRebuildAtMs);
       if (waitMs > 0) {
-        if (this.cullRetryTimer === null) {
-          this.cullRetryTimer = setTimeout(() => {
-            this.cullRetryTimer = null;
-            this.scheduleCull();
-          }, waitMs);
-        }
+        this.cullRetry.queue(waitMs, () => this.scheduleCull());
         return;
       }
       if (this.cameraMovedEnough()) this.rebuildAll();
@@ -7179,8 +7194,7 @@ export class HexMapRenderer {
 
   destroy() {
     this.destroyed = true;
-    if (this.cullRetryTimer !== null) clearTimeout(this.cullRetryTimer);
-    this.cullRetryTimer = null;
+    this.cullRetry.cancel();
     this.maskBaker.destroy();
     this.labelOverlay?.destroy();
     this.labelOverlay = null;
