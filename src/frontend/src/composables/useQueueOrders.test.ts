@@ -161,6 +161,47 @@ describe('useBuildOrders', () => {
     wrapper.unmount();
   });
 
+  it('starts the bar from empty when a waiting order gets a slot', async () => {
+    const world = useWorldStore();
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.queue = [buildOrder({ id: 'order-1', state: 'waiting', completesAtGameTime: null, completesInSeconds: null })];
+
+    const { wrapper, result } = mountWithOrders(useBuildOrders);
+    await wrapper.vm.$nextTick();
+    expect(result.value[0].progress).toBe(0);
+
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.queue = [buildOrder({ id: 'order-1', state: 'building', completesInSeconds: 570, totalSeconds: 600 })];
+    world.hud.tick += 1;
+    await wrapper.vm.$nextTick();
+
+    expect(result.value[0].progress).toBeCloseTo(0.05, 2);
+    wrapper.unmount();
+  });
+
+  it('keeps the last known progress while the clock is frozen and resumes from it', async () => {
+    const world = useWorldStore();
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.queue = [buildOrder({ id: 'order-1', completesInSeconds: 80, totalSeconds: 100 })];
+
+    const { wrapper, result } = mountWithOrders(useBuildOrders);
+    await wrapper.vm.$nextTick();
+    expect(result.value[0].progress).toBeCloseTo(0.2, 2);
+
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.queue = [buildOrder({ id: 'order-1', completesInSeconds: null, totalSeconds: 100 })];
+    world.hud.tick += 1;
+    await wrapper.vm.$nextTick();
+    expect(result.value[0].progress).toBeCloseTo(0.2, 2);
+
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.queue = [buildOrder({ id: 'order-1', completesInSeconds: 70, totalSeconds: 100 })];
+    world.hud.tick += 1;
+    await wrapper.vm.$nextTick();
+    expect(result.value[0].progress).toBeCloseTo(0.3, 2);
+    wrapper.unmount();
+  });
+
   it('exposes remainingSeconds as null for a waiting order and a number otherwise', async () => {
     const world = useWorldStore();
     world.hud.queueFetchedAt = Date.now();
